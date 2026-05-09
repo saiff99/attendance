@@ -69,7 +69,8 @@ export default function LiveScan() {
 
   useEffect(() => {
     // Fetch available CCTV cameras
-    fetch('http://localhost:8000/api/cameras')
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+    fetch(`${backendUrl}/api/cameras`)
       .then(res => res.json())
       .then(data => setCctvCameraCount(data.count))
       .catch(err => console.error("Failed to fetch camera count", err));
@@ -127,7 +128,8 @@ export default function LiveScan() {
       formData.append('file', file);
       formData.append('session_id', activeSession.id);
 
-      const response = await fetch(`http://localhost:8000/api/process-attendance`, {
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+      const response = await fetch(`${backendUrl}/api/process-attendance`, {
         method: 'POST',
         body: formData,
       });
@@ -209,7 +211,8 @@ export default function LiveScan() {
       formData.append('file', file);
       formData.append('session_id', activeSession.id); // Pass session ID to backend
 
-      const response = await fetch(`http://localhost:8000/api/process-attendance`, {
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+      const response = await fetch(`${backendUrl}/api/process-attendance`, {
         method: 'POST',
         body: formData,
       });
@@ -449,7 +452,7 @@ export default function LiveScan() {
                   {/* Using key to force React to re-mount the img tag when selectedCctvIndex changes, bypassing browser cache */}
                   <img 
                     key={selectedCctvIndex}
-                    src={`http://localhost:8000/api/video-feed/${activeSession.id}?camera_index=${selectedCctvIndex}`} 
+                    src={`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'}/api/video-feed/${activeSession.id}?camera_index=${selectedCctvIndex}`} 
                     className="w-full h-full object-contain"
                     alt="CCTV Live Tracking Stream" 
                   />
