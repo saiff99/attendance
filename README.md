@@ -10,6 +10,8 @@ Open VS Code and open a new terminal.
 
 Move to the backend folder by pasting this ➡️ cd /Users/saif/Desktop/Attendance/Attendance-app/backend
 
+
+
 Activate your Python environment: ➡️ source .venv/bin/activate
 
 Start the AI engine: ➡️ uvicorn main:app --reload (Leave this running. It connects to the Dahua camera and processes the faces!)
@@ -36,8 +38,9 @@ Go to your Vercel Dashboard > Settings > Environment Variables.
 
 Find NEXT_PUBLIC_BACKEND_URL, click the edit (pencil) icon, paste your new Cloudflare link, and hit Save.
 
-Go to the Deployments tab at the top.
+Move to the backend folder by pasting this:
 
-Click the three dots (...) next to your most recent deployment and click Redeploy.
+Move to the backend folder by pasting this:
 
-Once Vercel finishes building (usually takes 1 minute), your CCTV tracking will be completely live on the internet!
+```bash
+cd /Users/saif/Desktop/Attendance/Attendance-app/backend
