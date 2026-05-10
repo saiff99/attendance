@@ -1,3 +1,4 @@
+```bash
 Welcome back! Every time you turn on your MacBook, you just need to start two terminals to bring the whole AI system back online.
 
 Here is your exact step-by-step startup guide:
@@ -42,5 +43,3 @@ Move to the backend folder by pasting this:
 
 Move to the backend folder by pasting this:
 
-```bash
-cd /Users/saif/Desktop/Attendance/Attendance-app/backend
