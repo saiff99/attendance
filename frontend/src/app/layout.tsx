@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, Playfair_Display } from "next/font/google";
 import Sidebar from "@/components/layout/Sidebar";
+import { ThemeProvider } from "@/components/ThemeProvider";
 import "./globals.css";
 
 const inter = Inter({
@@ -26,13 +27,21 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      suppressHydrationWarning
       className={`${inter.variable} ${playfair.variable} h-full antialiased`}
     >
-      <body suppressHydrationWarning className="h-full bg-gray-50 flex">
-        <Sidebar />
-        <main className="flex-1 ml-64 min-h-screen">
-          {children}
-        </main>
+      <body suppressHydrationWarning className="h-full bg-gray-50 dark:bg-gray-950 flex transition-colors duration-300">
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <Sidebar />
+          <main className="flex-1 ml-64 min-h-screen">
+            {children}
+          </main>
+        </ThemeProvider>
       </body>
     </html>
   );

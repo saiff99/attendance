@@ -238,24 +238,24 @@ export default function LiveScan() {
 
   if (!activeSession) {
     return (
-      <div className="p-8 max-w-2xl mx-auto h-[calc(100vh-2rem)] flex flex-col justify-center">
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
+      <div className="p-8 max-w-2xl mx-auto h-[calc(100vh-2rem)] flex flex-col justify-center dark:bg-gray-950 transition-colors duration-300">
+        <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 p-8 transition-colors">
           <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-indigo-50 mb-4">
-              <BookOpen className="w-8 h-8 text-indigo-600" />
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-indigo-50 dark:bg-indigo-900/30 mb-4">
+              <BookOpen className="w-8 h-8 text-indigo-600 dark:text-indigo-400" />
             </div>
-            <h1 className="text-3xl font-serif font-bold text-gray-900">Class Setup</h1>
-            <p className="mt-2 text-gray-500">Configure class details before taking attendance.</p>
+            <h1 className="text-3xl font-serif font-bold text-gray-900 dark:text-white">Class Setup</h1>
+            <p className="mt-2 text-gray-500 dark:text-gray-400">Configure class details before taking attendance.</p>
           </div>
 
           <form onSubmit={handleStartSession} className="space-y-6">
             <div>
-              <label htmlFor="subject" className="block text-sm font-medium text-gray-700">Subject / Topic</label>
+              <label htmlFor="subject" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Subject / Topic</label>
               <input 
                 id="subject"
                 required
                 type="text" 
-                className="mt-1 block w-full rounded-lg border-0 py-3 px-4 text-gray-900 ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6" 
+                className="mt-1 block w-full rounded-lg border-0 py-3 px-4 text-gray-900 dark:text-white bg-white dark:bg-gray-800 ring-1 ring-inset ring-gray-300 dark:ring-gray-700 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6 transition-colors" 
                 value={setupData.subject}
                 onChange={e => setSetupData({...setupData, subject: e.target.value})}
                 placeholder="e.g. Anatomy 101"
@@ -263,11 +263,11 @@ export default function LiveScan() {
             </div>
 
             <div>
-              <label htmlFor="hall" className="block text-sm font-medium text-gray-700">Lecture Hall</label>
+              <label htmlFor="hall" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Lecture Hall</label>
               <select
                 id="hall"
                 required
-                className="mt-1 block w-full rounded-lg border-0 py-3 px-4 text-gray-900 ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
+                className="mt-1 block w-full rounded-lg border-0 py-3 px-4 text-gray-900 dark:text-white bg-white dark:bg-gray-800 ring-1 ring-inset ring-gray-300 dark:ring-gray-700 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6 transition-colors"
                 value={setupData.hall}
                 onChange={e => setSetupData({...setupData, hall: e.target.value})}
               >
@@ -279,12 +279,12 @@ export default function LiveScan() {
             </div>
 
             <div>
-              <label htmlFor="topic" className="block text-sm font-medium text-gray-700">Topic Name</label>
+              <label htmlFor="topic" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Topic Name</label>
               <input 
                 id="topic"
                 required
                 type="text" 
-                className="mt-1 block w-full rounded-lg border-0 py-3 px-4 text-gray-900 ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6" 
+                className="mt-1 block w-full rounded-lg border-0 py-3 px-4 text-gray-900 dark:text-white bg-white dark:bg-gray-800 ring-1 ring-inset ring-gray-300 dark:ring-gray-700 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6 transition-colors" 
                 value={setupData.topic}
                 onChange={e => setSetupData({...setupData, topic: e.target.value})}
                 placeholder="e.g. Human Heart Anatomy"
@@ -307,7 +307,7 @@ export default function LiveScan() {
   }
 
   return (
-    <div className="p-8 max-w-7xl mx-auto h-[calc(100vh-2rem)] flex flex-col relative">
+    <div className="p-8 max-w-7xl mx-auto h-[calc(100vh-2rem)] flex flex-col relative dark:bg-gray-950 transition-colors duration-300 min-h-screen">
       <input 
         type="file" 
         accept="image/*" 
@@ -318,28 +318,28 @@ export default function LiveScan() {
 
       <div className="mb-6 flex-shrink-0 flex items-center justify-between">
         <div>
-          <button onClick={() => setActiveSession(null)} className="text-sm font-medium text-indigo-600 hover:text-indigo-800 flex items-center mb-2">
+          <button onClick={() => setActiveSession(null)} className="text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 flex items-center mb-2 transition-colors">
             <ArrowLeft className="w-4 h-4 mr-1" /> End Session & Back
           </button>
-          <h1 className="text-3xl font-serif font-bold text-gray-900">Live Scan: {activeSession.class_name}</h1>
-          <div className="flex items-center gap-4 mt-2 text-sm text-gray-600">
-            <span className="flex items-center"><Users className="w-4 h-4 mr-1 text-gray-400" /> {activeSession.instructor_name}</span>
-            <span className="flex items-center"><MapPin className="w-4 h-4 mr-1 text-gray-400" /> {setupData.hall}</span>
+          <h1 className="text-3xl font-serif font-bold text-gray-900 dark:text-white">Live Scan: {activeSession.class_name}</h1>
+          <div className="flex items-center gap-4 mt-2 text-sm text-gray-600 dark:text-gray-400">
+            <span className="flex items-center"><Users className="w-4 h-4 mr-1 text-gray-400 dark:text-gray-500" /> {activeSession.instructor_name}</span>
+            <span className="flex items-center"><MapPin className="w-4 h-4 mr-1 text-gray-400 dark:text-gray-500" /> {setupData.hall}</span>
           </div>
         </div>
       </div>
 
       <div className="flex-1 flex gap-8 min-h-0">
         {/* Left Side: Camera Feed / Upload */}
-        <div className="w-2/3 flex flex-col bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="w-2/3 flex flex-col bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden transition-colors">
           {/* Tabs */}
-          <div className="flex border-b border-gray-100 p-2 overflow-x-auto">
+          <div className="flex border-b border-gray-100 dark:border-gray-800 p-2 overflow-x-auto">
             <button
               onClick={() => setActiveTab("live")}
               className={`flex-1 min-w-[150px] py-3 px-4 text-sm font-medium rounded-lg flex items-center justify-center transition-colors ${
                 activeTab === "live"
-                  ? "bg-indigo-50 text-indigo-700"
-                  : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+                  ? "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400"
+                  : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50"
               }`}
             >
               <Camera className="w-5 h-5 mr-2" />
@@ -349,8 +349,8 @@ export default function LiveScan() {
               onClick={() => setActiveTab("cctv")}
               className={`flex-1 min-w-[150px] py-3 px-4 text-sm font-medium rounded-lg flex items-center justify-center transition-colors ${
                 activeTab === "cctv"
-                  ? "bg-indigo-50 text-indigo-700"
-                  : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+                  ? "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400"
+                  : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50"
               }`}
             >
               <Video className="w-5 h-5 mr-2" />
@@ -360,8 +360,8 @@ export default function LiveScan() {
               onClick={() => setActiveTab("manual")}
               className={`flex-1 min-w-[150px] py-3 px-4 text-sm font-medium rounded-lg flex items-center justify-center transition-colors ${
                 activeTab === "manual"
-                  ? "bg-indigo-50 text-indigo-700"
-                  : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+                  ? "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400"
+                  : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50"
               }`}
             >
               <Upload className="w-5 h-5 mr-2" />
@@ -467,15 +467,15 @@ export default function LiveScan() {
             ) : (
               <div 
                 onClick={() => !isProcessing && fileInputRef.current?.click()}
-                className={`flex-1 flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors ${!isProcessing ? 'cursor-pointer' : 'opacity-70 cursor-not-allowed'}`}
+                className={`flex-1 flex flex-col items-center justify-center border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors ${!isProcessing ? 'cursor-pointer' : 'opacity-70 cursor-not-allowed'}`}
               >
                 {isProcessing ? (
-                  <Loader2 className="w-12 h-12 text-indigo-500 mb-4 animate-spin" />
+                  <Loader2 className="w-12 h-12 text-indigo-500 dark:text-indigo-400 mb-4 animate-spin" />
                 ) : (
-                  <Upload className="w-12 h-12 text-gray-400 mb-4" />
+                  <Upload className="w-12 h-12 text-gray-400 dark:text-gray-600 mb-4" />
                 )}
-                <p className="text-gray-600 font-medium">{isProcessing ? "Processing AI Attendance..." : "Click or drag classroom photo to upload"}</p>
-                <p className="text-gray-400 text-sm mt-1">Supports JPG, PNG (Max 5MB)</p>
+                <p className="text-gray-600 dark:text-gray-300 font-medium">{isProcessing ? "Processing AI Attendance..." : "Click or drag classroom photo to upload"}</p>
+                <p className="text-gray-400 dark:text-gray-500 text-sm mt-1">Supports JPG, PNG (Max 5MB)</p>
               </div>
             )}
 
@@ -520,21 +520,21 @@ export default function LiveScan() {
         </div>
 
         {/* Right Side: Live Log */}
-        <div className="w-1/3 bg-white rounded-xl shadow-sm border border-gray-100 flex flex-col overflow-hidden">
-          <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between">
-            <h2 className="font-semibold text-gray-900 flex items-center">
-              <Activity className="w-5 h-5 mr-2 text-indigo-600" /> Class Recognition Log
+        <div className="w-1/3 bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 flex flex-col overflow-hidden transition-colors">
+          <div className="p-4 border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/30 flex items-center justify-between">
+            <h2 className="font-semibold text-gray-900 dark:text-white flex items-center">
+              <Activity className="w-5 h-5 mr-2 text-indigo-600 dark:text-indigo-400" /> Class Recognition Log
             </h2>
             <button
               onClick={exportToCSV}
-              className="text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-full transition-colors flex items-center"
+              className="text-xs font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 px-3 py-1.5 rounded-full transition-colors flex items-center"
             >
               <Download className="w-3.5 h-3.5 mr-1" /> Export CSV
             </button>
           </div>
           <div className="flex-1 overflow-y-auto p-4 space-y-3">
             {logs.length === 0 ? (
-              <p className="text-sm text-gray-500 text-center py-8">No attendance recorded yet for this session.</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-8">No attendance recorded yet for this session.</p>
             ) : (
               logs.map((log) => {
                 const studentName = log.students?.full_name?.toUpperCase() || "UNKNOWN STUDENT";
@@ -546,19 +546,19 @@ export default function LiveScan() {
                 return (
                   <div
                     key={log.id}
-                    className="flex items-center p-3 rounded-lg border border-gray-100 bg-white shadow-sm hover:border-indigo-100 transition-colors"
+                    className="flex items-center p-3 rounded-lg border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm hover:border-indigo-100 dark:hover:border-indigo-900/50 transition-colors"
                   >
                     <div className="flex-shrink-0 mr-4">
-                      <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-sm uppercase">
+                      <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center text-indigo-700 dark:text-indigo-400 font-bold text-sm uppercase">
                         {log.students?.full_name?.substring(0, 2) || "??"}
                       </div>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">{displayName}</p>
-                      <p className="text-xs text-gray-500">{time} • Conf: {confidence}%</p>
+                      <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{displayName}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">{time} • Conf: {confidence}%</p>
                     </div>
                     <div className="flex-shrink-0">
-                      <CheckCircle2 className="w-5 h-5 text-green-500" />
+                      <CheckCircle2 className="w-5 h-5 text-green-500 dark:text-green-400" />
                     </div>
                   </div>
                 );
