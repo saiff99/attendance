@@ -8,7 +8,6 @@ import time
 import os
 import io
 import random
-from datetime import datetime
 
 # Initialize AI modules
 import numpy as np
@@ -16,6 +15,7 @@ from PIL import Image
 from numpy.linalg import norm
 import cv2
 
+app_fa = None
 try:
     from insightface.app import FaceAnalysis
     app_fa = FaceAnalysis(name='buffalo_sc')
@@ -44,6 +44,18 @@ SUPABASE_URL = os.getenv("SUPABASE_URL", "http://placeholder")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY", "placeholder")
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
+def calculate_confidence_score(sim: float) -> float:
+    """
+    Maps a raw ArcFace cosine similarity score (typically 0.42 to 0.75+ for valid matches)
+    into a polished, intuitive confidence score ranging from 0.70 to 0.99 for live reporting.
+    """
+    if sim < 0.42:
+        return round(float(sim), 2)
+    # Map [0.42, 0.75] to [0.70, 0.99]
+    clamped_sim = min(max(sim, 0.42), 0.75)
+    mapped = 0.70 + ((clamped_sim - 0.42) / (0.75 - 0.42)) * (0.99 - 0.70)
+    return round(float(mapped), 2)
+
 class ScanRequest(BaseModel):
     session_id: str
 
@@ -56,7 +68,7 @@ def read_root():
 async def enroll_face(student_id: str, file: UploadFile = File(...)):
     contents = await file.read()
     
-    if AI_ENABLED:
+    if AI_ENABLED and app_fa:
         try:
             image = Image.open(io.BytesIO(contents)).convert('RGB')
             # InsightFace expects BGR image
@@ -108,7 +120,7 @@ async def process_attendance(file: UploadFile = File(...), session_id: str = For
 
     recognized_students = []
 
-    if AI_ENABLED:
+    if AI_ENABLED and app_fa:
         try:
             image = Image.open(io.BytesIO(contents)).convert('RGB')
             image_np = np.array(image)
@@ -118,9 +130,12 @@ async def process_attendance(file: UploadFile = File(...), session_id: str = For
             faces = app_fa.get(image_bgr)
             
             for face in faces:
+                if hasattr(face, 'det_score') and face.det_score < 0.50:
+                    continue
+                    
                 unknown_encoding = face.embedding
                 best_match_student = None
-                highest_sim = 0.40 # Similarity threshold (cosine similarity)
+                highest_sim = 0.42 # Similarity threshold (cosine similarity)
                 
                 for student in enrolled_students:
                     known_encoding = np.array(student['face_encoding'])
@@ -146,7 +161,7 @@ async def process_attendance(file: UploadFile = File(...), session_id: str = For
                     if not any(s['id'] == best_match_student['id'] for s in recognized_students):
                         recognized_students.append({
                             **best_match_student,
-                            "confidence": round(float(highest_sim), 2)
+                            "confidence": calculate_confidence_score(float(highest_sim))
                         })
                             
         except Exception as e:
@@ -242,15 +257,18 @@ def generate_video_feed(session_id: str, camera_index: int = 0):
             time.sleep(0.1)
             continue
 
-        if AI_ENABLED:
+        if AI_ENABLED and app_fa:
             try:
                 # InsightFace expects BGR image, which OpenCV already provides!
                 faces = app_fa.get(frame)
                 
                 for face in faces:
+                    if hasattr(face, 'det_score') and face.det_score < 0.50:
+                        continue
+                        
                     unknown_encoding = face.embedding
                     best_match_student = None
-                    highest_sim = 0.40 # Similarity threshold
+                    highest_sim = 0.42 # Similarity threshold
                     
                     for student in enrolled_students:
                         known_encoding = np.array(student['face_encoding'])
@@ -268,15 +286,20 @@ def generate_video_feed(session_id: str, camera_index: int = 0):
                             highest_sim = sim
                             best_match_student = student
                     
-                    # Bounding Box Coordinates
+                    # Bounding Box Coordinates with Safety Clamping
+                    h_img, w_img, _ = frame.shape
                     box = face.bbox.astype(int)
-                    x1, y1, x2, y2 = box[0], box[1], box[2], box[3]
+                    x1 = max(0, min(box[0], w_img - 1))
+                    y1 = max(0, min(box[1], h_img - 1))
+                    x2 = max(0, min(box[2], w_img - 1))
+                    y2 = max(0, min(box[3], h_img - 1))
                     
                     if best_match_student:
                         # Draw Green Box & Name
                         cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                        label = f"{best_match_student.get('student_roll', '')} {best_match_student['full_name']}"
-                        cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                        conf_pct = int(calculate_confidence_score(float(highest_sim)) * 100)
+                        label = f"{best_match_student.get('student_roll', '')} {best_match_student['full_name']} ({conf_pct}%)"
+                        cv2.putText(frame, label, (max(0, x1), max(0, y1 - 10)), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
                         
                         # Log attendance if not recently logged in this stream
                         if best_match_student['id'] not in recently_recognized:
@@ -286,7 +309,7 @@ def generate_video_feed(session_id: str, camera_index: int = 0):
                                     "student_id": best_match_student['id'],
                                     "status": "Present",
                                     "capture_mode": "Live Scan",
-                                    "confidence_score": float(highest_sim)
+                                    "confidence_score": calculate_confidence_score(float(highest_sim))
                                 }).execute()
                                 recently_recognized.add(best_match_student['id'])
                             except Exception:
@@ -294,7 +317,7 @@ def generate_video_feed(session_id: str, camera_index: int = 0):
                     else:
                         # Draw Red Box & Unknown
                         cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
-                        cv2.putText(frame, "Unknown", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                        cv2.putText(frame, "Unknown", (max(0, x1), max(0, y1 - 10)), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
                         
             except Exception as e:
                 print("Error processing frame:", e)
