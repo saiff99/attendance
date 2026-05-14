@@ -21,7 +21,8 @@ export default function LiveScan() {
   const [setupData, setSetupData] = useState({
     subject: "",
     hall: "Hall 1",
-    topic: ""
+    topic: "",
+    academic_year: "All"
   });
   const [isStartingSession, setIsStartingSession] = useState(false);
 
@@ -181,7 +182,8 @@ export default function LiveScan() {
         date: today,
         start_time: new Date().toISOString(),
         end_time: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(), // 2 hours duration
-        instructor_name: setupData.topic
+        instructor_name: setupData.topic,
+        target_academic_year: setupData.academic_year
       };
       
       const { data, error } = await supabase
@@ -190,12 +192,15 @@ export default function LiveScan() {
         .select()
         .single();
         
-      if (error) throw error;
+      if (error) {
+        console.error("Supabase Error:", error);
+        throw error;
+      }
       
       setActiveSession(data);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to create session:", error);
-      alert("Failed to start session.");
+      alert(`Failed to start session: ${error.message || JSON.stringify(error)}`);
     } finally {
       setIsStartingSession(false);
     }
@@ -238,8 +243,8 @@ export default function LiveScan() {
 
   if (!activeSession) {
     return (
-      <div className="p-8 max-w-2xl mx-auto h-[calc(100vh-2rem)] flex flex-col justify-center dark:bg-gray-950 transition-colors duration-300">
-        <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 p-8 transition-colors">
+      <div className="w-full min-h-screen flex flex-col justify-center bg-gray-50 dark:bg-gray-950 transition-colors duration-300 p-8">
+        <div className="w-full max-w-2xl mx-auto bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 p-8 transition-colors">
           <div className="text-center mb-8">
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-indigo-50 dark:bg-indigo-900/30 mb-4">
               <BookOpen className="w-8 h-8 text-indigo-600 dark:text-indigo-400" />
@@ -291,6 +296,22 @@ export default function LiveScan() {
               />
             </div>
             
+            <div>
+              <label htmlFor="academic_year" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Target Academic Year</label>
+              <select
+                id="academic_year"
+                className="mt-1 block w-full rounded-lg border-0 py-3 px-4 text-gray-900 dark:text-white bg-white dark:bg-gray-800 ring-1 ring-inset ring-gray-300 dark:ring-gray-700 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6 transition-colors"
+                value={setupData.academic_year}
+                onChange={e => setSetupData({...setupData, academic_year: e.target.value})}
+              >
+                <option value="All">All Years (No Restriction)</option>
+                <option value="1st Year">1st Year Only</option>
+                <option value="2nd Year">2nd Year Only</option>
+                <option value="3rd Year">3rd Year Only</option>
+                <option value="4th Year">4th Year Only</option>
+              </select>
+            </div>
+            
             <div className="pt-4">
               <button
                 type="submit"
@@ -307,10 +328,11 @@ export default function LiveScan() {
   }
 
   return (
-    <div className="p-8 max-w-7xl mx-auto h-[calc(100vh-2rem)] flex flex-col relative dark:bg-gray-950 transition-colors duration-300 min-h-screen">
-      <input 
-        type="file" 
-        accept="image/*" 
+    <div className="w-full min-h-screen bg-gray-50 dark:bg-gray-950 transition-colors duration-300 p-8 flex flex-col">
+      <div className="max-w-7xl mx-auto w-full flex-1 flex flex-col relative">
+        <input 
+          type="file" 
+          accept="image/*" 
         className="hidden" 
         ref={fileInputRef} 
         onChange={handleProcessAttendance} 
@@ -579,6 +601,7 @@ export default function LiveScan() {
           animation: scan 3s linear infinite;
         }
       `}} />
+      </div>
     </div>
   );
 }

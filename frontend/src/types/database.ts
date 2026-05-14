@@ -15,6 +15,7 @@ export interface Session {
   start_time: string;
   end_time: string;
   instructor_name: string;
+  target_academic_year?: string;
   created_at: string;
 }
 

@@ -68,8 +68,18 @@ async def process_attendance(file: UploadFile = File(...), session_id: str = For
     if not session_id:
         raise HTTPException(status_code=400, detail="session_id is required.")
 
-    # 1. Fetch enrolled students
-    students_res = supabase.table("students").select("id, full_name, face_encoding").not_.is_("face_encoding", "null").execute()
+    # 1. Fetch Session to get target_academic_year
+    session_res = supabase.table("sessions").select("target_academic_year").eq("id", session_id).execute()
+    target_year = "All"
+    if session_res.data and session_res.data[0].get("target_academic_year"):
+        target_year = session_res.data[0]["target_academic_year"]
+
+    # 2. Fetch enrolled students (restricted by cohort if applicable)
+    query = supabase.table("students").select("id, full_name, face_encoding").not_.is_("face_encoding", "null")
+    if target_year and target_year != "All":
+        query = query.eq("academic_year", target_year)
+    
+    students_res = query.execute()
     enrolled_students = students_res.data
     
     if not enrolled_students:

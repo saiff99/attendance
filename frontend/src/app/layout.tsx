@@ -28,9 +28,9 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${inter.variable} ${playfair.variable} h-full antialiased`}
+      className={`${inter.variable} ${playfair.variable} min-h-screen bg-gray-50 dark:bg-gray-950 antialiased`}
     >
-      <body suppressHydrationWarning className="h-full bg-gray-50 dark:bg-gray-950 flex transition-colors duration-300">
+      <body suppressHydrationWarning className="min-h-screen flex transition-colors duration-300">
         <ThemeProvider
           attribute="class"
           defaultTheme="system"

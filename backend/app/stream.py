@@ -19,7 +19,18 @@ def generate_video_feed(session_id: str, camera_index: int = 0):
 
     # Fetch enrolled students once when starting the stream
     try:
-        students_res = supabase.table("students").select("id, full_name, face_encoding, student_roll").not_.is_("face_encoding", "null").execute()
+        # 1. Fetch Session to get target_academic_year
+        session_res = supabase.table("sessions").select("target_academic_year").eq("id", session_id).execute()
+        target_year = "All"
+        if session_res.data and session_res.data[0].get("target_academic_year"):
+            target_year = session_res.data[0]["target_academic_year"]
+
+        # 2. Fetch enrolled students (restricted by cohort if applicable)
+        query = supabase.table("students").select("id, full_name, face_encoding, student_roll").not_.is_("face_encoding", "null")
+        if target_year and target_year != "All":
+            query = query.eq("academic_year", target_year)
+            
+        students_res = query.execute()
         enrolled_students = students_res.data or []
     except Exception as e:
         print("Error fetching students for stream:", e)
