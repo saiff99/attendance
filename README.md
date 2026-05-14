@@ -5,17 +5,15 @@ Here is your exact step-by-step startup guide:
 
 Start the AI Camera Engine
 Open VS Code and open a new terminal.
-Move to the backend folder by pasting this
+1. Move to the backend folder by pasting this
+2. Activate your Python environment:
+3. Start the AI engine:
 ```
 cd /Users/saif/Desktop/Attendance/Attendance-app/backend
 ```
-
-Activate your Python environment:
 ```
 source .venv/bin/activate
 ```
-
-Start the AI engine:
 ```
 uvicorn main:app --reload
 ```
@@ -27,11 +25,11 @@ Start the Cloud Tunnel
 
 Click the + icon in the terminal panel to open a second terminal tab.
 
-Move to the backend folder again:
+1. Move to the backend folder again:
+2. Start the Cloudflare Tunnel to broadcast to the internet:
 ```
 cd /Users/saif/Desktop/Attendance/Attendance-app/backend
 ```
-Start the Cloudflare Tunnel to broadcast to the internet:
 ```
 npx cloudflared tunnel --url http://localhost:8000
 ```
