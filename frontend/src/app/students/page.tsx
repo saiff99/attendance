@@ -182,7 +182,7 @@ export default function StudentDirectory() {
       {/* Header */}
       <div className="sm:flex sm:items-center sm:justify-between mb-8">
         <div>
-          <h1 className="text-3xl font-serif font-bold text-gray-900 dark:text-white">Student Directory</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white">Student Directory</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Manage student profiles and facial recognition data.</p>
         </div>
         <div className="mt-4 sm:mt-0 sm:flex sm:space-x-3">

@@ -24,7 +24,7 @@ export default function Sidebar() {
     <div className="flex h-full w-64 flex-col bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 shadow-sm fixed inset-y-0 z-50 transition-colors duration-300">
       <div className="flex h-16 shrink-0 items-center px-6 border-b border-gray-100 dark:border-gray-800">
         <Activity className="h-8 w-8 text-indigo-600 dark:text-indigo-400 mr-2" />
-        <span className="font-serif text-2xl font-bold tracking-tight text-gray-900 dark:text-white">
+        <span className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">
           MedAttend
         </span>
       </div>

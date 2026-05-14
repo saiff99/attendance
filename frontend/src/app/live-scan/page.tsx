@@ -244,7 +244,7 @@ export default function LiveScan() {
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-indigo-50 dark:bg-indigo-900/30 mb-4">
               <BookOpen className="w-8 h-8 text-indigo-600 dark:text-indigo-400" />
             </div>
-            <h1 className="text-3xl font-serif font-bold text-gray-900 dark:text-white">Class Setup</h1>
+            <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white">Class Setup</h1>
             <p className="mt-2 text-gray-500 dark:text-gray-400">Configure class details before taking attendance.</p>
           </div>
 
@@ -321,7 +321,7 @@ export default function LiveScan() {
           <button onClick={() => setActiveSession(null)} className="text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 flex items-center mb-2 transition-colors">
             <ArrowLeft className="w-4 h-4 mr-1" /> End Session & Back
           </button>
-          <h1 className="text-3xl font-serif font-bold text-gray-900 dark:text-white">Live Scan: {activeSession.class_name}</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white">Live Scan: {activeSession.class_name}</h1>
           <div className="flex items-center gap-4 mt-2 text-sm text-gray-600 dark:text-gray-400">
             <span className="flex items-center"><Users className="w-4 h-4 mr-1 text-gray-400 dark:text-gray-500" /> {activeSession.instructor_name}</span>
             <span className="flex items-center"><MapPin className="w-4 h-4 mr-1 text-gray-400 dark:text-gray-500" /> {setupData.hall}</span>

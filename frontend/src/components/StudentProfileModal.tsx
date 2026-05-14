@@ -43,7 +43,7 @@ export function StudentProfileModal({ student, isOpen, onClose }: StudentProfile
       
       <div className="relative w-full max-w-md h-full bg-white dark:bg-gray-900 shadow-2xl flex flex-col transform transition-transform duration-300 border-l border-gray-200 dark:border-gray-800">
         <div className="flex items-center justify-between p-6 border-b border-gray-100 dark:border-gray-800">
-          <h2 className="text-xl font-serif font-bold text-gray-900 dark:text-white">Student Profile</h2>
+          <h2 className="text-xl font-bold tracking-tight text-gray-900 dark:text-white">Student Profile</h2>
           <button
             onClick={onClose}
             className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors"
