@@ -2,13 +2,14 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Search, UserPlus, FileDown, MoreHorizontal, X, UploadCloud, Loader2, Edit2, Trash2 } from "lucide-react";
+import { Search, UserPlus, FileDown, MoreHorizontal, X, UploadCloud, Loader2, Edit2, Trash2, Folder, ArrowLeft, Users } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import type { Student } from "@/types/database";
 import { StudentProfileModal } from "@/components/StudentProfileModal";
 
 export default function StudentDirectory() {
   const [searchTerm, setSearchTerm] = useState("");
+  const [activeView, setActiveView] = useState<string | null>(null);
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -22,7 +23,7 @@ export default function StudentDirectory() {
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
   // Form State
-  const [newStudent, setNewStudent] = useState({ student_roll: '', full_name: '', email: '' });
+  const [newStudent, setNewStudent] = useState({ student_roll: '', full_name: '', email: '', academic_year: '1st Year' });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Reference for the hidden file input
@@ -65,6 +66,7 @@ export default function StudentDirectory() {
             student_roll: newStudent.student_roll,
             full_name: newStudent.full_name,
             email: generatedEmail,
+            academic_year: newStudent.academic_year,
           })
           .eq('id', editingId);
 
@@ -76,6 +78,7 @@ export default function StudentDirectory() {
             student_roll: newStudent.student_roll,
             full_name: newStudent.full_name,
             email: generatedEmail,
+            academic_year: newStudent.academic_year,
             face_encoding: null
           }]);
 
@@ -147,20 +150,29 @@ export default function StudentDirectory() {
 
   const openEnrollModal = () => {
     setEditingId(null);
-    setNewStudent({ student_roll: '', full_name: '', email: '' });
+    setNewStudent({ student_roll: '', full_name: '', email: '', academic_year: activeView || '1st Year' });
     setIsModalOpen(true);
   };
 
   const closeModal = () => {
     setIsModalOpen(false);
     setEditingId(null);
-    setNewStudent({ student_roll: '', full_name: '', email: '' });
+    setNewStudent({ student_roll: '', full_name: '', email: '', academic_year: activeView || '1st Year' });
   };
 
-  const filteredStudents = students.filter(student => 
-    student.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    student.student_roll?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredStudents = students.filter(student => {
+    const matchesSearch = student.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                          student.student_roll?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesYear = activeView ? student.academic_year === activeView : true;
+    return matchesSearch && matchesYear;
+  });
+
+  const yearFolders = [
+    { id: "1st Year", title: "First Year", description: "Freshman Cohort", color: "bg-blue-500", shadow: "shadow-blue-500/20" },
+    { id: "2nd Year", title: "Second Year", description: "Sophomore Cohort", color: "bg-emerald-500", shadow: "shadow-emerald-500/20" },
+    { id: "3rd Year", title: "Third Year", description: "Junior Cohort", color: "bg-amber-500", shadow: "shadow-amber-500/20" },
+    { id: "4th Year", title: "Fourth Year", description: "Senior Cohort", color: "bg-purple-500", shadow: "shadow-purple-500/20" },
+  ];
 
   return (
     <div className="p-8 max-w-7xl mx-auto relative dark:bg-gray-950 transition-colors duration-300 min-h-screen">
@@ -180,42 +192,84 @@ export default function StudentDirectory() {
       />
 
       {/* Header */}
-      <div className="sm:flex sm:items-center sm:justify-between mb-8">
-        <div>
+      {!activeView ? (
+        <div className="mb-8">
           <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white">Student Directory</h1>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Manage student profiles and facial recognition data.</p>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Select an academic year folder to manage student profiles and facial data.</p>
         </div>
-        <div className="mt-4 sm:mt-0 sm:flex sm:space-x-3">
-          <button type="button" className="inline-flex items-center justify-center rounded-md bg-white dark:bg-gray-900 px-3 py-2 text-sm font-semibold text-gray-900 dark:text-gray-100 shadow-sm ring-1 ring-inset ring-gray-300 dark:ring-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-            <FileDown className="h-4 w-4 mr-2 text-gray-500 dark:text-gray-400" />
-            Export CSV
-          </button>
-          <button 
-            onClick={openEnrollModal}
-            type="button" 
-            className="inline-flex items-center justify-center rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 transition-colors"
-          >
-            <UserPlus className="h-4 w-4 mr-2" />
-            Enroll New Student
-          </button>
-        </div>
-      </div>
-
-      {/* Search and Filter Bar */}
-      <div className="bg-white dark:bg-gray-900 p-4 rounded-t-xl border border-gray-200 dark:border-gray-800 border-b-0 flex items-center transition-colors">
-        <div className="relative flex-1 max-w-md">
-          <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-            <Search className="h-5 w-5 text-gray-400" aria-hidden="true" />
+      ) : (
+        <div className="sm:flex sm:items-center sm:justify-between mb-8">
+          <div>
+            <button 
+              onClick={() => { setActiveView(null); setSearchTerm(""); }}
+              className="mb-4 inline-flex items-center text-sm font-medium text-gray-500 hover:text-indigo-600 dark:text-gray-400 dark:hover:text-indigo-400 transition-colors"
+            >
+              <ArrowLeft className="mr-1 h-4 w-4" /> Back to Folders
+            </button>
+            <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white">Directory: {activeView}</h1>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Manage students inside the {activeView} cohort.</p>
           </div>
-          <input
-            type="text"
-            className="block w-full rounded-md border-0 py-2 pl-10 text-gray-900 dark:text-white bg-white dark:bg-gray-800 ring-1 ring-inset ring-gray-300 dark:ring-gray-700 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6 transition-colors"
-            placeholder="Search by name or ID..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
+          <div className="mt-4 sm:mt-0 sm:flex sm:space-x-3">
+            <button type="button" className="inline-flex items-center justify-center rounded-md bg-white dark:bg-gray-900 px-3 py-2 text-sm font-semibold text-gray-900 dark:text-gray-100 shadow-sm ring-1 ring-inset ring-gray-300 dark:ring-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+              <FileDown className="h-4 w-4 mr-2 text-gray-500 dark:text-gray-400" />
+              Export CSV
+            </button>
+            <button 
+              onClick={openEnrollModal}
+              type="button" 
+              className="inline-flex items-center justify-center rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 transition-colors"
+            >
+              <UserPlus className="h-4 w-4 mr-2" />
+              Enroll Student
+            </button>
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* Main Content Area */}
+      {!activeView ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          {yearFolders.map((folder) => {
+            const count = students.filter(s => s.academic_year === folder.id).length;
+            return (
+              <div 
+                key={folder.id}
+                onClick={() => setActiveView(folder.id)}
+                className="group relative bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-6 hover:shadow-xl transition-all duration-300 cursor-pointer overflow-hidden"
+              >
+                <div className={`absolute top-0 right-0 w-32 h-32 -mr-8 -mt-8 rounded-full opacity-10 transition-transform duration-500 group-hover:scale-150 ${folder.color}`}></div>
+                <div className="flex items-center justify-between mb-4 relative z-10">
+                  <div className={`p-3 rounded-xl ${folder.color} bg-opacity-10 dark:bg-opacity-20`}>
+                    <Folder className={`w-8 h-8 ${folder.color.replace('bg-', 'text-')}`} />
+                  </div>
+                  <div className="flex items-center space-x-1 text-sm font-medium text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 px-3 py-1 rounded-full border border-gray-100 dark:border-gray-700">
+                    <Users className="w-4 h-4 mr-1" />
+                    {count}
+                  </div>
+                </div>
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-1 relative z-10">{folder.title}</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 relative z-10">{folder.description}</p>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <>
+          {/* Search Bar (Inside Folder) */}
+          <div className="bg-white dark:bg-gray-900 p-4 rounded-t-xl border border-gray-200 dark:border-gray-800 border-b-0 flex items-center transition-colors">
+            <div className="relative flex-1 max-w-md">
+              <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                <Search className="h-5 w-5 text-gray-400" aria-hidden="true" />
+              </div>
+              <input
+                type="text"
+                className="block w-full rounded-md border-0 py-2 pl-10 text-gray-900 dark:text-white bg-white dark:bg-gray-800 ring-1 ring-inset ring-gray-300 dark:ring-gray-700 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6 transition-colors"
+                placeholder={`Search inside ${activeView}...`}
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+          </div>
 
       {/* Data Table */}
       <div className="bg-white dark:bg-gray-900 rounded-b-xl border border-gray-200 dark:border-gray-800 shadow-sm overflow-hidden pb-[100px] -mb-[100px] transition-colors">
@@ -228,6 +282,9 @@ export default function StudentDirectory() {
                 </th>
                 <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900 dark:text-gray-300">
                   Name
+                </th>
+                <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900 dark:text-gray-300">
+                  Academic Year
                 </th>
                 <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900 dark:text-gray-300">
                   Face Data
@@ -275,6 +332,11 @@ export default function StudentDirectory() {
                       </div>
                     </td>
                     <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500 dark:text-gray-400">
+                      <span className="inline-flex items-center rounded-md bg-blue-50 dark:bg-blue-900/30 px-2 py-1 text-xs font-medium text-blue-700 dark:text-blue-400 ring-1 ring-inset ring-blue-700/10 dark:ring-blue-400/20">
+                        {student.academic_year || 'N/A'}
+                      </span>
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500 dark:text-gray-400">
                       <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset ${
                         student.face_encoding ? 'bg-indigo-50 text-indigo-700 ring-indigo-600/20 dark:bg-indigo-900/30 dark:text-indigo-400 dark:ring-indigo-400/20' : 'bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-900/30 dark:text-amber-400 dark:ring-amber-400/20'
                       }`}>
@@ -314,7 +376,8 @@ export default function StudentDirectory() {
                                       setNewStudent({ 
                                         student_roll: student.student_roll || '', 
                                         full_name: student.full_name || '', 
-                                        email: student.email || '' 
+                                        email: student.email || '',
+                                        academic_year: student.academic_year || '1st Year'
                                       });
                                       setEditingId(student.id);
                                       setIsModalOpen(true);
@@ -349,6 +412,8 @@ export default function StudentDirectory() {
           </table>
         </div>
       </div>
+      </>
+      )}
 
       {/* Enroll/Edit Modal */}
       {isModalOpen && (
@@ -385,6 +450,22 @@ export default function StudentDirectory() {
                   onChange={e => setNewStudent({...newStudent, full_name: e.target.value})}
                   placeholder="e.g. Emily Chen"
                 />
+              </div>
+              <div>
+                <label htmlFor="academic_year" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Academic Year</label>
+                <select
+                  id="academic_year"
+                  required
+                  disabled={!!activeView}
+                  className={`mt-1 block w-full rounded-md border-0 py-2 pl-3 pr-10 ring-1 ring-inset focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6 transition-colors ${activeView ? 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 ring-gray-200 dark:ring-gray-700 cursor-not-allowed' : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white ring-gray-300 dark:ring-gray-700'}`}
+                  value={newStudent.academic_year}
+                  onChange={e => setNewStudent({...newStudent, academic_year: e.target.value})}
+                >
+                  <option value="1st Year">1st Year</option>
+                  <option value="2nd Year">2nd Year</option>
+                  <option value="3rd Year">3rd Year</option>
+                  <option value="4th Year">4th Year</option>
+                </select>
               </div>
               
               <div className="mt-6 flex justify-end space-x-3 pt-4 border-t border-gray-100 dark:border-gray-800">

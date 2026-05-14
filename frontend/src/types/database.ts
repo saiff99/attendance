@@ -3,6 +3,7 @@ export interface Student {
   student_roll: string;
   full_name: string;
   email: string;
+  academic_year?: string;
   face_encoding?: Record<string, unknown>;
   created_at: string;
 }
