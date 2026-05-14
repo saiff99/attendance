@@ -62,11 +62,11 @@ export default function Sidebar() {
         <div className="flex items-center">
           <div>
             <div className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-indigo-100 dark:bg-indigo-900/50">
-              <span className="text-sm font-medium leading-none text-indigo-700 dark:text-indigo-300">Dr</span>
+              <span className="text-sm font-medium leading-none text-indigo-700 dark:text-indigo-300">Sk</span>
             </div>
           </div>
           <div className="ml-3">
-            <p className="text-sm font-medium text-gray-700 dark:text-gray-200 group-hover:text-gray-900">Dr. Smith</p>
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-200 group-hover:text-gray-900">Sk. Saifuddin</p>
             <p className="text-xs font-medium text-gray-500 dark:text-gray-400 group-hover:text-gray-700">Admin</p>
           </div>
         </div>
