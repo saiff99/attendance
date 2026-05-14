@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LayoutDashboard, ScanLine, Users, FileBarChart, Activity } from "lucide-react";
-import { ThemeToggle } from "@/components/ThemeToggle";
 import { SystemHealth } from "@/components/SystemHealth";
 
 const navigation = [
@@ -58,7 +57,6 @@ export default function Sidebar() {
       </div>
       <div className="flex flex-col shrink-0 border-t border-gray-200 dark:border-gray-800 p-4 gap-4">
         <SystemHealth />
-        <ThemeToggle />
         <div className="flex items-center">
           <div>
             <div className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-indigo-100 dark:bg-indigo-900/50">
