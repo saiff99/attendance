@@ -5,6 +5,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { Camera, Upload, CheckCircle2, PlayCircle, StopCircle, Activity, Loader2, ArrowLeft, BookOpen, Users, MapPin, Video, Download } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import Webcam from "react-webcam";
+import { MjpegPlayer } from "@/components/MjpegPlayer";
 
 export default function LiveScan() {
   const [activeTab, setActiveTab] = useState<"live" | "manual" | "cctv">("live");
@@ -471,12 +472,10 @@ export default function LiveScan() {
                 )}
 
                 <div className="absolute inset-0 w-full h-full bg-black flex items-center justify-center">
-                  {/* Using key to force React to re-mount the img tag when selectedCctvIndex changes, bypassing browser cache */}
-                  <img 
+                  <MjpegPlayer 
                     key={selectedCctvIndex}
-                    src={`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'}/api/video-feed/${activeSession.id}?camera_index=${selectedCctvIndex}`} 
+                    url={`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'}/api/video-feed/${activeSession.id}?camera_index=${selectedCctvIndex}`} 
                     className="w-full h-full object-contain"
-                    alt="CCTV Live Tracking Stream" 
                   />
                   
                   {/* Status Overlay */}
