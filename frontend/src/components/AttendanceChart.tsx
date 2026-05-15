@@ -22,11 +22,11 @@ export function AttendanceChart({ data, totalPresent, totalAbsent }: AttendanceC
   const COLORS = ['#10b981', '#ef4444'];
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-      <div className="lg:col-span-2 bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 p-6">
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8 min-w-0 w-full">
+      <div className="lg:col-span-2 bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 p-4 sm:p-6 min-w-0 w-full">
         <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-6">Attendance Trends (Last 7 Days)</h3>
-        <div className="h-72 w-full">
-          <ResponsiveContainer width="100%" height="100%">
+        <div className="h-72 w-full min-w-0">
+          <ResponsiveContainer width="99%" height="100%">
             <BarChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#374151" opacity={0.2} />
               <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 12 }} dy={10} />
@@ -43,10 +43,10 @@ export function AttendanceChart({ data, totalPresent, totalAbsent }: AttendanceC
         </div>
       </div>
       
-      <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 p-6">
+      <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 p-4 sm:p-6 min-w-0 w-full">
         <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-6">Overall Distribution</h3>
-        <div className="h-72 w-full">
-          <ResponsiveContainer width="100%" height="100%">
+        <div className="h-72 w-full min-w-0">
+          <ResponsiveContainer width="99%" height="100%">
             <PieChart>
               <Pie
                 data={pieData}

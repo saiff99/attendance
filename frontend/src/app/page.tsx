@@ -83,7 +83,7 @@ export default async function Dashboard() {
   ];
 
   return (
-    <div className="p-8 max-w-7xl mx-auto dark:bg-gray-950 transition-colors duration-300 min-h-screen">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full dark:bg-gray-950 transition-colors duration-300 min-h-screen">
       <div className="mb-8">
         <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white">Dashboard Overview</h1>
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Monitor live attendance and system status.</p>
@@ -108,7 +108,7 @@ export default async function Dashboard() {
 
       <AttendanceChart data={chartData} totalPresent={totalPresentCount} totalAbsent={totalAbsentCount} />
 
-      <div className="bg-white dark:bg-gray-900 shadow-sm border border-gray-100 dark:border-gray-800 rounded-xl overflow-hidden transition-colors duration-300">
+      <div className="bg-white dark:bg-gray-900 shadow-sm border border-gray-100 dark:border-gray-800 rounded-xl overflow-hidden transition-colors duration-300 min-w-0 w-full">
         <div className="p-6 border-b border-gray-100 dark:border-gray-800 flex items-center">
           <CalendarDays className="w-5 h-5 mr-2 text-indigo-600 dark:text-indigo-400" />
           <h2 className="text-lg font-medium text-gray-900 dark:text-white">Recent Class Sessions</h2>
