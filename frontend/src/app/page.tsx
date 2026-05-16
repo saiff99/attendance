@@ -83,7 +83,8 @@ export default async function Dashboard() {
   ];
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full dark:bg-gray-950 transition-colors duration-300 min-h-screen">
+    <div className="w-full min-h-screen bg-gray-50 dark:bg-gray-950 transition-colors duration-300">
+      <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full">
       <div className="mb-8">
         <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white">Dashboard Overview</h1>
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Monitor live attendance and system status.</p>
@@ -160,6 +161,7 @@ export default async function Dashboard() {
             </tbody>
           </table>
         </div>
+      </div>
       </div>
     </div>
   );

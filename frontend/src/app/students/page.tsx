@@ -175,7 +175,8 @@ export default function StudentDirectory() {
   ];
 
   return (
-    <div className="p-8 max-w-7xl mx-auto relative dark:bg-gray-950 transition-colors duration-300 min-h-screen">
+    <div className="w-full min-h-screen bg-gray-50 dark:bg-gray-950 transition-colors duration-300">
+      <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full relative">
       <StudentProfileModal 
         isOpen={isProfileModalOpen} 
         onClose={() => setIsProfileModalOpen(false)} 
@@ -488,6 +489,7 @@ export default function StudentDirectory() {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }
