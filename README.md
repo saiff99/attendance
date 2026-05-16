@@ -3,16 +3,20 @@ Here is your exact step-by-step startup guide:
 
 ### Terminal 1: Start the AI Camera Engine
 Open a terminal and run these commands to start the Python backend:
-```bash
+```
 cd /Users/saif/Desktop/Attendance/Attendance-app/backend
+```
+```
 source .venv/bin/activate
+```
+```
 uvicorn main:app --reload
 ```
 *(Leave this running. It connects to the cameras and processes the faces!)*
 
 ### Terminal 2: Start the Cloud Tunnel
 Open a **second** terminal tab and run your permanent Ngrok tunnel:
-```bash
+```
 ngrok http --url=bonfire-frosting-exclaim.ngrok-free.dev 8000
 ```
 *(Leave this running. This securely connects your laptop to the internet without changing your URL!)*
@@ -24,8 +28,10 @@ Because you have a permanent Ngrok domain, you **NO LONGER** need to update Verc
 
 ### Terminal 3 (Optional): Run Frontend Locally
 If you want to make edits to the website and test them on your laptop before pushing to Vercel, open a **third** terminal and run:
-```bash
+```
 cd /Users/saif/Desktop/Attendance/Attendance-app/frontend
+```
+```
 npm run dev
 ```
 Then open your browser and go to `http://localhost:3000`.
