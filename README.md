@@ -35,5 +35,3 @@ cd /Users/saif/Desktop/Attendance/Attendance-app/frontend
 npm run dev
 ```
 Then open your browser and go to `http://localhost:3000`.
-
-
