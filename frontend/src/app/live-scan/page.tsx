@@ -547,7 +547,7 @@ export default function LiveScan() {
               <h2 className="font-semibold text-gray-900 dark:text-white flex items-center">
                 <Activity className="w-5 h-5 mr-2 text-indigo-600 dark:text-indigo-400" /> Class Recognition Log
               </h2>
-              <span className="bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 text-xs font-bold px-2.5 py-0.5 rounded-full" title="Total Present">
+              <span className="bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20 text-xs font-bold px-2.5 py-0.5 rounded-full shadow-sm" title="Total Present">
                 {logs.length}
               </span>
             </div>

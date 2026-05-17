@@ -248,6 +248,32 @@ export function FaceRegistrationModal({ isOpen, onClose, studentId, studentName,
                 )}
               </div>
             )}
+
+            {/* Directional Prompts */}
+            {status === 'scanning' && (
+              <>
+                {instructionIndex === 1 && (
+                  <div className="absolute top-1/2 left-full ml-2 -translate-y-1/2 text-emerald-400 font-bold text-xl animate-pulse drop-shadow-md whitespace-nowrap">
+                    Right →
+                  </div>
+                )}
+                {instructionIndex === 2 && (
+                  <div className="absolute top-1/2 right-full mr-2 -translate-y-1/2 text-emerald-400 font-bold text-xl animate-pulse drop-shadow-md whitespace-nowrap">
+                    ← Left
+                  </div>
+                )}
+                {instructionIndex === 3 && (
+                  <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 text-emerald-400 font-bold text-xl animate-pulse drop-shadow-md whitespace-nowrap">
+                    ↑ Up
+                  </div>
+                )}
+                {instructionIndex === 4 && (
+                  <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 text-emerald-400 font-bold text-xl animate-pulse drop-shadow-md whitespace-nowrap">
+                    ↓ Down
+                  </div>
+                )}
+              </>
+            )}
           </div>
 
           {/* Instructions / Actions */}
