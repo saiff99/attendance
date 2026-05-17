@@ -232,6 +232,22 @@ export function FaceRegistrationModal({ isOpen, onClose, studentId, studentName,
                 <div className="absolute left-1/2 w-[1px] h-full bg-indigo-500/50 shadow-[0_0_8px_2px_rgba(99,102,241,0.5)]"></div>
               </div>
             )}
+            
+            {/* Center Countdown Overlay */}
+            {status === 'scanning' && (
+              <div className="absolute inset-0 pointer-events-none flex items-center justify-center z-10">
+                {countdown !== null && countdown > 0 && (
+                  <span className="text-7xl font-bold text-white drop-shadow-[0_4px_8px_rgba(0,0,0,0.8)] animate-pulse">
+                    {countdown}
+                  </span>
+                )}
+                {countdown === 0 && (
+                  <span className="text-4xl font-bold text-emerald-400 drop-shadow-[0_4px_8px_rgba(0,0,0,0.8)]">
+                    Capturing...
+                  </span>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Instructions / Actions */}
@@ -254,16 +270,6 @@ export function FaceRegistrationModal({ isOpen, onClose, studentId, studentName,
                 <p className="text-xl font-medium text-white mb-1">
                   {INSTRUCTIONS[instructionIndex]}
                 </p>
-                {countdown !== null && countdown > 0 && (
-                  <p className="text-3xl font-bold text-indigo-400 animate-pulse">
-                    {countdown}
-                  </p>
-                )}
-                {countdown === 0 && (
-                  <p className="text-3xl font-bold text-emerald-400">
-                    Capturing...
-                  </p>
-                )}
               </div>
             )}
 
