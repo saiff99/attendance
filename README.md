@@ -23,4 +23,4 @@ Terminal 3: The Ngrok Tunnel (This securely exposes your backend so the Vercel m
 ngrok http --url=silly-unframed-extortion.ngrok-free.dev 8000
 ```
 
-Then open your browser and go `http://localhost:3000`.[Open](http://localhost:3000)
+Then open your browser and go `http://localhost:3000`[↗️](http://localhost:3000)
