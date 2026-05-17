@@ -555,7 +555,7 @@ export default function LiveScan() {
               onClick={exportToCSV}
               className="text-xs font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 px-3 py-1.5 rounded-full transition-colors flex items-center"
             >
-              <Download className="w-3.5 h-3.5 mr-1" /> Export CSV
+              <Download className="w-3.5 h-3.5 mr-1" /> Export
             </button>
           </div>
           <div className="flex-1 overflow-y-auto p-4 space-y-3">
