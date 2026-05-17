@@ -543,9 +543,14 @@ export default function LiveScan() {
         {/* Right Side: Live Log */}
         <div className="w-1/3 bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 flex flex-col overflow-hidden transition-colors">
           <div className="p-4 border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/30 flex items-center justify-between">
-            <h2 className="font-semibold text-gray-900 dark:text-white flex items-center">
-              <Activity className="w-5 h-5 mr-2 text-indigo-600 dark:text-indigo-400" /> Class Recognition Log
-            </h2>
+            <div className="flex items-center gap-2">
+              <h2 className="font-semibold text-gray-900 dark:text-white flex items-center">
+                <Activity className="w-5 h-5 mr-2 text-indigo-600 dark:text-indigo-400" /> Class Recognition Log
+              </h2>
+              <span className="bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 text-xs font-bold px-2.5 py-0.5 rounded-full" title="Total Present">
+                {logs.length}
+              </span>
+            </div>
             <button
               onClick={exportToCSV}
               className="text-xs font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 px-3 py-1.5 rounded-full transition-colors flex items-center"
