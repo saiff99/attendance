@@ -6,6 +6,7 @@ import { Search, UserPlus, FileDown, MoreHorizontal, X, UploadCloud, Loader2, Ed
 import { supabase } from "@/lib/supabase";
 import type { Student } from "@/types/database";
 import { StudentProfileModal } from "@/components/StudentProfileModal";
+import { FaceRegistrationModal } from "@/components/FaceRegistrationModal";
 
 export default function StudentDirectory() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -13,7 +14,6 @@ export default function StudentDirectory() {
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [uploadingForId, setUploadingForId] = useState<string | null>(null);
   
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -26,9 +26,16 @@ export default function StudentDirectory() {
   const [newStudent, setNewStudent] = useState({ student_roll: '', full_name: '', email: '', academic_year: '1st Year' });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Reference for the hidden file input
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
+  // Face Registration Modal State
+  const [isFaceModalOpen, setIsFaceModalOpen] = useState(false);
+  const [faceModalStudentId, setFaceModalStudentId] = useState<string>("");
+  const [faceModalStudentName, setFaceModalStudentName] = useState<string>("");
+
+  const triggerFaceRegistration = (studentId: string, studentName: string) => {
+    setFaceModalStudentId(studentId);
+    setFaceModalStudentName(studentName);
+    setIsFaceModalOpen(true);
+  };
 
   const fetchStudents = async () => {
     setLoading(true);
@@ -108,45 +115,7 @@ export default function StudentDirectory() {
     }
   };
 
-  const triggerFileUpload = (studentId: string) => {
-    setSelectedStudentId(studentId);
-    fileInputRef.current?.click();
-  };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !selectedStudentId) return;
-
-    setUploadingForId(selectedStudentId);
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
-      const response = await fetch(`${backendUrl}/api/enroll-face/${selectedStudentId}`, {
-        method: 'POST',
-        body: formData,
-        headers: {
-          "ngrok-skip-browser-warning": "69420"
-        }
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Failed to upload photo');
-      }
-
-      await fetchStudents(); // Refresh the list to show Active status
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } catch (error: any) {
-      console.error('Error uploading face data:', error);
-      alert(error.message || 'Failed to upload photo. Check console.');
-    } finally {
-      setUploadingForId(null);
-      setSelectedStudentId(null);
-      if (e.target) e.target.value = ''; // Reset input
-    }
-  };
 
   const openEnrollModal = () => {
     setEditingId(null);
@@ -183,13 +152,12 @@ export default function StudentDirectory() {
         student={selectedProfileStudent} 
       />
 
-      {/* Hidden file input for uploading face images */}
-      <input 
-        type="file" 
-        accept="image/*" 
-        ref={fileInputRef} 
-        onChange={handleFileUpload} 
-        className="hidden" 
+      <FaceRegistrationModal
+        isOpen={isFaceModalOpen}
+        onClose={() => setIsFaceModalOpen(false)}
+        studentId={faceModalStudentId}
+        studentName={faceModalStudentName}
+        onSuccess={() => fetchStudents()}
       />
 
       {/* Header */}
@@ -347,15 +315,10 @@ export default function StudentDirectory() {
                     <td className="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6 actions-cell">
                       <div className="flex justify-end items-center gap-2">
                         <button 
-                          onClick={() => triggerFileUpload(student.id)}
-                          disabled={uploadingForId === student.id}
-                          className="inline-flex items-center text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300 disabled:opacity-50 mr-2 transition-colors"
+                          onClick={() => triggerFaceRegistration(student.id, student.full_name)}
+                          className="inline-flex items-center text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300 mr-2 transition-colors"
                         >
-                          {uploadingForId === student.id ? (
-                            <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Uploading...</>
-                          ) : (
-                            <><UploadCloud className="w-4 h-4 mr-1" /> {student.face_encoding ? 'Update Face' : 'Upload Face'}</>
-                          )}
+                          <UploadCloud className="w-4 h-4 mr-1" /> {student.face_encoding ? 'Update Face ID' : 'Setup Face ID'}
                         </button>
                         
                         {/* Actions Dropdown */}

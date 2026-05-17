@@ -6,6 +6,7 @@ from PIL import Image
 from numpy.linalg import norm
 from fastapi import APIRouter, File, UploadFile, Form, HTTPException
 from fastapi.responses import StreamingResponse
+from typing import List
 from pydantic import BaseModel
 
 from app.config import supabase, get_camera_urls
@@ -56,6 +57,59 @@ async def enroll_face(student_id: str, file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail="Failed to save face encoding to database.")
 
     return {"success": True, "message": "Face data enrolled successfully!", "ai_used": AI_ENABLED}
+
+@router.post("/api/enroll-face-burst/{student_id}")
+async def enroll_face_burst(student_id: str, files: List[UploadFile] = File(...)):
+    if not files:
+        raise HTTPException(status_code=400, detail="No files uploaded.")
+        
+    valid_encodings = []
+    
+    if AI_ENABLED and app_fa:
+        try:
+            for file in files:
+                contents = await file.read()
+                image = Image.open(io.BytesIO(contents)).convert('RGB')
+                image_np = np.array(image)
+                image_bgr = image_np[:, :, ::-1]
+                
+                faces = app_fa.get(image_bgr)
+                
+                # We only want frames where exactly one face is detected
+                if len(faces) == 1:
+                    valid_encodings.append(faces[0].embedding)
+            
+            if not valid_encodings:
+                raise HTTPException(status_code=400, detail="Could not detect a clear single face in any of the captured frames. Please try again.")
+                
+            # Average the encodings for a highly robust 3D representation
+            avg_encoding = np.mean(valid_encodings, axis=0)
+            
+            # Normalize the average encoding
+            avg_encoding = avg_encoding / norm(avg_encoding)
+            encoding_list = avg_encoding.tolist()
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            print("Error processing images with AI:", str(e))
+            raise HTTPException(status_code=500, detail="Failed to process images.")
+    else:
+        # Fallback Mock
+        encoding_list = [random.uniform(-1.0, 1.0) for _ in range(128)]
+        time.sleep(1)
+
+    try:
+        supabase.table("students").update({"face_encoding": encoding_list}).eq("id", student_id).execute()
+    except Exception as e:
+        print("Database error:", str(e))
+        raise HTTPException(status_code=500, detail="Failed to save face encoding to database.")
+
+    return {
+        "success": True, 
+        "message": f"Face data enrolled successfully using {len(valid_encodings)} angles!", 
+        "ai_used": AI_ENABLED
+    }
 
 @router.post("/api/process-attendance")
 async def process_attendance(file: UploadFile = File(...), session_id: str = Form(...)):
