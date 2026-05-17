@@ -17,7 +17,7 @@ uvicorn main:app --reload
 ### Terminal 2: Start the Cloud Tunnel
 Open a **second** terminal tab and run your permanent Ngrok tunnel:
 ```
-ngrok http --url=bonfire-frosting-exclaim.ngrok-free.dev 8000
+ngrok http --url=silly-unframed-extortion.ngrok-free.dev 8000
 ```
 *(Leave this running. This securely connects your laptop to the internet without changing your URL!)*
 
