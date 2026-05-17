@@ -16,8 +16,8 @@ type ScanStatus = 'idle' | 'scanning' | 'processing' | 'success' | 'error';
 
 const INSTRUCTIONS = [
   "Look straight at the camera",
-  "Turn your head slightly to the left",
   "Turn your head slightly to the right",
+  "Turn your head slightly to the left",
   "Tilt your head slightly up",
   "Tilt your head slightly down",
 ];
@@ -27,10 +27,10 @@ export function FaceRegistrationModal({ isOpen, onClose, studentId, studentName,
   const [instructionIndex, setInstructionIndex] = useState(0);
   const [progress, setProgress] = useState(0);
   const [errorMessage, setErrorMessage] = useState("");
+  const [countdown, setCountdown] = useState<number | null>(null);
   
   const webcamRef = useRef<Webcam>(null);
   const framesRef = useRef<string[]>([]);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Reset state when modal opens
   useEffect(() => {
@@ -39,54 +39,55 @@ export function FaceRegistrationModal({ isOpen, onClose, studentId, studentName,
       setInstructionIndex(0);
       setProgress(0);
       setErrorMessage("");
+      setCountdown(null);
       framesRef.current = [];
     }
-    return () => stopScanning();
   }, [isOpen]);
-
-  const stopScanning = () => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-  };
 
   const startScanning = () => {
     setStatus('scanning');
     setInstructionIndex(0);
     setProgress(0);
     framesRef.current = [];
-    
-    // We want to capture 5 frames total, one every 1.5 seconds
-    const totalFrames = 5;
-    let currentFrame = 0;
-
-    // Capture first frame immediately
-    captureFrame();
-    currentFrame++;
-    setProgress((currentFrame / totalFrames) * 100);
-    
-    intervalRef.current = setInterval(() => {
-      if (currentFrame < totalFrames) {
-        setInstructionIndex(currentFrame);
-        captureFrame();
-        currentFrame++;
-        setProgress((currentFrame / totalFrames) * 100);
-      } else {
-        stopScanning();
-        processFrames();
-      }
-    }, 1500);
+    setCountdown(3);
   };
 
-  const captureFrame = useCallback(() => {
-    if (webcamRef.current) {
-      const imageSrc = webcamRef.current.getScreenshot();
-      if (imageSrc) {
-        framesRef.current.push(imageSrc);
+  useEffect(() => {
+    if (status !== 'scanning' || countdown === null) return;
+
+    if (countdown > 0) {
+      const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+      return () => clearTimeout(timer);
+    } else if (countdown === 0) {
+      // Time to capture!
+      if (webcamRef.current) {
+        const imageSrc = webcamRef.current.getScreenshot();
+        if (imageSrc) {
+          framesRef.current.push(imageSrc);
+        }
+      }
+      
+      const currentFrame = framesRef.current.length;
+      const totalFrames = 5;
+      
+      setProgress((currentFrame / totalFrames) * 100);
+      
+      if (currentFrame < totalFrames) {
+        // Move to next instruction and reset countdown
+        // We use a tiny timeout so the user sees "Capturing..." or the flash effect momentarily
+        const flashTimer = setTimeout(() => {
+          setInstructionIndex(currentFrame);
+          setCountdown(3);
+        }, 500);
+        return () => clearTimeout(flashTimer);
+      } else {
+        // Done capturing all frames
+        setStatus('processing');
+        setCountdown(null);
+        processFrames();
       }
     }
-  }, [webcamRef]);
+  }, [countdown, status]);
 
   // Convert base64 data URL to Blob
   const dataURLtoBlob = (dataurl: string) => {
@@ -249,9 +250,21 @@ export function FaceRegistrationModal({ isOpen, onClose, studentId, studentName,
             )}
 
             {status === 'scanning' && (
-              <p className="text-xl font-medium text-white animate-pulse">
-                {INSTRUCTIONS[instructionIndex]}
-              </p>
+              <div className="flex flex-col items-center">
+                <p className="text-xl font-medium text-white mb-1">
+                  {INSTRUCTIONS[instructionIndex]}
+                </p>
+                {countdown !== null && countdown > 0 && (
+                  <p className="text-3xl font-bold text-indigo-400 animate-pulse">
+                    {countdown}
+                  </p>
+                )}
+                {countdown === 0 && (
+                  <p className="text-3xl font-bold text-emerald-400">
+                    Capturing...
+                  </p>
+                )}
+              </div>
             )}
 
             {status === 'processing' && (
