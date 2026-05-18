@@ -51,8 +51,8 @@ def generate_video_feed(session_id: str, camera_index: int = 0):
         frame_count += 1
 
         if AI_ENABLED and app_fa:
-            # Throttle heavy InsightFace AI processing to run once every 4 frames
-            if frame_count % 4 == 1:
+            # Throttle heavy InsightFace AI processing to run once every 30 frames (approx 1 fps) to prevent lag
+            if frame_count % 30 == 1:
                 try:
                     faces = app_fa.get(frame)
                     current_faces = []
