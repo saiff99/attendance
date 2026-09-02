@@ -2,13 +2,13 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Camera, Upload, CheckCircle2, PlayCircle, StopCircle, Activity, Loader2, ArrowLeft, BookOpen, Users, MapPin, Video, Download } from "lucide-react";
+import { Camera, Upload, CheckCircle2, PlayCircle, StopCircle, Activity, Loader2, ArrowLeft, BookOpen, Users, MapPin, Video, Download, Focus, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, ZoomIn, ZoomOut } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import Webcam from "react-webcam";
 import { MjpegPlayer } from "@/components/MjpegPlayer";
 
 export default function LiveScan() {
-  const [activeTab, setActiveTab] = useState<"live" | "manual" | "cctv">("live");
+  const [activeTab, setActiveTab] = useState<"live" | "manual" | "cctv" | "ptz">("live");
   const [isScanning, setIsScanning] = useState(false);
   
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -30,6 +30,8 @@ export default function LiveScan() {
   // Multi-camera state
   const [cctvCameraCount, setCctvCameraCount] = useState(1);
   const [selectedCctvIndex, setSelectedCctvIndex] = useState(0);
+  const [ptzCameraCount, setPtzCameraCount] = useState(1);
+  const [selectedPtzIndex, setSelectedPtzIndex] = useState(0);
 
   // Webcam State
   const webcamRef = useRef<Webcam>(null);
@@ -76,7 +78,26 @@ export default function LiveScan() {
       .then(res => res.json())
       .then(data => setCctvCameraCount(data.count))
       .catch(err => console.error("Failed to fetch camera count", err));
+      
+    // Fetch available PTZ cameras
+    fetch(`${backendUrl}/api/ptz-cameras`)
+      .then(res => res.json())
+      .then(data => setPtzCameraCount(data.count))
+      .catch(err => console.error("Failed to fetch PTZ camera count", err));
   }, []);
+
+  // PTZ Control functions
+  const sendPtzCommand = (direction: string) => {
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+    fetch(`${backendUrl}/api/ptz/move`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ direction })
+    }).catch(err => console.error("PTZ Command Failed", err));
+  };
+
+  const startPtzMove = (direction: string) => sendPtzCommand(direction);
+  const stopPtzMove = () => sendPtzCommand('stop');
 
   const exportToCSV = () => {
     if (!logs || logs.length === 0) {
@@ -380,6 +401,17 @@ export default function LiveScan() {
               CCTV Tracking
             </button>
             <button
+              onClick={() => setActiveTab("ptz")}
+              className={`flex-1 min-w-[150px] py-3 px-4 text-sm font-medium rounded-lg flex items-center justify-center transition-colors ${
+                activeTab === "ptz"
+                  ? "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400"
+                  : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50"
+              }`}
+            >
+              <Focus className="w-5 h-5 mr-2" />
+              PTZ Camera
+            </button>
+            <button
               onClick={() => setActiveTab("manual")}
               className={`flex-1 min-w-[150px] py-3 px-4 text-sm font-medium rounded-lg flex items-center justify-center transition-colors ${
                 activeTab === "manual"
@@ -485,6 +517,126 @@ export default function LiveScan() {
                   </div>
                 </div>
               </div>
+            ) : activeTab === "ptz" ? (
+              <div className="flex-1 flex flex-col items-center justify-center bg-gray-900 rounded-xl relative overflow-hidden group">
+                
+                {/* PTZ Camera Selection Dropdown */}
+                {ptzCameraCount > 1 && (
+                  <div className="absolute top-4 left-4 z-20 bg-white/90 backdrop-blur-sm rounded-lg shadow-sm border border-gray-200 text-sm flex items-center pr-2 transition-opacity">
+                    <div className="pl-3 py-2 border-r border-gray-200">
+                      <Focus className="w-4 h-4 text-gray-500" />
+                    </div>
+                    <select
+                      className="py-2 pl-2 pr-6 border-0 bg-transparent text-gray-700 font-medium focus:ring-0 cursor-pointer outline-none w-full max-w-[200px] truncate"
+                      value={selectedPtzIndex}
+                      onChange={(e) => setSelectedPtzIndex(Number(e.target.value))}
+                    >
+                      {Array.from({ length: ptzCameraCount }).map((_, idx) => (
+                        <option key={idx} value={idx}>
+                          PTZ Camera {idx + 1}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                <div className="absolute inset-0 w-full h-full bg-black flex items-center justify-center">
+                  <MjpegPlayer 
+                    key={selectedPtzIndex}
+                    url={`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'}/api/ptz-video-feed/${activeSession.id}?camera_index=${selectedPtzIndex}`} 
+                    className="w-full h-full object-contain"
+                  />
+                  
+                  {/* Status Overlay */}
+                  <div className="absolute top-4 right-4 bg-black/60 backdrop-blur-sm rounded-full px-4 py-2 flex items-center shadow-lg border border-white/10 z-20">
+                    <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse mr-2"></div>
+                    <span className="text-white text-xs font-semibold tracking-wider">PTZ AI TRACKING</span>
+                  </div>
+
+                  {/* PTZ On-Screen Joystick */}
+                  <div className="absolute bottom-6 left-6 z-20 flex flex-col items-center gap-2 bg-black/50 backdrop-blur-md p-4 rounded-2xl border border-white/10 shadow-2xl">
+                    <div className="text-white/70 text-xs font-bold tracking-widest mb-1">PTZ CONTROLS</div>
+                    
+                    {/* D-Pad */}
+                    <div className="grid grid-cols-3 gap-1">
+                      <div />
+                      <button 
+                        onMouseDown={() => startPtzMove('up')}
+                        onMouseUp={stopPtzMove}
+                        onMouseLeave={stopPtzMove}
+                        onTouchStart={() => startPtzMove('up')}
+                        onTouchEnd={stopPtzMove}
+                        className="w-10 h-10 bg-white/10 hover:bg-white/20 active:bg-indigo-500/50 rounded-lg flex items-center justify-center text-white transition-colors"
+                      >
+                        <ChevronUp className="w-6 h-6" />
+                      </button>
+                      <div />
+                      <button 
+                        onMouseDown={() => startPtzMove('left')}
+                        onMouseUp={stopPtzMove}
+                        onMouseLeave={stopPtzMove}
+                        onTouchStart={() => startPtzMove('left')}
+                        onTouchEnd={stopPtzMove}
+                        className="w-10 h-10 bg-white/10 hover:bg-white/20 active:bg-indigo-500/50 rounded-lg flex items-center justify-center text-white transition-colors"
+                      >
+                        <ChevronLeft className="w-6 h-6" />
+                      </button>
+                      <button 
+                        onClick={stopPtzMove}
+                        className="w-10 h-10 bg-white/5 rounded-full flex items-center justify-center text-white/50"
+                      >
+                        <div className="w-2 h-2 rounded-full bg-white/50" />
+                      </button>
+                      <button 
+                        onMouseDown={() => startPtzMove('right')}
+                        onMouseUp={stopPtzMove}
+                        onMouseLeave={stopPtzMove}
+                        onTouchStart={() => startPtzMove('right')}
+                        onTouchEnd={stopPtzMove}
+                        className="w-10 h-10 bg-white/10 hover:bg-white/20 active:bg-indigo-500/50 rounded-lg flex items-center justify-center text-white transition-colors"
+                      >
+                        <ChevronRight className="w-6 h-6" />
+                      </button>
+                      <div />
+                      <button 
+                        onMouseDown={() => startPtzMove('down')}
+                        onMouseUp={stopPtzMove}
+                        onMouseLeave={stopPtzMove}
+                        onTouchStart={() => startPtzMove('down')}
+                        onTouchEnd={stopPtzMove}
+                        className="w-10 h-10 bg-white/10 hover:bg-white/20 active:bg-indigo-500/50 rounded-lg flex items-center justify-center text-white transition-colors"
+                      >
+                        <ChevronDown className="w-6 h-6" />
+                      </button>
+                      <div />
+                    </div>
+
+                    {/* Zoom Controls */}
+                    <div className="flex gap-2 mt-2 pt-2 border-t border-white/10 w-full justify-center">
+                      <button 
+                        onMouseDown={() => startPtzMove('zoom_out')}
+                        onMouseUp={stopPtzMove}
+                        onMouseLeave={stopPtzMove}
+                        onTouchStart={() => startPtzMove('zoom_out')}
+                        onTouchEnd={stopPtzMove}
+                        className="flex-1 py-2 bg-white/10 hover:bg-white/20 active:bg-indigo-500/50 rounded-lg flex items-center justify-center text-white transition-colors"
+                      >
+                        <ZoomOut className="w-5 h-5" />
+                      </button>
+                      <button 
+                        onMouseDown={() => startPtzMove('zoom_in')}
+                        onMouseUp={stopPtzMove}
+                        onMouseLeave={stopPtzMove}
+                        onTouchStart={() => startPtzMove('zoom_in')}
+                        onTouchEnd={stopPtzMove}
+                        className="flex-1 py-2 bg-white/10 hover:bg-white/20 active:bg-indigo-500/50 rounded-lg flex items-center justify-center text-white transition-colors"
+                      >
+                        <ZoomIn className="w-5 h-5" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
             ) : (
               <div 
                 onClick={() => !isProcessing && fileInputRef.current?.click()}
@@ -522,6 +674,10 @@ export default function LiveScan() {
               ) : activeTab === "cctv" ? (
                 <div className="px-6 py-3 rounded-full bg-gray-100 text-gray-600 font-medium border border-gray-200 shadow-inner">
                   Network Camera Feed Active
+                </div>
+              ) : activeTab === "ptz" ? (
+                <div className="px-6 py-3 rounded-full bg-gray-100 text-gray-600 font-medium border border-gray-200 shadow-inner">
+                  PTZ Camera Feed Active
                 </div>
               ) : (
                 <button 

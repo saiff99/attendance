@@ -9,7 +9,7 @@ from fastapi.responses import StreamingResponse
 from typing import List
 from pydantic import BaseModel
 
-from app.config import supabase, get_camera_urls
+from app.config import supabase, get_camera_urls, get_ptz_urls
 from app.ai import app_fa, AI_ENABLED, calculate_confidence_score
 from app.stream import generate_video_feed
 
@@ -246,4 +246,28 @@ async def get_cameras():
 @router.get("/api/video-feed/{session_id}")
 async def video_feed(session_id: str, camera_index: int = 0):
     """Streams the live CCTV video with bounding boxes."""
-    return StreamingResponse(generate_video_feed(session_id, camera_index), media_type="multipart/x-mixed-replace; boundary=frame")
+    return StreamingResponse(generate_video_feed(session_id, camera_index, "cctv"), media_type="multipart/x-mixed-replace; boundary=frame")
+
+@router.get("/api/ptz-cameras")
+async def get_ptz_cameras():
+    urls = get_ptz_urls()
+    return {"count": len(urls)}
+
+@router.get("/api/ptz-video-feed/{session_id}")
+async def ptz_video_feed(session_id: str, camera_index: int = 0):
+    """Streams the live PTZ video with bounding boxes."""
+    return StreamingResponse(generate_video_feed(session_id, camera_index, "ptz"), media_type="multipart/x-mixed-replace; boundary=frame")
+
+class PTZCommand(BaseModel):
+    direction: str
+
+from app.ptz import ptz_move
+
+@router.post("/api/ptz/move")
+async def ptz_control(cmd: PTZCommand):
+    """Controls the PTZ camera movement."""
+    success = ptz_move(cmd.direction)
+    if success:
+        return {"status": "success", "direction": cmd.direction}
+    else:
+        raise HTTPException(status_code=500, detail="Failed to execute PTZ command")

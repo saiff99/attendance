@@ -19,3 +19,8 @@ def get_camera_urls():
     """Returns a list of camera URLs parsed from the CCTV_URLS env variable."""
     urls_str = os.getenv("CCTV_URLS", "0")
     return [url.strip() for url in urls_str.split(",") if url.strip()]
+
+def get_ptz_urls():
+    """Returns a list of PTZ camera URLs parsed from the PTZ_URLS env variable."""
+    urls_str = os.getenv("PTZ_URLS", "0")
+    return [url.strip() for url in urls_str.split(",") if url.strip()]

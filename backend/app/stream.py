@@ -2,12 +2,15 @@ import cv2
 import time
 import numpy as np
 from numpy.linalg import norm
-from app.config import supabase, get_camera_urls
+from app.config import supabase, get_camera_urls, get_ptz_urls
 from app.ai import app_fa, AI_ENABLED, calculate_confidence_score
 
-def generate_video_feed(session_id: str, camera_index: int = 0):
+def generate_video_feed(session_id: str, camera_index: int = 0, camera_type: str = "cctv"):
     # Determine camera source. 0 = local webcam. Change to RTSP URL for CCTV.
-    urls = get_camera_urls()
+    if camera_type == "ptz":
+        urls = get_ptz_urls()
+    else:
+        urls = get_camera_urls()
     
     if camera_index >= len(urls):
         camera_index = 0
