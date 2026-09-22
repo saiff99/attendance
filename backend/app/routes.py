@@ -18,9 +18,13 @@ router = APIRouter()
 class ScanRequest(BaseModel):
     session_id: str
 
-@router.get("/")
+@router.api_route("/", methods=["GET", "HEAD"])
 def read_root():
     return {"status": "Online", "message": "Smart Attendance API is running", "ai_enabled": AI_ENABLED}
+
+@router.api_route("/health", methods=["GET", "HEAD"])
+def health_check():
+    return {"status": "ok", "ai_enabled": AI_ENABLED}
 
 @router.post("/api/enroll-face/{student_id}")
 async def enroll_face(student_id: str, file: UploadFile = File(...)):
