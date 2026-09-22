@@ -9,7 +9,7 @@ from fastapi.responses import StreamingResponse
 from typing import List
 from pydantic import BaseModel
 
-from app.config import supabase, get_camera_urls, get_ptz_urls
+from app.config import supabase, get_camera_urls, get_camera_details, get_ptz_urls
 from app.ai import app_fa, AI_ENABLED, calculate_confidence_score
 from app.stream import generate_video_feed
 
@@ -240,8 +240,8 @@ async def upload_photo(file: UploadFile = File(...)):
 
 @router.get("/api/cameras")
 async def get_cameras():
-    urls = get_camera_urls()
-    return {"count": len(urls)}
+    cameras = get_camera_details()
+    return {"count": len(cameras), "cameras": cameras}
 
 @router.get("/api/video-feed/{session_id}")
 async def video_feed(session_id: str, camera_index: int = 0):

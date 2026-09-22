@@ -1,147 +1,306 @@
+import os
 import cv2
 import time
+import threading
 import numpy as np
 from numpy.linalg import norm
-from app.config import supabase, get_camera_urls, get_ptz_urls
+from typing import Dict, List, Optional, Set
+from app.config import supabase, get_camera_urls, get_camera_details, get_ptz_urls
 from app.ai import app_fa, AI_ENABLED, calculate_confidence_score
 
-def generate_video_feed(session_id: str, camera_index: int = 0, camera_type: str = "cctv"):
-    # Determine camera source. 0 = local webcam. Change to RTSP URL for CCTV.
-    if camera_type == "ptz":
-        urls = get_ptz_urls()
-    else:
-        urls = get_camera_urls()
-    
-    if camera_index >= len(urls):
-        camera_index = 0
-        
-    CCTV_URL = urls[camera_index]
-    source = int(CCTV_URL) if CCTV_URL.isdigit() else CCTV_URL
-    cap = cv2.VideoCapture(source)
-    cap.set(cv2.CAP_PROP_BUFFERSIZE, 2)
+# Set OpenCV FFmpeg transport to TCP and set low timeout to prevent blocking
+os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp|timeout;5000000"
 
-    # Fetch enrolled students once when starting the stream
+# Global session-wide deduplication set: session_id -> set of student_ids
+session_recognized_students: Dict[str, Set[str]] = {}
+session_enrolled_cache: Dict[str, List[dict]] = {}
+session_last_fetch: Dict[str, float] = {}
+
+def get_enrolled_students(session_id: str) -> List[dict]:
+    """Fetches and caches enrolled students for the given session's cohort."""
+    now = time.time()
+    if session_id in session_enrolled_cache and (now - session_last_fetch.get(session_id, 0)) < 60:
+        return session_enrolled_cache[session_id]
+
     try:
-        # 1. Fetch Session to get target_academic_year
         session_res = supabase.table("sessions").select("target_academic_year").eq("id", session_id).execute()
         target_year = "All"
         if session_res.data and session_res.data[0].get("target_academic_year"):
             target_year = session_res.data[0]["target_academic_year"]
 
-        # 2. Fetch enrolled students (restricted by cohort if applicable)
         query = supabase.table("students").select("id, full_name, face_encoding, student_roll").not_.is_("face_encoding", "null")
         if target_year and target_year != "All":
             query = query.eq("academic_year", target_year)
             
         students_res = query.execute()
-        enrolled_students = students_res.data or []
+        enrolled = students_res.data or []
+        session_enrolled_cache[session_id] = enrolled
+        session_last_fetch[session_id] = now
+        return enrolled
     except Exception as e:
-        print("Error fetching students for stream:", e)
-        enrolled_students = []
+        print(f"Error fetching students for session {session_id}: {e}")
+        return session_enrolled_cache.get(session_id, [])
 
-    # Keep track of recognized students to avoid spamming the DB every single frame
-    recently_recognized = set()
+
+class ThreadedRTSPStream:
+    """
+    Dedicated background reader for a single RTSP stream.
+    Drops stale buffered frames so the active frame is always zero-latency.
+    """
+    def __init__(self, url: str, name: str = "CCTV Camera"):
+        self.url = url
+        self.name = name
+        self.source = int(url) if url.isdigit() else url
+        self.cap: Optional[cv2.VideoCapture] = None
+        self.latest_frame: Optional[np.ndarray] = None
+        self.last_faces: List[dict] = []
+        self.running = False
+        self.connected = False
+        self.lock = threading.Lock()
+        self.thread: Optional[threading.Thread] = None
+        self.last_ai_time = 0.0
+
+    def start(self):
+        if self.running:
+            return
+        self.running = True
+        self.thread = threading.Thread(target=self._capture_loop, daemon=True)
+        self.thread.start()
+
+    def _capture_loop(self):
+        while self.running:
+            try:
+                if self.cap is None or not self.cap.isOpened():
+                    self.connected = False
+                    self.cap = cv2.VideoCapture(self.source)
+                    self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                    if not self.cap.isOpened():
+                        time.sleep(3.0)
+                        continue
+                    self.connected = True
+
+                success, frame = self.cap.read()
+                if not success or frame is None:
+                    self.connected = False
+                    if self.cap:
+                        self.cap.release()
+                    self.cap = None
+                    time.sleep(1.0)
+                    continue
+
+                self.connected = True
+                with self.lock:
+                    self.latest_frame = frame
+
+            except Exception as e:
+                print(f"Stream capture exception on {self.name}: {e}")
+                self.connected = False
+                time.sleep(2.0)
+
+        if self.cap:
+            self.cap.release()
+            self.cap = None
+
+    def get_frame_with_overlays(self, session_id: str) -> Optional[np.ndarray]:
+        """Runs AI inference if due, overlays bounding boxes, and returns the frame."""
+        with self.lock:
+            if self.latest_frame is None:
+                return None
+            frame = self.latest_frame.copy()
+
+        now = time.time()
+        # Run AI detection roughly every 1.0 second per camera
+        if AI_ENABLED and app_fa and (now - self.last_ai_time >= 1.0):
+            self.last_ai_time = now
+            self._process_ai(frame, session_id)
+
+        # Draw cached face overlays
+        for f_info in self.last_faces:
+            x1, y1, x2, y2 = f_info["coords"]
+            student = f_info.get("student")
+            sim = f_info.get("sim", 0.0)
+
+            if student:
+                # Green Box & Name + Roll
+                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                conf_pct = int(calculate_confidence_score(float(sim)) * 100)
+                label = f"{student.get('student_roll', '')} {student.get('full_name', '')} ({conf_pct}%)"
+                # Background badge behind label for legibility
+                label_size, _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.55, 2)
+                cv2.rectangle(frame, (x1, max(0, y1 - 22)), (x1 + label_size[0] + 6, max(0, y1)), (0, 180, 0), -1)
+                cv2.putText(frame, label, (x1 + 3, max(0, y1 - 6)), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 2)
+            else:
+                # Red Box & Unknown
+                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
+                label = "Unknown"
+                cv2.rectangle(frame, (x1, max(0, y1 - 20)), (x1 + 75, max(0, y1)), (0, 0, 200), -1)
+                cv2.putText(frame, label, (x1 + 3, max(0, y1 - 6)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+
+        # Add camera title badge at top-left
+        cv2.putText(frame, self.name, (12, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 0, 0), 3)
+        cv2.putText(frame, self.name, (12, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 255, 255), 1)
+
+        return frame
+
+    def _process_ai(self, frame: np.ndarray, session_id: str):
+        """Detects faces in the frame and matches against enrolled students."""
+        try:
+            enrolled_students = get_enrolled_students(session_id)
+            faces = app_fa.get(frame)
+            current_faces = []
+
+            if session_id not in session_recognized_students:
+                session_recognized_students[session_id] = set()
+
+            recognized_set = session_recognized_students[session_id]
+
+            for face in faces:
+                if hasattr(face, 'det_score') and face.det_score < 0.50:
+                    continue
+
+                unknown_encoding = face.embedding
+                best_match_student = None
+                highest_sim = 0.42  # Cosine similarity threshold
+
+                for student in enrolled_students:
+                    known_encoding = np.array(student['face_encoding'])
+                    if known_encoding.shape != unknown_encoding.shape:
+                        if len(unknown_encoding) == 512:
+                            # Auto upgrade legacy 128D encodings
+                            supabase.table("students").update({"face_encoding": unknown_encoding.tolist()}).eq("id", student['id']).execute()
+                            known_encoding = unknown_encoding
+                            student['face_encoding'] = unknown_encoding.tolist()
+                        else:
+                            continue
+
+                    sim = np.dot(known_encoding, unknown_encoding) / (norm(known_encoding) * norm(unknown_encoding))
+                    if sim > highest_sim:
+                        highest_sim = sim
+                        best_match_student = student
+
+                h_img, w_img, _ = frame.shape
+                box = face.bbox.astype(int)
+                x1 = max(0, min(box[0], w_img - 1))
+                y1 = max(0, min(box[1], h_img - 1))
+                x2 = max(0, min(box[2], w_img - 1))
+                y2 = max(0, min(box[3], h_img - 1))
+
+                current_faces.append({
+                    "coords": (x1, y1, x2, y2),
+                    "student": best_match_student,
+                    "sim": highest_sim
+                })
+
+                # Record attendance only once per student across all 6 cameras
+                if best_match_student:
+                    student_id = best_match_student['id']
+                    if student_id not in recognized_set:
+                        try:
+                            conf_score = calculate_confidence_score(float(highest_sim))
+                            supabase.table("attendance").insert({
+                                "session_id": session_id,
+                                "student_id": student_id,
+                                "status": "Present",
+                                "capture_mode": "Live Scan",
+                                "confidence_score": conf_score
+                            }).execute()
+                            recognized_set.add(student_id)
+                            print(f"[ATTENDANCE] Recorded {best_match_student['full_name']} from {self.name} ({conf_score * 100:.0f}%)")
+                        except Exception as e:
+                            # Unique constraint violation or network error
+                            recognized_set.add(student_id)
+
+            self.last_faces = current_faces
+        except Exception as e:
+            print(f"Error processing AI for {self.name}: {e}")
+
+    def stop(self):
+        self.running = False
+        if self.thread:
+            self.thread.join(timeout=1.0)
+
+
+class CameraStreamManager:
+    """Manages active threaded streams for all cameras."""
+    def __init__(self):
+        self.cctv_streams: Dict[int, ThreadedRTSPStream] = {}
+        self.ptz_streams: Dict[int, ThreadedRTSPStream] = {}
+        self.lock = threading.Lock()
+
+    def get_cctv_stream(self, index: int) -> ThreadedRTSPStream:
+        with self.lock:
+            if index not in self.cctv_streams:
+                camera_details = get_camera_details()
+                if index < len(camera_details):
+                    cam_meta = camera_details[index]
+                    stream_name = f"{cam_meta['name']} ({cam_meta['ip']})"
+                    stream_url = cam_meta['url']
+                else:
+                    urls = get_camera_urls()
+                    stream_url = urls[index] if index < len(urls) else "0"
+                    stream_name = f"Camera {index + 1}"
+
+                stream = ThreadedRTSPStream(stream_url, stream_name)
+                stream.start()
+                self.cctv_streams[index] = stream
+
+            return self.cctv_streams[index]
+
+    def get_ptz_stream(self, index: int) -> ThreadedRTSPStream:
+        with self.lock:
+            if index not in self.ptz_streams:
+                urls = get_ptz_urls()
+                url = urls[index] if index < len(urls) else "0"
+                stream = ThreadedRTSPStream(url, f"PTZ Camera {index + 1}")
+                stream.start()
+                self.ptz_streams[index] = stream
+            return self.ptz_streams[index]
+
+
+# Singleton instance
+camera_manager = CameraStreamManager()
+
+
+def create_placeholder_frame(text: str, width: int = 640, height: int = 360) -> np.ndarray:
+    """Creates a sleek dark placeholder frame when a camera is connecting/offline."""
+    frame = np.zeros((height, width, 3), dtype=np.uint8)
+    frame[:] = (20, 24, 30)  # Dark slate background
+    # Add subtle border
+    cv2.rectangle(frame, (10, 10), (width - 10, height - 10), (45, 55, 72), 1)
     
-    frame_count = 0
-    last_faces = [] # Cache detection state to draw overlays instantly at native 30fps
+    text_size, _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
+    text_x = (width - text_size[0]) // 2
+    text_y = (height + text_size[1]) // 2
+    cv2.putText(frame, text, (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (160, 174, 192), 2)
+    return frame
+
+
+def generate_video_feed(session_id: str, camera_index: int = 0, camera_type: str = "cctv"):
+    """
+    Generator yielding live MJPEG multipart frames for a specified camera.
+    Uses threaded zero-lag frame grabber and cached AI bounding boxes.
+    """
+    if camera_type == "ptz":
+        stream = camera_manager.get_ptz_stream(camera_index)
+    else:
+        stream = camera_manager.get_cctv_stream(camera_index)
 
     while True:
-        success, frame = cap.read()
-        if not success:
-            time.sleep(0.01)
-            continue
-            
-        frame_count += 1
-
-        if AI_ENABLED and app_fa:
-            # Throttle heavy InsightFace AI processing to run once every 30 frames (approx 1 fps) to prevent lag
-            if frame_count % 30 == 1:
-                try:
-                    faces = app_fa.get(frame)
-                    current_faces = []
-                    
-                    for face in faces:
-                        if hasattr(face, 'det_score') and face.det_score < 0.50:
-                            continue
-                            
-                        unknown_encoding = face.embedding
-                        best_match_student = None
-                        highest_sim = 0.42 # Similarity threshold
-                        
-                        for student in enrolled_students:
-                            known_encoding = np.array(student['face_encoding'])
-                            if known_encoding.shape != unknown_encoding.shape:
-                                if len(unknown_encoding) == 512:
-                                    supabase.table("students").update({"face_encoding": unknown_encoding.tolist()}).eq("id", student['id']).execute()
-                                    known_encoding = unknown_encoding
-                                    student['face_encoding'] = unknown_encoding.tolist()
-                                else:
-                                    continue
-                                
-                            sim = np.dot(known_encoding, unknown_encoding) / (norm(known_encoding) * norm(unknown_encoding))
-                            
-                            if sim > highest_sim:
-                                highest_sim = sim
-                                best_match_student = student
-                        
-                        # Bounding Box Coordinates with Safety Clamping
-                        h_img, w_img, _ = frame.shape
-                        box = face.bbox.astype(int)
-                        x1 = max(0, min(box[0], w_img - 1))
-                        y1 = max(0, min(box[1], h_img - 1))
-                        x2 = max(0, min(box[2], w_img - 1))
-                        y2 = max(0, min(box[3], h_img - 1))
-                        
-                        current_faces.append({
-                            "coords": (x1, y1, x2, y2),
-                            "student": best_match_student,
-                            "sim": highest_sim
-                        })
-                        
-                        if best_match_student:
-                            # Log attendance if not recently logged in this stream
-                            if best_match_student['id'] not in recently_recognized:
-                                try:
-                                    supabase.table("attendance").insert({
-                                        "session_id": session_id,
-                                        "student_id": best_match_student['id'],
-                                        "status": "Present",
-                                        "capture_mode": "Live Scan",
-                                        "confidence_score": calculate_confidence_score(float(highest_sim))
-                                    }).execute()
-                                    recently_recognized.add(best_match_student['id'])
-                                except Exception:
-                                    pass # Likely duplicate constraint
-                                    
-                    last_faces = current_faces
-                except Exception as e:
-                    print("Error processing frame AI:", e)
-                    pass
-
-            # Instantly draw cached overlays onto current frame for silky-smooth output
-            for f_info in last_faces:
-                x1, y1, x2, y2 = f_info["coords"]
-                student = f_info["student"]
-                sim = f_info["sim"]
-                
-                if student:
-                    # Draw Green Box & Name
-                    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                    conf_pct = int(calculate_confidence_score(float(sim)) * 100)
-                    label = f"{student.get('student_roll', '')} {student['full_name']} ({conf_pct}%)"
-                    cv2.putText(frame, label, (max(0, x1), max(0, y1 - 10)), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-                else:
-                    # Draw Red Box & Unknown
-                    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
-                    cv2.putText(frame, "Unknown", (max(0, x1), max(0, y1 - 10)), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+        frame = stream.get_frame_with_overlays(session_id)
+        if frame is None:
+            placeholder_text = f"{stream.name}: Connecting..." if not stream.connected else "Acquiring Video..."
+            frame = create_placeholder_frame(placeholder_text)
 
         # Encode frame as JPEG
-        ret, buffer = cv2.imencode('.jpg', frame)
+        ret, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
         if not ret:
+            time.sleep(0.04)
             continue
-        
+
         frame_bytes = buffer.tobytes()
         yield (b'--frame\r\n'
                b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
 
-    cap.release()
+        # Limit client MJPEG frame rate to ~25 FPS to save bandwidth
+        time.sleep(0.04)
+
