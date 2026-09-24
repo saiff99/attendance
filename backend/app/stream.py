@@ -72,10 +72,13 @@ class ThreadedRTSPStream:
             try:
                 if self.cap is None or not self.cap.isOpened():
                     self.connected = False
-                    self.cap = cv2.VideoCapture(self.source)
+                    if isinstance(self.source, str):
+                        self.cap = cv2.VideoCapture(self.source, cv2.CAP_FFMPEG)
+                    else:
+                        self.cap = cv2.VideoCapture(self.source)
                     self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
                     if not self.cap.isOpened():
-                        time.sleep(3.0)
+                        time.sleep(2.0)
                         continue
                     self.connected = True
 
