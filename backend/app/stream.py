@@ -119,6 +119,12 @@ class ThreadedRTSPStream:
             self.ai_busy = True
             threading.Thread(target=self._async_ai_worker, args=(frame.copy(), session_id), daemon=True).start()
 
+        h_f, w_f, _ = frame.shape
+        scale_ratio = max(1.0, w_f / 1280.0)
+        box_thick = max(2, int(2 * scale_ratio))
+        font_scale = 0.55 * scale_ratio
+        font_thick = max(1, int(1.5 * scale_ratio))
+
         # Draw cached face overlays
         for f_info in self.last_faces:
             x1, y1, x2, y2 = f_info["coords"]
@@ -127,23 +133,29 @@ class ThreadedRTSPStream:
 
             if student:
                 # Green Box & Name + Roll
-                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), box_thick)
                 conf_pct = int(calculate_confidence_score(float(sim)) * 100)
                 label = f"{student.get('student_roll', '')} {student.get('full_name', '')} ({conf_pct}%)"
                 # Background badge behind label for legibility
-                label_size, _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.55, 2)
-                cv2.rectangle(frame, (x1, max(0, y1 - 22)), (x1 + label_size[0] + 6, max(0, y1)), (0, 180, 0), -1)
-                cv2.putText(frame, label, (x1 + 3, max(0, y1 - 6)), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 2)
+                label_size, _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, font_scale, font_thick)
+                badge_h = int(24 * scale_ratio)
+                cv2.rectangle(frame, (x1, max(0, y1 - badge_h)), (x1 + label_size[0] + int(8 * scale_ratio), max(0, y1)), (0, 180, 0), -1)
+                cv2.putText(frame, label, (x1 + int(4 * scale_ratio), max(0, y1 - int(6 * scale_ratio))), cv2.FONT_HERSHEY_SIMPLEX, font_scale, (255, 255, 255), font_thick)
             else:
                 # Red Box & Unknown
-                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
+                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), box_thick)
                 label = "Unknown"
-                cv2.rectangle(frame, (x1, max(0, y1 - 20)), (x1 + 75, max(0, y1)), (0, 0, 200), -1)
-                cv2.putText(frame, label, (x1 + 3, max(0, y1 - 6)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                label_size, _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, font_scale, font_thick)
+                badge_h = int(22 * scale_ratio)
+                cv2.rectangle(frame, (x1, max(0, y1 - badge_h)), (x1 + label_size[0] + int(8 * scale_ratio), max(0, y1)), (0, 0, 200), -1)
+                cv2.putText(frame, label, (x1 + int(4 * scale_ratio), max(0, y1 - int(6 * scale_ratio))), cv2.FONT_HERSHEY_SIMPLEX, font_scale, (255, 255, 255), font_thick)
 
         # Add camera title badge at top-left
-        cv2.putText(frame, self.name, (12, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 0, 0), 3)
-        cv2.putText(frame, self.name, (12, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 255, 255), 1)
+        title_scale = 0.65 * scale_ratio
+        title_thick = max(2, int(2 * scale_ratio))
+        title_y = int(30 * scale_ratio)
+        cv2.putText(frame, self.name, (16, title_y), cv2.FONT_HERSHEY_SIMPLEX, title_scale, (0, 0, 0), title_thick + 2)
+        cv2.putText(frame, self.name, (16, title_y), cv2.FONT_HERSHEY_SIMPLEX, title_scale, (0, 255, 255), title_thick)
 
         return frame
 
@@ -178,7 +190,7 @@ class ThreadedRTSPStream:
 
                 unknown_encoding = face.embedding
                 best_match_student = None
-                highest_sim = 0.35  # Calibrated Cosine similarity threshold for distant/angle faces
+                highest_sim = 0.28  # Calibrated Cosine similarity threshold for distant/angle faces
 
                 for student in enrolled_students:
                     known_encoding = np.array(student['face_encoding'])
@@ -297,6 +309,7 @@ def generate_video_feed(session_id: str, camera_index: int = 0, camera_type: str
     """
     Generator yielding live MJPEG multipart frames for a specified camera.
     Uses threaded zero-lag frame grabber and cached AI bounding boxes.
+    Downsamples to HD 720p for client streaming efficiency while maintaining full 4K AI analysis.
     """
     if camera_type == "ptz":
         stream = camera_manager.get_ptz_stream(camera_index)
@@ -309,8 +322,17 @@ def generate_video_feed(session_id: str, camera_index: int = 0, camera_type: str
             placeholder_text = f"{stream.name}: Connecting..." if not stream.connected else "Acquiring Video..."
             frame = create_placeholder_frame(placeholder_text)
 
+        # Scale down to 720p (1280x720) for butter-smooth network streaming to web browser
+        h, w, _ = frame.shape
+        if w > 1280:
+            target_w = 1280
+            target_h = int(h * (1280.0 / w))
+            frame_display = cv2.resize(frame, (target_w, target_h), interpolation=cv2.INTER_AREA)
+        else:
+            frame_display = frame
+
         # Encode frame as JPEG
-        ret, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+        ret, buffer = cv2.imencode('.jpg', frame_display, [cv2.IMWRITE_JPEG_QUALITY, 80])
         if not ret:
             time.sleep(0.04)
             continue

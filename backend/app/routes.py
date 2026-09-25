@@ -160,7 +160,7 @@ async def process_attendance(file: UploadFile = File(...), session_id: str = For
                     
                 unknown_encoding = face.embedding
                 best_match_student = None
-                highest_sim = 0.35 # Calibrated similarity threshold (cosine similarity) for distant faces
+                highest_sim = 0.28 # Calibrated similarity threshold (cosine similarity) for distant faces
                 
                 for student in enrolled_students:
                     known_encoding = np.array(student['face_encoding'])
