@@ -158,12 +158,12 @@ class ThreadedRTSPStream:
             recognized_set = session_recognized_students[session_id]
 
             for face in faces:
-                if hasattr(face, 'det_score') and face.det_score < 0.50:
+                if hasattr(face, 'det_score') and face.det_score < 0.28:
                     continue
 
                 unknown_encoding = face.embedding
                 best_match_student = None
-                highest_sim = 0.42  # Cosine similarity threshold
+                highest_sim = 0.38  # Calibrated Cosine similarity threshold for distant/angle faces
 
                 for student in enrolled_students:
                     known_encoding = np.array(student['face_encoding'])
