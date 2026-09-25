@@ -540,6 +540,7 @@ export default function LiveScan() {
                               url={`${backendUrl}/api/video-feed/${activeSession.id}?camera_index=${cam.index}`}
                               className="w-full h-full object-contain"
                               fallbackText={`Connecting to ${cam.name}...`}
+                              paused={focusedCamera !== null}
                             />
                           </div>
                         </div>
@@ -580,6 +581,7 @@ export default function LiveScan() {
                               url={`${backendUrl}/api/video-feed/${activeSession.id}?camera_index=${cam.index}`}
                               className="w-full h-full object-contain"
                               fallbackText={`Connecting to ${cam.name}...`}
+                              paused={focusedCamera !== null}
                             />
                           </div>
                         </div>
@@ -934,9 +936,11 @@ export default function LiveScan() {
 
               <div className="aspect-video w-full bg-black flex items-center justify-center relative">
                 <MjpegPlayer 
+                  key={focusedCamera.id}
                   url={`${backendUrl}/api/video-feed/${activeSession.id}?camera_index=${focusedCamera.index}`}
                   className="w-full h-full object-contain"
                   fallbackText={`Connecting to ${focusedCamera.name}...`}
+                  paused={false}
                 />
               </div>
 

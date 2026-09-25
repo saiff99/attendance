@@ -7,15 +7,22 @@ interface MjpegPlayerProps {
   url: string;
   className?: string;
   fallbackText?: string;
+  paused?: boolean;
 }
 
-export function MjpegPlayer({ url, className = "", fallbackText = "Connecting to camera..." }: MjpegPlayerProps) {
+export function MjpegPlayer({ 
+  url, 
+  className = "", 
+  fallbackText = "Connecting to camera...",
+  paused = false 
+}: MjpegPlayerProps) {
   const [frameSrc, setFrameSrc] = useState<string>('');
   const [error, setError] = useState<boolean>(false);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
-    let abortController = new AbortController();
+    if (paused) return;
+
+    const abortController = new AbortController();
     setError(false);
     
     const fetchStream = async () => {
@@ -60,13 +67,13 @@ export function MjpegPlayer({ url, className = "", fallbackText = "Connecting to
           }
           
           if (startIdx !== -1 && endIdx !== -1) {
-            // We have a full frame!
+            // Full frame ready
             const frameData = buffer.slice(startIdx, endIdx);
             const blob = new Blob([frameData], { type: 'image/jpeg' });
             const objectUrl = URL.createObjectURL(blob);
             
             setFrameSrc(prev => {
-              if (prev) URL.revokeObjectURL(prev); // Clean up old memory
+              if (prev && prev.startsWith('blob:')) URL.revokeObjectURL(prev);
               return objectUrl;
             });
             
@@ -86,12 +93,8 @@ export function MjpegPlayer({ url, className = "", fallbackText = "Connecting to
     
     return () => {
       abortController.abort();
-      setFrameSrc(prev => {
-        if (prev) URL.revokeObjectURL(prev);
-        return '';
-      });
     };
-  }, [url]);
+  }, [url, paused]);
 
   if (error) {
     return (
