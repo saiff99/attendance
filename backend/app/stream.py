@@ -59,6 +59,7 @@ class ThreadedRTSPStream:
         self.lock = threading.Lock()
         self.thread: Optional[threading.Thread] = None
         self.last_ai_time = 0.0
+        self.ai_busy = False
 
     def start(self):
         if self.running:
@@ -105,17 +106,18 @@ class ThreadedRTSPStream:
             self.cap = None
 
     def get_frame_with_overlays(self, session_id: str) -> Optional[np.ndarray]:
-        """Runs AI inference if due, overlays bounding boxes, and returns the frame."""
+        """Returns frame with overlays instantly in <1ms without blocking on AI inference."""
         with self.lock:
             if self.latest_frame is None:
                 return None
             frame = self.latest_frame.copy()
 
         now = time.time()
-        # Run AI detection roughly every 1.0 second per camera
-        if AI_ENABLED and app_fa and (now - self.last_ai_time >= 1.0):
+        # Trigger non-blocking AI inference in background worker
+        if AI_ENABLED and app_fa and not self.ai_busy and (now - self.last_ai_time >= 0.6):
             self.last_ai_time = now
-            self._process_ai(frame, session_id)
+            self.ai_busy = True
+            threading.Thread(target=self._async_ai_worker, args=(frame.copy(), session_id), daemon=True).start()
 
         # Draw cached face overlays
         for f_info in self.last_faces:
@@ -145,11 +147,24 @@ class ThreadedRTSPStream:
 
         return frame
 
+    def _async_ai_worker(self, frame: np.ndarray, session_id: str):
+        """Runs AI detection asynchronously so video streaming is never delayed."""
+        try:
+            self._process_ai(frame, session_id)
+        finally:
+            self.ai_busy = False
+
     def _process_ai(self, frame: np.ndarray, session_id: str):
         """Detects faces in the frame and matches against enrolled students."""
         try:
             enrolled_students = get_enrolled_students(session_id)
             faces = app_fa.get(frame)
+            
+            # If no faces detected on low-contrast frame, try quick contrast enhancement
+            if len(faces) == 0:
+                enhanced = cv2.convertScaleAbs(frame, alpha=1.2, beta=10)
+                faces = app_fa.get(enhanced)
+
             current_faces = []
 
             if session_id not in session_recognized_students:
@@ -158,12 +173,12 @@ class ThreadedRTSPStream:
             recognized_set = session_recognized_students[session_id]
 
             for face in faces:
-                if hasattr(face, 'det_score') and face.det_score < 0.28:
+                if hasattr(face, 'det_score') and face.det_score < 0.20:
                     continue
 
                 unknown_encoding = face.embedding
                 best_match_student = None
-                highest_sim = 0.38  # Calibrated Cosine similarity threshold for distant/angle faces
+                highest_sim = 0.35  # Calibrated Cosine similarity threshold for distant/angle faces
 
                 for student in enrolled_students:
                     known_encoding = np.array(student['face_encoding'])

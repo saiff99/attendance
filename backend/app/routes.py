@@ -155,12 +155,12 @@ async def process_attendance(file: UploadFile = File(...), session_id: str = For
             faces = app_fa.get(image_bgr)
             
             for face in faces:
-                if hasattr(face, 'det_score') and face.det_score < 0.28:
+                if hasattr(face, 'det_score') and face.det_score < 0.20:
                     continue
                     
                 unknown_encoding = face.embedding
                 best_match_student = None
-                highest_sim = 0.38 # Calibrated similarity threshold (cosine similarity) for distant faces
+                highest_sim = 0.35 # Calibrated similarity threshold (cosine similarity) for distant faces
                 
                 for student in enrolled_students:
                     known_encoding = np.array(student['face_encoding'])
