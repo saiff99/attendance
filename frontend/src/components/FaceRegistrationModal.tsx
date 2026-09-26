@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import Webcam from 'react-webcam';
 import { X, CheckCircle2, AlertCircle, Camera, Loader2 } from 'lucide-react';
+import { getBackendUrl } from '@/lib/api';
 
 interface FaceRegistrationModalProps {
   isOpen: boolean;
@@ -115,7 +116,7 @@ export function FaceRegistrationModal({ isOpen, onClose, studentId, studentName,
         formData.append('files', blob, `frame_${index}.jpg`);
       });
 
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+      const backendUrl = getBackendUrl();
       const response = await fetch(`${backendUrl}/api/enroll-face-burst/${studentId}`, {
         method: 'POST',
         body: formData,

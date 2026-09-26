@@ -10,6 +10,7 @@ import {
   Clock, Sparkles, ChevronLeft as PrevIcon, ChevronRight as NextIcon
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { getBackendUrl } from "@/lib/api";
 import Webcam from "react-webcam";
 import { MjpegPlayer } from "@/components/MjpegPlayer";
 
@@ -117,7 +118,7 @@ export default function LiveScan() {
 
   useEffect(() => {
     // Fetch available CCTV cameras & metadata from backend
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+    const backendUrl = getBackendUrl();
     fetch(`${backendUrl}/api/cameras`)
       .then(res => res.json())
       .then(data => {
@@ -139,7 +140,7 @@ export default function LiveScan() {
 
   // PTZ Control functions
   const sendPtzCommand = (direction: string) => {
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+    const backendUrl = getBackendUrl();
     fetch(`${backendUrl}/api/ptz/move`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -196,7 +197,7 @@ export default function LiveScan() {
       formData.append('file', file);
       formData.append('session_id', activeSession.id);
 
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+      const backendUrl = getBackendUrl();
       const response = await fetch(`${backendUrl}/api/process-attendance`, {
         method: 'POST',
         body: formData,
@@ -281,7 +282,7 @@ export default function LiveScan() {
       formData.append('file', file);
       formData.append('session_id', activeSession.id);
 
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+      const backendUrl = getBackendUrl();
       const response = await fetch(`${backendUrl}/api/process-attendance`, {
         method: 'POST',
         body: formData,
@@ -334,7 +335,7 @@ export default function LiveScan() {
   const backRowCameras = cctvCameras.filter(c => c.row.includes("2nd") || c.name.includes("2nd") || c.index >= 3);
   const frontRowCameras = cctvCameras.filter(c => c.row.includes("1st") || c.name.includes("1st") || c.index < 3);
 
-  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+  const backendUrl = getBackendUrl();
 
   if (!activeSession) {
     return (
