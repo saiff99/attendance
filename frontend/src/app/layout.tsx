@@ -38,7 +38,7 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <Sidebar />
-          <main className="flex-1 md:ml-64 pt-16 md:pt-0 min-h-screen flex flex-col">
+          <main className="flex-1 lg:ml-64 pt-16 lg:pt-0 min-h-screen flex flex-col w-full min-w-0">
             {children}
           </main>
         </ThemeProvider>

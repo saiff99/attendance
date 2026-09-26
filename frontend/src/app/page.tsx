@@ -84,84 +84,87 @@ export default async function Dashboard() {
 
   return (
     <div className="w-full min-h-screen bg-gray-50 dark:bg-gray-950 transition-colors duration-300">
-      <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white">Dashboard Overview</h1>
-        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Monitor live attendance and system status.</p>
-      </div>
-
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4 mb-8">
-        {stats.map((item) => (
-          <div
-            key={item.name}
-            className="relative overflow-hidden rounded-xl bg-white dark:bg-gray-900 px-6 py-8 shadow-sm border border-gray-100 dark:border-gray-800 flex items-center transition-colors duration-300"
-          >
-            <div className={`p-4 rounded-full ${item.bg} mr-4`}>
-              <item.icon className={`h-8 w-8 ${item.color}`} aria-hidden="true" />
-            </div>
-            <div>
-              <p className="truncate text-sm font-medium text-gray-500 dark:text-gray-400">{item.name}</p>
-              <p className="mt-1 text-3xl font-semibold text-gray-900 dark:text-white">{item.stat}</p>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <AttendanceChart data={chartData} totalPresent={totalPresentCount} totalAbsent={totalAbsentCount} />
-
-      <div className="bg-white dark:bg-gray-900 shadow-sm border border-gray-100 dark:border-gray-800 rounded-xl overflow-hidden transition-colors duration-300 min-w-0 w-full">
-        <div className="p-6 border-b border-gray-100 dark:border-gray-800 flex items-center">
-          <CalendarDays className="w-5 h-5 mr-2 text-indigo-600 dark:text-indigo-400" />
-          <h2 className="text-lg font-medium text-gray-900 dark:text-white">Recent Class Sessions</h2>
+      <div className="p-3 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full">
+        <div className="mb-6 sm:mb-8">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-gray-900 dark:text-white">Dashboard Overview</h1>
+          <p className="mt-1 text-xs sm:text-sm text-gray-500 dark:text-gray-400">Monitor live attendance and system status.</p>
         </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-800">
-            <thead className="bg-gray-50 dark:bg-gray-800/50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Date & Time</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Subject & Lecture Hall</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Topic Name</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Attendance Count</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Report</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-800">
-              {recentSessions && recentSessions.length > 0 ? recentSessions.map((session: any) => {
-                // Supabase returns count inside an array for one-to-many relationships when queried like attendance(count)
-                const attendanceCount = (session.attendance as any)?.[0]?.count || 0;
-                
-                return (
-                  <tr key={session.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                      {new Date(session.created_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
-                      {session.class_name}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                      {session.instructor_name}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${attendanceCount > 0 ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300'}`}>
-                        {attendanceCount} Present
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <DownloadReportButton sessionId={session.id} sessionName={session.class_name} />
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6 mb-6 sm:mb-8">
+          {stats.map((item) => (
+            <div
+              key={item.name}
+              className="relative overflow-hidden rounded-xl bg-white dark:bg-gray-900 p-4 sm:p-6 shadow-sm border border-gray-100 dark:border-gray-800 flex items-center transition-colors duration-300"
+            >
+              <div className={`p-3 sm:p-4 rounded-xl ${item.bg} mr-3 sm:mr-4 shrink-0`}>
+                <item.icon className={`h-6 w-6 sm:h-8 sm:w-8 ${item.color}`} aria-hidden="true" />
+              </div>
+              <div className="min-w-0">
+                <p className="truncate text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-400">{item.name}</p>
+                <p className="mt-0.5 sm:mt-1 text-2xl sm:text-3xl font-semibold text-gray-900 dark:text-white">{item.stat}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <AttendanceChart data={chartData} totalPresent={totalPresentCount} totalAbsent={totalAbsentCount} />
+
+        <div className="bg-white dark:bg-gray-900 shadow-sm border border-gray-100 dark:border-gray-800 rounded-xl overflow-hidden transition-colors duration-300 min-w-0 w-full">
+          <div className="p-4 sm:p-6 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
+            <div className="flex items-center">
+              <CalendarDays className="w-5 h-5 mr-2 text-indigo-600 dark:text-indigo-400" />
+              <h2 className="text-base sm:text-lg font-medium text-gray-900 dark:text-white">Recent Class Sessions</h2>
+            </div>
+            <span className="text-[11px] text-gray-400 sm:hidden">Scroll horizontally →</span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-[650px] w-full divide-y divide-gray-200 dark:divide-gray-800">
+              <thead className="bg-gray-50 dark:bg-gray-800/50">
+                <tr>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Date & Time</th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Subject & Lecture Hall</th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Topic Name</th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Attendance Count</th>
+                  <th className="px-4 sm:px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Report</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-800">
+                {recentSessions && recentSessions.length > 0 ? recentSessions.map((session: any) => {
+                  // Supabase returns count inside an array for one-to-many relationships when queried like attendance(count)
+                  const attendanceCount = (session.attendance as any)?.[0]?.count || 0;
+                  
+                  return (
+                    <tr key={session.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                      <td className="px-4 sm:px-6 py-3.5 sm:py-4 whitespace-nowrap text-xs sm:text-sm text-gray-500 dark:text-gray-400">
+                        {new Date(session.created_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
+                      </td>
+                      <td className="px-4 sm:px-6 py-3.5 sm:py-4 whitespace-nowrap text-xs sm:text-sm font-medium text-gray-900 dark:text-white">
+                        {session.class_name}
+                      </td>
+                      <td className="px-4 sm:px-6 py-3.5 sm:py-4 whitespace-nowrap text-xs sm:text-sm text-gray-500 dark:text-gray-400">
+                        {session.instructor_name}
+                      </td>
+                      <td className="px-4 sm:px-6 py-3.5 sm:py-4 whitespace-nowrap text-xs sm:text-sm text-gray-500 dark:text-gray-400">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${attendanceCount > 0 ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300'}`}>
+                          {attendanceCount} Present
+                        </span>
+                      </td>
+                      <td className="px-4 sm:px-6 py-3.5 sm:py-4 whitespace-nowrap text-right text-xs sm:text-sm font-medium">
+                        <DownloadReportButton sessionId={session.id} sessionName={session.class_name} />
+                      </td>
+                    </tr>
+                  );
+                }) : (
+                  <tr>
+                    <td colSpan={5} className="px-6 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+                      No recent sessions found. Start a new live scan to see data here.
                     </td>
                   </tr>
-                );
-              }) : (
-                <tr>
-                  <td colSpan={5} className="px-6 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
-                    No recent sessions found. Start a new live scan to see data here.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
       </div>
     </div>
   );

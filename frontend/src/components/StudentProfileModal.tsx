@@ -41,9 +41,9 @@ export function StudentProfileModal({ student, isOpen, onClose }: StudentProfile
     <div className="fixed inset-0 z-[100] flex items-center justify-end overflow-hidden pointer-events-auto">
       <div className="fixed inset-0 bg-gray-900/40 dark:bg-gray-950/80 backdrop-blur-sm transition-opacity" onClick={onClose} />
       
-      <div className="relative w-full max-w-md h-full bg-white dark:bg-gray-900 shadow-2xl flex flex-col transform transition-transform duration-300 border-l border-gray-200 dark:border-gray-800">
-        <div className="flex items-center justify-between p-6 border-b border-gray-100 dark:border-gray-800">
-          <h2 className="text-xl font-bold tracking-tight text-gray-900 dark:text-white">Student Profile</h2>
+      <div className="relative w-full max-w-full sm:max-w-md h-full bg-white dark:bg-gray-900 shadow-2xl flex flex-col transform transition-transform duration-300 border-l border-gray-200 dark:border-gray-800">
+        <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-100 dark:border-gray-800">
+          <h2 className="text-lg sm:text-xl font-bold tracking-tight text-gray-900 dark:text-white">Student Profile</h2>
           <button
             onClick={onClose}
             className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors"
@@ -52,7 +52,7 @@ export function StudentProfileModal({ student, isOpen, onClose }: StudentProfile
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6">
           <div className="flex flex-col items-center text-center mb-8">
             <div className="w-24 h-24 bg-indigo-100 dark:bg-indigo-900/30 rounded-full flex items-center justify-center mb-4 text-3xl font-bold text-indigo-600 dark:text-indigo-400 border-4 border-white dark:border-gray-900 shadow-sm">
               {student.full_name.charAt(0)}

@@ -145,7 +145,7 @@ export default function StudentDirectory() {
 
   return (
     <div className="w-full min-h-screen bg-gray-50 dark:bg-gray-950 transition-colors duration-300">
-      <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full relative">
+      <div className="p-3 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full relative">
       <StudentProfileModal 
         isOpen={isProfileModalOpen} 
         onClose={() => setIsProfileModalOpen(false)} 
@@ -162,33 +162,33 @@ export default function StudentDirectory() {
 
       {/* Header */}
       {!activeView ? (
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white">Student Directory</h1>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Select an academic year folder to manage student profiles and facial data.</p>
+        <div className="mb-6 sm:mb-8">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-gray-900 dark:text-white">Student Directory</h1>
+          <p className="mt-1 text-xs sm:text-sm text-gray-500 dark:text-gray-400">Select an academic year folder to manage student profiles and facial data.</p>
         </div>
       ) : (
-        <div className="sm:flex sm:items-center sm:justify-between mb-8">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 sm:mb-8">
           <div>
             <button 
               onClick={() => { setActiveView(null); setSearchTerm(""); }}
-              className="mb-4 inline-flex items-center text-sm font-medium text-gray-500 hover:text-indigo-600 dark:text-gray-400 dark:hover:text-indigo-400 transition-colors"
+              className="mb-3 sm:mb-4 inline-flex items-center text-xs sm:text-sm font-medium text-gray-500 hover:text-indigo-600 dark:text-gray-400 dark:hover:text-indigo-400 transition-colors"
             >
-              <ArrowLeft className="mr-1 h-4 w-4" /> Back to Folders
+              <ArrowLeft className="mr-1 h-3.5 w-3.5 sm:h-4 sm:w-4" /> Back to Folders
             </button>
-            <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white">Directory: {activeView}</h1>
-            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Manage students inside the {activeView} cohort.</p>
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-gray-900 dark:text-white">Directory: {activeView}</h1>
+            <p className="mt-1 text-xs sm:text-sm text-gray-500 dark:text-gray-400">Manage students inside the {activeView} cohort.</p>
           </div>
-          <div className="mt-4 sm:mt-0 sm:flex sm:space-x-3">
-            <button type="button" className="inline-flex items-center justify-center rounded-md bg-white dark:bg-gray-900 px-3 py-2 text-sm font-semibold text-gray-900 dark:text-gray-100 shadow-sm ring-1 ring-inset ring-gray-300 dark:ring-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-              <FileDown className="h-4 w-4 mr-2 text-gray-500 dark:text-gray-400" />
+          <div className="flex items-center space-x-2 sm:space-x-3 w-full sm:w-auto">
+            <button type="button" className="flex-1 sm:flex-none inline-flex items-center justify-center rounded-xl bg-white dark:bg-gray-900 px-3 py-2 text-xs sm:text-sm font-semibold text-gray-900 dark:text-gray-100 shadow-sm ring-1 ring-inset ring-gray-300 dark:ring-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+              <FileDown className="h-4 w-4 mr-1.5 sm:mr-2 text-gray-500 dark:text-gray-400" />
               Export CSV
             </button>
             <button 
               onClick={openEnrollModal}
               type="button" 
-              className="inline-flex items-center justify-center rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 transition-colors"
+              className="flex-1 sm:flex-none inline-flex items-center justify-center rounded-xl bg-indigo-600 px-3 py-2 text-xs sm:text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 transition-colors"
             >
-              <UserPlus className="h-4 w-4 mr-2" />
+              <UserPlus className="h-4 w-4 mr-1.5 sm:mr-2" />
               Enroll Student
             </button>
           </div>
@@ -197,27 +197,27 @@ export default function StudentDirectory() {
 
       {/* Main Content Area */}
       {!activeView ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
           {yearFolders.map((folder) => {
             const count = students.filter(s => s.academic_year === folder.id).length;
             return (
               <div 
                 key={folder.id}
                 onClick={() => setActiveView(folder.id)}
-                className="group relative bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-6 hover:shadow-xl transition-all duration-300 cursor-pointer overflow-hidden"
+                className="group relative bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-5 sm:p-6 hover:shadow-xl transition-all duration-300 cursor-pointer overflow-hidden"
               >
                 <div className={`absolute top-0 right-0 w-32 h-32 -mr-8 -mt-8 rounded-full opacity-10 transition-transform duration-500 group-hover:scale-150 ${folder.color}`}></div>
                 <div className="flex items-center justify-between mb-4 relative z-10">
                   <div className={`p-3 rounded-xl ${folder.color} bg-opacity-10 dark:bg-opacity-20`}>
-                    <Folder className={`w-8 h-8 ${folder.color.replace('bg-', 'text-')}`} />
+                    <Folder className={`w-7 h-7 sm:w-8 sm:h-8 ${folder.color.replace('bg-', 'text-')}`} />
                   </div>
-                  <div className="flex items-center space-x-1 text-sm font-medium text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 px-3 py-1 rounded-full border border-gray-100 dark:border-gray-700">
-                    <Users className="w-4 h-4 mr-1" />
+                  <div className="flex items-center space-x-1 text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 px-2.5 sm:px-3 py-1 rounded-full border border-gray-100 dark:border-gray-700">
+                    <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1" />
                     {count}
                   </div>
                 </div>
-                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-1 relative z-10">{folder.title}</h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400 relative z-10">{folder.description}</p>
+                <h3 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white mb-1 relative z-10">{folder.title}</h3>
+                <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 relative z-10">{folder.description}</p>
               </div>
             );
           })}
@@ -225,25 +225,26 @@ export default function StudentDirectory() {
       ) : (
         <>
           {/* Search Bar (Inside Folder) */}
-          <div className="bg-white dark:bg-gray-900 p-4 rounded-t-xl border border-gray-200 dark:border-gray-800 border-b-0 flex items-center transition-colors">
+          <div className="bg-white dark:bg-gray-900 p-3 sm:p-4 rounded-t-xl border border-gray-200 dark:border-gray-800 border-b-0 flex items-center justify-between transition-colors">
             <div className="relative flex-1 max-w-md">
               <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                <Search className="h-5 w-5 text-gray-400" aria-hidden="true" />
+                <Search className="h-4 w-4 sm:h-5 sm:w-5 text-gray-400" aria-hidden="true" />
               </div>
               <input
                 type="text"
-                className="block w-full rounded-md border-0 py-2 pl-10 text-gray-900 dark:text-white bg-white dark:bg-gray-800 ring-1 ring-inset ring-gray-300 dark:ring-gray-700 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6 transition-colors"
+                className="block w-full rounded-xl border-0 py-2 pl-9 sm:pl-10 pr-3 text-gray-900 dark:text-white bg-white dark:bg-gray-800 ring-1 ring-inset ring-gray-300 dark:ring-gray-700 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 text-xs sm:text-sm sm:leading-6 transition-colors"
                 placeholder={`Search inside ${activeView}...`}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
+            <span className="text-[11px] text-gray-400 sm:hidden ml-2 shrink-0">Scroll →</span>
           </div>
 
       {/* Data Table */}
-      <div className="bg-white dark:bg-gray-900 rounded-b-xl border border-gray-200 dark:border-gray-800 shadow-sm overflow-hidden pb-[100px] -mb-[100px] transition-colors">
-        <div className="overflow-x-visible">
-          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-800">
+      <div className="bg-white dark:bg-gray-900 rounded-b-xl border border-gray-200 dark:border-gray-800 shadow-sm overflow-hidden transition-colors">
+        <div className="overflow-x-auto">
+          <table className="min-w-[680px] w-full divide-y divide-gray-200 dark:divide-gray-800">
             <thead className="bg-gray-50 dark:bg-gray-800/50">
               <tr>
                 <th scope="col" className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 dark:text-gray-300 sm:pl-6">
