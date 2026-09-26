@@ -137,10 +137,10 @@ export default function StudentDirectory() {
   });
 
   const yearFolders = [
-    { id: "1st Year", title: "First Year", description: "Freshman Cohort", color: "bg-blue-500", shadow: "shadow-blue-500/20" },
-    { id: "2nd Year", title: "Second Year", description: "Sophomore Cohort", color: "bg-emerald-500", shadow: "shadow-emerald-500/20" },
-    { id: "3rd Year", title: "Third Year", description: "Junior Cohort", color: "bg-amber-500", shadow: "shadow-amber-500/20" },
-    { id: "4th Year", title: "Fourth Year", description: "Senior Cohort", color: "bg-purple-500", shadow: "shadow-purple-500/20" },
+    { id: "1st Year", title: "First Year", iconBg: "bg-blue-500/10 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400", glow: "bg-blue-500" },
+    { id: "2nd Year", title: "Second Year", iconBg: "bg-emerald-500/10 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400", glow: "bg-emerald-500" },
+    { id: "3rd Year", title: "Third Year", iconBg: "bg-amber-500/10 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400", glow: "bg-amber-500" },
+    { id: "4th Year", title: "Fourth Year", iconBg: "bg-purple-500/10 dark:bg-purple-500/20 text-purple-600 dark:text-purple-400", glow: "bg-purple-500" },
   ];
 
   return (
@@ -206,18 +206,17 @@ export default function StudentDirectory() {
                 onClick={() => setActiveView(folder.id)}
                 className="group relative bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-5 sm:p-6 hover:shadow-xl transition-all duration-300 cursor-pointer overflow-hidden"
               >
-                <div className={`absolute top-0 right-0 w-32 h-32 -mr-8 -mt-8 rounded-full opacity-10 transition-transform duration-500 group-hover:scale-150 ${folder.color}`}></div>
+                <div className={`absolute top-0 right-0 w-32 h-32 -mr-8 -mt-8 rounded-full opacity-10 transition-transform duration-500 group-hover:scale-150 ${folder.glow}`}></div>
                 <div className="flex items-center justify-between mb-4 relative z-10">
-                  <div className={`p-3 rounded-xl ${folder.color} bg-opacity-10 dark:bg-opacity-20`}>
-                    <Folder className={`w-7 h-7 sm:w-8 sm:h-8 ${folder.color.replace('bg-', 'text-')}`} />
+                  <div className={`p-3 rounded-xl ${folder.iconBg} flex items-center justify-center shadow-inner`}>
+                    <Folder className="w-7 h-7 sm:w-8 sm:h-8" />
                   </div>
                   <div className="flex items-center space-x-1 text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 px-2.5 sm:px-3 py-1 rounded-full border border-gray-100 dark:border-gray-700">
                     <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1" />
                     {count}
                   </div>
                 </div>
-                <h3 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white mb-1 relative z-10">{folder.title}</h3>
-                <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 relative z-10">{folder.description}</p>
+                <h3 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white relative z-10">{folder.title}</h3>
               </div>
             );
           })}
