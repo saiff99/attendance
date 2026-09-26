@@ -275,3 +275,210 @@ async def ptz_control(cmd: PTZCommand):
         return {"status": "success", "direction": cmd.direction}
     else:
         raise HTTPException(status_code=500, detail="Failed to execute PTZ command")
+
+
+# ==========================================
+# Student Mobile Selfie Attendance API
+# ==========================================
+
+@router.get("/api/active-sessions")
+async def get_active_sessions():
+    """
+    Fetches current/recent active class sessions for student self-attendance selection.
+    """
+    try:
+        res = supabase.table("sessions").select(
+            "id, class_name, date, start_time, end_time, instructor_name, target_academic_year, created_at"
+        ).order("created_at", desc=True).limit(10).execute()
+        
+        sessions = res.data or []
+        
+        # Attach total attendance count to each session
+        enhanced_sessions = []
+        for s in sessions:
+            att_res = supabase.table("attendance").select("id", count="exact").eq("session_id", s["id"]).execute()
+            count = att_res.count if hasattr(att_res, "count") and att_res.count is not None else len(att_res.data or [])
+            enhanced_sessions.append({
+                **s,
+                "attendance_count": count
+            })
+            
+        return {"success": True, "sessions": enhanced_sessions}
+    except Exception as e:
+        print("Error fetching active sessions:", e)
+        raise HTTPException(status_code=500, detail="Failed to fetch active sessions")
+
+
+@router.get("/api/student-lookup/{student_roll}")
+async def student_lookup(student_roll: str):
+    """
+    Looks up student details by roll number to verify student identity before taking selfie.
+    """
+    try:
+        clean_roll = student_roll.strip()
+        res = supabase.table("students").select(
+            "id, student_roll, full_name, email, academic_year, face_encoding"
+        ).ilike("student_roll", clean_roll).execute()
+        
+        if not res.data:
+            res = supabase.table("students").select(
+                "id, student_roll, full_name, email, academic_year, face_encoding"
+            ).eq("student_roll", clean_roll).execute()
+            
+        if not res.data:
+            raise HTTPException(status_code=404, detail=f"No student found with Roll Number '{clean_roll}'. Please check and try again.")
+            
+        student = res.data[0]
+        has_face = student.get("face_encoding") is not None and len(student.get("face_encoding") or []) > 0
+        
+        return {
+            "success": True,
+            "student": {
+                "id": student["id"],
+                "student_roll": student["student_roll"],
+                "full_name": student["full_name"],
+                "academic_year": student.get("academic_year") or "MBBS",
+                "has_face_enrolled": has_face
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print("Error in student lookup:", e)
+        raise HTTPException(status_code=500, detail="Failed to lookup student details")
+
+
+@router.post("/api/selfie-attendance")
+async def selfie_attendance(
+    file: UploadFile = File(...),
+    session_id: str = Form(...),
+    student_roll: str = Form(...)
+):
+    """
+    Processes a student's mobile selfie, verifies face against student's enrolled embedding using InsightFace AI,
+    and logs attendance if matched.
+    """
+    clean_roll = student_roll.strip()
+    contents = await file.read()
+    
+    # 1. Fetch Student from DB
+    res = supabase.table("students").select(
+        "id, student_roll, full_name, academic_year, face_encoding"
+    ).ilike("student_roll", clean_roll).execute()
+    
+    if not res.data:
+        res = supabase.table("students").select(
+            "id, student_roll, full_name, academic_year, face_encoding"
+        ).eq("student_roll", clean_roll).execute()
+        
+    if not res.data:
+        raise HTTPException(status_code=404, detail=f"Student with Roll '{clean_roll}' not found.")
+        
+    student = res.data[0]
+    if not student.get("face_encoding"):
+        raise HTTPException(status_code=400, detail=f"Student {student['full_name']} (Roll: {clean_roll}) does not have face biometric data enrolled yet. Please contact the administrator.")
+        
+    known_encoding = np.array(student["face_encoding"])
+    
+    # 2. Check if already marked present in this session
+    existing_att = supabase.table("attendance").select("id, recorded_at, confidence_score").eq("session_id", session_id).eq("student_id", student["id"]).execute()
+    if existing_att.data:
+        rec_time = existing_att.data[0].get("recorded_at", "Earlier Today")
+        return {
+            "success": True,
+            "already_marked": True,
+            "message": f"Attendance is already recorded for {student['full_name']} (Roll: {clean_roll})!",
+            "student_name": student["full_name"],
+            "student_roll": student["student_roll"],
+            "academic_year": student.get("academic_year") or "MBBS",
+            "recorded_at": rec_time,
+            "confidence": existing_att.data[0].get("confidence_score", 0.95)
+        }
+        
+    # 3. AI Face Recognition Verification
+    if AI_ENABLED and app_fa:
+        try:
+            image = Image.open(io.BytesIO(contents)).convert('RGB')
+            image_np = np.array(image)
+            image_bgr = image_np[:, :, ::-1]
+            
+            faces = app_fa.get(image_bgr)
+            
+            if len(faces) == 0:
+                raise HTTPException(status_code=400, detail="No face detected in the selfie. Please look directly into the camera in good lighting.")
+            if len(faces) > 1:
+                raise HTTPException(status_code=400, detail="Multiple faces detected. Please ensure only you are in the selfie frame.")
+                
+            unknown_encoding = faces[0].embedding
+            
+            # Handle 128D legacy vs 512D
+            if known_encoding.shape != unknown_encoding.shape:
+                if len(unknown_encoding) == 512:
+                    supabase.table("students").update({"face_encoding": unknown_encoding.tolist()}).eq("id", student["id"]).execute()
+                    known_encoding = unknown_encoding
+                else:
+                    raise HTTPException(status_code=500, detail="Face encoding dimension mismatch.")
+                    
+            sim = float(np.dot(known_encoding, unknown_encoding) / (norm(known_encoding) * norm(unknown_encoding)))
+            
+            # High precision threshold for single-face selfie verification (ArcFace cosine similarity >= 0.35)
+            if sim < 0.35:
+                raise HTTPException(status_code=400, detail=f"Face mismatch! The captured selfie does not match the registered face for {student['full_name']} (Roll {clean_roll}).")
+                
+            confidence_score = calculate_confidence_score(sim)
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            print("Error in selfie face matching:", e)
+            raise HTTPException(status_code=500, detail="AI face analysis failed. Please try again.")
+    else:
+        # Fallback Mock
+        confidence_score = 0.95
+        time.sleep(0.5)
+        
+    # 4. Record Attendance in Supabase
+    try:
+        supabase.table("attendance").insert({
+            "session_id": session_id,
+            "student_id": student["id"],
+            "status": "Present",
+            "capture_mode": "Live Scan",
+            "confidence_score": confidence_score
+        }).execute()
+        
+        # Sync memory cache if stream is currently active
+        try:
+            from app.stream import session_recognized_students
+            if session_id in session_recognized_students:
+                session_recognized_students[session_id].add(student["id"])
+        except Exception:
+            pass
+            
+        return {
+            "success": True,
+            "already_marked": False,
+            "message": f"Attendance verified successfully for {student['full_name']}!",
+            "student_name": student["full_name"],
+            "student_roll": student["student_roll"],
+            "academic_year": student.get("academic_year") or "MBBS",
+            "confidence": confidence_score,
+            "recorded_at": time.strftime("%Y-%m-%d %H:%M:%S")
+        }
+    except Exception as e:
+        print("Database insert error:", e)
+        # Check if inserted concurrently
+        existing = supabase.table("attendance").select("id, recorded_at, confidence_score").eq("session_id", session_id).eq("student_id", student["id"]).execute()
+        if existing.data:
+            return {
+                "success": True,
+                "already_marked": True,
+                "message": f"Attendance already recorded for {student['full_name']}.",
+                "student_name": student["full_name"],
+                "student_roll": student["student_roll"],
+                "academic_year": student.get("academic_year") or "MBBS",
+                "confidence": existing.data[0].get("confidence_score", confidence_score),
+                "recorded_at": existing.data[0].get("recorded_at", "Just now")
+            }
+        raise HTTPException(status_code=500, detail="Failed to save attendance record.")
+

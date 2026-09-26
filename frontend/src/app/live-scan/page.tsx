@@ -7,8 +7,10 @@ import {
   ArrowLeft, BookOpen, Users, MapPin, Video, Download, Focus, 
   ChevronUp, ChevronDown, ChevronLeft, ChevronRight, ZoomIn, ZoomOut,
   Grid, Maximize2, Minimize2, Eye, ShieldCheck, RefreshCw, X, Search,
-  Clock, Sparkles, ChevronLeft as PrevIcon, ChevronRight as NextIcon
+  Clock, Sparkles, ChevronLeft as PrevIcon, ChevronRight as NextIcon,
+  QrCode, Copy, Check, ExternalLink, Smartphone
 } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
 import { supabase } from "@/lib/supabase";
 import { getBackendUrl } from "@/lib/api";
 import Webcam from "react-webcam";
@@ -61,6 +63,8 @@ export default function LiveScan() {
   const [selectedCctvIndex, setSelectedCctvIndex] = useState(0);
   const [focusedCamera, setFocusedCamera] = useState<CameraMeta | null>(null);
   const [isModalFullscreen, setIsModalFullscreen] = useState(false);
+  const [showQrModal, setShowQrModal] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
   const [ptzCameraCount, setPtzCameraCount] = useState(1);
   const [selectedPtzIndex, setSelectedPtzIndex] = useState(0);
 
@@ -501,6 +505,15 @@ export default function LiveScan() {
               <Clock className="w-3.5 h-3.5 text-indigo-400" />
               <span>{sessionTime}</span>
             </div>
+
+            {/* Student Selfie QR Code Trigger Button */}
+            <button
+              onClick={() => setShowQrModal(true)}
+              className="inline-flex items-center px-3 sm:px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-xs font-semibold text-white shadow-md shadow-indigo-600/25 transition-all cursor-pointer shrink-0"
+              title="Open Student Mobile Selfie Attendance QR Code"
+            >
+              <QrCode className="w-3.5 h-3.5 mr-1.5" /> Selfie QR
+            </button>
 
             <button
               onClick={() => fetchLogs()}
@@ -1157,6 +1170,83 @@ export default function LiveScan() {
                   <Grid className="w-3.5 h-3.5" />
                   Return to 6-Camera Grid
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Student Mobile Selfie QR Code Modal */}
+        {showQrModal && activeSession && (
+          <div 
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-150"
+            onClick={() => setShowQrModal(false)}
+          >
+            <div 
+              className="bg-[#0A0E17] border border-slate-800/90 rounded-3xl p-5 sm:p-7 max-w-md w-full shadow-2xl flex flex-col items-center text-center relative animate-in zoom-in-95 duration-150"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                onClick={() => setShowQrModal(false)}
+                className="absolute top-4 right-4 p-1.5 rounded-full bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition-all"
+                title="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
+
+              <div className="w-11 h-11 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-indigo-400 mb-3 shadow-lg shadow-indigo-500/20">
+                <QrCode className="w-6 h-6" />
+              </div>
+
+              <h3 className="text-base sm:text-lg font-bold text-white">Student Selfie Attendance QR</h3>
+              <p className="text-xs text-slate-400 mt-1 max-w-xs">
+                Students sitting in the back or out of camera view can scan this QR with their mobile to self-verify.
+              </p>
+
+              {/* Class Pill */}
+              <div className="mt-3 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-xs text-indigo-300 font-medium">
+                📚 {activeSession.class_name} ({setupData.hall})
+              </div>
+
+              {/* QR Code Container */}
+              <div className="my-5 p-4 bg-white rounded-2xl shadow-2xl border-4 border-indigo-500/20 flex items-center justify-center">
+                <QRCodeSVG
+                  value={typeof window !== "undefined" ? `${window.location.origin}/selfieattend?session_id=${activeSession.id}` : `http://localhost:3000/selfieattend?session_id=${activeSession.id}`}
+                  size={200}
+                  level="H"
+                  includeMargin={true}
+                />
+              </div>
+
+              {/* Link Box & Copy */}
+              <div className="w-full flex items-center gap-2 bg-slate-950 border border-slate-800 rounded-xl p-2 text-xs">
+                <span className="font-mono text-slate-400 truncate flex-1 text-left px-2">
+                  {typeof window !== "undefined" ? `${window.location.origin}/selfieattend?session_id=${activeSession.id}` : `/selfieattend?session_id=${activeSession.id}`}
+                </span>
+                <button
+                  onClick={() => {
+                    if (typeof window !== "undefined") {
+                      navigator.clipboard.writeText(`${window.location.origin}/selfieattend?session_id=${activeSession.id}`);
+                      setCopiedLink(true);
+                      setTimeout(() => setCopiedLink(false), 2000);
+                    }
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs flex items-center gap-1 shrink-0 transition-all cursor-pointer shadow"
+                >
+                  {copiedLink ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedLink ? "Copied!" : "Copy"}</span>
+                </button>
+              </div>
+
+              <div className="mt-4 flex items-center justify-between w-full text-[11px] text-slate-500 pt-3 border-t border-slate-800/80">
+                <span>Project on hall screen for 100% attendance</span>
+                <a 
+                  href={`/selfieattend?session_id=${activeSession.id}`} 
+                  target="_blank" 
+                  rel="noreferrer"
+                  className="text-indigo-400 hover:text-indigo-300 flex items-center gap-1 font-medium"
+                >
+                  Open Portal <ExternalLink className="w-3 h-3" />
+                </a>
               </div>
             </div>
           </div>

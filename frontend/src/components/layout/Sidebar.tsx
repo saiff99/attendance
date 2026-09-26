@@ -3,13 +3,14 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, ScanLine, Users, FileBarChart, Activity, Menu, X } from "lucide-react";
+import { LayoutDashboard, ScanLine, Users, FileBarChart, Activity, Menu, X, Smartphone } from "lucide-react";
 import { SystemHealth } from "@/components/SystemHealth";
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
   { name: "Live Scan", href: "/live-scan", icon: ScanLine },
   { name: "Student Directory", href: "/students", icon: Users },
+  { name: "Selfie Portal", href: "/selfieattend", icon: Smartphone },
   { name: "Reports", href: "/reports", icon: FileBarChart },
 ];
 
