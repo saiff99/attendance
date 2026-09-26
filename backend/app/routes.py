@@ -56,6 +56,8 @@ async def enroll_face(student_id: str, file: UploadFile = File(...)):
 
     try:
         supabase.table("students").update({"face_encoding": encoding}).eq("id", student_id).execute()
+        from app.stream import session_enrolled_cache
+        session_enrolled_cache.clear()
     except Exception as e:
         print("Database error:", str(e))
         raise HTTPException(status_code=500, detail="Failed to save face encoding to database.")
@@ -105,6 +107,8 @@ async def enroll_face_burst(student_id: str, files: List[UploadFile] = File(...)
 
     try:
         supabase.table("students").update({"face_encoding": encoding_list}).eq("id", student_id).execute()
+        from app.stream import session_enrolled_cache
+        session_enrolled_cache.clear()
     except Exception as e:
         print("Database error:", str(e))
         raise HTTPException(status_code=500, detail="Failed to save face encoding to database.")
