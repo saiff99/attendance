@@ -1,13 +1,13 @@
 /* eslint-disable */
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { 
   Camera, CheckCircle2, ShieldCheck, AlertCircle, RefreshCw, 
   UserCheck, ArrowRight, ArrowLeft, Clock, MapPin, BookOpen, 
   Sparkles, SwitchCamera, Check, X, ShieldAlert, GraduationCap,
-  Building2, HelpCircle
+  Building2, HelpCircle, Lock, Timer, Hourglass
 } from "lucide-react";
 import Webcam from "react-webcam";
 import { getBackendUrl } from "@/lib/api";
@@ -22,6 +22,9 @@ interface ActiveSession {
   target_academic_year?: string;
   created_at: string;
   attendance_count?: number;
+  remaining_seconds?: number;
+  is_expired?: boolean;
+  window_duration_seconds?: number;
 }
 
 interface StudentProfile {
@@ -44,6 +47,15 @@ export default function SelfieAttendPortal() {
   const [loadingSessions, setLoadingSessions] = useState(true);
   const [selectedSession, setSelectedSession] = useState<ActiveSession | null>(null);
   
+  // Live Clock for Real-Time 1-second Countdown Ticks
+  const [nowTime, setNowTime] = useState<number>(Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNowTime(Date.now());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
   const [rollInput, setRollInput] = useState("");
   const [student, setStudent] = useState<StudentProfile | null>(null);
   const [lookingUpStudent, setLookingUpStudent] = useState(false);
@@ -69,6 +81,31 @@ export default function SelfieAttendPortal() {
 
   const backendUrl = getBackendUrl();
 
+  // Helper: calculate remaining seconds for any session (5-minute / 300s window)
+  const getSessionRemainingSeconds = useCallback((sess: ActiveSession) => {
+    const timeStr = sess.start_time || sess.created_at;
+    if (!timeStr) return 0;
+    const startMs = new Date(timeStr).getTime();
+    const elapsedSec = Math.floor((nowTime - startMs) / 1000);
+    const windowSec = sess.window_duration_seconds || 300;
+    return Math.max(0, windowSec - elapsedSec);
+  }, [nowTime]);
+
+  // Helper: format MM:SS
+  const formatTimeMMSS = (totalSeconds: number) => {
+    const m = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
+    const s = (totalSeconds % 60).toString().padStart(2, '0');
+    return `${m}:${s}`;
+  };
+
+  // Remaining seconds for currently selected session
+  const selectedRemainingSec = useMemo(() => {
+    if (!selectedSession) return 0;
+    return getSessionRemainingSeconds(selectedSession);
+  }, [selectedSession, getSessionRemainingSeconds]);
+
+  const isSelectedExpired = selectedSession !== null && selectedRemainingSec <= 0;
+
   // Fetch active sessions
   const fetchActiveSessions = useCallback(async () => {
     setLoadingSessions(true);
@@ -79,7 +116,7 @@ export default function SelfieAttendPortal() {
         const activeList: ActiveSession[] = data.sessions || [];
         setSessions(activeList);
 
-        // If URL provided a session_id, auto-select it
+        // If URL provided a session_id, auto-select it if still active
         if (initialSessionId) {
           const matched = activeList.find(s => s.id === initialSessionId);
           if (matched) {
@@ -103,6 +140,11 @@ export default function SelfieAttendPortal() {
   const handleVerifyRoll = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!rollInput.trim()) return;
+
+    if (isSelectedExpired) {
+      setLookupError("Attendance window for this lecture has expired (5-minute limit).");
+      return;
+    }
 
     setLookingUpStudent(true);
     setLookupError(null);
@@ -137,6 +179,15 @@ export default function SelfieAttendPortal() {
   // Submit selfie for AI verification
   const handleSubmitSelfie = async () => {
     if (!capturedImage || !selectedSession || !student) return;
+
+    if (isSelectedExpired) {
+      setResultData({
+        success: false,
+        message: "The 5-minute attendance window for this lecture has just ended. Attendance could not be recorded.",
+      });
+      setStep("result");
+      return;
+    }
 
     setSubmittingAttendance(true);
     try {
@@ -187,13 +238,21 @@ export default function SelfieAttendPortal() {
     setCapturedImage(null);
     setResultData(null);
     setLookupError(null);
+    setSelectedSession(null);
+    setStudent(null);
+    setRollInput("");
     setStep("select_session");
     fetchActiveSessions();
   };
 
+  // Count active vs expired
+  const activeCount = useMemo(() => {
+    return sessions.filter(s => getSessionRemainingSeconds(s) > 0).length;
+  }, [sessions, getSessionRemainingSeconds]);
+
   return (
     <div className="min-h-screen bg-[#070B12] text-slate-100 flex flex-col items-center justify-start p-3 sm:p-6 select-none">
-      {/* Background Glow */}
+      {/* Background Ambient Glow */}
       <div className="fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-lg h-64 bg-indigo-600/10 blur-[100px] rounded-full pointer-events-none" />
 
       {/* Header */}
@@ -206,7 +265,7 @@ export default function SelfieAttendPortal() {
             <h1 className="text-base font-bold text-white tracking-tight flex items-center gap-1.5">
               MedAttend <span className="text-[10px] font-semibold uppercase bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-1.5 py-0.2 rounded">Selfie Portal</span>
             </h1>
-            <p className="text-[11px] text-slate-400">Smart Student Face Verification</p>
+            <p className="text-[11px] text-slate-400">5-Min Live Face Verification</p>
           </div>
         </div>
 
@@ -223,7 +282,7 @@ export default function SelfieAttendPortal() {
         {/* STEP 1: SELECT ACTIVE CLASS SESSION */}
         {/* ========================================================================= */}
         {step === "select_session" && (
-          <div className="flex flex-col gap-4 animate-in fade-in slide-in-from-bottom-3 duration-200">
+          <div className="flex flex-col gap-3.5 animate-in fade-in slide-in-from-bottom-3 duration-200">
             <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl">
               <div className="flex items-center justify-between mb-3">
                 <div>
@@ -231,12 +290,14 @@ export default function SelfieAttendPortal() {
                     <BookOpen className="w-4 h-4 text-indigo-400" />
                     Select Your Live Class
                   </h2>
-                  <p className="text-xs text-slate-400 mt-0.5">Choose the lecture you are currently attending:</p>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Selfie check-in is valid for <strong>5 minutes</strong> from start time:
+                  </p>
                 </div>
                 <button 
                   onClick={fetchActiveSessions} 
                   disabled={loadingSessions}
-                  className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all"
+                  className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all cursor-pointer"
                   title="Refresh Sessions"
                 >
                   <RefreshCw className={`w-4 h-4 ${loadingSessions ? "animate-spin text-indigo-400" : ""}`} />
@@ -254,12 +315,12 @@ export default function SelfieAttendPortal() {
                   <div>
                     <h3 className="text-sm font-semibold text-white">No Live Lectures Right Now</h3>
                     <p className="text-xs text-slate-400 mt-1 max-w-xs">
-                      No attendance sessions are currently running today. Please wait for the professor to launch the session.
+                      No attendance sessions are currently running today. Please wait for the professor to start the session.
                     </p>
                   </div>
                   <button
                     onClick={fetchActiveSessions}
-                    className="mt-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-1.5 transition-all shadow-md shadow-indigo-600/25"
+                    className="mt-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-1.5 transition-all shadow-md shadow-indigo-600/25 cursor-pointer"
                   >
                     <RefreshCw className="w-3.5 h-3.5" />
                     Check Again
@@ -267,48 +328,79 @@ export default function SelfieAttendPortal() {
                 </div>
               ) : (
                 <div className="flex flex-col gap-2.5 mt-2">
-                  {sessions.map((sess) => (
-                    <div
-                      key={sess.id}
-                      onClick={() => {
-                        setSelectedSession(sess);
-                        setStep("enter_roll");
-                      }}
-                      className="group p-3.5 rounded-xl bg-slate-950/60 hover:bg-indigo-950/30 border border-slate-800 hover:border-indigo-500/50 cursor-pointer transition-all duration-150 flex items-center justify-between"
-                    >
-                      <div className="min-w-0 pr-2">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-                          <h4 className="text-sm font-bold text-white group-hover:text-indigo-300 transition-colors truncate">
-                            {sess.class_name}
-                          </h4>
+                  {sessions.map((sess) => {
+                    const remSec = getSessionRemainingSeconds(sess);
+                    const isExp = remSec <= 0;
+
+                    return (
+                      <div
+                        key={sess.id}
+                        onClick={() => {
+                          if (!isExp) {
+                            setSelectedSession(sess);
+                            setStep("enter_roll");
+                          }
+                        }}
+                        className={`group p-3.5 rounded-xl border transition-all duration-150 flex items-center justify-between ${
+                          isExp
+                            ? "bg-slate-950/40 border-slate-800/50 opacity-60 cursor-not-allowed"
+                            : "bg-slate-950/70 hover:bg-indigo-950/30 border-slate-800 hover:border-indigo-500/50 cursor-pointer shadow-md hover:shadow-indigo-500/10"
+                        }`}
+                      >
+                        <div className="min-w-0 pr-2">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className={`w-2 h-2 rounded-full shrink-0 ${isExp ? "bg-slate-600" : "bg-emerald-400 animate-pulse"}`} />
+                            <h4 className={`text-sm font-bold truncate ${isExp ? "text-slate-400" : "text-white group-hover:text-indigo-300"}`}>
+                              {sess.class_name}
+                            </h4>
+                          </div>
+                          
+                          <div className="flex items-center gap-2.5 text-xs text-slate-400 flex-wrap">
+                            <span className="truncate">👨‍🏫 {sess.instructor_name || "Faculty"}</span>
+                            {sess.target_academic_year && (
+                              <span className="text-[11px] bg-slate-800/80 px-2 py-0.5 rounded text-indigo-300 font-medium">
+                                {sess.target_academic_year}
+                              </span>
+                            )}
+                          </div>
                         </div>
-                        <div className="flex items-center gap-3 text-xs text-slate-400">
-                          <span className="truncate">👨‍🏫 {sess.instructor_name || "Faculty"}</span>
-                          {sess.target_academic_year && (
-                            <span className="text-[11px] bg-slate-800 px-2 py-0.5 rounded text-indigo-300 font-medium">
-                              {sess.target_academic_year}
+
+                        <div className="flex flex-col items-end gap-1.5 shrink-0">
+                          {/* 5-Min Timer Pill */}
+                          {!isExp ? (
+                            <span className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold flex items-center gap-1 shadow-sm ${
+                              remSec <= 60 
+                                ? "bg-red-500/20 text-red-300 border border-red-500/40 animate-pulse" 
+                                : "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
+                            }`}>
+                              <Timer className="w-3.5 h-3.5" />
+                              {formatTimeMMSS(remSec)} left
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-lg text-[11px] font-medium text-slate-500 bg-slate-900 border border-slate-800 flex items-center gap-1">
+                              <Lock className="w-3 h-3" />
+                              Expired
+                            </span>
+                          )}
+
+                          {!isExp && (
+                            <span className="text-[10px] text-slate-500 group-hover:text-indigo-400 transition-colors flex items-center gap-0.5">
+                              Check in <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
                             </span>
                           )}
                         </div>
                       </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className="text-xs font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-1 rounded-lg">
-                          {sess.attendance_count || 0} Present
-                        </span>
-                        <ArrowRight className="w-4 h-4 text-slate-500 group-hover:text-indigo-400 group-hover:translate-x-0.5 transition-all" />
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
 
             {/* Instruction Tip */}
             <div className="p-3.5 rounded-xl bg-slate-900/50 border border-slate-800/80 text-xs text-slate-400 flex items-start gap-2.5">
-              <Sparkles className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
+              <Hourglass className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
               <span>
-                <strong>Tip:</strong> If you are sitting in the back row and the camera didn't catch your face, tap your class above to verify attendance via selfie!
+                <strong>5-Minute Security Rule:</strong> Selfie attendance automatically closes after 5 minutes of class start time to prevent proxy check-ins from hostel/outside.
               </span>
             </div>
           </div>
@@ -318,109 +410,152 @@ export default function SelfieAttendPortal() {
         {/* STEP 2: ENTER ROLL NUMBER */}
         {/* ========================================================================= */}
         {step === "enter_roll" && selectedSession && (
-          <div className="flex flex-col gap-4 animate-in fade-in slide-in-from-right-3 duration-200">
-            {/* Selected Class Banner */}
-            <div className="p-3 rounded-xl bg-indigo-950/40 border border-indigo-500/30 flex items-center justify-between">
-              <div className="min-w-0">
-                <span className="text-[10px] font-semibold text-indigo-300 uppercase tracking-wider">Active Lecture</span>
-                <h3 className="text-sm font-bold text-white truncate">{selectedSession.class_name}</h3>
-                <p className="text-[11px] text-slate-400">{selectedSession.instructor_name}</p>
+          <div className="flex flex-col gap-3.5 animate-in fade-in slide-in-from-right-3 duration-200">
+            
+            {/* Live Remaining Countdown Banner */}
+            <div className={`p-3 rounded-xl border flex items-center justify-between shadow-lg transition-all ${
+              isSelectedExpired 
+                ? "bg-red-950/50 border-red-500/50 text-red-300"
+                : selectedRemainingSec <= 60
+                  ? "bg-amber-950/40 border-amber-500/40 text-amber-300 animate-pulse"
+                  : "bg-indigo-950/40 border-indigo-500/30 text-indigo-300"
+            }`}>
+              <div className="flex items-center gap-2 min-w-0">
+                <span className={`w-2 h-2 rounded-full shrink-0 ${isSelectedExpired ? "bg-red-500" : "bg-amber-400 animate-ping"}`} />
+                <div className="min-w-0">
+                  <h4 className="text-xs font-bold text-white truncate">{selectedSession.class_name}</h4>
+                  <p className="text-[11px] text-slate-400">
+                    {isSelectedExpired ? "Check-in time has closed" : "Time remaining to submit attendance:"}
+                  </p>
+                </div>
               </div>
-              <button 
-                onClick={() => {
-                  setSelectedSession(null);
-                  setStudent(null);
-                  setStep("select_session");
-                }}
-                className="text-xs text-indigo-400 hover:text-indigo-300 underline shrink-0 ml-2"
-              >
-                Change
-              </button>
+
+              <div className="flex items-center gap-1.5 shrink-0">
+                <div className={`px-2.5 py-1 rounded-lg font-mono font-bold text-xs flex items-center gap-1 ${
+                  isSelectedExpired 
+                    ? "bg-red-500/20 text-red-400 border border-red-500/30"
+                    : "bg-slate-900 text-amber-300 border border-amber-500/30 text-sm"
+                }`}>
+                  <Timer className="w-3.5 h-3.5" />
+                  {isSelectedExpired ? "00:00 (Closed)" : formatTimeMMSS(selectedRemainingSec)}
+                </div>
+                <button 
+                  onClick={() => {
+                    setSelectedSession(null);
+                    setStudent(null);
+                    setStep("select_session");
+                  }}
+                  className="text-[11px] text-slate-400 hover:text-white underline ml-1 cursor-pointer"
+                >
+                  Change
+                </button>
+              </div>
             </div>
 
-            {/* Roll Verification Card */}
-            <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl">
-              <h2 className="text-base font-bold text-white mb-1">Enter Your Roll Number</h2>
-              <p className="text-xs text-slate-400 mb-4">Please enter your college roll number to load your profile:</p>
-
-              <form onSubmit={handleVerifyRoll} className="flex flex-col gap-3">
-                <div className="relative">
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    placeholder="e.g. 26001"
-                    value={rollInput}
-                    onChange={(e) => {
-                      setRollInput(e.target.value);
-                      setLookupError(null);
-                      setStudent(null);
-                    }}
-                    autoFocus
-                    className="w-full bg-slate-950 border border-slate-700 focus:border-indigo-500 rounded-xl px-4 py-3 text-base text-white font-mono tracking-wider placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all"
-                  />
+            {/* If Expired Notice */}
+            {isSelectedExpired ? (
+              <div className="p-6 rounded-2xl bg-slate-900/90 border border-red-500/40 text-center flex flex-col items-center gap-3 shadow-xl">
+                <div className="w-12 h-12 rounded-full bg-red-500/10 border border-red-500/30 flex items-center justify-center text-red-400">
+                  <Lock className="w-6 h-6" />
                 </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">Attendance Window Closed</h3>
+                  <p className="text-xs text-slate-300 mt-1 max-w-xs">
+                    The 5-minute self-attendance limit for <strong>{selectedSession.class_name}</strong> has expired.
+                  </p>
+                </div>
+                <button
+                  onClick={handleReset}
+                  className="w-full mt-2 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold transition-all cursor-pointer"
+                >
+                  Return to Classes
+                </button>
+              </div>
+            ) : (
+              /* Roll Verification Form */
+              <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl">
+                <h2 className="text-base font-bold text-white mb-1">Enter Your Roll Number</h2>
+                <p className="text-xs text-slate-400 mb-4">Please enter your college roll number to verify your profile:</p>
 
-                {lookupError && (
-                  <div className="p-2.5 rounded-lg bg-red-950/50 border border-red-500/30 text-xs text-red-300 flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
-                    <span>{lookupError}</span>
+                <form onSubmit={handleVerifyRoll} className="flex flex-col gap-3">
+                  <div className="relative">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      placeholder="e.g. 26001"
+                      value={rollInput}
+                      onChange={(e) => {
+                        setRollInput(e.target.value);
+                        setLookupError(null);
+                        setStudent(null);
+                      }}
+                      autoFocus
+                      className="w-full bg-slate-950 border border-slate-700 focus:border-indigo-500 rounded-xl px-4 py-3 text-base text-white font-mono tracking-wider placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all"
+                    />
+                  </div>
+
+                  {lookupError && (
+                    <div className="p-2.5 rounded-lg bg-red-950/50 border border-red-500/30 text-xs text-red-300 flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
+                      <span>{lookupError}</span>
+                    </div>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={lookingUpStudent || !rollInput.trim()}
+                    className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-semibold text-sm transition-all shadow-lg shadow-indigo-600/25 flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    {lookingUpStudent ? (
+                      <>
+                        <div className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                        <span>Checking Profile...</span>
+                      </>
+                    ) : (
+                      <>
+                        <UserCheck className="w-4 h-4" />
+                        <span>Find My Profile</span>
+                      </>
+                    )}
+                  </button>
+                </form>
+
+                {/* Verified Student Profile Preview */}
+                {student && (
+                  <div className="mt-4 p-4 rounded-xl bg-slate-950/70 border border-emerald-500/30 flex flex-col gap-3 animate-in fade-in zoom-in-95 duration-150">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-10 h-10 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-bold text-sm">
+                          {student.full_name.substring(0, 2).toUpperCase()}
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-bold text-white">{student.full_name}</h4>
+                          <p className="text-xs text-slate-400 font-mono">Roll: {student.student_roll} • {student.academic_year}</p>
+                        </div>
+                      </div>
+                      <span className="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+                        <Check className="w-3.5 h-3.5" />
+                      </span>
+                    </div>
+
+                    {!student.has_face_enrolled ? (
+                      <div className="p-2.5 rounded-lg bg-amber-950/50 border border-amber-500/30 text-xs text-amber-300 flex items-center gap-2">
+                        <ShieldAlert className="w-4 h-4 shrink-0 text-amber-400" />
+                        <span>No facial biometric enrolled. Please contact system admin.</span>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setStep("capture_selfie")}
+                        className="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-sm transition-all shadow-lg shadow-emerald-600/25 flex items-center justify-center gap-2 cursor-pointer mt-1"
+                      >
+                        <Camera className="w-4 h-4" />
+                        <span>Proceed to Take Selfie</span>
+                      </button>
+                    )}
                   </div>
                 )}
-
-                <button
-                  type="submit"
-                  disabled={lookingUpStudent || !rollInput.trim()}
-                  className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-semibold text-sm transition-all shadow-lg shadow-indigo-600/25 flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  {lookingUpStudent ? (
-                    <>
-                      <div className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
-                      <span>Checking Profile...</span>
-                    </>
-                  ) : (
-                    <>
-                      <UserCheck className="w-4 h-4" />
-                      <span>Find My Profile</span>
-                    </>
-                  )}
-                </button>
-              </form>
-
-              {/* Verified Student Profile Preview */}
-              {student && (
-                <div className="mt-4 p-4 rounded-xl bg-slate-950/70 border border-emerald-500/30 flex flex-col gap-3 animate-in fade-in zoom-in-95 duration-150">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-10 h-10 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-bold text-sm">
-                        {student.full_name.substring(0, 2).toUpperCase()}
-                      </div>
-                      <div>
-                        <h4 className="text-sm font-bold text-white">{student.full_name}</h4>
-                        <p className="text-xs text-slate-400 font-mono">Roll: {student.student_roll} • {student.academic_year}</p>
-                      </div>
-                    </div>
-                    <span className="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
-                      <Check className="w-3.5 h-3.5" />
-                    </span>
-                  </div>
-
-                  {!student.has_face_enrolled ? (
-                    <div className="p-2.5 rounded-lg bg-amber-950/50 border border-amber-500/30 text-xs text-amber-300 flex items-center gap-2">
-                      <ShieldAlert className="w-4 h-4 shrink-0 text-amber-400" />
-                      <span>No facial biometric enrolled. Please contact system admin.</span>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => setStep("capture_selfie")}
-                      className="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-sm transition-all shadow-lg shadow-emerald-600/25 flex items-center justify-center gap-2 cursor-pointer mt-1"
-                    >
-                      <Camera className="w-4 h-4" />
-                      <span>Proceed to Take Selfie</span>
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -429,124 +564,153 @@ export default function SelfieAttendPortal() {
         {/* ========================================================================= */}
         {step === "capture_selfie" && student && selectedSession && (
           <div className="flex flex-col gap-3 animate-in fade-in slide-in-from-right-3 duration-200">
-            {/* Top Bar with Class & Student */}
+            
+            {/* Top Bar with Live Countdown & Student info */}
             <div className="flex items-center justify-between px-1">
               <button
                 onClick={() => {
                   setCapturedImage(null);
                   setStep("enter_roll");
                 }}
-                className="text-xs text-slate-400 hover:text-white flex items-center gap-1 transition-colors"
+                className="text-xs text-slate-400 hover:text-white flex items-center gap-1 transition-colors cursor-pointer"
               >
                 <ArrowLeft className="w-3.5 h-3.5" /> Back
               </button>
 
-              <div className="text-right">
-                <span className="text-xs font-bold text-indigo-300">{student.full_name}</span>
-                <span className="text-[11px] text-slate-500 font-mono ml-1.5">({student.student_roll})</span>
+              <div className="flex items-center gap-2">
+                <span className={`px-2 py-0.5 rounded text-[11px] font-mono font-bold flex items-center gap-1 ${
+                  isSelectedExpired 
+                    ? "bg-red-500/20 text-red-400 border border-red-500/30" 
+                    : "bg-slate-900 text-amber-300 border border-amber-500/30"
+                }`}>
+                  <Timer className="w-3 h-3" />
+                  {isSelectedExpired ? "Expired" : formatTimeMMSS(selectedRemainingSec)}
+                </span>
+                <span className="text-xs font-bold text-indigo-300 truncate max-w-[120px]">{student.full_name}</span>
               </div>
             </div>
 
-            {/* Camera Viewport */}
-            <div className="relative w-full aspect-[3/4] max-h-[58vh] bg-black rounded-3xl overflow-hidden border-2 border-slate-800 shadow-2xl flex items-center justify-center">
-              {!capturedImage ? (
-                <>
-                  <Webcam
-                    audio={false}
-                    ref={webcamRef}
-                    screenshotFormat="image/jpeg"
-                    videoConstraints={{
-                      facingMode: facingMode,
-                      width: { ideal: 1280 },
-                      height: { ideal: 720 },
-                    }}
-                    className="w-full h-full object-cover"
-                  />
-
-                  {/* Biometric Oval Guide Overlay */}
-                  <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center">
-                    <div className="w-[68%] h-[68%] border-2 border-dashed border-indigo-400/70 rounded-[50%] relative flex items-center justify-center shadow-[0_0_50px_rgba(99,102,241,0.15)]">
-                      {/* Scanning animation bar */}
-                      <div className="absolute left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-indigo-400 to-transparent animate-scan" />
-                      
-                      {/* Corner Accents */}
-                      <div className="absolute top-2 w-4 h-1 bg-indigo-400 rounded-full" />
-                      <div className="absolute bottom-2 w-4 h-1 bg-indigo-400 rounded-full" />
-                    </div>
-                    <span className="mt-3 text-[11px] font-semibold text-white/90 bg-black/60 backdrop-blur-md px-3 py-1 rounded-full border border-white/10">
-                      Center your face inside the oval
-                    </span>
-                  </div>
-
-                  {/* Switch Camera Button (Front/Back) */}
-                  <button
-                    onClick={() => setFacingMode(prev => (prev === "user" ? "environment" : "user"))}
-                    className="absolute top-3 right-3 p-2.5 rounded-full bg-black/60 hover:bg-black/80 backdrop-blur-md text-white border border-white/20 transition-all"
-                    title="Switch Camera"
-                  >
-                    <SwitchCamera className="w-4 h-4" />
-                  </button>
-                </>
-              ) : (
-                /* Captured Image Preview */
-                <div className="relative w-full h-full">
-                  <img 
-                    src={capturedImage} 
-                    alt="Captured Selfie" 
-                    className="w-full h-full object-cover"
-                  />
-                  <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-black/70 backdrop-blur-md px-3 py-1 rounded-full border border-emerald-500/30 text-[11px] text-emerald-300 font-medium flex items-center gap-1.5">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                    Photo Captured Ready
-                  </div>
+            {/* If Expired in the middle of selfie */}
+            {isSelectedExpired ? (
+              <div className="p-6 rounded-2xl bg-slate-900/90 border border-red-500/40 text-center flex flex-col items-center gap-3 shadow-xl my-4">
+                <Lock className="w-8 h-8 text-red-400" />
+                <div>
+                  <h3 className="text-base font-bold text-white">5-Minute Time Limit Ended</h3>
+                  <p className="text-xs text-slate-300 mt-1">
+                    The check-in window closed while you were on this page.
+                  </p>
                 </div>
-              )}
-            </div>
-
-            {/* Action Buttons */}
-            <div className="flex flex-col gap-2 mt-1">
-              {!capturedImage ? (
                 <button
-                  onClick={capturePhoto}
-                  className="w-full py-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-base transition-all shadow-xl shadow-indigo-600/30 flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+                  onClick={handleReset}
+                  className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-semibold cursor-pointer"
                 >
-                  <Camera className="w-5 h-5" />
-                  <span>Capture Photo</span>
+                  Return Home
                 </button>
-              ) : (
-                <div className="grid grid-cols-2 gap-2.5">
-                  <button
-                    onClick={() => setCapturedImage(null)}
-                    disabled={submittingAttendance}
-                    className="py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs transition-all border border-slate-700/80 flex items-center justify-center gap-1.5 cursor-pointer"
-                  >
-                    <RefreshCw className="w-3.5 h-3.5" />
-                    Retake Photo
-                  </button>
-                  <button
-                    onClick={handleSubmitSelfie}
-                    disabled={submittingAttendance}
-                    className="py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs transition-all shadow-lg shadow-emerald-600/25 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
-                  >
-                    {submittingAttendance ? (
-                      <>
-                        <div className="w-3.5 h-3.5 rounded-full border-2 border-white border-t-transparent animate-spin" />
-                        <span>Verifying...</span>
-                      </>
-                    ) : (
-                      <>
-                        <ShieldCheck className="w-4 h-4" />
-                        <span>Submit Attendance</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-              )}
+              </div>
+            ) : (
+              <>
+                {/* Camera Viewport */}
+                <div className="relative w-full aspect-[3/4] max-h-[55vh] bg-black rounded-3xl overflow-hidden border-2 border-slate-800 shadow-2xl flex items-center justify-center">
+                  {!capturedImage ? (
+                    <>
+                      <Webcam
+                        audio={false}
+                        ref={webcamRef}
+                        screenshotFormat="image/jpeg"
+                        videoConstraints={{
+                          facingMode: facingMode,
+                          width: { ideal: 1280 },
+                          height: { ideal: 720 },
+                        }}
+                        className="w-full h-full object-cover"
+                      />
 
-              <p className="text-[11px] text-center text-slate-500">
-                AI InsightFace will verify your biometric profile against registered vectors.
-              </p>
-            </div>
+                      {/* Biometric Oval Guide Overlay */}
+                      <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center">
+                        <div className="w-[68%] h-[68%] border-2 border-dashed border-indigo-400/70 rounded-[50%] relative flex items-center justify-center shadow-[0_0_50px_rgba(99,102,241,0.15)]">
+                          {/* Scanning animation bar */}
+                          <div className="absolute left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-indigo-400 to-transparent animate-scan" />
+                          
+                          {/* Corner Accents */}
+                          <div className="absolute top-2 w-4 h-1 bg-indigo-400 rounded-full" />
+                          <div className="absolute bottom-2 w-4 h-1 bg-indigo-400 rounded-full" />
+                        </div>
+                        <span className="mt-3 text-[11px] font-semibold text-white/90 bg-black/60 backdrop-blur-md px-3 py-1 rounded-full border border-white/10">
+                          Center your face inside the oval
+                        </span>
+                      </div>
+
+                      {/* Switch Camera Button (Front/Back) */}
+                      <button
+                        onClick={() => setFacingMode(prev => (prev === "user" ? "environment" : "user"))}
+                        className="absolute top-3 right-3 p-2.5 rounded-full bg-black/60 hover:bg-black/80 backdrop-blur-md text-white border border-white/20 transition-all cursor-pointer"
+                        title="Switch Camera"
+                      >
+                        <SwitchCamera className="w-4 h-4" />
+                      </button>
+                    </>
+                  ) : (
+                    /* Captured Image Preview */
+                    <div className="relative w-full h-full">
+                      <img 
+                        src={capturedImage} 
+                        alt="Captured Selfie" 
+                        className="w-full h-full object-cover"
+                      />
+                      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-black/70 backdrop-blur-md px-3 py-1 rounded-full border border-emerald-500/30 text-[11px] text-emerald-300 font-medium flex items-center gap-1.5">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                        Photo Ready
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex flex-col gap-2 mt-1">
+                  {!capturedImage ? (
+                    <button
+                      onClick={capturePhoto}
+                      className="w-full py-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-base transition-all shadow-xl shadow-indigo-600/30 flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+                    >
+                      <Camera className="w-5 h-5" />
+                      <span>Capture Photo</span>
+                    </button>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <button
+                        onClick={() => setCapturedImage(null)}
+                        disabled={submittingAttendance}
+                        className="py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs transition-all border border-slate-700/80 flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        Retake Photo
+                      </button>
+                      <button
+                        onClick={handleSubmitSelfie}
+                        disabled={submittingAttendance}
+                        className="py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs transition-all shadow-lg shadow-emerald-600/25 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                      >
+                        {submittingAttendance ? (
+                          <>
+                            <div className="w-3.5 h-3.5 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                            <span>Verifying...</span>
+                          </>
+                        ) : (
+                          <>
+                            <ShieldCheck className="w-4 h-4" />
+                            <span>Submit Attendance</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  )}
+
+                  <p className="text-[11px] text-center text-slate-500">
+                    AI InsightFace verifies your biometric profile against registered vectors.
+                  </p>
+                </div>
+              </>
+            )}
           </div>
         )}
 

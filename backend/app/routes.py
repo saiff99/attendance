@@ -284,23 +284,47 @@ async def ptz_control(cmd: PTZCommand):
 @router.get("/api/active-sessions")
 async def get_active_sessions():
     """
-    Fetches current/recent active class sessions for student self-attendance selection.
+    Fetches current/recent active class sessions with remaining 5-minute window for student self-attendance.
     """
     try:
+        from datetime import datetime, timezone
+        now_utc = datetime.now(timezone.utc)
+
         res = supabase.table("sessions").select(
             "id, class_name, date, start_time, end_time, instructor_name, target_academic_year, created_at"
-        ).order("created_at", desc=True).limit(10).execute()
+        ).order("created_at", desc=True).limit(15).execute()
         
         sessions = res.data or []
         
-        # Attach total attendance count to each session
+        # Attach total attendance count and remaining seconds to each session
         enhanced_sessions = []
         for s in sessions:
             att_res = supabase.table("attendance").select("id", count="exact").eq("session_id", s["id"]).execute()
             count = att_res.count if hasattr(att_res, "count") and att_res.count is not None else len(att_res.data or [])
+            
+            time_str = s.get("start_time") or s.get("created_at")
+            remaining_seconds = 0
+            is_expired = True
+            
+            if time_str:
+                try:
+                    start_dt = datetime.fromisoformat(time_str.replace("Z", "+00:00"))
+                    elapsed_seconds = (now_utc - start_dt).total_seconds()
+                    # 5-minute window = 300 seconds
+                    rem = int(300 - elapsed_seconds)
+                    remaining_seconds = max(0, rem)
+                    is_expired = remaining_seconds <= 0
+                except Exception as e:
+                    print("Error parsing timestamp:", e)
+                    remaining_seconds = 0
+                    is_expired = True
+
             enhanced_sessions.append({
                 **s,
-                "attendance_count": count
+                "attendance_count": count,
+                "remaining_seconds": remaining_seconds,
+                "is_expired": is_expired,
+                "window_duration_seconds": 300
             })
             
         return {"success": True, "sessions": enhanced_sessions}
@@ -356,12 +380,37 @@ async def selfie_attendance(
 ):
     """
     Processes a student's mobile selfie, verifies face against student's enrolled embedding using InsightFace AI,
-    and logs attendance if matched.
+    and logs attendance if matched (valid within 5-minute window).
     """
     clean_roll = student_roll.strip()
     contents = await file.read()
     
-    # 1. Fetch Student from DB
+    # 1. Check 5-minute session expiration window
+    session_res = supabase.table("sessions").select("id, start_time, created_at, class_name").eq("id", session_id).execute()
+    if not session_res.data:
+        raise HTTPException(status_code=404, detail="Lecture session not found.")
+        
+    sess_obj = session_res.data[0]
+    time_str = sess_obj.get("start_time") or sess_obj.get("created_at")
+    if time_str:
+        from datetime import datetime, timezone
+        try:
+            start_dt = datetime.fromisoformat(time_str.replace("Z", "+00:00"))
+            now_dt = datetime.now(timezone.utc)
+            elapsed = (now_dt - start_dt).total_seconds()
+            
+            # 5 minutes = 300 seconds (allowing 30s buffer for slow mobile networks = 330s)
+            if elapsed > 330:
+                raise HTTPException(
+                    status_code=403, 
+                    detail=f"Attendance window closed! The 5-minute selfie check-in time for '{sess_obj.get('class_name')}' has expired."
+                )
+        except HTTPException:
+            raise
+        except Exception as err:
+            print("Timestamp check error:", err)
+
+    # 2. Fetch Student from DB
     res = supabase.table("students").select(
         "id, student_roll, full_name, academic_year, face_encoding"
     ).ilike("student_roll", clean_roll).execute()
