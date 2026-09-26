@@ -1,16 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Retrieve environment variables
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-// Check if variables are defined to prevent client initialization errors
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn("Supabase URL or Anon Key is missing. Make sure to set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in your .env.local file.");
-}
+// Retrieve environment variables with fallback credentials
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://bsphlgmxzmlbgzanpujh.supabase.co";
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "sb_publishable_u8O4lCQg9KtcxeLj7nxqFg_xu3v2WLz";
 
 // Create and export the Supabase client
-export const supabase = createClient(
-  supabaseUrl || "https://placeholder-url.supabase.co", 
-  supabaseAnonKey || "placeholder-key"
-);
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);

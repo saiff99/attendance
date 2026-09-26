@@ -124,7 +124,9 @@ export default function LiveScan() {
   useEffect(() => {
     // Fetch available CCTV cameras & metadata from backend
     const backendUrl = getBackendUrl();
-    fetch(`${backendUrl}/api/cameras`)
+    fetch(`${backendUrl}/api/cameras`, {
+      headers: { "ngrok-skip-browser-warning": "69420" }
+    })
       .then(res => res.json())
       .then(data => {
         if (data.cameras && data.cameras.length > 0) {
@@ -137,7 +139,9 @@ export default function LiveScan() {
       .catch(err => console.error("Failed to fetch camera count", err));
       
     // Fetch available PTZ cameras
-    fetch(`${backendUrl}/api/ptz-cameras`)
+    fetch(`${backendUrl}/api/ptz-cameras`, {
+      headers: { "ngrok-skip-browser-warning": "69420" }
+    })
       .then(res => res.json())
       .then(data => setPtzCameraCount(data.count || 1))
       .catch(err => console.error("Failed to fetch PTZ camera count", err));
@@ -148,7 +152,10 @@ export default function LiveScan() {
     const backendUrl = getBackendUrl();
     fetch(`${backendUrl}/api/ptz/move`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'ngrok-skip-browser-warning': '69420'
+      },
       body: JSON.stringify({ direction })
     }).catch(err => console.error("PTZ Command Failed", err));
   };
@@ -205,6 +212,9 @@ export default function LiveScan() {
       const backendUrl = getBackendUrl();
       const response = await fetch(`${backendUrl}/api/process-attendance`, {
         method: 'POST',
+        headers: {
+          'ngrok-skip-browser-warning': '69420'
+        },
         body: formData,
       });
 
@@ -290,6 +300,9 @@ export default function LiveScan() {
       const backendUrl = getBackendUrl();
       const response = await fetch(`${backendUrl}/api/process-attendance`, {
         method: 'POST',
+        headers: {
+          'ngrok-skip-browser-warning': '69420'
+        },
         body: formData,
       });
 

@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import Webcam from "react-webcam";
 import { getBackendUrl } from "@/lib/api";
+import { supabase } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 
@@ -116,17 +117,66 @@ function SelfieAttendContent() {
 
   const isSelectedExpired = selectedSession !== null && selectedRemainingSec <= 0;
 
-  // Fetch active sessions
+  // Fetch active sessions directly from Supabase Cloud
   const fetchActiveSessions = useCallback(async () => {
     setLoadingSessions(true);
     try {
-      const res = await fetch(`${backendUrl}/api/active-sessions`);
+      // 1. Direct Supabase Query (works immediately on Vercel, localhost, and mobile)
+      const { data: sessionData, error } = await supabase
+        .from("sessions")
+        .select("id, class_name, date, start_time, end_time, instructor_name, target_academic_year, created_at")
+        .order("created_at", { ascending: false })
+        .limit(20);
+
+      if (!error && sessionData && sessionData.length > 0) {
+        const nowUtc = Date.now();
+        const activeList: ActiveSession[] = sessionData.map((s: any) => {
+          const timeStr = s.start_time || s.created_at;
+          let remainingSeconds = 0;
+          let isExpired = true;
+          if (timeStr) {
+            const startMs = new Date(timeStr).getTime();
+            const elapsedSec = Math.floor((nowUtc - startMs) / 1000);
+            remainingSeconds = Math.max(0, 300 - elapsedSec);
+            isExpired = remainingSeconds <= 0;
+          }
+          return {
+            id: s.id,
+            class_name: s.class_name,
+            date: s.date,
+            start_time: s.start_time,
+            end_time: s.end_time,
+            instructor_name: s.instructor_name,
+            target_academic_year: s.target_academic_year,
+            created_at: s.created_at,
+            remaining_seconds: remainingSeconds,
+            is_expired: isExpired,
+            window_duration_seconds: 300,
+          };
+        });
+
+        setSessions(activeList);
+
+        // If URL provided a session_id, auto-select it if still active
+        if (initialSessionId) {
+          const matched = activeList.find(s => s.id === initialSessionId);
+          if (matched) {
+            setSelectedSession(matched);
+            setStep("enter_roll");
+          }
+        }
+        return;
+      }
+
+      // 2. Fallback to backend API if Supabase query returned no rows or had network error
+      const res = await fetch(`${backendUrl}/api/active-sessions`, {
+        headers: { "ngrok-skip-browser-warning": "69420" }
+      });
       if (res.ok) {
         const data = await res.json();
         const activeList: ActiveSession[] = data.sessions || [];
         setSessions(activeList);
 
-        // If URL provided a session_id, auto-select it if still active
         if (initialSessionId) {
           const matched = activeList.find(s => s.id === initialSessionId);
           if (matched) {
@@ -146,7 +196,7 @@ function SelfieAttendContent() {
     fetchActiveSessions();
   }, [fetchActiveSessions]);
 
-  // Lookup student by roll
+  // Lookup student by roll & check live CCTV attendance
   const handleVerifyRoll = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!rollInput.trim()) return;
@@ -159,13 +209,64 @@ function SelfieAttendContent() {
     setLookingUpStudent(true);
     setLookupError(null);
 
+    const cleanRoll = rollInput.trim();
+
     try {
+      // 1. Direct Supabase Query for fast & reliable lookup across Vercel and mobile
+      let { data: studentData, error: studErr } = await supabase
+        .from("students")
+        .select("id, student_roll, full_name, email, academic_year, face_encoding")
+        .ilike("student_roll", cleanRoll);
+
+      if (!studentData || studentData.length === 0) {
+        const resEq = await supabase
+          .from("students")
+          .select("id, student_roll, full_name, email, academic_year, face_encoding")
+          .eq("student_roll", cleanRoll);
+        studentData = resEq.data;
+      }
+
+      if (studentData && studentData.length > 0) {
+        const stud = studentData[0];
+        const hasFace = !!(stud.face_encoding && Array.isArray(stud.face_encoding) && stud.face_encoding.length > 0);
+
+        let isAlreadyPresent = false;
+        let attendanceInfo = null;
+
+        if (selectedSession) {
+          const { data: attData } = await supabase
+            .from("attendance")
+            .select("id, status, capture_mode, confidence_score, recorded_at")
+            .eq("session_id", selectedSession.id)
+            .eq("student_id", stud.id);
+
+          if (attData && attData.length > 0) {
+            isAlreadyPresent = true;
+            attendanceInfo = attData[0];
+          }
+        }
+
+        setStudent({
+          id: stud.id,
+          student_roll: stud.student_roll,
+          full_name: stud.full_name,
+          academic_year: stud.academic_year || "1st Year",
+          has_face_enrolled: hasFace,
+          is_already_present: isAlreadyPresent,
+          attendance_info: attendanceInfo,
+        });
+        return;
+      }
+
+      // 2. Fallback to backend API
       const sessionIdParam = selectedSession ? `?session_id=${encodeURIComponent(selectedSession.id)}` : "";
-      const res = await fetch(`${backendUrl}/api/student-lookup/${encodeURIComponent(rollInput.trim())}${sessionIdParam}`);
+      const res = await fetch(`${backendUrl}/api/student-lookup/${encodeURIComponent(cleanRoll)}${sessionIdParam}`, {
+        headers: { "ngrok-skip-browser-warning": "69420" }
+      });
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.detail || "Student roll not found in directory.");
+        throw new Error(data.detail || `No student found with Roll Number '${cleanRoll}'. Please check and try again.`);
       }
 
       setStudent(data.student);
@@ -213,6 +314,9 @@ function SelfieAttendContent() {
 
       const response = await fetch(`${backendUrl}/api/selfie-attendance`, {
         method: "POST",
+        headers: {
+          "ngrok-skip-browser-warning": "69420",
+        },
         body: formData,
       });
 
