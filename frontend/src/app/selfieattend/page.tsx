@@ -1,7 +1,7 @@
 /* eslint-disable */
 "use client";
 
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { 
   Camera, CheckCircle2, ShieldCheck, AlertCircle, RefreshCw, 
@@ -11,6 +11,8 @@ import {
 } from "lucide-react";
 import Webcam from "react-webcam";
 import { getBackendUrl } from "@/lib/api";
+
+export const dynamic = "force-dynamic";
 
 interface ActiveSession {
   id: string;
@@ -35,7 +37,7 @@ interface StudentProfile {
   has_face_enrolled: boolean;
 }
 
-export default function SelfieAttendPortal() {
+function SelfieAttendContent() {
   const searchParams = useSearchParams();
   const initialSessionId = searchParams.get("session_id");
 
@@ -828,3 +830,19 @@ export default function SelfieAttendPortal() {
     </div>
   );
 }
+
+export default function SelfieAttendPortal() {
+  return (
+    <Suspense 
+      fallback={
+        <div className="min-h-screen bg-[#070B12] text-slate-200 flex flex-col items-center justify-center gap-3">
+          <div className="w-10 h-10 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin" />
+          <p className="text-xs text-slate-400 font-medium">Loading Selfie Attendance Portal...</p>
+        </div>
+      }
+    >
+      <SelfieAttendContent />
+    </Suspense>
+  );
+}
+
