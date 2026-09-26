@@ -21,12 +21,12 @@ def get_camera_urls():
     return [url.strip() for url in urls_str.split(",") if url.strip()]
 
 CAMERA_PRESETS = [
-    {"name": "1st Row Left", "row": "1st Row (Front)", "position": "Left", "ip": "172.16.7.5"},
-    {"name": "1st Row Middle", "row": "1st Row (Front)", "position": "Middle", "ip": "172.16.7.3"},
-    {"name": "1st Row Right", "row": "1st Row (Front)", "position": "Right", "ip": "172.16.7.17"},
-    {"name": "2nd Row Left", "row": "2nd Row (Back)", "position": "Left", "ip": "172.16.7.16"},
-    {"name": "2nd Row Middle", "row": "2nd Row (Back)", "position": "Middle", "ip": "172.16.7.18"},
-    {"name": "2nd Row Right", "row": "2nd Row (Back)", "position": "Right", "ip": "172.16.7.9"},
+    {"name": "1L", "row": "1st Row (Front)", "position": "Left", "ip": "172.16.7.5"},
+    {"name": "1M", "row": "1st Row (Front)", "position": "Middle", "ip": "172.16.7.3"},
+    {"name": "1R", "row": "1st Row (Front)", "position": "Right", "ip": "172.16.7.17"},
+    {"name": "2L", "row": "2nd Row (Back)", "position": "Left", "ip": "172.16.7.16"},
+    {"name": "2M", "row": "2nd Row (Back)", "position": "Middle", "ip": "172.16.7.18"},
+    {"name": "2R", "row": "2nd Row (Back)", "position": "Right", "ip": "172.16.7.9"},
 ]
 
 def get_camera_details():

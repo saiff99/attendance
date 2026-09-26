@@ -24,12 +24,12 @@ interface CameraMeta {
 }
 
 const DEFAULT_CAMERAS: CameraMeta[] = [
-  { index: 0, id: "cam-1", name: "1st Row Left", row: "1st Row (Front)", position: "Left", ip: "172.16.7.5" },
-  { index: 1, id: "cam-2", name: "1st Row Middle", row: "1st Row (Front)", position: "Middle", ip: "172.16.7.3" },
-  { index: 2, id: "cam-3", name: "1st Row Right", row: "1st Row (Front)", position: "Right", ip: "172.16.7.17" },
-  { index: 3, id: "cam-4", name: "2nd Row Left", row: "2nd Row (Back)", position: "Left", ip: "172.16.7.16" },
-  { index: 4, id: "cam-5", name: "2nd Row Middle", row: "2nd Row (Back)", position: "Middle", ip: "172.16.7.18" },
-  { index: 5, id: "cam-6", name: "2nd Row Right", row: "2nd Row (Back)", position: "Right", ip: "172.16.7.9" },
+  { index: 0, id: "cam-1", name: "1L", row: "1st Row (Front)", position: "Left", ip: "172.16.7.5" },
+  { index: 1, id: "cam-2", name: "1M", row: "1st Row (Front)", position: "Middle", ip: "172.16.7.3" },
+  { index: 2, id: "cam-3", name: "1R", row: "1st Row (Front)", position: "Right", ip: "172.16.7.17" },
+  { index: 3, id: "cam-4", name: "2L", row: "2nd Row (Back)", position: "Left", ip: "172.16.7.16" },
+  { index: 4, id: "cam-5", name: "2M", row: "2nd Row (Back)", position: "Middle", ip: "172.16.7.18" },
+  { index: 5, id: "cam-6", name: "2R", row: "2nd Row (Back)", position: "Right", ip: "172.16.7.9" },
 ];
 
 export default function LiveScan() {
@@ -593,7 +593,6 @@ export default function LiveScan() {
                           <div className="absolute top-2 left-2 z-10 flex items-center gap-1.5 bg-black/75 backdrop-blur-md px-2 py-0.5 rounded-md text-[10px] font-semibold text-white border border-white/10 shadow-sm">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                             {cam.name}
-                            <span className="text-slate-400 font-mono text-[9px]">({cam.ip})</span>
                           </div>
 
                           {/* Top-Right Maximize Button */}
@@ -609,7 +608,7 @@ export default function LiveScan() {
                             <MjpegPlayer 
                               url={`${backendUrl}/api/video-feed/${activeSession.id}?camera_index=${cam.index}`}
                               className="w-full h-full object-contain"
-                              fallbackText={`Connecting to ${cam.name}...`}
+                              fallbackText="Connecting..."
                               paused={focusedCamera !== null}
                             />
                           </div>
@@ -635,7 +634,6 @@ export default function LiveScan() {
                           <div className="absolute top-2 left-2 z-10 flex items-center gap-1.5 bg-black/75 backdrop-blur-md px-2 py-0.5 rounded-md text-[10px] font-semibold text-white border border-white/10 shadow-sm">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                             {cam.name}
-                            <span className="text-slate-400 font-mono text-[9px]">({cam.ip})</span>
                           </div>
 
                           <button 
@@ -650,7 +648,7 @@ export default function LiveScan() {
                             <MjpegPlayer 
                               url={`${backendUrl}/api/video-feed/${activeSession.id}?camera_index=${cam.index}`}
                               className="w-full h-full object-contain"
-                              fallbackText={`Connecting to ${cam.name}...`}
+                              fallbackText="Connecting..."
                               paused={focusedCamera !== null}
                             />
                           </div>
@@ -673,7 +671,7 @@ export default function LiveScan() {
                     >
                       {cctvCameras.map((cam) => (
                         <option key={cam.id} value={cam.index} className="bg-slate-900 text-white">
-                          {cam.name} ({cam.ip})
+                          {cam.name}
                         </option>
                       ))}
                     </select>
@@ -1016,10 +1014,7 @@ export default function LiveScan() {
               <div className="flex items-center justify-between p-3.5 sm:p-4 border-b border-slate-800 bg-slate-900/90">
                 <div className="flex items-center gap-2.5 min-w-0">
                   <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-                  <h3 className="text-sm sm:text-base font-bold text-white truncate">{focusedCamera.name}</h3>
-                  <span className="text-[11px] font-mono text-slate-400 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
-                    {focusedCamera.ip}
-                  </span>
+                  <h3 className="text-sm sm:text-base font-bold text-white truncate">Camera {focusedCamera.name}</h3>
                   <span className="text-xs bg-indigo-500/10 text-indigo-300 px-2.5 py-0.5 rounded-full border border-indigo-500/20 hidden sm:inline">
                     {focusedCamera.row}
                   </span>
@@ -1057,7 +1052,7 @@ export default function LiveScan() {
                   key={focusedCamera.id}
                   url={`${backendUrl}/api/video-feed/${activeSession.id}?camera_index=${focusedCamera.index}`}
                   className="w-full h-full object-contain"
-                  fallbackText={`Connecting to ${focusedCamera.name}...`}
+                  fallbackText="Connecting..."
                   paused={false}
                 />
               </div>

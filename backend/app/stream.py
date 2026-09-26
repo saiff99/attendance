@@ -263,7 +263,7 @@ class CameraStreamManager:
                 camera_details = get_camera_details()
                 if index < len(camera_details):
                     cam_meta = camera_details[index]
-                    stream_name = f"{cam_meta['name']} ({cam_meta['ip']})"
+                    stream_name = cam_meta['name']
                     stream_url = cam_meta['url']
                 else:
                     urls = get_camera_urls()
@@ -319,7 +319,7 @@ def generate_video_feed(session_id: str, camera_index: int = 0, camera_type: str
     while True:
         frame = stream.get_frame_with_overlays(session_id)
         if frame is None:
-            placeholder_text = f"{stream.name}: Connecting..." if not stream.connected else "Acquiring Video..."
+            placeholder_text = "Connecting..."
             frame = create_placeholder_frame(placeholder_text)
 
         # Scale down to 720p (1280x720) for butter-smooth network streaming to web browser

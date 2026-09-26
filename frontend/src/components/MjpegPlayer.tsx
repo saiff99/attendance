@@ -13,7 +13,7 @@ interface MjpegPlayerProps {
 export function MjpegPlayer({ 
   url, 
   className = "", 
-  fallbackText = "Connecting to camera...",
+  fallbackText = "Connecting...",
   paused = false 
 }: MjpegPlayerProps) {
   const [frameSrc, setFrameSrc] = useState<string>('');
