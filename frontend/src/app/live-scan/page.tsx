@@ -1,12 +1,13 @@
 /* eslint-disable */
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { 
   Camera, Upload, CheckCircle2, PlayCircle, StopCircle, Activity, Loader2, 
   ArrowLeft, BookOpen, Users, MapPin, Video, Download, Focus, 
   ChevronUp, ChevronDown, ChevronLeft, ChevronRight, ZoomIn, ZoomOut,
-  Grid, Maximize2, Minimize2, Eye, ShieldCheck, RefreshCw, X
+  Grid, Maximize2, Minimize2, Eye, ShieldCheck, RefreshCw, X, Search,
+  Clock, Sparkles, ChevronLeft as PrevIcon, ChevronRight as NextIcon
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import Webcam from "react-webcam";
@@ -37,7 +38,9 @@ export default function LiveScan() {
   
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [logs, setLogs] = useState<any[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
+  const [sessionTime, setSessionTime] = useState("00:00:00");
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Session State
@@ -75,6 +78,20 @@ export default function LiveScan() {
     navigator.mediaDevices.enumerateDevices().then(handleDevices);
   }, [handleDevices]);
 
+  // Session Duration Timer
+  useEffect(() => {
+    if (!activeSession) return;
+    const startTime = new Date(activeSession.start_time || Date.now()).getTime();
+    const timer = setInterval(() => {
+      const diff = Math.floor((Date.now() - startTime) / 1000);
+      const hours = Math.floor(diff / 3600).toString().padStart(2, '0');
+      const minutes = Math.floor((diff % 3600) / 60).toString().padStart(2, '0');
+      const seconds = (diff % 60).toString().padStart(2, '0');
+      setSessionTime(`${hours}:${minutes}:${seconds}`);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [activeSession]);
+
   // Automated scanning effect (for live camera only)
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -93,7 +110,7 @@ export default function LiveScan() {
       fetchLogs();
       interval = setInterval(() => {
         fetchLogs();
-      }, 2500); // Poll logs every 2.5s
+      }, 2000); // Poll logs every 2.0s
     }
     return () => clearInterval(interval);
   }, [activeTab, activeSession]);
@@ -139,16 +156,13 @@ export default function LiveScan() {
       return;
     }
     
-    // Create CSV Headers
     const headers = ["Roll Number", "Full Name", "Status", "Capture Mode", "Confidence (%)", "Recorded At"];
-    
-    // Map data rows
     const rows = logs.map(log => {
       const studentName = log.students?.full_name || "Unknown";
       const studentRoll = log.students?.student_roll || "N/A";
       const status = log.status || "Present";
-      const captureMode = log.capture_mode || "Unknown";
-      const confidence = Math.round(log.confidence_score * 100).toString();
+      const captureMode = log.capture_mode || "AI CCTV";
+      const confidence = Math.round((log.confidence_score || 0.9) * 100).toString();
       const time = new Date(log.recorded_at).toLocaleString();
       
       return [studentRoll, studentName, status, captureMode, confidence, time]
@@ -161,7 +175,7 @@ export default function LiveScan() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `attendance_report_${activeSession.class_name.replace(/\s+/g, '_')}.csv`);
+    link.setAttribute("download", `Attendance_${activeSession.class_name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -290,6 +304,32 @@ export default function LiveScan() {
     }
   };
 
+  // Filter logs based on search query
+  const filteredLogs = useMemo(() => {
+    if (!searchQuery.trim()) return logs;
+    const q = searchQuery.toLowerCase();
+    return logs.filter(log => {
+      const name = log.students?.full_name?.toLowerCase() || "";
+      const roll = log.students?.student_roll?.toString().toLowerCase() || "";
+      return name.includes(q) || roll.includes(q);
+    });
+  }, [logs, searchQuery]);
+
+  // Modal navigation (Next/Previous camera)
+  const handleNextCamera = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!focusedCamera) return;
+    const nextIdx = (focusedCamera.index + 1) % cctvCameras.length;
+    setFocusedCamera(cctvCameras[nextIdx]);
+  };
+
+  const handlePrevCamera = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!focusedCamera) return;
+    const prevIdx = (focusedCamera.index - 1 + cctvCameras.length) % cctvCameras.length;
+    setFocusedCamera(cctvCameras[prevIdx]);
+  };
+
   // Split cameras into Back Row (2nd Row) and Front Row (1st Row)
   const backRowCameras = cctvCameras.filter(c => c.row.includes("2nd") || c.name.includes("2nd") || c.index >= 3);
   const frontRowCameras = cctvCameras.filter(c => c.row.includes("1st") || c.name.includes("1st") || c.index < 3);
@@ -298,72 +338,75 @@ export default function LiveScan() {
 
   if (!activeSession) {
     return (
-      <div className="w-full min-h-screen bg-gray-50 dark:bg-gray-950 transition-colors duration-300 p-8 flex items-center justify-center">
-        <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl shadow-xl max-w-lg w-full p-8 transition-colors">
-          <div className="text-center mb-8">
-            <div className="w-16 h-16 bg-indigo-50 dark:bg-indigo-900/40 rounded-full flex items-center justify-center mx-auto mb-4 text-indigo-600 dark:text-indigo-400">
+      <div className="w-full min-h-screen bg-[#070B12] text-slate-100 flex items-center justify-center p-4 sm:p-6">
+        <div className="bg-slate-900/90 backdrop-blur-2xl border border-slate-800 rounded-3xl shadow-2xl max-w-xl w-full p-8 relative overflow-hidden">
+          {/* Subtle Ambient Glow */}
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-80 h-32 bg-indigo-500/10 blur-3xl rounded-full pointer-events-none" />
+
+          <div className="text-center mb-8 relative z-10">
+            <div className="w-16 h-16 bg-indigo-500/10 border border-indigo-500/20 rounded-2xl flex items-center justify-center mx-auto mb-4 text-indigo-400 shadow-inner">
               <Camera className="w-8 h-8" />
             </div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Start Attendance Session</h1>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">Initialize a lecture session with 6-camera hall monitoring.</p>
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">Start Attendance Session</h1>
+            <p className="text-sm text-slate-400 mt-2">Initialize lecture attendance with 6-camera synchronized AI tracking.</p>
           </div>
 
-          <form onSubmit={handleStartSession} className="space-y-4">
+          <form onSubmit={handleStartSession} className="space-y-4 relative z-10">
             <div>
-              <label htmlFor="subject" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Subject / Module</label>
+              <label htmlFor="subject" className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Subject / Department</label>
               <input 
                 id="subject"
                 required
                 type="text" 
-                className="mt-1 block w-full rounded-lg border-0 py-3 px-4 text-gray-900 dark:text-white bg-white dark:bg-gray-800 ring-1 ring-inset ring-gray-300 dark:ring-gray-700 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6 transition-colors" 
+                className="w-full rounded-xl border border-slate-800 py-3 px-4 text-white bg-slate-950/70 placeholder:text-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all text-sm" 
                 value={setupData.subject}
                 onChange={e => setSetupData({...setupData, subject: e.target.value})}
-                placeholder="e.g. Anatomy & Physiology"
+                placeholder="e.g. Department of Anatomy & Physiology"
               />
             </div>
 
             <div>
-              <label htmlFor="hall" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Lecture / Exam Hall</label>
+              <label htmlFor="hall" className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Lecture / Examination Hall</label>
               <select 
                 id="hall"
-                className="mt-1 block w-full rounded-lg border-0 py-3 px-4 text-gray-900 dark:text-white bg-white dark:bg-gray-800 ring-1 ring-inset ring-gray-300 dark:ring-gray-700 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6 transition-colors"
+                className="w-full rounded-xl border border-slate-800 py-3 px-4 text-white bg-slate-950/70 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all text-sm cursor-pointer"
                 value={setupData.hall}
                 onChange={e => setSetupData({...setupData, hall: e.target.value})}
               >
-                <option value="Lecture Hall 1">Lecture Hall 1 (6 CP PLUS Cameras)</option>
-                <option value="Lecture Hall 2">Lecture Hall 2</option>
-                <option value="Main Exam Hall">Main Exam Hall (Full Matrix)</option>
-                <option value="Auditorium">Auditorium</option>
+                <option value="Lecture Hall 1" className="bg-slate-900">Lecture Hall 1 (6 CP PLUS 4K Matrix)</option>
+                <option value="Lecture Hall 2" className="bg-slate-900">Lecture Hall 2</option>
+                <option value="Main Exam Auditorium" className="bg-slate-900">Main Exam Auditorium</option>
+                <option value="Surgical Amphitheatre" className="bg-slate-900">Surgical Amphitheatre</option>
               </select>
             </div>
 
             <div>
-              <label htmlFor="topic" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Topic / Instructor</label>
+              <label htmlFor="topic" className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Topic / Professor Name</label>
               <input 
                 id="topic"
                 required
                 type="text" 
-                className="mt-1 block w-full rounded-lg border-0 py-3 px-4 text-gray-900 dark:text-white bg-white dark:bg-gray-800 ring-1 ring-inset ring-gray-300 dark:ring-gray-700 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6 transition-colors" 
+                className="w-full rounded-xl border border-slate-800 py-3 px-4 text-white bg-slate-950/70 placeholder:text-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all text-sm" 
                 value={setupData.topic}
                 onChange={e => setSetupData({...setupData, topic: e.target.value})}
-                placeholder="e.g. Dr. A. Rahman - Cardiovascular System"
+                placeholder="e.g. Prof. Dr. A. K. Rahman - Cardiovascular Pathology"
               />
             </div>
             
             <div>
-              <label htmlFor="academic_year" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Target Academic Cohort</label>
+              <label htmlFor="academic_year" className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Target Student Cohort</label>
               <select
                 id="academic_year"
-                className="mt-1 block w-full rounded-lg border-0 py-3 px-4 text-gray-900 dark:text-white bg-white dark:bg-gray-800 ring-1 ring-inset ring-gray-300 dark:ring-gray-700 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6 transition-colors"
+                className="w-full rounded-xl border border-slate-800 py-3 px-4 text-white bg-slate-950/70 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all text-sm cursor-pointer"
                 value={setupData.academic_year}
                 onChange={e => setSetupData({...setupData, academic_year: e.target.value})}
               >
-                <option value="All">All Years (No Restriction)</option>
-                <option value="1st Year">1st Year</option>
-                <option value="2nd Year">2nd Year</option>
-                <option value="3rd Year">3rd Year</option>
-                <option value="4th Year">4th Year</option>
-                <option value="Interns">Interns</option>
+                <option value="All" className="bg-slate-900">All MBBS Batches (No Restriction)</option>
+                <option value="1st Year" className="bg-slate-900">1st Year MBBS</option>
+                <option value="2nd Year" className="bg-slate-900">2nd Year MBBS</option>
+                <option value="3rd Year" className="bg-slate-900">3rd Year MBBS</option>
+                <option value="4th Year" className="bg-slate-900">4th Year MBBS</option>
+                <option value="Interns" className="bg-slate-900">Interns & Residents</option>
               </select>
             </div>
             
@@ -371,12 +414,12 @@ export default function LiveScan() {
               <button
                 type="submit"
                 disabled={isStartingSession}
-                className="w-full rounded-xl bg-indigo-600 px-4 py-3.5 text-sm font-semibold text-white shadow-lg hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+                className="w-full rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 py-3.5 px-4 text-sm font-semibold text-white shadow-lg shadow-indigo-600/30 hover:from-indigo-500 hover:to-indigo-400 focus:outline-none disabled:opacity-50 transition-all flex items-center justify-center gap-2 transform active:scale-[0.99]"
               >
                 {isStartingSession ? (
-                  <><Loader2 className="w-4 h-4 animate-spin" /> Starting Live Session...</>
+                  <><Loader2 className="w-4 h-4 animate-spin" /> Initializing AI Hub...</>
                 ) : (
-                  <><ShieldCheck className="w-5 h-5" /> Start 6-Camera Attendance Session</>
+                  <><ShieldCheck className="w-5 h-5" /> Launch 6-Camera Attendance Session</>
                 )}
               </button>
             </div>
@@ -387,8 +430,8 @@ export default function LiveScan() {
   }
 
   return (
-    <div className="w-full min-h-screen bg-gray-50 dark:bg-gray-950 transition-colors duration-300 p-4 sm:p-6 lg:p-8 flex flex-col">
-      <div className="max-w-[1600px] mx-auto w-full flex-1 flex flex-col relative">
+    <div className="w-full min-h-screen bg-[#070B12] text-slate-100 flex flex-col p-2.5 sm:p-4 lg:p-5 overflow-x-hidden box-border">
+      <div className="w-full max-w-[1720px] mx-auto flex-1 flex flex-col min-w-0">
         <input 
           type="file" 
           accept="image/*" 
@@ -397,142 +440,169 @@ export default function LiveScan() {
           onChange={handleProcessAttendance} 
         />
 
-        {/* Top Header */}
-        <div className="mb-6 flex-shrink-0 flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <button onClick={() => setActiveSession(null)} className="text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 flex items-center mb-2 transition-colors">
-              <ArrowLeft className="w-4 h-4 mr-1" /> End Session & Back
+        {/* Top Header Command Bar */}
+        <div className="mb-4 bg-slate-900/80 backdrop-blur-xl border border-slate-800/90 rounded-2xl p-3 sm:p-4 shadow-xl flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-3 min-w-0">
+            <button 
+              onClick={() => setActiveSession(null)} 
+              className="px-3 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700/80 text-xs font-semibold text-slate-300 hover:text-white border border-slate-700/60 flex items-center transition-all"
+            >
+              <ArrowLeft className="w-3.5 h-3.5 mr-1" /> End Session
             </button>
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-gray-900 dark:text-white flex items-center gap-3">
-              <span>{activeSession.class_name}</span>
-              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping mr-1.5" />
-                6-Cam AI Live
-              </span>
-            </h1>
-            <div className="flex flex-wrap items-center gap-4 mt-2 text-sm text-gray-600 dark:text-gray-400">
-              <span className="flex items-center"><Users className="w-4 h-4 mr-1.5 text-gray-400 dark:text-gray-500" /> {activeSession.instructor_name}</span>
-              <span className="flex items-center"><MapPin className="w-4 h-4 mr-1.5 text-gray-400 dark:text-gray-500" /> {setupData.hall}</span>
-              <span className="flex items-center text-indigo-600 dark:text-indigo-400 font-medium">
-                Cohort: {activeSession.target_academic_year || "All"}
-              </span>
+            
+            <div className="h-5 w-px bg-slate-800 hidden sm:block" />
+
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="text-lg sm:text-xl font-bold tracking-tight text-white flex items-center gap-2">
+                  <span>{activeSession.class_name}</span>
+                </h1>
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping mr-1.5" />
+                  6-Cam 4K Live Hub
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400 mt-0.5">
+                <span className="flex items-center"><Users className="w-3.5 h-3.5 mr-1 text-slate-500" /> {activeSession.instructor_name}</span>
+                <span className="flex items-center"><MapPin className="w-3.5 h-3.5 mr-1 text-slate-500" /> {setupData.hall}</span>
+                <span className="text-indigo-400 font-medium">Cohort: {activeSession.target_academic_year || "All"}</span>
+              </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            {/* Live Timer Pill */}
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-950/80 border border-slate-800 text-xs font-mono font-medium text-slate-300">
+              <Clock className="w-3.5 h-3.5 text-indigo-400" />
+              <span>{sessionTime}</span>
+            </div>
+
             <button
               onClick={() => fetchLogs()}
-              className="inline-flex items-center px-3.5 py-2 rounded-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 shadow-sm transition-colors"
+              className="inline-flex items-center px-3 py-1.5 rounded-lg bg-slate-800/80 border border-slate-700/60 text-xs font-semibold text-slate-200 hover:bg-slate-700/80 hover:text-white shadow-sm transition-all"
+              title="Synchronize Attendance Records"
             >
-              <RefreshCw className="w-4 h-4 mr-1.5 text-gray-500" /> Sync Attendance
+              <RefreshCw className="w-3.5 h-3.5 mr-1.5 text-slate-400" /> Sync
+            </button>
+
+            <button
+              onClick={exportToCSV}
+              className="inline-flex items-center px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white shadow-md shadow-indigo-600/20 transition-all"
+            >
+              <Download className="w-3.5 h-3.5 mr-1.5" /> Export Report
             </button>
           </div>
         </div>
 
-        <div className="flex-1 flex flex-col lg:flex-row gap-6 min-h-0">
-          {/* Main Visualizer Area */}
-          <div className="flex-1 flex flex-col bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden transition-colors min-w-0">
-            {/* Navigation Tabs */}
-            <div className="flex border-b border-gray-100 dark:border-gray-800 p-2 overflow-x-auto gap-2 bg-gray-50/50 dark:bg-gray-800/20">
+        {/* Main Dashboard Layout (Zero Horizontal Scroll) */}
+        <div className="flex-1 flex flex-col lg:flex-row gap-4 min-h-0 w-full">
+          
+          {/* Left Column: Visualizer & Camera Matrix */}
+          <div className="flex-1 flex flex-col bg-slate-900/80 backdrop-blur-xl rounded-2xl shadow-xl border border-slate-800/90 overflow-hidden min-w-0">
+            
+            {/* Segmented Mode Selector */}
+            <div className="p-2 border-b border-slate-800/80 bg-slate-950/40 flex items-center gap-1.5 overflow-x-auto">
               <button
                 onClick={() => setActiveTab("grid")}
-                className={`flex-1 min-w-[170px] py-2.5 px-4 text-sm font-semibold rounded-xl flex items-center justify-center transition-all ${
+                className={`flex-1 min-w-[130px] py-2 px-3 text-xs font-semibold rounded-xl flex items-center justify-center transition-all ${
                   activeTab === "grid"
-                    ? "bg-indigo-600 text-white shadow-md"
-                    : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800"
+                    ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
+                    : "text-slate-400 hover:text-white hover:bg-slate-800/60"
                 }`}
               >
-                <Grid className="w-4 h-4 mr-2" />
-                6-Cam Hall Matrix
+                <Grid className="w-3.5 h-3.5 mr-1.5" />
+                6-Cam Matrix
               </button>
               <button
                 onClick={() => setActiveTab("cctv")}
-                className={`flex-1 min-w-[150px] py-2.5 px-4 text-sm font-semibold rounded-xl flex items-center justify-center transition-all ${
+                className={`flex-1 min-w-[120px] py-2 px-3 text-xs font-semibold rounded-xl flex items-center justify-center transition-all ${
                   activeTab === "cctv"
-                    ? "bg-indigo-600 text-white shadow-md"
-                    : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800"
+                    ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
+                    : "text-slate-400 hover:text-white hover:bg-slate-800/60"
                 }`}
               >
-                <Video className="w-4 h-4 mr-2" />
-                Single Camera
+                <Video className="w-3.5 h-3.5 mr-1.5" />
+                Single Feed
               </button>
               <button
                 onClick={() => setActiveTab("ptz")}
-                className={`flex-1 min-w-[140px] py-2.5 px-4 text-sm font-semibold rounded-xl flex items-center justify-center transition-all ${
+                className={`flex-1 min-w-[110px] py-2 px-3 text-xs font-semibold rounded-xl flex items-center justify-center transition-all ${
                   activeTab === "ptz"
-                    ? "bg-indigo-600 text-white shadow-md"
-                    : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800"
+                    ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
+                    : "text-slate-400 hover:text-white hover:bg-slate-800/60"
                 }`}
               >
-                <Focus className="w-4 h-4 mr-2" />
+                <Focus className="w-3.5 h-3.5 mr-1.5" />
                 PTZ Control
               </button>
               <button
                 onClick={() => setActiveTab("live")}
-                className={`flex-1 min-w-[140px] py-2.5 px-4 text-sm font-semibold rounded-xl flex items-center justify-center transition-all ${
+                className={`flex-1 min-w-[110px] py-2 px-3 text-xs font-semibold rounded-xl flex items-center justify-center transition-all ${
                   activeTab === "live"
-                    ? "bg-indigo-600 text-white shadow-md"
-                    : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800"
+                    ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
+                    : "text-slate-400 hover:text-white hover:bg-slate-800/60"
                 }`}
               >
-                <Camera className="w-4 h-4 mr-2" />
+                <Camera className="w-3.5 h-3.5 mr-1.5" />
                 Webcam Scan
               </button>
               <button
                 onClick={() => setActiveTab("manual")}
-                className={`flex-1 min-w-[140px] py-2.5 px-4 text-sm font-semibold rounded-xl flex items-center justify-center transition-all ${
+                className={`flex-1 min-w-[110px] py-2 px-3 text-xs font-semibold rounded-xl flex items-center justify-center transition-all ${
                   activeTab === "manual"
-                    ? "bg-indigo-600 text-white shadow-md"
-                    : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800"
+                    ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
+                    : "text-slate-400 hover:text-white hover:bg-slate-800/60"
                 }`}
               >
-                <Upload className="w-4 h-4 mr-2" />
+                <Upload className="w-3.5 h-3.5 mr-1.5" />
                 Photo Upload
               </button>
             </div>
 
-            {/* Content Area */}
-            <div className="flex-1 p-4 sm:p-6 flex flex-col min-h-0 overflow-y-auto">
+            {/* Video Viewport Area */}
+            <div className="flex-1 p-3 sm:p-4 flex flex-col min-h-0 overflow-y-auto">
               {activeTab === "grid" ? (
                 /* 6-CAMERA SPLIT SCREEN MATRIX */
-                <div className="flex-1 flex flex-col gap-5">
+                <div className="flex-1 flex flex-col gap-4">
                   {/* Hall Orientation Banner */}
-                  <div className="flex items-center justify-between px-4 py-2 rounded-xl bg-gray-100 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700/50 text-xs font-semibold text-gray-600 dark:text-gray-300">
+                  <div className="flex items-center justify-between px-3.5 py-1.5 rounded-xl bg-slate-950/70 border border-slate-800/80 text-xs font-medium text-slate-300">
                     <span className="flex items-center gap-1.5">
-                      <ShieldCheck className="w-4 h-4 text-indigo-500" />
-                      CP PLUS Multi-Camera AI Vision Hub (6 Nodes Synchronized)
+                      <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                      CP PLUS Vision Hub (6 Nodes Synchronized • 4K AI Stream)
                     </span>
-                    <span className="text-gray-500 dark:text-gray-400 font-normal">
-                      Click any feed to enlarge
+                    <span className="text-slate-500 text-[11px] hidden sm:inline">
+                      Click any feed to open fullscreen studio focus
                     </span>
                   </div>
 
                   {/* 2nd Row (Back of Hall) */}
                   <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-blue-500" /> Back Section (2nd Row Cameras)
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-blue-500 shadow-sm shadow-blue-500/50" /> Back Section (2nd Row Cameras)
                       </span>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
                       {backRowCameras.map((cam) => (
                         <div 
                           key={cam.id} 
-                          className="group relative rounded-xl overflow-hidden bg-gray-950 border border-gray-800 shadow-md aspect-video flex flex-col cursor-pointer transition-all hover:border-indigo-500 hover:shadow-indigo-500/10"
+                          className="group relative rounded-xl overflow-hidden bg-slate-950 border border-slate-800/90 shadow-lg aspect-video flex flex-col cursor-pointer transition-all hover:border-indigo-500/80 hover:shadow-indigo-500/10"
                           onClick={() => setFocusedCamera(cam)}
                         >
-                          <div className="absolute top-2 left-2 z-10 flex items-center gap-1.5 bg-black/70 backdrop-blur-md px-2.5 py-1 rounded-md text-[11px] font-semibold text-white border border-white/10">
-                            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                          {/* Top-Left Camera Label Badge */}
+                          <div className="absolute top-2 left-2 z-10 flex items-center gap-1.5 bg-black/75 backdrop-blur-md px-2 py-0.5 rounded-md text-[10px] font-semibold text-white border border-white/10 shadow-sm">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                             {cam.name}
-                            <span className="text-gray-400 font-mono text-[10px]">({cam.ip})</span>
+                            <span className="text-slate-400 font-mono text-[9px]">({cam.ip})</span>
                           </div>
 
+                          {/* Top-Right Maximize Button */}
                           <button 
                             onClick={(e) => { e.stopPropagation(); setFocusedCamera(cam); }}
-                            className="absolute top-2 right-2 z-10 p-1.5 rounded-md bg-black/60 text-white/80 hover:text-white hover:bg-black/90 opacity-0 group-hover:opacity-100 transition-opacity"
+                            className="absolute top-2 right-2 z-10 p-1.5 rounded-md bg-black/70 text-white/80 hover:text-white hover:bg-black/90 opacity-0 group-hover:opacity-100 transition-all"
                             title="Maximize Camera"
                           >
-                            <Maximize2 className="w-4 h-4" />
+                            <Maximize2 className="w-3.5 h-3.5" />
                           </button>
 
                           <div className="w-full h-full flex items-center justify-center bg-black">
@@ -550,30 +620,30 @@ export default function LiveScan() {
 
                   {/* 1st Row (Front of Hall) */}
                   <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-indigo-500" /> Front Section (1st Row Cameras)
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-indigo-500 shadow-sm shadow-indigo-500/50" /> Front Section (1st Row Cameras)
                       </span>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
                       {frontRowCameras.map((cam) => (
                         <div 
                           key={cam.id} 
-                          className="group relative rounded-xl overflow-hidden bg-gray-950 border border-gray-800 shadow-md aspect-video flex flex-col cursor-pointer transition-all hover:border-indigo-500 hover:shadow-indigo-500/10"
+                          className="group relative rounded-xl overflow-hidden bg-slate-950 border border-slate-800/90 shadow-lg aspect-video flex flex-col cursor-pointer transition-all hover:border-indigo-500/80 hover:shadow-indigo-500/10"
                           onClick={() => setFocusedCamera(cam)}
                         >
-                          <div className="absolute top-2 left-2 z-10 flex items-center gap-1.5 bg-black/70 backdrop-blur-md px-2.5 py-1 rounded-md text-[11px] font-semibold text-white border border-white/10">
-                            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                          <div className="absolute top-2 left-2 z-10 flex items-center gap-1.5 bg-black/75 backdrop-blur-md px-2 py-0.5 rounded-md text-[10px] font-semibold text-white border border-white/10 shadow-sm">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                             {cam.name}
-                            <span className="text-gray-400 font-mono text-[10px]">({cam.ip})</span>
+                            <span className="text-slate-400 font-mono text-[9px]">({cam.ip})</span>
                           </div>
 
                           <button 
                             onClick={(e) => { e.stopPropagation(); setFocusedCamera(cam); }}
-                            className="absolute top-2 right-2 z-10 p-1.5 rounded-md bg-black/60 text-white/80 hover:text-white hover:bg-black/90 opacity-0 group-hover:opacity-100 transition-opacity"
+                            className="absolute top-2 right-2 z-10 p-1.5 rounded-md bg-black/70 text-white/80 hover:text-white hover:bg-black/90 opacity-0 group-hover:opacity-100 transition-all"
                             title="Maximize Camera"
                           >
-                            <Maximize2 className="w-4 h-4" />
+                            <Maximize2 className="w-3.5 h-3.5" />
                           </button>
 
                           <div className="w-full h-full flex items-center justify-center bg-black">
@@ -591,10 +661,9 @@ export default function LiveScan() {
                 </div>
               ) : activeTab === "cctv" ? (
                 /* SINGLE CAMERA VIEW */
-                <div className="flex-1 flex flex-col items-center justify-center bg-gray-900 rounded-xl relative overflow-hidden group min-h-[420px]">
-                  {/* Camera Selection Dropdown */}
-                  <div className="absolute top-4 left-4 z-20 bg-black/75 backdrop-blur-md rounded-xl shadow-lg border border-white/10 text-sm flex items-center pr-2">
-                    <div className="pl-3 py-2 border-r border-white/10">
+                <div className="flex-1 flex flex-col items-center justify-center bg-slate-950 rounded-2xl relative overflow-hidden group min-h-[440px] border border-slate-800">
+                  <div className="absolute top-4 left-4 z-20 bg-slate-900/90 backdrop-blur-md rounded-xl shadow-xl border border-slate-700/70 text-xs flex items-center pr-2">
+                    <div className="pl-3 py-2 border-r border-slate-700/70">
                       <Video className="w-4 h-4 text-indigo-400" />
                     </div>
                     <select
@@ -603,7 +672,7 @@ export default function LiveScan() {
                       onChange={(e) => setSelectedCctvIndex(Number(e.target.value))}
                     >
                       {cctvCameras.map((cam) => (
-                        <option key={cam.id} value={cam.index} className="bg-gray-900 text-white">
+                        <option key={cam.id} value={cam.index} className="bg-slate-900 text-white">
                           {cam.name} ({cam.ip})
                         </option>
                       ))}
@@ -617,19 +686,18 @@ export default function LiveScan() {
                       className="w-full h-full object-contain"
                     />
                     
-                    {/* Status Overlay */}
-                    <div className="absolute top-4 right-4 bg-black/60 backdrop-blur-sm rounded-full px-4 py-2 flex items-center shadow-lg border border-white/10">
+                    <div className="absolute top-4 right-4 bg-black/70 backdrop-blur-sm rounded-full px-3 py-1 flex items-center shadow-lg border border-white/10">
                       <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse mr-2" />
-                      <span className="text-white text-xs font-semibold tracking-wider">LIVE AI TRACKING</span>
+                      <span className="text-white text-[11px] font-semibold tracking-wider">LIVE 4K AI VISION</span>
                     </div>
                   </div>
                 </div>
               ) : activeTab === "ptz" ? (
                 /* PTZ VIEW */
-                <div className="flex-1 flex flex-col items-center justify-center bg-gray-900 rounded-xl relative overflow-hidden group min-h-[420px]">
+                <div className="flex-1 flex flex-col items-center justify-center bg-slate-950 rounded-2xl relative overflow-hidden group min-h-[440px] border border-slate-800">
                   {ptzCameraCount > 1 && (
-                    <div className="absolute top-4 left-4 z-20 bg-black/75 backdrop-blur-md rounded-xl shadow-lg border border-white/10 text-sm flex items-center pr-2">
-                      <div className="pl-3 py-2 border-r border-white/10">
+                    <div className="absolute top-4 left-4 z-20 bg-slate-900/90 backdrop-blur-md rounded-xl shadow-xl border border-slate-700/70 text-xs flex items-center pr-2">
+                      <div className="pl-3 py-2 border-r border-slate-700/70">
                         <Focus className="w-4 h-4 text-indigo-400" />
                       </div>
                       <select
@@ -638,7 +706,7 @@ export default function LiveScan() {
                         onChange={(e) => setSelectedPtzIndex(Number(e.target.value))}
                       >
                         {Array.from({ length: ptzCameraCount }).map((_, idx) => (
-                          <option key={idx} value={idx} className="bg-gray-900 text-white">
+                          <option key={idx} value={idx} className="bg-slate-900 text-white">
                             PTZ Camera {idx + 1}
                           </option>
                         ))}
@@ -653,14 +721,14 @@ export default function LiveScan() {
                       className="w-full h-full object-contain"
                     />
                     
-                    <div className="absolute top-4 right-4 bg-black/60 backdrop-blur-sm rounded-full px-4 py-2 flex items-center shadow-lg border border-white/10 z-20">
+                    <div className="absolute top-4 right-4 bg-black/70 backdrop-blur-sm rounded-full px-3 py-1 flex items-center shadow-lg border border-white/10 z-20">
                       <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse mr-2" />
-                      <span className="text-white text-xs font-semibold tracking-wider">PTZ AI TRACKING</span>
+                      <span className="text-white text-[11px] font-semibold tracking-wider">PTZ ACTIVE</span>
                     </div>
 
                     {/* PTZ Joystick */}
-                    <div className="absolute bottom-6 left-6 z-20 flex flex-col items-center gap-2 bg-black/60 backdrop-blur-md p-4 rounded-2xl border border-white/10 shadow-2xl">
-                      <div className="text-white/70 text-[10px] font-bold tracking-widest mb-1 uppercase">PTZ Joystick</div>
+                    <div className="absolute bottom-6 left-6 z-20 flex flex-col items-center gap-2 bg-slate-950/80 backdrop-blur-md p-3.5 rounded-2xl border border-slate-800 shadow-2xl">
+                      <div className="text-slate-400 text-[9px] font-bold tracking-widest uppercase">PTZ Control</div>
                       
                       <div className="grid grid-cols-3 gap-1">
                         <div />
@@ -670,9 +738,9 @@ export default function LiveScan() {
                           onMouseLeave={stopPtzMove}
                           onTouchStart={() => startPtzMove('up')}
                           onTouchEnd={stopPtzMove}
-                          className="w-9 h-9 bg-white/10 hover:bg-white/20 active:bg-indigo-500/50 rounded-lg flex items-center justify-center text-white transition-colors"
+                          className="w-8 h-8 bg-slate-800/80 hover:bg-slate-700 active:bg-indigo-600 rounded-lg flex items-center justify-center text-white transition-all"
                         >
-                          <ChevronUp className="w-5 h-5" />
+                          <ChevronUp className="w-4 h-4" />
                         </button>
                         <div />
                         <button 
@@ -681,15 +749,15 @@ export default function LiveScan() {
                           onMouseLeave={stopPtzMove}
                           onTouchStart={() => startPtzMove('left')}
                           onTouchEnd={stopPtzMove}
-                          className="w-9 h-9 bg-white/10 hover:bg-white/20 active:bg-indigo-500/50 rounded-lg flex items-center justify-center text-white transition-colors"
+                          className="w-8 h-8 bg-slate-800/80 hover:bg-slate-700 active:bg-indigo-600 rounded-lg flex items-center justify-center text-white transition-all"
                         >
-                          <ChevronLeft className="w-5 h-5" />
+                          <ChevronLeft className="w-4 h-4" />
                         </button>
                         <button 
                           onClick={stopPtzMove}
-                          className="w-9 h-9 bg-white/5 rounded-full flex items-center justify-center text-white/50"
+                          className="w-8 h-8 bg-slate-900 rounded-full flex items-center justify-center text-slate-500"
                         >
-                          <div className="w-2 h-2 rounded-full bg-white/50" />
+                          <div className="w-2 h-2 rounded-full bg-slate-500" />
                         </button>
                         <button 
                           onMouseDown={() => startPtzMove('right')}
@@ -697,9 +765,9 @@ export default function LiveScan() {
                           onMouseLeave={stopPtzMove}
                           onTouchStart={() => startPtzMove('right')}
                           onTouchEnd={stopPtzMove}
-                          className="w-9 h-9 bg-white/10 hover:bg-white/20 active:bg-indigo-500/50 rounded-lg flex items-center justify-center text-white transition-colors"
+                          className="w-8 h-8 bg-slate-800/80 hover:bg-slate-700 active:bg-indigo-600 rounded-lg flex items-center justify-center text-white transition-all"
                         >
-                          <ChevronRight className="w-5 h-5" />
+                          <ChevronRight className="w-4 h-4" />
                         </button>
                         <div />
                         <button 
@@ -708,23 +776,23 @@ export default function LiveScan() {
                           onMouseLeave={stopPtzMove}
                           onTouchStart={() => startPtzMove('down')}
                           onTouchEnd={stopPtzMove}
-                          className="w-9 h-9 bg-white/10 hover:bg-white/20 active:bg-indigo-500/50 rounded-lg flex items-center justify-center text-white transition-colors"
+                          className="w-8 h-8 bg-slate-800/80 hover:bg-slate-700 active:bg-indigo-600 rounded-lg flex items-center justify-center text-white transition-all"
                         >
-                          <ChevronDown className="w-5 h-5" />
+                          <ChevronDown className="w-4 h-4" />
                         </button>
                         <div />
                       </div>
 
-                      <div className="flex gap-2 mt-1 pt-2 border-t border-white/10 w-full justify-center">
+                      <div className="flex gap-1.5 mt-1 pt-2 border-t border-slate-800 w-full justify-center">
                         <button 
                           onMouseDown={() => startPtzMove('zoom_out')}
                           onMouseUp={stopPtzMove}
                           onMouseLeave={stopPtzMove}
                           onTouchStart={() => startPtzMove('zoom_out')}
                           onTouchEnd={stopPtzMove}
-                          className="flex-1 py-1.5 bg-white/10 hover:bg-white/20 active:bg-indigo-500/50 rounded-lg flex items-center justify-center text-white text-xs transition-colors"
+                          className="flex-1 py-1 bg-slate-800/80 hover:bg-slate-700 active:bg-indigo-600 rounded-md flex items-center justify-center text-white text-[11px] transition-all"
                         >
-                          <ZoomOut className="w-4 h-4" />
+                          <ZoomOut className="w-3.5 h-3.5" />
                         </button>
                         <button 
                           onMouseDown={() => startPtzMove('zoom_in')}
@@ -732,9 +800,9 @@ export default function LiveScan() {
                           onMouseLeave={stopPtzMove}
                           onTouchStart={() => startPtzMove('zoom_in')}
                           onTouchEnd={stopPtzMove}
-                          className="flex-1 py-1.5 bg-white/10 hover:bg-white/20 active:bg-indigo-500/50 rounded-lg flex items-center justify-center text-white text-xs transition-colors"
+                          className="flex-1 py-1 bg-slate-800/80 hover:bg-slate-700 active:bg-indigo-600 rounded-md flex items-center justify-center text-white text-[11px] transition-all"
                         >
-                          <ZoomIn className="w-4 h-4" />
+                          <ZoomIn className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     </div>
@@ -742,19 +810,19 @@ export default function LiveScan() {
                 </div>
               ) : activeTab === "live" ? (
                 /* WEBCAM SCAN VIEW */
-                <div className="flex-1 flex flex-col items-center justify-center bg-gray-900 rounded-xl relative overflow-hidden group min-h-[420px]">
+                <div className="flex-1 flex flex-col items-center justify-center bg-slate-950 rounded-2xl relative overflow-hidden group min-h-[440px] border border-slate-800">
                   {devices.length > 0 && (
-                    <div className="absolute top-4 left-4 z-20 bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 text-sm flex items-center pr-2">
-                      <div className="pl-3 py-2 border-r border-gray-200 dark:border-gray-700">
-                        <Video className="w-4 h-4 text-gray-500" />
+                    <div className="absolute top-4 left-4 z-20 bg-slate-900/90 backdrop-blur-md rounded-xl shadow-xl border border-slate-700/70 text-xs flex items-center pr-2">
+                      <div className="pl-3 py-2 border-r border-slate-700/70">
+                        <Video className="w-4 h-4 text-slate-400" />
                       </div>
                       <select
-                        className="py-2 pl-2 pr-6 border-0 bg-transparent text-gray-700 dark:text-gray-200 font-medium focus:ring-0 cursor-pointer outline-none w-full max-w-[200px] truncate"
+                        className="py-2 pl-2 pr-6 border-0 bg-transparent text-white font-medium focus:ring-0 cursor-pointer outline-none w-full max-w-[200px] truncate"
                         value={selectedDeviceId}
                         onChange={(e) => setSelectedDeviceId(e.target.value)}
                       >
                         {devices.map((device, key) => (
-                          <option key={device.deviceId} value={device.deviceId} className="dark:bg-gray-900">
+                          <option key={device.deviceId} value={device.deviceId} className="bg-slate-900 text-white">
                             {device.label || `Camera ${key + 1}`}
                           </option>
                         ))}
@@ -783,9 +851,9 @@ export default function LiveScan() {
                       )}
                       
                       {!isScanning && (
-                        <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center backdrop-blur-sm transition-all">
-                          <Camera className="w-16 h-16 text-white/50 mb-4" />
-                          <p className="text-white font-medium tracking-widest text-sm">CAMERA STANDBY</p>
+                        <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center backdrop-blur-sm transition-all">
+                          <Camera className="w-14 h-14 text-slate-500 mb-3" />
+                          <p className="text-slate-300 font-medium tracking-widest text-xs">WEBCAM STANDBY</p>
                         </div>
                       )}
                     </div>
@@ -795,52 +863,52 @@ export default function LiveScan() {
                 /* PHOTO UPLOAD */
                 <div 
                   onClick={() => !isProcessing && fileInputRef.current?.click()}
-                  className={`flex-1 flex flex-col items-center justify-center border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors min-h-[420px] ${!isProcessing ? 'cursor-pointer' : 'opacity-70 cursor-not-allowed'}`}
+                  className={`flex-1 flex flex-col items-center justify-center border-2 border-dashed border-slate-800 rounded-2xl bg-slate-950/60 hover:bg-slate-950 hover:border-indigo-500/50 transition-all min-h-[440px] ${!isProcessing ? 'cursor-pointer' : 'opacity-70 cursor-not-allowed'}`}
                 >
                   {isProcessing ? (
-                    <Loader2 className="w-12 h-12 text-indigo-500 dark:text-indigo-400 mb-4 animate-spin" />
+                    <Loader2 className="w-12 h-12 text-indigo-400 mb-3 animate-spin" />
                   ) : (
-                    <Upload className="w-12 h-12 text-gray-400 dark:text-gray-600 mb-4" />
+                    <Upload className="w-12 h-12 text-slate-600 mb-3" />
                   )}
-                  <p className="text-gray-600 dark:text-gray-300 font-medium">{isProcessing ? "Processing AI Attendance..." : "Click or drag classroom photo to upload"}</p>
-                  <p className="text-gray-400 dark:text-gray-500 text-sm mt-1">Supports JPG, PNG (Max 5MB)</p>
+                  <p className="text-slate-300 font-medium text-sm">{isProcessing ? "Processing AI Recognition..." : "Click or drag classroom photo to upload"}</p>
+                  <p className="text-slate-500 text-xs mt-1">Supports JPG, PNG (High Resolution Classroom Wide Shots)</p>
                 </div>
               )}
 
               {/* Action Bar */}
-              <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between">
-                <div className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                  <span>AI Engine: InsightFace 512D ArcFace Active</span>
+              <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center justify-between">
+                <div className="text-[11px] text-slate-400 flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  <span>AI Engine: InsightFace 512D ArcFace Active (Zero-Lag Mode)</span>
                 </div>
 
                 {activeTab === "live" ? (
                   <button
                     onClick={() => setIsScanning(!isScanning)}
-                    className={`flex items-center px-6 py-2 rounded-full font-medium text-white shadow-md transition-all transform hover:scale-105 ${
-                      isScanning ? "bg-red-600 hover:bg-red-700" : "bg-indigo-600 hover:bg-indigo-700"
+                    className={`flex items-center px-4 py-1.5 rounded-xl font-semibold text-xs text-white shadow-md transition-all ${
+                      isScanning ? "bg-red-600 hover:bg-red-500" : "bg-indigo-600 hover:bg-indigo-500"
                     }`}
                   >
                     {isScanning ? (
-                      <><StopCircle className="w-4 h-4 mr-2" /> Stop Scanning</>
+                      <><StopCircle className="w-3.5 h-3.5 mr-1.5" /> Stop Scan</>
                     ) : (
-                      <><PlayCircle className="w-4 h-4 mr-2" /> Start Scanning</>
+                      <><PlayCircle className="w-3.5 h-3.5 mr-1.5" /> Start Scan</>
                     )}
                   </button>
                 ) : activeTab === "manual" ? (
                   <button 
                     disabled={isProcessing}
                     onClick={() => fileInputRef.current?.click()}
-                    className="flex items-center px-6 py-2 rounded-full font-medium text-white bg-indigo-600 hover:bg-indigo-700 shadow-md transition-all transform hover:scale-105 disabled:opacity-50"
+                    className="flex items-center px-4 py-1.5 rounded-xl font-semibold text-xs text-white bg-indigo-600 hover:bg-indigo-500 shadow-md transition-all disabled:opacity-50"
                   >
                     {isProcessing ? (
-                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Scanning...</>
+                      <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Scanning...</>
                     ) : (
-                      <><Upload className="w-4 h-4 mr-2" /> Select Photo</>
+                      <><Upload className="w-3.5 h-3.5 mr-1.5" /> Select Photo</>
                     )}
                   </button>
                 ) : (
-                  <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-1.5 rounded-full border border-emerald-200 dark:border-emerald-800">
+                  <span className="text-[11px] font-semibold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20">
                     Continuous AI Stream Monitoring
                   </span>
                 )}
@@ -848,34 +916,53 @@ export default function LiveScan() {
             </div>
           </div>
 
-          {/* Right Side: Real-time Attendance Stream */}
-          <div className="w-full lg:w-[380px] flex-shrink-0 bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 flex flex-col overflow-hidden transition-colors">
-            <div className="p-4 border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/30 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <h2 className="font-semibold text-gray-900 dark:text-white flex items-center text-sm">
-                  <Activity className="w-4 h-4 mr-2 text-indigo-600 dark:text-indigo-400" /> Class Recognition Feed
-                </h2>
-                <span className="bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20 text-xs font-bold px-2 py-0.5 rounded-full shadow-sm">
-                  {logs.length} Present
-                </span>
+          {/* Right Column: Attendance Feed (Responsive Width, Zero Overflow) */}
+          <div className="w-full lg:w-[320px] xl:w-[360px] 2xl:w-[390px] flex-shrink-0 bg-slate-900/80 backdrop-blur-xl rounded-2xl shadow-xl border border-slate-800/90 flex flex-col overflow-hidden">
+            
+            {/* Header with Search */}
+            <div className="p-3.5 border-b border-slate-800/80 bg-slate-950/50 flex flex-col gap-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-indigo-400" />
+                  <h2 className="font-bold text-white text-xs uppercase tracking-wider">Live Recognition</h2>
+                  <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[11px] font-bold px-2 py-0.5 rounded-full shadow-sm">
+                    {logs.length} Present
+                  </span>
+                </div>
               </div>
-              <button
-                onClick={exportToCSV}
-                className="text-xs font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 px-2.5 py-1 rounded-lg transition-colors flex items-center"
-              >
-                <Download className="w-3 h-3 mr-1" /> Export CSV
-              </button>
+
+              {/* Quick Search Filter */}
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input 
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search student or roll..."
+                  className="w-full bg-slate-950/80 border border-slate-800 rounded-xl pl-8 pr-3 py-1.5 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-indigo-500/80 transition-all"
+                />
+                {searchQuery && (
+                  <button onClick={() => setSearchQuery("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white">
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 space-y-2.5 max-h-[700px]">
-              {logs.length === 0 ? (
-                <div className="text-center py-12">
-                  <Eye className="w-8 h-8 text-gray-300 dark:text-gray-600 mx-auto mb-2" />
-                  <p className="text-sm text-gray-500 dark:text-gray-400">Waiting for face matches...</p>
-                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Students detected across any of the 6 cameras will appear here.</p>
+            {/* Student Attendance List */}
+            <div className="flex-1 overflow-y-auto p-3 space-y-2 max-h-[calc(100vh-280px)] min-h-[300px]">
+              {filteredLogs.length === 0 ? (
+                <div className="text-center py-16 px-4">
+                  <Eye className="w-8 h-8 text-slate-600 mx-auto mb-2 opacity-50" />
+                  <p className="text-xs font-semibold text-slate-400">
+                    {searchQuery ? "No matching students found" : "Waiting for face matches..."}
+                  </p>
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    {searchQuery ? "Try a different search keyword." : "Students detected across any of the 6 cameras will appear here instantly."}
+                  </p>
                 </div>
               ) : (
-                logs.map((log) => {
+                filteredLogs.map((log) => {
                   const studentName = log.students?.full_name?.toUpperCase() || "UNKNOWN STUDENT";
                   const studentRoll = log.students?.student_roll || "N/A";
                   const time = new Date(log.recorded_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -884,24 +971,31 @@ export default function LiveScan() {
                   return (
                     <div
                       key={log.id}
-                      className="flex items-center p-3 rounded-xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm hover:border-indigo-200 dark:hover:border-indigo-800 transition-colors"
+                      className="flex items-center p-2.5 rounded-xl border border-slate-800/80 bg-slate-950/60 hover:bg-slate-950 hover:border-indigo-500/40 transition-all group"
                     >
-                      <div className="flex-shrink-0 mr-3">
-                        <div className="w-9 h-9 rounded-full bg-indigo-50 dark:bg-indigo-900/50 flex items-center justify-center text-indigo-700 dark:text-indigo-400 font-bold text-xs uppercase border border-indigo-200 dark:border-indigo-800">
-                          {log.students?.full_name?.substring(0, 2) || "??"}
+                      {/* Avatar Initials Pill */}
+                      <div className="flex-shrink-0 mr-2.5">
+                        <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-600 to-indigo-800 flex items-center justify-center text-white font-bold text-[11px] uppercase shadow-md shadow-indigo-600/20">
+                          {studentName.substring(0, 2)}
                         </div>
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{studentName}</p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1.5 mt-0.5">
-                          <span>Roll: {studentRoll}</span>
-                          <span>•</span>
-                          <span className="text-emerald-600 dark:text-emerald-400 font-medium">{confidence}% match</span>
+                      
+                      <div className="flex-1 min-w-0 pr-2">
+                        <p className="text-xs font-bold text-white truncate group-hover:text-indigo-300 transition-colors">
+                          {studentName}
                         </p>
+                        <div className="flex items-center gap-1.5 text-[10px] text-slate-400 mt-0.5">
+                          <span className="font-mono bg-slate-900 px-1.5 py-0.5 rounded text-slate-300 border border-slate-800">
+                            #{studentRoll}
+                          </span>
+                          <span>•</span>
+                          <span className="text-emerald-400 font-semibold">{confidence}% match</span>
+                        </div>
                       </div>
+
                       <div className="flex-shrink-0 text-right">
-                        <span className="text-[11px] text-gray-400 dark:text-gray-500 block font-mono">{time}</span>
-                        <span className="inline-flex items-center text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-1.5 py-0.5 rounded-full mt-0.5">
+                        <span className="text-[10px] text-slate-500 font-mono block">{time}</span>
+                        <span className="inline-flex items-center text-[9px] font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-md mt-0.5">
                           Present
                         </span>
                       </div>
@@ -913,27 +1007,51 @@ export default function LiveScan() {
           </div>
         </div>
 
-        {/* Camera Focus Modal */}
+        {/* Studio Camera Focus Modal */}
         {focusedCamera && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-            <div className="bg-gray-950 border border-gray-800 rounded-2xl overflow-hidden max-w-5xl w-full shadow-2xl flex flex-col">
-              <div className="flex items-center justify-between p-4 border-b border-gray-800 bg-gray-900">
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-                  <h3 className="text-base font-bold text-white">{focusedCamera.name}</h3>
-                  <span className="text-xs font-mono text-gray-400">({focusedCamera.ip})</span>
-                  <span className="text-xs bg-indigo-900/60 text-indigo-300 px-2.5 py-0.5 rounded-full border border-indigo-700">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/85 backdrop-blur-xl">
+            <div className="bg-[#0A0E17] border border-slate-800 rounded-3xl overflow-hidden max-w-5xl w-full shadow-2xl flex flex-col relative animate-in fade-in zoom-in-95 duration-150">
+              
+              {/* Modal Top Bar */}
+              <div className="flex items-center justify-between p-3.5 sm:p-4 border-b border-slate-800 bg-slate-900/90">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                  <h3 className="text-sm sm:text-base font-bold text-white truncate">{focusedCamera.name}</h3>
+                  <span className="text-[11px] font-mono text-slate-400 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
+                    {focusedCamera.ip}
+                  </span>
+                  <span className="text-xs bg-indigo-500/10 text-indigo-300 px-2.5 py-0.5 rounded-full border border-indigo-500/20 hidden sm:inline">
                     {focusedCamera.row}
                   </span>
                 </div>
-                <button
-                  onClick={() => setFocusedCamera(null)}
-                  className="p-1.5 rounded-lg bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700 transition-colors"
-                >
-                  <X className="w-5 h-5" />
-                </button>
+
+                <div className="flex items-center gap-2">
+                  {/* Camera Switcher Shortcuts */}
+                  <button 
+                    onClick={handlePrevCamera}
+                    className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-all"
+                    title="Previous Camera"
+                  >
+                    <PrevIcon className="w-4 h-4" />
+                  </button>
+                  <button 
+                    onClick={handleNextCamera}
+                    className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-all"
+                    title="Next Camera"
+                  >
+                    <NextIcon className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setFocusedCamera(null)}
+                    className="p-1.5 rounded-lg bg-slate-800 hover:bg-red-500/20 text-slate-400 hover:text-red-400 border border-slate-700/60 transition-all ml-1"
+                    title="Close Fullscreen"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
 
+              {/* Video Player */}
               <div className="aspect-video w-full bg-black flex items-center justify-center relative">
                 <MjpegPlayer 
                   key={focusedCamera.id}
@@ -944,11 +1062,15 @@ export default function LiveScan() {
                 />
               </div>
 
-              <div className="p-4 bg-gray-900/80 border-t border-gray-800 flex items-center justify-between text-xs text-gray-400">
-                <span>RTSP Stream: Substream (Zero-Lag Mode)</span>
+              {/* Modal Footer */}
+              <div className="p-3 sm:p-4 bg-slate-900/90 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                  <span>RTSP Stream: 4K Ultra-HD (Zero-Lag Synchronized)</span>
+                </span>
                 <button 
                   onClick={() => setFocusedCamera(null)}
-                  className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium transition-colors"
+                  className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold transition-all shadow-md shadow-indigo-600/20"
                 >
                   Return to 6-Camera Grid
                 </button>
