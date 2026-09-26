@@ -1007,20 +1007,26 @@ export default function LiveScan() {
 
         {/* Studio Camera Focus Modal */}
         {focusedCamera && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/85 backdrop-blur-xl">
-            <div className="bg-[#0A0E17] border border-slate-800 rounded-3xl overflow-hidden max-w-5xl w-full shadow-2xl flex flex-col relative animate-in fade-in zoom-in-95 duration-150">
+          <div 
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-8 md:p-12 bg-black/80 backdrop-blur-md transition-all"
+            onClick={() => setFocusedCamera(null)}
+          >
+            <div 
+              className="bg-[#0A0E17] border border-slate-800/90 rounded-2xl sm:rounded-3xl overflow-hidden max-w-4xl w-full max-h-[82vh] shadow-2xl flex flex-col relative animate-in fade-in zoom-in-95 duration-150"
+              onClick={(e) => e.stopPropagation()}
+            >
               
               {/* Modal Top Bar */}
-              <div className="flex items-center justify-between p-3.5 sm:p-4 border-b border-slate-800 bg-slate-900/90">
+              <div className="flex items-center justify-between px-4 py-3 sm:px-5 sm:py-3.5 border-b border-slate-800/80 bg-slate-900/90 shrink-0">
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
                   <h3 className="text-sm sm:text-base font-bold text-white truncate">Camera {focusedCamera.name}</h3>
-                  <span className="text-xs bg-indigo-500/10 text-indigo-300 px-2.5 py-0.5 rounded-full border border-indigo-500/20 hidden sm:inline">
+                  <span className="text-xs bg-indigo-500/10 text-indigo-300 px-2.5 py-0.5 rounded-full border border-indigo-500/20 hidden sm:inline shrink-0">
                     {focusedCamera.row}
                   </span>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
                   {/* Camera Switcher Shortcuts */}
                   <button 
                     onClick={handlePrevCamera}
@@ -1047,7 +1053,7 @@ export default function LiveScan() {
               </div>
 
               {/* Video Player */}
-              <div className="aspect-video w-full bg-black flex items-center justify-center relative">
+              <div className="relative flex-1 min-h-0 bg-black flex items-center justify-center aspect-video max-h-[58vh] overflow-hidden">
                 <MjpegPlayer 
                   key={focusedCamera.id}
                   url={`${backendUrl}/api/video-feed/${activeSession.id}?camera_index=${focusedCamera.index}`}
@@ -1058,14 +1064,14 @@ export default function LiveScan() {
               </div>
 
               {/* Modal Footer */}
-              <div className="p-3 sm:p-4 bg-slate-900/90 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
+              <div className="px-4 py-2.5 sm:px-5 sm:py-3 bg-slate-900/90 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400 shrink-0">
                 <span className="flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                  <span>RTSP Stream: 4K Ultra-HD (Zero-Lag Synchronized)</span>
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+                  <span className="truncate">RTSP Stream: 4K Ultra-HD (Zero-Lag Synchronized)</span>
                 </span>
                 <button 
                   onClick={() => setFocusedCamera(null)}
-                  className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold transition-all shadow-md shadow-indigo-600/20"
+                  className="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold transition-all shadow-md shadow-indigo-600/20 text-xs sm:text-sm shrink-0"
                 >
                   Return to 6-Camera Grid
                 </button>
