@@ -60,6 +60,7 @@ export default function LiveScan() {
   const [cctvCameraCount, setCctvCameraCount] = useState(6);
   const [selectedCctvIndex, setSelectedCctvIndex] = useState(0);
   const [focusedCamera, setFocusedCamera] = useState<CameraMeta | null>(null);
+  const [isModalFullscreen, setIsModalFullscreen] = useState(false);
   const [ptzCameraCount, setPtzCameraCount] = useState(1);
   const [selectedPtzIndex, setSelectedPtzIndex] = useState(0);
 
@@ -317,19 +318,42 @@ export default function LiveScan() {
   }, [logs, searchQuery]);
 
   // Modal navigation (Next/Previous camera)
-  const handleNextCamera = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!focusedCamera) return;
-    const nextIdx = (focusedCamera.index + 1) % cctvCameras.length;
-    setFocusedCamera(cctvCameras[nextIdx]);
-  };
+  const handleNextCamera = useCallback((e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setFocusedCamera((current) => {
+      if (!current) return null;
+      const nextIdx = (current.index + 1) % cctvCameras.length;
+      return cctvCameras[nextIdx];
+    });
+  }, [cctvCameras]);
 
-  const handlePrevCamera = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handlePrevCamera = useCallback((e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setFocusedCamera((current) => {
+      if (!current) return null;
+      const prevIdx = (current.index - 1 + cctvCameras.length) % cctvCameras.length;
+      return cctvCameras[prevIdx];
+    });
+  }, [cctvCameras]);
+
+  // Keyboard navigation for Focused Camera Modal
+  useEffect(() => {
     if (!focusedCamera) return;
-    const prevIdx = (focusedCamera.index - 1 + cctvCameras.length) % cctvCameras.length;
-    setFocusedCamera(cctvCameras[prevIdx]);
-  };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setFocusedCamera(null);
+        setIsModalFullscreen(false);
+      } else if (e.key === "ArrowRight") {
+        handleNextCamera();
+      } else if (e.key === "ArrowLeft") {
+        handlePrevCamera();
+      } else if (e.key === "f" || e.key === "F") {
+        setIsModalFullscreen(prev => !prev);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [focusedCamera, handleNextCamera, handlePrevCamera]);
 
   // Split cameras into Back Row (2nd Row) and Front Row (1st Row)
   const backRowCameras = cctvCameras.filter(c => c.row.includes("2nd") || c.name.includes("2nd") || c.index >= 3);
@@ -1007,73 +1031,130 @@ export default function LiveScan() {
         </div>
 
         {/* Studio Camera Focus Modal */}
+        {/* Studio Camera Focus Modal (Enlarged Widescreen / Fullscreen) */}
         {focusedCamera && (
           <div 
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-8 md:p-12 bg-black/80 backdrop-blur-md transition-all"
-            onClick={() => setFocusedCamera(null)}
+            className={`fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md transition-all ${
+              isModalFullscreen ? "p-0" : "p-2 sm:p-4 md:p-6 lg:p-7"
+            }`}
+            onClick={() => {
+              setFocusedCamera(null);
+              setIsModalFullscreen(false);
+            }}
           >
             <div 
-              className="bg-[#0A0E17] border border-slate-800/90 rounded-2xl sm:rounded-3xl overflow-hidden max-w-4xl w-full max-h-[82vh] shadow-2xl flex flex-col relative animate-in fade-in zoom-in-95 duration-150"
+              className={`bg-[#0A0E17] border border-slate-800/90 shadow-2xl flex flex-col relative transition-all duration-200 overflow-hidden ${
+                isModalFullscreen 
+                  ? "w-screen h-screen rounded-none border-0" 
+                  : "w-full max-w-6xl xl:max-w-7xl 2xl:max-w-[1680px] max-h-[94vh] rounded-2xl sm:rounded-3xl"
+              }`}
               onClick={(e) => e.stopPropagation()}
             >
               
               {/* Modal Top Bar */}
-              <div className="flex items-center justify-between px-4 py-3 sm:px-5 sm:py-3.5 border-b border-slate-800/80 bg-slate-900/90 shrink-0">
-                <div className="flex items-center gap-2.5 min-w-0">
+              <div className="flex items-center justify-between px-3 py-2.5 sm:px-5 sm:py-3.5 border-b border-slate-800/80 bg-slate-900/95 shrink-0">
+                <div className="flex items-center gap-2 sm:gap-3 min-w-0">
                   <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-                  <h3 className="text-sm sm:text-base font-bold text-white truncate">Camera {focusedCamera.name}</h3>
-                  <span className="text-xs bg-indigo-500/10 text-indigo-300 px-2.5 py-0.5 rounded-full border border-indigo-500/20 hidden sm:inline shrink-0">
+                  <h3 className="text-sm sm:text-base md:text-lg font-bold text-white truncate">
+                    Camera {focusedCamera.name}
+                  </h3>
+                  <span className="text-xs bg-indigo-500/10 text-indigo-300 px-2.5 py-0.5 rounded-full border border-indigo-500/20 hidden sm:inline shrink-0 font-medium">
                     {focusedCamera.row}
+                  </span>
+                  <span className="text-[11px] font-mono text-slate-400 bg-slate-800/90 px-2 py-0.5 rounded border border-slate-700 hidden md:inline shrink-0">
+                    {focusedCamera.ip}
                   </span>
                 </div>
 
-                <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                {/* Quick Camera Switcher Pills */}
+                <div className="hidden lg:flex items-center gap-1 bg-slate-950/60 p-1 rounded-xl border border-slate-800/60">
+                  {cctvCameras.map((cam) => (
+                    <button
+                      key={cam.id}
+                      onClick={() => setFocusedCamera(cam)}
+                      className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition-all ${
+                        focusedCamera.id === cam.id
+                          ? "bg-indigo-600 text-white shadow"
+                          : "text-slate-400 hover:text-white hover:bg-slate-800/80"
+                      }`}
+                    >
+                      {cam.name}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex items-center gap-1 sm:gap-2 shrink-0">
                   {/* Camera Switcher Shortcuts */}
                   <button 
                     onClick={handlePrevCamera}
-                    className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-all"
-                    title="Previous Camera"
+                    className="p-1.5 sm:p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-all border border-slate-700/60"
+                    title="Previous Camera (←)"
                   >
                     <PrevIcon className="w-4 h-4" />
                   </button>
                   <button 
                     onClick={handleNextCamera}
-                    className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-all"
-                    title="Next Camera"
+                    className="p-1.5 sm:p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-all border border-slate-700/60"
+                    title="Next Camera (→)"
                   >
                     <NextIcon className="w-4 h-4" />
                   </button>
+                  
+                  {/* Fullscreen Toggle Button */}
                   <button
-                    onClick={() => setFocusedCamera(null)}
-                    className="p-1.5 rounded-lg bg-slate-800 hover:bg-red-500/20 text-slate-400 hover:text-red-400 border border-slate-700/60 transition-all ml-1"
-                    title="Close Fullscreen"
+                    onClick={() => setIsModalFullscreen(prev => !prev)}
+                    className="p-1.5 sm:p-2 rounded-lg bg-slate-800 hover:bg-indigo-600/30 text-slate-300 hover:text-indigo-300 border border-slate-700/60 transition-all"
+                    title={isModalFullscreen ? "Exit Fullscreen" : "Fullscreen (F)"}
+                  >
+                    {isModalFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+                  </button>
+
+                  {/* Close button */}
+                  <button
+                    onClick={() => {
+                      setFocusedCamera(null);
+                      setIsModalFullscreen(false);
+                    }}
+                    className="p-1.5 sm:p-2 rounded-lg bg-slate-800 hover:bg-red-500/20 text-slate-400 hover:text-red-400 border border-slate-700/60 transition-all ml-1"
+                    title="Close (Esc)"
                   >
                     <X className="w-4 h-4" />
                   </button>
                 </div>
               </div>
 
-              {/* Video Player */}
-              <div className="relative flex-1 min-h-0 bg-black flex items-center justify-center aspect-video max-h-[58vh] overflow-hidden">
+              {/* Video Player Container */}
+              <div className={`relative flex-1 min-h-0 bg-black flex items-center justify-center overflow-hidden w-full ${
+                isModalFullscreen ? "h-full" : "aspect-video max-h-[78vh]"
+              }`}>
                 <MjpegPlayer 
                   key={focusedCamera.id}
                   url={`${backendUrl}/api/video-feed/${activeSession.id}?camera_index=${focusedCamera.index}`}
                   className="w-full h-full object-contain"
-                  fallbackText="Connecting..."
+                  fallbackText="Connecting to Camera Stream..."
                   paused={false}
                 />
               </div>
 
               {/* Modal Footer */}
-              <div className="px-4 py-2.5 sm:px-5 sm:py-3 bg-slate-900/90 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400 shrink-0">
-                <span className="flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
-                  <span className="truncate">RTSP Stream: 4K Ultra-HD (Zero-Lag Synchronized)</span>
-                </span>
+              <div className="px-3 py-2 sm:px-5 sm:py-3 bg-slate-900/95 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400 shrink-0">
+                <div className="flex items-center gap-3">
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+                    <span className="truncate font-medium text-slate-300">RTSP Stream: 4K Ultra-HD (Zero-Lag Synchronized)</span>
+                  </span>
+                  <span className="hidden sm:inline text-slate-500 text-[11px]">
+                    • Use <kbd className="px-1.5 py-0.5 bg-slate-800 rounded border border-slate-700 font-sans text-[10px]">←</kbd> <kbd className="px-1.5 py-0.5 bg-slate-800 rounded border border-slate-700 font-sans text-[10px]">→</kbd> to switch cameras • <kbd className="px-1.5 py-0.5 bg-slate-800 rounded border border-slate-700 font-sans text-[10px]">F</kbd> for fullscreen • <kbd className="px-1.5 py-0.5 bg-slate-800 rounded border border-slate-700 font-sans text-[10px]">Esc</kbd> to close
+                  </span>
+                </div>
                 <button 
-                  onClick={() => setFocusedCamera(null)}
-                  className="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold transition-all shadow-md shadow-indigo-600/20 text-xs sm:text-sm shrink-0"
+                  onClick={() => {
+                    setFocusedCamera(null);
+                    setIsModalFullscreen(false);
+                  }}
+                  className="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold transition-all shadow-md shadow-indigo-600/20 text-xs sm:text-sm shrink-0 flex items-center gap-1.5"
                 >
+                  <Grid className="w-3.5 h-3.5" />
                   Return to 6-Camera Grid
                 </button>
               </div>
