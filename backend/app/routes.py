@@ -6,7 +6,7 @@ from PIL import Image
 from numpy.linalg import norm
 from fastapi import APIRouter, File, UploadFile, Form, HTTPException
 from fastapi.responses import StreamingResponse
-from typing import List
+from typing import List, Optional
 from pydantic import BaseModel
 
 from app.config import supabase, get_camera_urls, get_camera_details, get_ptz_urls
@@ -334,9 +334,9 @@ async def get_active_sessions():
 
 
 @router.get("/api/student-lookup/{student_roll}")
-async def student_lookup(student_roll: str):
+async def student_lookup(student_roll: str, session_id: Optional[str] = None):
     """
-    Looks up student details by roll number to verify student identity before taking selfie.
+    Looks up student details by roll number and verifies if attendance has already been recorded (e.g. by CCTV AI) for the active session.
     """
     try:
         clean_roll = student_roll.strip()
@@ -355,6 +355,26 @@ async def student_lookup(student_roll: str):
         student = res.data[0]
         has_face = student.get("face_encoding") is not None and len(student.get("face_encoding") or []) > 0
         
+        # Check if already marked present in this session
+        is_already_present = False
+        attendance_info = None
+        
+        if session_id:
+            att_res = supabase.table("attendance").select(
+                "id, status, capture_mode, confidence_score, recorded_at"
+            ).eq("session_id", session_id).eq("student_id", student["id"]).execute()
+            
+            if att_res.data:
+                is_already_present = True
+                att_record = att_res.data[0]
+                attendance_info = {
+                    "id": att_record["id"],
+                    "status": att_record.get("status", "Present"),
+                    "capture_mode": att_record.get("capture_mode", "Live Scan"),
+                    "confidence_score": att_record.get("confidence_score", 0.95),
+                    "recorded_at": att_record.get("recorded_at", "Earlier Today")
+                }
+        
         return {
             "success": True,
             "student": {
@@ -362,7 +382,9 @@ async def student_lookup(student_roll: str):
                 "student_roll": student["student_roll"],
                 "full_name": student["full_name"],
                 "academic_year": student.get("academic_year") or "MBBS",
-                "has_face_enrolled": has_face
+                "has_face_enrolled": has_face,
+                "is_already_present": is_already_present,
+                "attendance_info": attendance_info
             }
         }
     except HTTPException:

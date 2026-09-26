@@ -35,6 +35,14 @@ interface StudentProfile {
   full_name: string;
   academic_year: string;
   has_face_enrolled: boolean;
+  is_already_present?: boolean;
+  attendance_info?: {
+    id: string;
+    status: string;
+    capture_mode: string;
+    confidence_score: number;
+    recorded_at: string;
+  } | null;
 }
 
 function SelfieAttendContent() {
@@ -152,7 +160,8 @@ function SelfieAttendContent() {
     setLookupError(null);
 
     try {
-      const res = await fetch(`${backendUrl}/api/student-lookup/${encodeURIComponent(rollInput.trim())}`);
+      const sessionIdParam = selectedSession ? `?session_id=${encodeURIComponent(selectedSession.id)}` : "";
+      const res = await fetch(`${backendUrl}/api/student-lookup/${encodeURIComponent(rollInput.trim())}${sessionIdParam}`);
       const data = await res.json();
 
       if (!res.ok) {
@@ -524,27 +533,80 @@ function SelfieAttendContent() {
 
                 {/* Verified Student Profile Preview */}
                 {student && (
-                  <div className="mt-4 p-4 rounded-xl bg-slate-950/70 border border-emerald-500/30 flex flex-col gap-3 animate-in fade-in zoom-in-95 duration-150">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-10 h-10 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-bold text-sm">
+                  <div className={`mt-4 p-4 rounded-2xl border flex flex-col gap-3 animate-in fade-in zoom-in-95 duration-150 ${
+                    student.is_already_present
+                      ? "bg-emerald-950/40 border-emerald-500/50 shadow-lg shadow-emerald-950/30"
+                      : "bg-slate-950/80 border-slate-800"
+                  }`}>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shrink-0 ${
+                          student.is_already_present
+                            ? "bg-emerald-500/20 border border-emerald-500/50 text-emerald-300"
+                            : "bg-indigo-500/10 border border-indigo-500/30 text-indigo-300"
+                        }`}>
                           {student.full_name.substring(0, 2).toUpperCase()}
                         </div>
-                        <div>
-                          <h4 className="text-sm font-bold text-white">{student.full_name}</h4>
+                        <div className="min-w-0">
+                          <h4 className="text-sm font-bold text-white truncate">{student.full_name}</h4>
                           <p className="text-xs text-slate-400 font-mono">Roll: {student.student_roll} • {student.academic_year}</p>
                         </div>
                       </div>
-                      <span className="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
-                        <Check className="w-3.5 h-3.5" />
-                      </span>
+
+                      {/* Top-Right Status Icon (Green Checkmark if already marked by CCTV, Red Cross if not) */}
+                      {student.is_already_present ? (
+                        <div 
+                          className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs font-bold shrink-0 animate-in zoom-in-75 duration-150 shadow-sm"
+                          title="Attendance Already Recorded by CCTV Cameras"
+                        >
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                          <span>Present</span>
+                        </div>
+                      ) : (
+                        <div 
+                          className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-500/15 text-red-300 border border-red-500/30 text-xs font-bold shrink-0 animate-in zoom-in-75 duration-150 shadow-sm"
+                          title="Not Yet Detected by CCTV Cameras"
+                        >
+                          <X className="w-3.5 h-3.5 text-red-400" />
+                          <span>Not Present Yet</span>
+                        </div>
+                      )}
                     </div>
 
+                    {/* Attendance Status Context Message */}
+                    {student.is_already_present ? (
+                      <div className="p-3 rounded-xl bg-emerald-950/60 border border-emerald-500/30 text-xs text-emerald-200 flex flex-col gap-1">
+                        <div className="flex items-center gap-1.5 font-bold text-emerald-300">
+                          <Sparkles className="w-4 h-4 text-emerald-400 shrink-0" />
+                          <span>Attendance Confirmed via CCTV AI!</span>
+                        </div>
+                        <p className="text-[11px] text-slate-300 leading-relaxed">
+                          Your presence was successfully recognized by the classroom CCTV cameras. You do not need to take a selfie!
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-300 flex items-start gap-2">
+                        <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                        <span className="text-[11px] text-slate-300 leading-relaxed">
+                          CCTV cameras haven't caught your face yet. Please click below to capture your selfie and verify attendance.
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Action Button */}
                     {!student.has_face_enrolled ? (
                       <div className="p-2.5 rounded-lg bg-amber-950/50 border border-amber-500/30 text-xs text-amber-300 flex items-center gap-2">
                         <ShieldAlert className="w-4 h-4 shrink-0 text-amber-400" />
                         <span>No facial biometric enrolled. Please contact system admin.</span>
                       </div>
+                    ) : student.is_already_present ? (
+                      <button
+                        onClick={handleReset}
+                        className="w-full py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-emerald-500/30 font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer mt-1"
+                      >
+                        <Check className="w-4 h-4 text-emerald-400" />
+                        <span>Attendance Confirmed • Return Home</span>
+                      </button>
                     ) : (
                       <button
                         onClick={() => setStep("capture_selfie")}
