@@ -24,5 +24,9 @@ else
     echo "Backend is not running."
 fi
 
+# 3. Stop Ngrok if running
+pkill -f "ngrok http" > /dev/null 2>&1 || true
+pkill -f "uvicorn main:app" > /dev/null 2>&1 || true
+
 echo ""
-echo "All Attendance System processes have been stopped successfully!"
+echo "All Attendance System processes and AI background services stopped!"

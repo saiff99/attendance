@@ -1221,34 +1221,44 @@ export default function LiveScan() {
               </div>
 
               {/* QR Code Container */}
-              <div className="my-5 p-4 bg-white rounded-2xl shadow-2xl border-4 border-indigo-500/20 flex items-center justify-center">
-                <QRCodeSVG
-                  value={typeof window !== "undefined" ? `${window.location.origin}/selfieattend?session_id=${activeSession.id}` : `http://localhost:3000/selfieattend?session_id=${activeSession.id}`}
-                  size={200}
-                  level="H"
-                  includeMargin={true}
-                />
-              </div>
+              {(() => {
+                const qrTarget = typeof window !== "undefined" && window.location.hostname && !window.location.hostname.includes("localhost") && !window.location.hostname.includes("127.0.0.1")
+                  ? `${window.location.origin}/selfieattend?session_id=${activeSession.id}`
+                  : `https://attendance-cd0ishn9x-jims-hospital.vercel.app/selfieattend?session_id=${activeSession.id}`;
+                
+                return (
+                  <>
+                    <div className="my-5 p-4 bg-white rounded-2xl shadow-2xl border-4 border-indigo-500/20 flex items-center justify-center">
+                      <QRCodeSVG
+                        value={qrTarget}
+                        size={200}
+                        level="H"
+                        includeMargin={true}
+                      />
+                    </div>
 
-              {/* Link Box & Copy */}
-              <div className="w-full flex items-center gap-2 bg-slate-950 border border-slate-800 rounded-xl p-2 text-xs">
-                <span className="font-mono text-slate-400 truncate flex-1 text-left px-2">
-                  {typeof window !== "undefined" ? `${window.location.origin}/selfieattend?session_id=${activeSession.id}` : `/selfieattend?session_id=${activeSession.id}`}
-                </span>
-                <button
-                  onClick={() => {
-                    if (typeof window !== "undefined") {
-                      navigator.clipboard.writeText(`${window.location.origin}/selfieattend?session_id=${activeSession.id}`);
-                      setCopiedLink(true);
-                      setTimeout(() => setCopiedLink(false), 2000);
-                    }
-                  }}
-                  className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs flex items-center gap-1 shrink-0 transition-all cursor-pointer shadow"
-                >
-                  {copiedLink ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                  <span>{copiedLink ? "Copied!" : "Copy"}</span>
-                </button>
-              </div>
+                    {/* Link Box & Copy */}
+                    <div className="w-full flex items-center gap-2 bg-slate-950 border border-slate-800 rounded-xl p-2 text-xs">
+                      <span className="font-mono text-slate-400 truncate flex-1 text-left px-2">
+                        {qrTarget}
+                      </span>
+                      <button
+                        onClick={() => {
+                          if (typeof navigator !== "undefined" && navigator.clipboard) {
+                            navigator.clipboard.writeText(qrTarget);
+                            setCopiedLink(true);
+                            setTimeout(() => setCopiedLink(false), 2000);
+                          }
+                        }}
+                        className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs flex items-center gap-1 shrink-0 transition-all cursor-pointer shadow"
+                      >
+                        {copiedLink ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                        <span>{copiedLink ? "Copied!" : "Copy"}</span>
+                      </button>
+                    </div>
+                  </>
+                );
+              })()}
 
               <div className="mt-4 flex items-center justify-between w-full text-[11px] text-slate-500 pt-3 border-t border-slate-800/80">
                 <span>Project on hall screen for 100% attendance</span>

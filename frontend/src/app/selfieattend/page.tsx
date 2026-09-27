@@ -288,6 +288,20 @@ function SelfieAttendContent() {
     }
   }, [webcamRef]);
 
+  // Convert dataURL to Blob synchronously (fast and reliable on mobile Safari)
+  const dataURLtoBlob = (dataurl: string): Blob => {
+    const arr = dataurl.split(',');
+    const mimeMatch = arr[0].match(/:(.*?);/);
+    const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+    const bstr = atob(arr[1]);
+    let n = bstr.length;
+    const u8arr = new Uint8Array(n);
+    while (n--) {
+      u8arr[n] = bstr.charCodeAt(n);
+    }
+    return new Blob([u8arr], { type: mime });
+  };
+
   // Submit selfie for AI verification
   const handleSubmitSelfie = async () => {
     if (!capturedImage || !selectedSession || !student) return;
@@ -302,10 +316,13 @@ function SelfieAttendContent() {
     }
 
     setSubmittingAttendance(true);
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 20000);
+
     try {
-      // Convert base64 dataURI to Blob
-      const resBlob = await fetch(capturedImage);
-      const blob = await resBlob.blob();
+      // Synchronous base64 to Blob conversion
+      const blob = dataURLtoBlob(capturedImage);
 
       const formData = new FormData();
       formData.append("file", blob, "selfie.jpg");
@@ -318,7 +335,10 @@ function SelfieAttendContent() {
           "ngrok-skip-browser-warning": "69420",
         },
         body: formData,
+        signal: controller.signal,
       });
+
+      clearTimeout(timeoutId);
 
       const data = await response.json();
 
@@ -338,9 +358,15 @@ function SelfieAttendContent() {
       });
       setStep("result");
     } catch (err: any) {
+      clearTimeout(timeoutId);
+      console.error("Selfie verification error:", err);
+      let errorMsg = err.message || "Face matching failed. Please try again with proper lighting.";
+      if (err.name === "AbortError") {
+        errorMsg = "Verification timed out. Please check your internet connection or backend server and try again.";
+      }
       setResultData({
         success: false,
-        message: err.message || "Face matching failed. Please try again with proper lighting.",
+        message: errorMsg,
       });
       setStep("result");
     } finally {
