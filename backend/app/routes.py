@@ -81,12 +81,16 @@ async def enroll_face_burst(student_id: str, files: List[UploadFile] = File(...)
                 
                 faces = app_fa.get(image_bgr)
                 
-                # We only want frames where exactly one face is detected
-                if len(faces) == 1:
-                    valid_encodings.append(faces[0].embedding)
+                # Pick dominant face in the frame
+                v_faces = [f for f in faces if getattr(f, 'det_score', 1.0) >= 0.40]
+                if not v_faces and faces:
+                    v_faces = faces
+                if len(v_faces) >= 1:
+                    v_faces.sort(key=lambda f: (f.bbox[2]-f.bbox[0])*(f.bbox[3]-f.bbox[1]), reverse=True)
+                    valid_encodings.append(v_faces[0].embedding)
             
             if not valid_encodings:
-                raise HTTPException(status_code=400, detail="Could not detect a clear single face in any of the captured frames. Please try again.")
+                raise HTTPException(status_code=400, detail="Could not detect a clear face in any of the captured frames. Please try again.")
                 
             # Average the encodings for a highly robust 3D representation
             avg_encoding = np.mean(valid_encodings, axis=0)
@@ -479,12 +483,23 @@ async def selfie_attendance(
             
             faces = app_fa.get(image_bgr)
             
-            if len(faces) == 0:
-                raise HTTPException(status_code=400, detail="No face detected in the selfie. Please look directly into the camera in good lighting.")
-            if len(faces) > 1:
-                raise HTTPException(status_code=400, detail="Multiple faces detected. Please ensure only you are in the selfie frame.")
-                
-            unknown_encoding = faces[0].embedding
+            # Filter faces with detection confidence >= 0.40
+            valid_faces = [f for f in faces if getattr(f, 'det_score', 1.0) >= 0.40]
+            if not valid_faces and faces:
+                valid_faces = faces
+
+            if len(valid_faces) == 0:
+                raise HTTPException(status_code=400, detail="No clear face detected in the selfie. Please look directly into the camera in good lighting.")
+            
+            # If multiple faces detected, pick the primary / largest face (the selfie taker in front of camera)
+            def get_face_area(f):
+                b = f.bbox
+                return max(0, (b[2] - b[0]) * (b[3] - b[1]))
+
+            valid_faces.sort(key=get_face_area, reverse=True)
+            primary_face = valid_faces[0]
+            
+            unknown_encoding = primary_face.embedding
             
             # Handle 128D legacy vs 512D
             if known_encoding.shape != unknown_encoding.shape:
