@@ -518,7 +518,7 @@ async def selfie_attendance(
             "session_id": session_id,
             "student_id": student["id"],
             "status": "Present",
-            "capture_mode": "Selfie Portal",
+            "capture_mode": "Live Scan",
             "confidence_score": confidence_score
         }).execute()
         
