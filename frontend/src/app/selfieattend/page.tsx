@@ -77,6 +77,7 @@ function SelfieAttendContent() {
   const [facingMode, setFacingMode] = useState<"user" | "environment">("user");
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [submittingAttendance, setSubmittingAttendance] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
   
   // Result States
   const [resultData, setResultData] = useState<{
@@ -807,41 +808,67 @@ function SelfieAttendContent() {
                 <div className="relative w-full aspect-[3/4] max-h-[55vh] bg-black rounded-3xl overflow-hidden border-2 border-slate-800 shadow-2xl flex items-center justify-center">
                   {!capturedImage ? (
                     <>
-                      <Webcam
-                        audio={false}
-                        ref={webcamRef}
-                        screenshotFormat="image/jpeg"
-                        videoConstraints={{
-                          facingMode: facingMode,
-                          width: { ideal: 1280 },
-                          height: { ideal: 720 },
-                        }}
-                        className="w-full h-full object-cover"
-                      />
-
-                      {/* Biometric Oval Guide Overlay */}
-                      <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center">
-                        <div className="w-[68%] h-[68%] border-2 border-dashed border-indigo-400/70 rounded-[50%] relative flex items-center justify-center shadow-[0_0_50px_rgba(99,102,241,0.15)]">
-                          {/* Scanning animation bar */}
-                          <div className="absolute left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-indigo-400 to-transparent animate-scan" />
-                          
-                          {/* Corner Accents */}
-                          <div className="absolute top-2 w-4 h-1 bg-indigo-400 rounded-full" />
-                          <div className="absolute bottom-2 w-4 h-1 bg-indigo-400 rounded-full" />
+                      {cameraError ? (
+                        <div className="p-6 text-center flex flex-col items-center gap-3 bg-slate-950/90 text-slate-200 z-10 w-full h-full justify-center">
+                          <AlertCircle className="w-10 h-10 text-amber-400" />
+                          <div>
+                            <h4 className="text-sm font-bold text-white">Camera Access Blocked</h4>
+                            <p className="text-xs text-slate-400 mt-1 max-w-xs leading-relaxed">
+                              iOS Safari blocks camera on HTTP local IP (<code>192.168.x.x</code>). Please open via the secure <strong>HTTPS portal</strong>:
+                            </p>
+                          </div>
+                          <a
+                            href={`https://attendance-cd0ishn9x-jims-hospital.vercel.app/selfieattend?session_id=${selectedSession?.id || ""}`}
+                            className="mt-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-all shadow-lg shadow-indigo-600/25 flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <Camera className="w-4 h-4" />
+                            Open HTTPS Camera Portal
+                          </a>
                         </div>
-                        <span className="mt-3 text-[11px] font-semibold text-white/90 bg-black/60 backdrop-blur-md px-3 py-1 rounded-full border border-white/10">
-                          Center your face inside the oval
-                        </span>
-                      </div>
+                      ) : (
+                        <>
+                          <Webcam
+                            audio={false}
+                            ref={webcamRef}
+                            screenshotFormat="image/jpeg"
+                            videoConstraints={{
+                              facingMode: facingMode,
+                              width: { ideal: 1280 },
+                              height: { ideal: 720 },
+                            }}
+                            onUserMedia={() => setCameraError(null)}
+                            onUserMediaError={(err: any) => {
+                              console.error("Camera error:", err);
+                              setCameraError("Camera permission blocked by browser.");
+                            }}
+                            className="w-full h-full object-cover"
+                          />
 
-                      {/* Switch Camera Button (Front/Back) */}
-                      <button
-                        onClick={() => setFacingMode(prev => (prev === "user" ? "environment" : "user"))}
-                        className="absolute top-3 right-3 p-2.5 rounded-full bg-black/60 hover:bg-black/80 backdrop-blur-md text-white border border-white/20 transition-all cursor-pointer"
-                        title="Switch Camera"
-                      >
-                        <SwitchCamera className="w-4 h-4" />
-                      </button>
+                          {/* Biometric Oval Guide Overlay */}
+                          <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center">
+                            <div className="w-[68%] h-[68%] border-2 border-dashed border-indigo-400/70 rounded-[50%] relative flex items-center justify-center shadow-[0_0_50px_rgba(99,102,241,0.15)]">
+                              {/* Scanning animation bar */}
+                              <div className="absolute left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-indigo-400 to-transparent animate-scan" />
+                              
+                              {/* Corner Accents */}
+                              <div className="absolute top-2 w-4 h-1 bg-indigo-400 rounded-full" />
+                              <div className="absolute bottom-2 w-4 h-1 bg-indigo-400 rounded-full" />
+                            </div>
+                            <span className="mt-3 text-[11px] font-semibold text-white/90 bg-black/60 backdrop-blur-md px-3 py-1 rounded-full border border-white/10">
+                              Center your face inside the oval
+                            </span>
+                          </div>
+
+                          {/* Switch Camera Button (Front/Back) */}
+                          <button
+                            onClick={() => setFacingMode(prev => (prev === "user" ? "environment" : "user"))}
+                            className="absolute top-3 right-3 p-2.5 rounded-full bg-black/60 hover:bg-black/80 backdrop-blur-md text-white border border-white/20 transition-all cursor-pointer"
+                            title="Switch Camera"
+                          >
+                            <SwitchCamera className="w-4 h-4" />
+                          </button>
+                        </>
+                      )}
                     </>
                   ) : (
                     /* Captured Image Preview */
