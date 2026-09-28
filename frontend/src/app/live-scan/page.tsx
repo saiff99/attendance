@@ -415,10 +415,10 @@ export default function LiveScan() {
                 value={setupData.hall}
                 onChange={e => setSetupData({...setupData, hall: e.target.value})}
               >
-                <option value="Lecture Hall 1" className="bg-slate-900">Lecture Hall 1 (6 CP PLUS 4K Matrix)</option>
+                <option value="Lecture Hall 1" className="bg-slate-900">Lecture Hall 1</option>
                 <option value="Lecture Hall 2" className="bg-slate-900">Lecture Hall 2</option>
-                <option value="Main Exam Auditorium" className="bg-slate-900">Main Exam Auditorium</option>
-                <option value="Surgical Amphitheatre" className="bg-slate-900">Surgical Amphitheatre</option>
+                <option value="Lecture Hall 3" className="bg-slate-900">Lecture Hall 3</option>
+                <option value="Lecture Hall 4" className="bg-slate-900">Lecture Hall 4</option>
               </select>
             </div>
 
