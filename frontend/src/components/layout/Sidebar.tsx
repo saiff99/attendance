@@ -22,6 +22,11 @@ export default function Sidebar() {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
 
+  // Do NOT show sidebar or mobile hamburger header on student selfie portal
+  if (pathname?.startsWith("/selfieattend") || pathname?.startsWith("/self-attendance")) {
+    return null;
+  }
+
   return (
     <>
       {/* Mobile & Tablet Top Header */}

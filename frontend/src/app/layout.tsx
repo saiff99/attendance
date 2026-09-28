@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Inter, Playfair_Display } from "next/font/google";
-import Sidebar from "@/components/layout/Sidebar";
+import { AppShell } from "@/components/layout/AppShell";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import "./globals.css";
 
@@ -37,10 +37,7 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <Sidebar />
-          <main className="flex-1 lg:ml-64 pt-16 lg:pt-0 min-h-screen flex flex-col w-full min-w-0">
-            {children}
-          </main>
+          <AppShell>{children}</AppShell>
         </ThemeProvider>
       </body>
     </html>

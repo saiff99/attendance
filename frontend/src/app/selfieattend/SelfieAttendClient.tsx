@@ -974,7 +974,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                         className="w-full py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-emerald-500/30 font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer mt-1"
                       >
                         <Check className="w-4 h-4 text-emerald-400" />
-                        <span>Attendance Confirmed • Return Home</span>
+                        <span>Attendance Confirmed • Return to Classes</span>
                       </button>
                     ) : (
                       <button
@@ -1053,7 +1053,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                   onClick={handleReset}
                   className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-semibold cursor-pointer"
                 >
-                  Return Home
+                  Return to Classes
                 </button>
               </div>
             ) : (
@@ -1249,9 +1249,10 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                 {resultData.success ? (
                   <button
                     onClick={handleReset}
-                    className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm transition-all shadow-lg shadow-indigo-600/25 cursor-pointer"
+                    className="w-full py-3.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm transition-all shadow-lg shadow-indigo-600/25 cursor-pointer flex items-center justify-center gap-2"
                   >
-                    Done & Return Home
+                    <Check className="w-4 h-4 text-emerald-400" />
+                    <span>Done • Return to Classes</span>
                   </button>
                 ) : (
                   <button
