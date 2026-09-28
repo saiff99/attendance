@@ -555,58 +555,58 @@ export default function LiveScan() {
             <div className="p-1.5 sm:p-2 border-b border-slate-800/80 bg-slate-950/40 flex items-center gap-1.5 overflow-x-auto no-scrollbar scroll-smooth">
               <button
                 onClick={() => setActiveTab("grid")}
-                className={`flex-1 min-w-[110px] sm:min-w-[130px] py-2 px-2.5 sm:px-3 text-xs font-semibold rounded-xl flex items-center justify-center whitespace-nowrap transition-all ${
+                className={`flex-1 min-w-[85px] sm:min-w-[100px] py-2 px-2.5 sm:px-3 text-xs font-semibold rounded-xl flex items-center justify-center whitespace-nowrap transition-all ${
                   activeTab === "grid"
                     ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
                     : "text-slate-400 hover:text-white hover:bg-slate-800/60"
                 }`}
               >
                 <Grid className="w-3.5 h-3.5 mr-1.5" />
-                6-Cam Matrix
+                Multi Cam
               </button>
               <button
                 onClick={() => setActiveTab("cctv")}
-                className={`flex-1 min-w-[100px] sm:min-w-[120px] py-2 px-2.5 sm:px-3 text-xs font-semibold rounded-xl flex items-center justify-center whitespace-nowrap transition-all ${
+                className={`flex-1 min-w-[75px] sm:min-w-[90px] py-2 px-2.5 sm:px-3 text-xs font-semibold rounded-xl flex items-center justify-center whitespace-nowrap transition-all ${
                   activeTab === "cctv"
                     ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
                     : "text-slate-400 hover:text-white hover:bg-slate-800/60"
                 }`}
               >
                 <Video className="w-3.5 h-3.5 mr-1.5" />
-                Single Feed
+                Single
               </button>
               <button
                 onClick={() => setActiveTab("ptz")}
-                className={`flex-1 min-w-[95px] sm:min-w-[110px] py-2 px-2.5 sm:px-3 text-xs font-semibold rounded-xl flex items-center justify-center whitespace-nowrap transition-all ${
+                className={`flex-1 min-w-[65px] sm:min-w-[80px] py-2 px-2.5 sm:px-3 text-xs font-semibold rounded-xl flex items-center justify-center whitespace-nowrap transition-all ${
                   activeTab === "ptz"
                     ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
                     : "text-slate-400 hover:text-white hover:bg-slate-800/60"
                 }`}
               >
                 <Focus className="w-3.5 h-3.5 mr-1.5" />
-                PTZ Control
+                PTZ
               </button>
               <button
                 onClick={() => setActiveTab("live")}
-                className={`flex-1 min-w-[100px] sm:min-w-[110px] py-2 px-2.5 sm:px-3 text-xs font-semibold rounded-xl flex items-center justify-center whitespace-nowrap transition-all ${
+                className={`flex-1 min-w-[80px] sm:min-w-[90px] py-2 px-2.5 sm:px-3 text-xs font-semibold rounded-xl flex items-center justify-center whitespace-nowrap transition-all ${
                   activeTab === "live"
                     ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
                     : "text-slate-400 hover:text-white hover:bg-slate-800/60"
                 }`}
               >
                 <Camera className="w-3.5 h-3.5 mr-1.5" />
-                Webcam Scan
+                Webcam
               </button>
               <button
                 onClick={() => setActiveTab("manual")}
-                className={`flex-1 min-w-[100px] sm:min-w-[110px] py-2 px-2.5 sm:px-3 text-xs font-semibold rounded-xl flex items-center justify-center whitespace-nowrap transition-all ${
+                className={`flex-1 min-w-[75px] sm:min-w-[85px] py-2 px-2.5 sm:px-3 text-xs font-semibold rounded-xl flex items-center justify-center whitespace-nowrap transition-all ${
                   activeTab === "manual"
                     ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
                     : "text-slate-400 hover:text-white hover:bg-slate-800/60"
                 }`}
               >
                 <Upload className="w-3.5 h-3.5 mr-1.5" />
-                Photo Upload
+                Upload
               </button>
             </div>
 
