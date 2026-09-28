@@ -55,6 +55,7 @@ export default function LiveScan() {
     topic: "",
     academic_year: "All"
   });
+  const [customHallName, setCustomHallName] = useState("");
   const [isStartingSession, setIsStartingSession] = useState(false);
 
   // Multi-camera state
@@ -256,7 +257,8 @@ export default function LiveScan() {
     setIsStartingSession(true);
     try {
       const today = new Date().toISOString().split('T')[0];
-      const className = `${setupData.subject} - ${setupData.hall}`;
+      const finalHall = setupData.hall === "custom" ? (customHallName.trim() || "Custom Hall") : setupData.hall;
+      const className = `${setupData.subject} - ${finalHall}`;
       
       const newSession = {
         class_name: className,
@@ -419,7 +421,26 @@ export default function LiveScan() {
                 <option value="Lecture Hall 2" className="bg-slate-900">Lecture Hall 2</option>
                 <option value="Lecture Hall 3" className="bg-slate-900">Lecture Hall 3</option>
                 <option value="Lecture Hall 4" className="bg-slate-900">Lecture Hall 4</option>
+                <option value="custom" className="bg-slate-900">✨ Custom / Other Room (e.g. Anatomy Demo)...</option>
               </select>
+
+              {setupData.hall === "custom" && (
+                <div className="mt-2.5 animate-in fade-in slide-in-from-top-1 duration-200">
+                  <label htmlFor="custom-hall" className="block text-[11px] font-medium text-indigo-400 mb-1">
+                    Enter Custom Hall / Demo Room Name:
+                  </label>
+                  <input
+                    id="custom-hall"
+                    required
+                    type="text"
+                    className="w-full rounded-xl border border-indigo-500/50 py-2 sm:py-2.5 px-3.5 text-white bg-slate-950/90 placeholder:text-slate-500 focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 text-xs sm:text-sm shadow-inner"
+                    value={customHallName}
+                    onChange={e => setCustomHallName(e.target.value)}
+                    placeholder="e.g. Anatomy Demo, Physiology Demo, Biochemistry Lab..."
+                    autoFocus
+                  />
+                </div>
+              )}
             </div>
 
             <div>
@@ -506,7 +527,7 @@ export default function LiveScan() {
               </div>
               <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-[11px] sm:text-xs text-slate-400 mt-0.5">
                 <span className="flex items-center"><Users className="w-3.5 h-3.5 mr-1 text-slate-500 shrink-0" /> {activeSession.instructor_name}</span>
-                <span className="flex items-center"><MapPin className="w-3.5 h-3.5 mr-1 text-slate-500 shrink-0" /> {setupData.hall}</span>
+                <span className="flex items-center"><MapPin className="w-3.5 h-3.5 mr-1 text-slate-500 shrink-0" /> {setupData.hall === "custom" ? (customHallName || "Custom Hall") : setupData.hall}</span>
                 <span className="text-indigo-400 font-medium">Cohort: {activeSession.target_academic_year || "All"}</span>
               </div>
             </div>
@@ -1217,7 +1238,7 @@ export default function LiveScan() {
 
               {/* Class Pill */}
               <div className="mt-3 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-xs text-indigo-300 font-medium">
-                📚 {activeSession.class_name} ({setupData.hall})
+                📚 {activeSession.class_name}
               </div>
 
               {/* QR Code Container */}
