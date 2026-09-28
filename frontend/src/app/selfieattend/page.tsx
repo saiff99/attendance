@@ -25,16 +25,27 @@ async function getInitialSessions(): Promise<ActiveSession[]> {
     }
 
     // 2. Direct Supabase query from server
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const startOfTodayIso = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+
     const { data: sessionData, error } = await supabase
       .from('sessions')
       .select('id, class_name, date, start_time, end_time, instructor_name, target_academic_year, created_at')
       .order('created_at', { ascending: false })
-      .limit(20);
+      .limit(50);
 
     if (error || !sessionData) return [];
 
+    // Filter strictly for today's sessions
+    const todaySessions = (sessionData || []).filter((s: any) => {
+      const dateVal = s.date || '';
+      const createdVal = s.created_at || '';
+      return dateVal === todayStr || createdVal.startsWith(todayStr) || createdVal >= startOfTodayIso;
+    });
+
     const nowUtc = Date.now();
-    return sessionData.map((s: any) => {
+    return todaySessions.map((s: any) => {
       const timeStr = s.start_time || s.created_at;
       let remainingSeconds = 0;
       let isExpired = true;

@@ -21,18 +21,29 @@ export async function GET(request: Request) {
     }
 
     // 2. Fallback to Supabase Cloud directly from Next.js server
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const startOfTodayIso = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+
     const { data: sessionData, error } = await supabase
       .from('sessions')
       .select('id, class_name, date, start_time, end_time, instructor_name, target_academic_year, created_at')
       .order('created_at', { ascending: false })
-      .limit(20);
+      .limit(50);
 
     if (error) {
       return NextResponse.json({ success: false, error: error.message, sessions: [] }, { status: 500 });
     }
 
+    // Filter strictly for today's sessions
+    const todaySessions = (sessionData || []).filter((s: any) => {
+      const dateVal = s.date || '';
+      const createdVal = s.created_at || '';
+      return dateVal === todayStr || createdVal.startsWith(todayStr) || createdVal >= startOfTodayIso;
+    });
+
     const nowUtc = Date.now();
-    const sessions = (sessionData || []).map((s: any) => {
+    const sessions = todaySessions.map((s: any) => {
       const timeStr = s.start_time || s.created_at;
       let remainingSeconds = 0;
       let isExpired = true;

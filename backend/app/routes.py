@@ -292,17 +292,25 @@ async def ptz_control(cmd: PTZCommand):
 @router.get("/api/active-sessions")
 async def get_active_sessions():
     """
-    Fetches current/recent active class sessions with remaining 5-minute window for student self-attendance.
+    Fetches today's active class sessions with remaining 5-minute window for student self-attendance.
+    Only sessions created today are returned; older dates are automatically excluded.
     """
     try:
         from datetime import datetime, timezone
         now_utc = datetime.now(timezone.utc)
+        today_local = datetime.now().strftime("%Y-%m-%d")
+        start_of_today_iso = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
 
         res = supabase.table("sessions").select(
             "id, class_name, date, start_time, end_time, instructor_name, target_academic_year, created_at"
-        ).order("created_at", desc=True).limit(15).execute()
+        ).order("created_at", desc=True).limit(50).execute()
         
-        sessions = res.data or []
+        all_sessions = res.data or []
+        # Filter strictly for today's sessions
+        sessions = [
+            s for s in all_sessions 
+            if s.get("date") == today_local or (s.get("created_at") and s["created_at"].startswith(today_local)) or (s.get("created_at") and s["created_at"] >= start_of_today_iso)
+        ]
         
         # Attach total attendance count and remaining seconds to each session
         enhanced_sessions = []
