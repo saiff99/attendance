@@ -505,7 +505,7 @@ export default function LiveScan() {
                 {isStartingSession ? (
                   <><Loader2 className="w-4 h-4 animate-spin" /> Initializing AI Hub...</>
                 ) : (
-                  <><ShieldCheck className="w-4 h-4 sm:w-5 sm:h-5" /> Launch 6-Camera Attendance Session</>
+                  <><ShieldCheck className="w-4 h-4 sm:w-5 sm:h-5" /> Start Attendance Session</>
                 )}
               </button>
             </div>
