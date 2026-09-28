@@ -2,11 +2,12 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Search, UserPlus, FileDown, MoreHorizontal, X, UploadCloud, Loader2, Edit2, Trash2, Folder, ArrowLeft, Users } from "lucide-react";
+import { Search, UserPlus, FileDown, MoreHorizontal, X, UploadCloud, Loader2, Edit2, Trash2, Folder, ArrowLeft, Users, FileSpreadsheet } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import type { Student } from "@/types/database";
 import { StudentProfileModal } from "@/components/StudentProfileModal";
 import { FaceRegistrationModal } from "@/components/FaceRegistrationModal";
+import { BulkImportModal } from "@/components/BulkImportModal";
 
 export default function StudentDirectory() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -14,6 +15,7 @@ export default function StudentDirectory() {
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -129,6 +131,31 @@ export default function StudentDirectory() {
     setNewStudent({ student_roll: '', full_name: '', email: '', academic_year: activeView || '1st Year' });
   };
 
+  const handleExportCSV = () => {
+    const listToExport = filteredStudents.length > 0 ? filteredStudents : students;
+    if (listToExport.length === 0) {
+      alert("No students to export.");
+      return;
+    }
+    const headers = ["Roll Number", "Full Name", "Academic Year", "Email", "Face Data Status"];
+    const rows = listToExport.map(s => [
+      `"${s.student_roll || ''}"`,
+      `"${s.full_name || ''}"`,
+      `"${s.academic_year || ''}"`,
+      `"${s.email || ''}"`,
+      `"${s.face_encoding ? 'Active' : 'Missing'}"`
+    ]);
+    const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `students_${(activeView || 'all').toLowerCase().replace(/\s+/g, '_')}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const filteredStudents = students.filter(student => {
     const matchesSearch = student.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
                           student.student_roll?.toLowerCase().includes(searchTerm.toLowerCase());
@@ -160,11 +187,38 @@ export default function StudentDirectory() {
         onSuccess={() => fetchStudents()}
       />
 
+      <BulkImportModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        defaultAcademicYear={activeView}
+        onSuccess={() => fetchStudents()}
+      />
+
       {/* Header */}
       {!activeView ? (
-        <div className="mb-6 sm:mb-8">
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-gray-900 dark:text-white">Student Directory</h1>
-          <p className="mt-1 text-xs sm:text-sm text-gray-500 dark:text-gray-400">Select an academic year folder to manage student profiles and facial data.</p>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 sm:mb-8">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-gray-900 dark:text-white">Student Directory</h1>
+            <p className="mt-1 text-xs sm:text-sm text-gray-500 dark:text-gray-400">Select an academic year folder to manage student profiles and facial data.</p>
+          </div>
+          <div className="flex items-center space-x-2 sm:space-x-3 w-full sm:w-auto">
+            <button 
+              onClick={() => setIsImportModalOpen(true)}
+              type="button" 
+              className="flex-1 sm:flex-none inline-flex items-center justify-center rounded-xl bg-white dark:bg-gray-900 px-3.5 py-2 text-xs sm:text-sm font-semibold text-gray-900 dark:text-gray-100 shadow-sm ring-1 ring-inset ring-gray-300 dark:ring-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+            >
+              <FileSpreadsheet className="h-4 w-4 mr-1.5 sm:mr-2 text-indigo-600 dark:text-indigo-400" />
+              Import Excel / CSV
+            </button>
+            <button 
+              onClick={openEnrollModal}
+              type="button" 
+              className="flex-1 sm:flex-none inline-flex items-center justify-center rounded-xl bg-indigo-600 px-3.5 py-2 text-xs sm:text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 transition-colors"
+            >
+              <UserPlus className="h-4 w-4 mr-1.5 sm:mr-2" />
+              Enroll Student
+            </button>
+          </div>
         </div>
       ) : (
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 sm:mb-8">
@@ -179,7 +233,19 @@ export default function StudentDirectory() {
             <p className="mt-1 text-xs sm:text-sm text-gray-500 dark:text-gray-400">Manage students inside the {activeView} cohort.</p>
           </div>
           <div className="flex items-center space-x-2 sm:space-x-3 w-full sm:w-auto">
-            <button type="button" className="flex-1 sm:flex-none inline-flex items-center justify-center rounded-xl bg-white dark:bg-gray-900 px-3 py-2 text-xs sm:text-sm font-semibold text-gray-900 dark:text-gray-100 shadow-sm ring-1 ring-inset ring-gray-300 dark:ring-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+            <button 
+              onClick={() => setIsImportModalOpen(true)}
+              type="button" 
+              className="flex-1 sm:flex-none inline-flex items-center justify-center rounded-xl bg-white dark:bg-gray-900 px-3 py-2 text-xs sm:text-sm font-semibold text-gray-900 dark:text-gray-100 shadow-sm ring-1 ring-inset ring-gray-300 dark:ring-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+            >
+              <FileSpreadsheet className="h-4 w-4 mr-1.5 sm:mr-2 text-indigo-600 dark:text-indigo-400" />
+              Import Excel
+            </button>
+            <button 
+              onClick={handleExportCSV}
+              type="button" 
+              className="flex-1 sm:flex-none inline-flex items-center justify-center rounded-xl bg-white dark:bg-gray-900 px-3 py-2 text-xs sm:text-sm font-semibold text-gray-900 dark:text-gray-100 shadow-sm ring-1 ring-inset ring-gray-300 dark:ring-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+            >
               <FileDown className="h-4 w-4 mr-1.5 sm:mr-2 text-gray-500 dark:text-gray-400" />
               Export CSV
             </button>
