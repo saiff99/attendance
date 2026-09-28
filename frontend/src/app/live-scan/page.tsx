@@ -15,6 +15,7 @@ import { supabase } from "@/lib/supabase";
 import { getBackendUrl } from "@/lib/api";
 import Webcam from "react-webcam";
 import { MjpegPlayer } from "@/components/MjpegPlayer";
+import { GeofenceModal } from "@/components/GeofenceModal";
 
 interface CameraMeta {
   index: number;
@@ -65,6 +66,7 @@ export default function LiveScan() {
   const [focusedCamera, setFocusedCamera] = useState<CameraMeta | null>(null);
   const [isModalFullscreen, setIsModalFullscreen] = useState(false);
   const [showQrModal, setShowQrModal] = useState(false);
+  const [showGeofenceModal, setShowGeofenceModal] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [ptzCameraCount, setPtzCameraCount] = useState(1);
   const [selectedPtzIndex, setSelectedPtzIndex] = useState(0);
@@ -473,6 +475,26 @@ export default function LiveScan() {
               </select>
             </div>
             
+            {/* GPS Geofence Security Card */}
+            <div className="flex items-center justify-between p-3 rounded-xl bg-slate-950/70 border border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                  <MapPin className="w-4 h-4" />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-white">GPS Geofence Shield</p>
+                  <p className="text-[11px] text-slate-400">Restricts mobile attendance to classroom/campus</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowGeofenceModal(true)}
+                className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700/80 transition-all cursor-pointer"
+              >
+                Configure GPS
+              </button>
+            </div>
+            
             <div className="pt-3 sm:pt-4">
               <button
                 type="submit"
@@ -488,6 +510,9 @@ export default function LiveScan() {
             </div>
           </form>
         </div>
+
+        {/* GPS Geofence Modal */}
+        <GeofenceModal isOpen={showGeofenceModal} onClose={() => setShowGeofenceModal(false)} />
       </div>
     );
   }
@@ -539,6 +564,15 @@ export default function LiveScan() {
               <Clock className="w-3.5 h-3.5 text-indigo-400" />
               <span>{sessionTime}</span>
             </div>
+
+            {/* GPS Geofence Configuration Button */}
+            <button
+              onClick={() => setShowGeofenceModal(true)}
+              className="inline-flex items-center px-3 sm:px-3.5 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/60 text-xs font-semibold text-emerald-400 hover:text-emerald-300 shadow-sm transition-all cursor-pointer shrink-0"
+              title="Configure Classroom GPS Geofence boundary"
+            >
+              <MapPin className="w-3.5 h-3.5 mr-1.5 text-emerald-400" /> GPS Geofence
+            </button>
 
             {/* Student Selfie QR Code Trigger Button */}
             <button
@@ -1295,6 +1329,9 @@ export default function LiveScan() {
             </div>
           </div>
         )}
+
+        {/* GPS Geofence Modal */}
+        <GeofenceModal isOpen={showGeofenceModal} onClose={() => setShowGeofenceModal(false)} />
 
         {/* Scanning Animation Styles */}
         <style dangerouslySetInnerHTML={{__html: `

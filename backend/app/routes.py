@@ -414,11 +414,14 @@ async def student_lookup(student_roll: str, session_id: Optional[str] = None):
 async def selfie_attendance(
     file: UploadFile = File(...),
     session_id: str = Form(...),
-    student_roll: str = Form(...)
+    student_roll: str = Form(...),
+    latitude: Optional[float] = Form(None),
+    longitude: Optional[float] = Form(None),
+    distance_meters: Optional[float] = Form(None)
 ):
     """
     Processes a student's mobile selfie, verifies face against student's enrolled embedding using InsightFace AI,
-    and logs attendance if matched (valid within 5-minute window).
+    and logs attendance if matched (valid within 5-minute window and optional GPS geofence).
     """
     clean_roll = student_roll.strip()
     contents = await file.read()
