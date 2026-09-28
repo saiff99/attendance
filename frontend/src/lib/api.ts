@@ -4,21 +4,25 @@ export function getBackendUrl(): string {
   }
   if (typeof window !== "undefined") {
     const host = window.location.hostname;
-    const protocol = window.location.protocol;
 
-    // If accessed via localhost on HTTP (Mac local testing)
-    if ((host === "localhost" || host === "127.0.0.1") && protocol === "http:") {
-      return "http://localhost:8000";
+    // When running locally on Mac or local Wi-Fi (localhost, 127.0.0.1, or local subnet 172.16.x / 192.168.x / 10.x)
+    // Use same-origin relative endpoints ("") which are proxied locally by Next.js to FastAPI on port 8000
+    if (
+      host === "localhost" ||
+      host === "127.0.0.1" ||
+      host.startsWith("172.") ||
+      host.startsWith("192.168.") ||
+      host.startsWith("10.")
+    ) {
+      return "";
     }
 
-    // When on HTTPS (e.g. mobile Safari, Vercel, or local HTTPS) route to secure HTTPS ngrok tunnel
-    // This prevents Safari/WebKit from blocking mixed content (insecure HTTP fetch on HTTPS page -> "Load failed")
-    if (protocol === "https:" || host.includes("vercel.app") || host.includes("ngrok")) {
+    // When deployed on Vercel or cloud HTTPS, route to the secure public ngrok tunnel
+    if (host.includes("vercel.app") || host.includes("ngrok")) {
       return "https://silly-unframed-extortion.ngrok-free.dev";
     }
 
-    return `http://${host}:8000`;
+    return "";
   }
   return "http://localhost:8000";
 }
-
