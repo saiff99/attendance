@@ -108,14 +108,20 @@ export default function Sidebar() {
         <SystemHealth />
         <div className="flex items-center justify-between">
           <div className="flex items-center min-w-0">
-            <div className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-indigo-100 dark:bg-indigo-900/50">
-              <span className="text-sm font-medium leading-none text-indigo-700 dark:text-indigo-300">
-                {user?.name ? user.name.substring(0, 2).toUpperCase() : "SA"}
+            <div className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-indigo-100 dark:bg-indigo-900/50 border border-indigo-500/20">
+              <span className="text-xs font-bold leading-none text-indigo-700 dark:text-indigo-300 tracking-wider">
+                {(() => {
+                  const displayName = user?.name || "SK SAIFUDDIN";
+                  const parts = displayName.trim().split(/\s+/);
+                  return parts.length >= 2 
+                    ? `${parts[0][0]}${parts[1][0]}`.toUpperCase() 
+                    : displayName.substring(0, 2).toUpperCase();
+                })()}
               </span>
             </div>
             <div className="ml-3 min-w-0">
-              <p className="text-sm font-medium text-gray-700 dark:text-gray-200 truncate">{user?.name || "Sk. Saifuddin"}</p>
-              <p className="text-xs font-medium text-gray-500 dark:text-gray-400">{user?.role || "Admin"}</p>
+              <p className="text-sm font-bold text-gray-800 dark:text-gray-100 truncate">{user?.name || "SK SAIFUDDIN"}</p>
+              <p className="text-xs font-medium text-indigo-500 dark:text-indigo-400">{user?.role || "Super Admin"}</p>
             </div>
           </div>
 

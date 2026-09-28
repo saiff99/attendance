@@ -40,6 +40,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (stored) {
         const parsed = JSON.parse(stored);
         if (parsed && parsed.username) {
+          // Ensure display name is SK SAIFUDDIN
+          if (parsed.name === "Administrator" || !parsed.name) {
+            parsed.name = "SK SAIFUDDIN";
+            localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(parsed));
+          }
           setUser(parsed);
           document.cookie = "medattend_auth=true; path=/; max-age=2592000; SameSite=Lax";
         }
@@ -73,7 +78,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const authUser: AuthUser = {
       username: cleanUser,
-      name: cleanUser === "saif" ? "Sk. Saifuddin" : "Administrator",
+      name: "SK SAIFUDDIN",
       role: "Super Admin",
     };
 
