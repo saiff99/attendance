@@ -421,13 +421,13 @@ export default function LiveScan() {
                 <option value="Lecture Hall 2" className="bg-slate-900">Lecture Hall 2</option>
                 <option value="Lecture Hall 3" className="bg-slate-900">Lecture Hall 3</option>
                 <option value="Lecture Hall 4" className="bg-slate-900">Lecture Hall 4</option>
-                <option value="custom" className="bg-slate-900">✨ Custom / Other Room (e.g. Anatomy Demo)...</option>
+                <option value="custom" className="bg-slate-900">Others Classroom</option>
               </select>
 
               {setupData.hall === "custom" && (
                 <div className="mt-2.5 animate-in fade-in slide-in-from-top-1 duration-200">
                   <label htmlFor="custom-hall" className="block text-[11px] font-medium text-indigo-400 mb-1">
-                    Enter Custom Hall / Demo Room Name:
+                    Enter Classroom / Demo Room Name:
                   </label>
                   <input
                     id="custom-hall"
