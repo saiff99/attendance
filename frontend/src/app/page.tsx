@@ -16,12 +16,24 @@ export default async function Dashboard() {
   const now = new Date();
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
 
-  // Fetch Today's Total Attendances (All students present across all classes today)
+  // Fetch Today's Total Attendances (Cumulative sum of all present attendances marked today)
   const { count: todayTotalPresent } = await supabase
     .from('attendance')
     .select('*', { count: 'exact', head: true })
     .eq('status', 'Present')
     .gte('recorded_at', startOfToday);
+
+  // Fetch Today's Unique Attendance (unique students who attended classes today for Overall Distribution)
+  const { data: todayAttendanceRecords } = await supabase
+    .from('attendance')
+    .select('student_id')
+    .eq('status', 'Present')
+    .gte('recorded_at', startOfToday);
+
+  const uniquePresentStudentIds = new Set((todayAttendanceRecords || []).map(r => r.student_id));
+  const todayUniquePresent = uniquePresentStudentIds.size;
+  const totalRegistered = totalStudents || 0;
+  const todayUniqueAbsent = Math.max(0, totalRegistered - todayUniquePresent);
 
   // Fetch Recent Sessions
   const { data: recentSessions } = await supabase
@@ -108,7 +120,7 @@ export default async function Dashboard() {
           ))}
         </div>
 
-        <AttendanceChart data={chartData} totalPresent={totalPresentCount} totalAbsent={totalAbsentCount} />
+        <AttendanceChart data={chartData} todayPresent={todayUniquePresent} todayAbsent={todayUniqueAbsent} totalStudents={totalRegistered} />
 
         <div className="bg-white dark:bg-gray-900 shadow-sm border border-gray-100 dark:border-gray-800 rounded-xl overflow-hidden transition-colors duration-300 min-w-0 w-full">
           <div className="p-4 sm:p-6 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
