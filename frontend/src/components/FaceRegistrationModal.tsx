@@ -126,8 +126,15 @@ export function FaceRegistrationModal({ isOpen, onClose, studentId, studentName,
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Failed to process facial data');
+        let errorDetail = 'Failed to process facial data';
+        try {
+          const errorData = await response.json();
+          errorDetail = errorData.detail || errorData.message || errorDetail;
+        } catch {
+          const text = await response.text().catch(() => '');
+          if (text) errorDetail = text.slice(0, 100);
+        }
+        throw new Error(errorDetail);
       }
 
       setStatus('success');
