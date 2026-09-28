@@ -3,8 +3,9 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, ScanLine, Users, FileBarChart, Activity, Menu, X, Smartphone } from "lucide-react";
+import { LayoutDashboard, ScanLine, Users, FileBarChart, Activity, Menu, X, Smartphone, LogOut } from "lucide-react";
 import { SystemHealth } from "@/components/SystemHealth";
+import { useAuth } from "@/lib/auth";
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
@@ -21,6 +22,7 @@ function classNames(...classes: string[]) {
 export default function Sidebar() {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
+  const { user, logout } = useAuth();
   const isStudentPortal = pathname?.startsWith("/selfieattend") || pathname?.startsWith("/self-attendance");
 
   return (
@@ -104,16 +106,26 @@ export default function Sidebar() {
       </div>
       <div className="flex flex-col shrink-0 border-t border-gray-200 dark:border-gray-800 p-4 gap-4">
         <SystemHealth />
-        <div className="flex items-center">
-          <div>
-            <div className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-indigo-100 dark:bg-indigo-900/50">
-              <span className="text-sm font-medium leading-none text-indigo-700 dark:text-indigo-300">Sk</span>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center min-w-0">
+            <div className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-indigo-100 dark:bg-indigo-900/50">
+              <span className="text-sm font-medium leading-none text-indigo-700 dark:text-indigo-300">
+                {user?.name ? user.name.substring(0, 2).toUpperCase() : "SA"}
+              </span>
+            </div>
+            <div className="ml-3 min-w-0">
+              <p className="text-sm font-medium text-gray-700 dark:text-gray-200 truncate">{user?.name || "Sk. Saifuddin"}</p>
+              <p className="text-xs font-medium text-gray-500 dark:text-gray-400">{user?.role || "Admin"}</p>
             </div>
           </div>
-          <div className="ml-3">
-            <p className="text-sm font-medium text-gray-700 dark:text-gray-200 group-hover:text-gray-900">Sk. Saifuddin</p>
-            <p className="text-xs font-medium text-gray-500 dark:text-gray-400 group-hover:text-gray-700">Admin</p>
-          </div>
+
+          <button
+            onClick={logout}
+            className="p-2 rounded-xl text-gray-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-all cursor-pointer shrink-0"
+            title="Log out of Admin Hub"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
         </div>
       </div>
       </div>
