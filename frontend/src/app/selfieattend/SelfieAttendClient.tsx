@@ -65,9 +65,13 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
     return null;
   });
   
-  // Live Clock for Real-Time 1-second Countdown Ticks
+  // Live Clock for Real-Time 1-second Countdown Ticks (Hydration safe)
+  const [isMounted, setIsMounted] = useState(false);
   const [nowTime, setNowTime] = useState<number>(Date.now());
+  
   useEffect(() => {
+    setIsMounted(true);
+    setNowTime(Date.now());
     const timer = setInterval(() => {
       setNowTime(Date.now());
     }, 1000);
@@ -105,10 +109,11 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
     const timeStr = sess.start_time || sess.created_at;
     if (!timeStr) return 0;
     const startMs = new Date(timeStr).getTime();
-    const elapsedSec = Math.floor((nowTime - startMs) / 1000);
+    const currentMs = isMounted ? nowTime : Date.now();
+    const elapsedSec = Math.floor((currentMs - startMs) / 1000);
     const windowSec = sess.window_duration_seconds || 300;
     return Math.max(0, windowSec - elapsedSec);
-  }, [nowTime]);
+  }, [nowTime, isMounted]);
 
   // Helper: format MM:SS
   const formatTimeMMSS = (totalSeconds: number) => {
@@ -522,7 +527,8 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                     const isExp = remSec <= 0;
 
                     return (
-                      <div
+                      <button
+                        type="button"
                         key={sess.id}
                         onClick={() => {
                           if (!isExp) {
@@ -530,10 +536,11 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                             setStep("enter_roll");
                           }
                         }}
-                        className={`group p-3.5 rounded-xl border transition-all duration-150 flex items-center justify-between ${
+                        disabled={isExp}
+                        className={`w-full text-left group p-3.5 rounded-xl border transition-all duration-150 flex items-center justify-between ${
                           isExp
                             ? "bg-slate-950/40 border-slate-800/50 opacity-60 cursor-not-allowed"
-                            : "bg-slate-950/70 hover:bg-indigo-950/30 border-slate-800 hover:border-indigo-500/50 cursor-pointer shadow-md hover:shadow-indigo-500/10"
+                            : "bg-slate-950/70 hover:bg-indigo-950/30 active:bg-indigo-900/40 border-slate-800 hover:border-indigo-500/50 cursor-pointer shadow-md hover:shadow-indigo-500/10"
                         }`}
                       >
                         <div className="min-w-0 pr-2">
@@ -557,13 +564,16 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                         <div className="flex flex-col items-end gap-1.5 shrink-0">
                           {/* 5-Min Timer Pill */}
                           {!isExp ? (
-                            <span className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold flex items-center gap-1 shadow-sm ${
-                              remSec <= 60 
-                                ? "bg-red-500/20 text-red-300 border border-red-500/40 animate-pulse" 
-                                : "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
-                            }`}>
+                            <span 
+                              suppressHydrationWarning
+                              className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold flex items-center gap-1 shadow-sm ${
+                                remSec <= 60 
+                                  ? "bg-red-500/20 text-red-300 border border-red-500/40 animate-pulse" 
+                                  : "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
+                              }`}
+                            >
                               <Timer className="w-3.5 h-3.5" />
-                              {formatTimeMMSS(remSec)} left
+                              <span suppressHydrationWarning>{formatTimeMMSS(remSec)} left</span>
                             </span>
                           ) : (
                             <span className="px-2 py-0.5 rounded-lg text-[11px] font-medium text-slate-500 bg-slate-900 border border-slate-800 flex items-center gap-1">
@@ -578,7 +588,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                             </span>
                           )}
                         </div>
-                      </div>
+                      </button>
                     );
                   })}
                 </div>
