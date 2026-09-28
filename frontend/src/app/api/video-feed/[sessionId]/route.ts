@@ -10,8 +10,9 @@ export async function GET(
     const { sessionId } = await params;
     const { searchParams } = new URL(request.url);
     const cameraIndex = searchParams.get('camera_index') || '0';
+    const grid = searchParams.get('grid') ?? '1';
 
-    const targetUrl = `http://127.0.0.1:8000/api/video-feed/${sessionId}?camera_index=${cameraIndex}`;
+    const targetUrl = `http://127.0.0.1:8000/api/video-feed/${sessionId}?camera_index=${cameraIndex}&grid=${grid}`;
 
     const res = await fetch(targetUrl, {
       headers: { 'ngrok-skip-browser-warning': '69420' },

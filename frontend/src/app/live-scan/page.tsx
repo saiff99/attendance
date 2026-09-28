@@ -657,7 +657,7 @@ export default function LiveScan() {
 
                           <div className="w-full h-full flex items-center justify-center bg-black">
                             <MjpegPlayer 
-                              url={`${backendUrl}/api/video-feed/${activeSession.id}?camera_index=${cam.index}`}
+                              url={`${backendUrl}/api/video-feed/${activeSession.id}?camera_index=${cam.index}&grid=1`}
                               className="w-full h-full object-contain"
                               fallbackText="Connecting..."
                               paused={focusedCamera !== null}
@@ -697,7 +697,7 @@ export default function LiveScan() {
 
                           <div className="w-full h-full flex items-center justify-center bg-black">
                             <MjpegPlayer 
-                              url={`${backendUrl}/api/video-feed/${activeSession.id}?camera_index=${cam.index}`}
+                              url={`${backendUrl}/api/video-feed/${activeSession.id}?camera_index=${cam.index}&grid=1`}
                               className="w-full h-full object-contain"
                               fallbackText="Connecting..."
                               paused={focusedCamera !== null}
@@ -731,7 +731,7 @@ export default function LiveScan() {
                   <div className="absolute inset-0 w-full h-full bg-black flex items-center justify-center">
                     <MjpegPlayer 
                       key={selectedCctvIndex}
-                      url={`${backendUrl}/api/video-feed/${activeSession.id}?camera_index=${selectedCctvIndex}`} 
+                      url={`${backendUrl}/api/video-feed/${activeSession.id}?camera_index=${selectedCctvIndex}&grid=0`} 
                       className="w-full h-full object-contain"
                     />
                     
@@ -766,7 +766,7 @@ export default function LiveScan() {
                   <div className="absolute inset-0 w-full h-full bg-black flex items-center justify-center">
                     <MjpegPlayer 
                       key={selectedPtzIndex}
-                      url={`${backendUrl}/api/ptz-video-feed/${activeSession.id}?camera_index=${selectedPtzIndex}`} 
+                      url={`${backendUrl}/api/ptz-video-feed/${activeSession.id}?camera_index=${selectedPtzIndex}&grid=0`} 
                       className="w-full h-full object-contain"
                     />
                     
@@ -1155,7 +1155,7 @@ export default function LiveScan() {
               }`}>
                 <MjpegPlayer 
                   key={focusedCamera.id}
-                  url={`${backendUrl}/api/video-feed/${activeSession.id}?camera_index=${focusedCamera.index}`}
+                  url={`${backendUrl}/api/video-feed/${activeSession.id}?camera_index=${focusedCamera.index}&grid=0`}
                   className="w-full h-full object-contain"
                   fallbackText="Connecting to Camera Stream..."
                   paused={false}
