@@ -241,8 +241,8 @@ export default function StudentDirectory() {
           </div>
 
       {/* Data Table */}
-      <div className="bg-white dark:bg-gray-900 rounded-b-xl border border-gray-200 dark:border-gray-800 shadow-sm overflow-hidden transition-colors">
-        <div className="overflow-x-auto">
+      <div className="bg-white dark:bg-gray-900 rounded-b-xl border border-gray-200 dark:border-gray-800 shadow-sm transition-colors">
+        <div className="overflow-x-auto min-h-[280px]">
           <table className="min-w-[680px] w-full divide-y divide-gray-200 dark:divide-gray-800">
             <thead className="bg-gray-50 dark:bg-gray-800/50">
               <tr>
@@ -277,7 +277,7 @@ export default function StudentDirectory() {
                   </td>
                 </tr>
               ) : (
-                filteredStudents.map((student) => (
+                filteredStudents.map((student, idx) => (
                   <tr 
                     key={student.id} 
                     className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors cursor-pointer"
@@ -325,44 +325,47 @@ export default function StudentDirectory() {
                         <div className="relative inline-block text-left">
                           <button 
                             onClick={() => setOpenDropdownId(openDropdownId === student.id ? null : student.id)}
-                            className="text-gray-400 dark:text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            className="text-gray-400 dark:text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            title="More options"
                           >
                             <MoreHorizontal className="h-5 w-5" />
                           </button>
 
                           {openDropdownId === student.id && (
                             <>
-                              <div className="fixed inset-0 z-10" onClick={() => setOpenDropdownId(null)}></div>
-                              <div className="absolute right-0 z-20 mt-2 w-36 origin-top-right rounded-md bg-white dark:bg-gray-800 shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
-                                <div className="py-1">
-                                  <button
-                                    onClick={() => {
-                                      setNewStudent({ 
-                                        student_roll: student.student_roll || '', 
-                                        full_name: student.full_name || '', 
-                                        email: student.email || '',
-                                        academic_year: student.academic_year || '1st Year'
-                                      });
-                                      setEditingId(student.id);
-                                      setIsModalOpen(true);
-                                      setOpenDropdownId(null);
-                                    }}
-                                    className="text-gray-700 dark:text-gray-200 w-full text-left px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center transition-colors"
-                                  >
-                                    <Edit2 className="w-4 h-4 mr-2 text-gray-500 dark:text-gray-400" />
-                                    Edit
-                                  </button>
-                                  <button
-                                    onClick={() => {
-                                      handleDelete(student.id);
-                                      setOpenDropdownId(null);
-                                    }}
-                                    className="text-red-600 dark:text-red-400 w-full text-left px-4 py-2 text-sm hover:bg-red-50 dark:hover:bg-red-900/30 flex items-center transition-colors"
-                                  >
-                                    <Trash2 className="w-4 h-4 mr-2" />
-                                    Delete
-                                  </button>
-                                </div>
+                              <div className="fixed inset-0 z-20" onClick={() => setOpenDropdownId(null)}></div>
+                              <div className={`absolute right-0 z-30 w-36 rounded-xl bg-white dark:bg-gray-800 shadow-xl border border-gray-200 dark:border-gray-700 py-1.5 ring-1 ring-black/5 focus:outline-none ${
+                                idx >= filteredStudents.length - 2 && filteredStudents.length > 3
+                                  ? 'bottom-full mb-2 origin-bottom-right'
+                                  : 'top-full mt-1.5 origin-top-right'
+                              }`}>
+                                <button
+                                  onClick={() => {
+                                    setNewStudent({ 
+                                      student_roll: student.student_roll || '', 
+                                      full_name: student.full_name || '', 
+                                      email: student.email || '',
+                                      academic_year: student.academic_year || '1st Year'
+                                    });
+                                    setEditingId(student.id);
+                                    setIsModalOpen(true);
+                                    setOpenDropdownId(null);
+                                  }}
+                                  className="text-gray-700 dark:text-gray-200 w-full text-left px-3.5 py-2 text-xs sm:text-sm hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center transition-colors font-medium"
+                                >
+                                  <Edit2 className="w-4 h-4 mr-2.5 text-gray-400 dark:text-gray-500" />
+                                  Edit
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    handleDelete(student.id);
+                                    setOpenDropdownId(null);
+                                  }}
+                                  className="text-red-600 dark:text-red-400 w-full text-left px-3.5 py-2 text-xs sm:text-sm hover:bg-red-50 dark:hover:bg-red-900/30 flex items-center transition-colors font-medium"
+                                >
+                                  <Trash2 className="w-4 h-4 mr-2.5 text-red-500" />
+                                  Delete
+                                </button>
                               </div>
                             </>
                           )}

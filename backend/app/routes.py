@@ -256,9 +256,9 @@ async def get_cameras():
     return {"count": len(cameras), "cameras": cameras}
 
 @router.get("/api/video-feed/{session_id}")
-async def video_feed(session_id: str, camera_index: int = 0):
+async def video_feed(session_id: str, camera_index: int = 0, grid: int = 1):
     """Streams the live CCTV video with bounding boxes."""
-    return StreamingResponse(generate_video_feed(session_id, camera_index, "cctv"), media_type="multipart/x-mixed-replace; boundary=frame")
+    return StreamingResponse(generate_video_feed(session_id, camera_index, "cctv", is_grid=bool(grid)), media_type="multipart/x-mixed-replace; boundary=frame")
 
 @router.get("/api/ptz-cameras")
 async def get_ptz_cameras():
@@ -266,9 +266,9 @@ async def get_ptz_cameras():
     return {"count": len(urls)}
 
 @router.get("/api/ptz-video-feed/{session_id}")
-async def ptz_video_feed(session_id: str, camera_index: int = 0):
+async def ptz_video_feed(session_id: str, camera_index: int = 0, grid: int = 0):
     """Streams the live PTZ video with bounding boxes."""
-    return StreamingResponse(generate_video_feed(session_id, camera_index, "ptz"), media_type="multipart/x-mixed-replace; boundary=frame")
+    return StreamingResponse(generate_video_feed(session_id, camera_index, "ptz", is_grid=bool(grid)), media_type="multipart/x-mixed-replace; boundary=frame")
 
 class PTZCommand(BaseModel):
     direction: str
