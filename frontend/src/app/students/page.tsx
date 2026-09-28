@@ -20,6 +20,10 @@ export default function StudentDirectory() {
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
 
+  // Multi-select / Bulk Delete State
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+
   // Profile Modal State
   const [selectedProfileStudent, setSelectedProfileStudent] = useState<Student | null>(null);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
@@ -108,8 +112,11 @@ export default function StudentDirectory() {
     if (!window.confirm("Are you sure you want to delete this student? This will also remove their attendance records.")) return;
     
     try {
+      // Delete any dependent attendance records first
+      await supabase.from('attendances').delete().eq('student_id', id);
       const { error } = await supabase.from('students').delete().eq('id', id);
       if (error) throw error;
+      setSelectedIds(prev => prev.filter(item => item !== id));
       fetchStudents();
     } catch (error) {
       console.error('Error deleting student:', error);
@@ -117,7 +124,28 @@ export default function StudentDirectory() {
     }
   };
 
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+    const count = selectedIds.length;
+    const confirmMsg = `Are you sure you want to delete ${count} selected student${count > 1 ? 's' : ''}? This will permanently remove their face biometrics and attendance records.`;
+    if (!window.confirm(confirmMsg)) return;
 
+    setIsBulkDeleting(true);
+    try {
+      // First delete dependent attendance records for all selected students
+      await supabase.from('attendances').delete().in('student_id', selectedIds);
+      const { error } = await supabase.from('students').delete().in('id', selectedIds);
+      if (error) throw error;
+      
+      setSelectedIds([]);
+      await fetchStudents();
+    } catch (error) {
+      console.error('Error during bulk deletion:', error);
+      alert('Failed to delete selected students. Check console for details.');
+    } finally {
+      setIsBulkDeleting(false);
+    }
+  };
 
   const openEnrollModal = () => {
     setEditingId(null);
@@ -131,8 +159,40 @@ export default function StudentDirectory() {
     setNewStudent({ student_roll: '', full_name: '', email: '', academic_year: activeView || '1st Year' });
   };
 
+  const filteredStudents = students.filter(student => {
+    const matchesSearch = student.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                          student.student_roll?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesYear = activeView ? student.academic_year === activeView : true;
+    return matchesSearch && matchesYear;
+  });
+
+  const isAllSelected = filteredStudents.length > 0 && filteredStudents.every(s => selectedIds.includes(s.id));
+  const isSomeSelected = filteredStudents.some(s => selectedIds.includes(s.id)) && !isAllSelected;
+
+  const handleToggleSelectAll = () => {
+    if (isAllSelected) {
+      const filteredIdSet = new Set(filteredStudents.map(s => s.id));
+      setSelectedIds(prev => prev.filter(id => !filteredIdSet.has(id)));
+    } else {
+      const newSelected = new Set(selectedIds);
+      filteredStudents.forEach(s => newSelected.add(s.id));
+      setSelectedIds(Array.from(newSelected));
+    }
+  };
+
+  const handleToggleSelect = (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setSelectedIds(prev => 
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    );
+  };
+
   const handleExportCSV = () => {
-    const listToExport = filteredStudents.length > 0 ? filteredStudents : students;
+    // If specific students are selected, export only selected ones, otherwise export all in view
+    const listToExport = selectedIds.length > 0 
+      ? students.filter(s => selectedIds.includes(s.id))
+      : (filteredStudents.length > 0 ? filteredStudents : students);
+      
     if (listToExport.length === 0) {
       alert("No students to export.");
       return;
@@ -155,13 +215,6 @@ export default function StudentDirectory() {
     link.click();
     document.body.removeChild(link);
   };
-
-  const filteredStudents = students.filter(student => {
-    const matchesSearch = student.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          student.student_roll?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesYear = activeView ? student.academic_year === activeView : true;
-    return matchesSearch && matchesYear;
-  });
 
   const yearFolders = [
     { id: "1st Year", title: "First Year", iconBg: "bg-blue-500/10 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400", glow: "bg-blue-500" },
@@ -269,7 +322,10 @@ export default function StudentDirectory() {
             return (
               <div 
                 key={folder.id}
-                onClick={() => setActiveView(folder.id)}
+                onClick={() => {
+                  setSelectedIds([]);
+                  setActiveView(folder.id);
+                }}
                 className="group relative bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-5 sm:p-6 hover:shadow-xl transition-all duration-300 cursor-pointer overflow-hidden"
               >
                 <div className={`absolute top-0 right-0 w-32 h-32 -mr-8 -mt-8 rounded-full opacity-10 transition-transform duration-500 group-hover:scale-150 ${folder.glow}`}></div>
@@ -289,8 +345,8 @@ export default function StudentDirectory() {
         </div>
       ) : (
         <>
-          {/* Search Bar (Inside Folder) */}
-          <div className="bg-white dark:bg-gray-900 p-3 sm:p-4 rounded-t-xl border border-gray-200 dark:border-gray-800 border-b-0 flex items-center justify-between transition-colors">
+          {/* Search Bar & Selection Summary (Inside Folder) */}
+          <div className="bg-white dark:bg-gray-900 p-3 sm:p-4 rounded-t-xl border border-gray-200 dark:border-gray-800 border-b-0 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 transition-colors">
             <div className="relative flex-1 max-w-md">
               <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
                 <Search className="h-4 w-4 sm:h-5 sm:w-5 text-gray-400" aria-hidden="true" />
@@ -303,16 +359,52 @@ export default function StudentDirectory() {
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
-            <span className="text-[11px] text-gray-400 sm:hidden ml-2 shrink-0">Scroll →</span>
+            
+            {selectedIds.length > 0 && (
+              <div className="flex items-center gap-2 self-end sm:self-center">
+                <span className="text-xs sm:text-sm font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50 px-3 py-1.5 rounded-lg border border-indigo-200 dark:border-indigo-800">
+                  {selectedIds.length} student{selectedIds.length > 1 ? 's' : ''} selected
+                </span>
+                <button
+                  type="button"
+                  onClick={handleBulkDelete}
+                  disabled={isBulkDeleting}
+                  className="inline-flex items-center justify-center rounded-xl bg-red-600 hover:bg-red-500 active:bg-red-700 px-3 py-1.5 text-xs sm:text-sm font-semibold text-white shadow-sm transition-colors disabled:opacity-50"
+                >
+                  {isBulkDeleting ? (
+                    <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                  ) : (
+                    <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+                  )}
+                  Delete Selected
+                </button>
+              </div>
+            )}
+            
+            <span className="text-[11px] text-gray-400 sm:hidden ml-auto shrink-0">Scroll →</span>
           </div>
 
       {/* Data Table */}
       <div className="bg-white dark:bg-gray-900 rounded-b-xl border border-gray-200 dark:border-gray-800 shadow-sm transition-colors">
         <div className="overflow-x-auto min-h-[280px]">
-          <table className="min-w-[680px] w-full divide-y divide-gray-200 dark:divide-gray-800">
+          <table className="min-w-[720px] w-full divide-y divide-gray-200 dark:divide-gray-800">
             <thead className="bg-gray-50 dark:bg-gray-800/50">
               <tr>
-                <th scope="col" className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 dark:text-gray-300 sm:pl-6">
+                <th scope="col" className="py-3.5 pl-4 sm:pl-6 pr-3 w-12 text-left">
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      ref={(el) => {
+                        if (el) el.indeterminate = isSomeSelected;
+                      }}
+                      checked={isAllSelected}
+                      onChange={handleToggleSelectAll}
+                      className="h-4 w-4 rounded border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-indigo-600 focus:ring-indigo-500 focus:ring-offset-gray-900 cursor-pointer transition-all"
+                      title={isAllSelected ? "Deselect All" : "Select All"}
+                    />
+                  </div>
+                </th>
+                <th scope="col" className="py-3.5 px-3 text-left text-sm font-semibold text-gray-900 dark:text-gray-300">
                   Roll Number
                 </th>
                 <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900 dark:text-gray-300">
@@ -332,119 +424,193 @@ export default function StudentDirectory() {
             <tbody className="divide-y divide-gray-200 dark:divide-gray-800 bg-white dark:bg-gray-900">
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+                  <td colSpan={6} className="py-8 text-center text-sm text-gray-500 dark:text-gray-400">
                     Loading students...
                   </td>
                 </tr>
               ) : filteredStudents.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+                  <td colSpan={6} className="py-8 text-center text-sm text-gray-500 dark:text-gray-400">
                     No students found. Enroll a new student to get started!
                   </td>
                 </tr>
               ) : (
-                filteredStudents.map((student, idx) => (
-                  <tr 
-                    key={student.id} 
-                    className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors cursor-pointer"
-                    onClick={(e) => {
-                      const target = e.target as HTMLElement;
-                      if (!target.closest('.actions-cell')) {
-                        setSelectedProfileStudent(student);
-                        setIsProfileModalOpen(true);
-                      }
-                    }}
-                  >
-                    <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 dark:text-gray-100 sm:pl-6">
-                      {student.student_roll}
-                    </td>
-                    <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500 dark:text-gray-400">
-                      <div className="flex items-center">
-                        <div className="h-8 w-8 flex-shrink-0 rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center text-indigo-700 dark:text-indigo-400 font-semibold text-xs mr-3 uppercase">
-                          {student.full_name?.substring(0, 2)}
+                filteredStudents.map((student, idx) => {
+                  const isSelected = selectedIds.includes(student.id);
+                  return (
+                    <tr 
+                      key={student.id} 
+                      className={`transition-colors cursor-pointer ${
+                        isSelected 
+                          ? 'bg-indigo-50/70 dark:bg-indigo-950/40 hover:bg-indigo-100/70 dark:hover:bg-indigo-950/60' 
+                          : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'
+                      }`}
+                      onClick={(e) => {
+                        const target = e.target as HTMLElement;
+                        if (!target.closest('.actions-cell') && !target.closest('input[type="checkbox"]')) {
+                          setSelectedProfileStudent(student);
+                          setIsProfileModalOpen(true);
+                        }
+                      }}
+                    >
+                      <td className="whitespace-nowrap py-4 pl-4 sm:pl-6 pr-3 w-12" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => handleToggleSelect(student.id)}
+                            className="h-4 w-4 rounded border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-indigo-600 focus:ring-indigo-500 focus:ring-offset-gray-900 cursor-pointer transition-all"
+                          />
                         </div>
-                        <span className="font-medium text-gray-900 dark:text-gray-100">{student.full_name}</span>
-                      </div>
-                    </td>
-                    <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500 dark:text-gray-400">
-                      <span className="inline-flex items-center rounded-md bg-blue-50 dark:bg-blue-900/30 px-2 py-1 text-xs font-medium text-blue-700 dark:text-blue-400 ring-1 ring-inset ring-blue-700/10 dark:ring-blue-400/20">
-                        {student.academic_year || 'N/A'}
-                      </span>
-                    </td>
-                    <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500 dark:text-gray-400">
-                      <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset ${
-                        student.face_encoding ? 'bg-indigo-50 text-indigo-700 ring-indigo-600/20 dark:bg-indigo-900/30 dark:text-indigo-400 dark:ring-indigo-400/20' : 'bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-900/30 dark:text-amber-400 dark:ring-amber-400/20'
-                      }`}>
-                        {student.face_encoding ? 'Active' : 'Missing'}
-                      </span>
-                    </td>
-                    <td className="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6 actions-cell">
-                      <div className="flex justify-end items-center gap-2">
-                        <button 
-                          onClick={() => triggerFaceRegistration(student.id, student.full_name)}
-                          className="inline-flex items-center text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300 mr-2 transition-colors"
-                        >
-                          <UploadCloud className="w-4 h-4 mr-1" /> {student.face_encoding ? 'Update Face ID' : 'Setup Face ID'}
-                        </button>
-                        
-                        {/* Actions Dropdown */}
-                        <div className="relative inline-block text-left">
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-4 text-sm font-medium text-gray-900 dark:text-gray-100">
+                        {student.student_roll}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500 dark:text-gray-400">
+                        <div className="flex items-center">
+                          <div className="h-8 w-8 flex-shrink-0 rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center text-indigo-700 dark:text-indigo-400 font-semibold text-xs mr-3 uppercase">
+                            {student.full_name?.substring(0, 2)}
+                          </div>
+                          <span className="font-medium text-gray-900 dark:text-gray-100">{student.full_name}</span>
+                        </div>
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500 dark:text-gray-400">
+                        <span className="inline-flex items-center rounded-md bg-blue-50 dark:bg-blue-900/30 px-2 py-1 text-xs font-medium text-blue-700 dark:text-blue-400 ring-1 ring-inset ring-blue-700/10 dark:ring-blue-400/20">
+                          {student.academic_year || 'N/A'}
+                        </span>
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500 dark:text-gray-400">
+                        <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset ${
+                          student.face_encoding ? 'bg-indigo-50 text-indigo-700 ring-indigo-600/20 dark:bg-indigo-900/30 dark:text-indigo-400 dark:ring-indigo-400/20' : 'bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-900/30 dark:text-amber-400 dark:ring-amber-400/20'
+                        }`}>
+                          {student.face_encoding ? 'Active' : 'Missing'}
+                        </span>
+                      </td>
+                      <td className="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6 actions-cell">
+                        <div className="flex justify-end items-center gap-2">
                           <button 
-                            onClick={() => setOpenDropdownId(openDropdownId === student.id ? null : student.id)}
-                            className="text-gray-400 dark:text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                            title="More options"
+                            onClick={() => triggerFaceRegistration(student.id, student.full_name)}
+                            className="inline-flex items-center text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300 mr-2 transition-colors"
                           >
-                            <MoreHorizontal className="h-5 w-5" />
+                            <UploadCloud className="w-4 h-4 mr-1" /> {student.face_encoding ? 'Update Face ID' : 'Setup Face ID'}
                           </button>
+                          
+                          {/* Actions Dropdown */}
+                          <div className="relative inline-block text-left">
+                            <button 
+                              onClick={() => setOpenDropdownId(openDropdownId === student.id ? null : student.id)}
+                              className="text-gray-400 dark:text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                              title="More options"
+                            >
+                              <MoreHorizontal className="h-5 w-5" />
+                            </button>
 
-                          {openDropdownId === student.id && (
-                            <>
-                              <div className="fixed inset-0 z-20" onClick={() => setOpenDropdownId(null)}></div>
-                              <div className={`absolute right-0 z-30 w-36 rounded-xl bg-white dark:bg-gray-800 shadow-xl border border-gray-200 dark:border-gray-700 py-1.5 ring-1 ring-black/5 focus:outline-none ${
-                                idx >= filteredStudents.length - 2 && filteredStudents.length > 3
-                                  ? 'bottom-full mb-2 origin-bottom-right'
-                                  : 'top-full mt-1.5 origin-top-right'
-                              }`}>
-                                <button
-                                  onClick={() => {
-                                    setNewStudent({ 
-                                      student_roll: student.student_roll || '', 
-                                      full_name: student.full_name || '', 
-                                      email: student.email || '',
-                                      academic_year: student.academic_year || '1st Year'
-                                    });
-                                    setEditingId(student.id);
-                                    setIsModalOpen(true);
-                                    setOpenDropdownId(null);
-                                  }}
-                                  className="text-gray-700 dark:text-gray-200 w-full text-left px-3.5 py-2 text-xs sm:text-sm hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center transition-colors font-medium"
-                                >
-                                  <Edit2 className="w-4 h-4 mr-2.5 text-gray-400 dark:text-gray-500" />
-                                  Edit
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    handleDelete(student.id);
-                                    setOpenDropdownId(null);
-                                  }}
-                                  className="text-red-600 dark:text-red-400 w-full text-left px-3.5 py-2 text-xs sm:text-sm hover:bg-red-50 dark:hover:bg-red-900/30 flex items-center transition-colors font-medium"
-                                >
-                                  <Trash2 className="w-4 h-4 mr-2.5 text-red-500" />
-                                  Delete
-                                </button>
-                              </div>
-                            </>
-                          )}
+                            {openDropdownId === student.id && (
+                              <>
+                                <div className="fixed inset-0 z-20" onClick={() => setOpenDropdownId(null)}></div>
+                                <div className={`absolute right-0 z-30 w-36 rounded-xl bg-white dark:bg-gray-800 shadow-xl border border-gray-200 dark:border-gray-700 py-1.5 ring-1 ring-black/5 focus:outline-none ${
+                                  idx >= filteredStudents.length - 2 && filteredStudents.length > 3
+                                    ? 'bottom-full mb-2 origin-bottom-right'
+                                    : 'top-full mt-1.5 origin-top-right'
+                                }`}>
+                                  <button
+                                    onClick={() => {
+                                      setNewStudent({ 
+                                        student_roll: student.student_roll || '', 
+                                        full_name: student.full_name || '', 
+                                        email: student.email || '',
+                                        academic_year: student.academic_year || '1st Year'
+                                      });
+                                      setEditingId(student.id);
+                                      setIsModalOpen(true);
+                                      setOpenDropdownId(null);
+                                    }}
+                                    className="text-gray-700 dark:text-gray-200 w-full text-left px-3.5 py-2 text-xs sm:text-sm hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center transition-colors font-medium"
+                                  >
+                                    <Edit2 className="w-4 h-4 mr-2.5 text-gray-400 dark:text-gray-500" />
+                                    Edit
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      handleDelete(student.id);
+                                      setOpenDropdownId(null);
+                                    }}
+                                    className="text-red-600 dark:text-red-400 w-full text-left px-3.5 py-2 text-xs sm:text-sm hover:bg-red-50 dark:hover:bg-red-900/30 flex items-center transition-colors font-medium"
+                                  >
+                                    <Trash2 className="w-4 h-4 mr-2.5 text-red-500" />
+                                    Delete
+                                  </button>
+                                </div>
+                              </>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
       </div>
+
+      {/* Floating Batch Action Toolbar */}
+      {selectedIds.length > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 max-w-2xl w-[92%] sm:w-auto">
+          <div className="flex flex-wrap items-center justify-between sm:justify-start gap-3 bg-gray-900/95 dark:bg-gray-800/95 backdrop-blur-md text-white px-4 sm:px-6 py-3 rounded-2xl shadow-2xl border border-gray-700/60 ring-1 ring-white/10">
+            <div className="flex items-center gap-2">
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-indigo-500 text-xs font-bold text-white shadow-sm">
+                {selectedIds.length}
+              </span>
+              <span className="text-xs sm:text-sm font-medium text-gray-200">
+                Student{selectedIds.length > 1 ? 's' : ''} selected
+              </span>
+            </div>
+
+            <div className="h-4 w-px bg-gray-700 hidden sm:block"></div>
+
+            <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+              <button
+                type="button"
+                onClick={handleExportCSV}
+                className="inline-flex items-center px-3 py-1.5 text-xs sm:text-sm font-medium text-gray-200 hover:text-white hover:bg-gray-800 dark:hover:bg-gray-700/70 rounded-xl transition-colors"
+                title="Export selected students to CSV"
+              >
+                <FileDown className="w-3.5 h-3.5 mr-1.5 text-gray-400" />
+                Export ({selectedIds.length})
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSelectedIds([])}
+                className="px-3 py-1.5 text-xs sm:text-sm font-medium text-gray-300 hover:text-white hover:bg-gray-800 dark:hover:bg-gray-700/70 rounded-xl transition-colors"
+              >
+                Clear
+              </button>
+
+              <button
+                type="button"
+                onClick={handleBulkDelete}
+                disabled={isBulkDeleting}
+                className="inline-flex items-center justify-center px-4 py-1.5 text-xs sm:text-sm font-semibold text-white bg-red-600 hover:bg-red-500 active:bg-red-700 rounded-xl shadow-md transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed gap-1.5"
+              >
+                {isBulkDeleting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    <span>Delete Selected ({selectedIds.length})</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       </>
       )}
 
