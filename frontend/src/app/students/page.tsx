@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Search, UserPlus, FileDown, MoreHorizontal, X, UploadCloud, Loader2, Edit2, Trash2, Folder, ArrowLeft, Users, FileSpreadsheet } from "lucide-react";
+import { Search, UserPlus, FileDown, MoreHorizontal, X, UploadCloud, Loader2, Edit2, Trash2, Folder, ArrowLeft, Users, FileSpreadsheet, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import type { Student } from "@/types/database";
 import { StudentProfileModal } from "@/components/StudentProfileModal";
@@ -19,6 +19,21 @@ export default function StudentDirectory() {
   
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+
+  // Sorting State - default ordered by Roll Number ascending
+  type SortField = 'student_roll' | 'full_name' | 'academic_year';
+  type SortOrder = 'asc' | 'desc';
+  const [sortField, setSortField] = useState<SortField>('student_roll');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortOrder('asc');
+    }
+  };
 
   // Multi-select / Bulk Delete State
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -49,7 +64,7 @@ export default function StudentDirectory() {
       const { data, error } = await supabase
         .from('students')
         .select('*')
-        .order('created_at', { ascending: false });
+        .order('student_roll', { ascending: true });
         
       if (error) throw error;
       setStudents(data || []);
@@ -159,12 +174,30 @@ export default function StudentDirectory() {
     setNewStudent({ student_roll: '', full_name: '', email: '', academic_year: activeView || '1st Year' });
   };
 
-  const filteredStudents = students.filter(student => {
-    const matchesSearch = student.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          student.student_roll?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesYear = activeView ? student.academic_year === activeView : true;
-    return matchesSearch && matchesYear;
-  });
+  const filteredStudents = students
+    .filter(student => {
+      const matchesSearch = student.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                            student.student_roll?.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesYear = activeView ? student.academic_year === activeView : true;
+      return matchesSearch && matchesYear;
+    })
+    .sort((a, b) => {
+      let comparison = 0;
+      if (sortField === 'student_roll') {
+        const rollA = a.student_roll || '';
+        const rollB = b.student_roll || '';
+        comparison = rollA.localeCompare(rollB, undefined, { numeric: true, sensitivity: 'base' });
+      } else if (sortField === 'full_name') {
+        const nameA = a.full_name || '';
+        const nameB = b.full_name || '';
+        comparison = nameA.localeCompare(nameB, undefined, { sensitivity: 'base' });
+      } else if (sortField === 'academic_year') {
+        const yearA = a.academic_year || '';
+        const yearB = b.academic_year || '';
+        comparison = yearA.localeCompare(yearB, undefined, { numeric: true, sensitivity: 'base' });
+      }
+      return sortOrder === 'asc' ? comparison : -comparison;
+    });
 
   const isAllSelected = filteredStudents.length > 0 && filteredStudents.every(s => selectedIds.includes(s.id));
   const isSomeSelected = filteredStudents.some(s => selectedIds.includes(s.id)) && !isAllSelected;
@@ -404,14 +437,62 @@ export default function StudentDirectory() {
                     />
                   </div>
                 </th>
-                <th scope="col" className="py-3.5 px-3 text-left text-sm font-semibold text-gray-900 dark:text-gray-300">
-                  Roll Number
+                <th 
+                  scope="col" 
+                  onClick={() => handleSort('student_roll')}
+                  className="py-3.5 px-3 text-left text-sm font-semibold text-gray-900 dark:text-gray-300 cursor-pointer hover:text-indigo-600 dark:hover:text-indigo-400 select-none group transition-colors"
+                  title="Click to sort by Roll Number"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span>Roll Number</span>
+                    {sortField === 'student_roll' ? (
+                      sortOrder === 'asc' ? (
+                        <ArrowUp className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                      ) : (
+                        <ArrowDown className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="w-3.5 h-3.5 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    )}
+                  </div>
                 </th>
-                <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900 dark:text-gray-300">
-                  Name
+                <th 
+                  scope="col" 
+                  onClick={() => handleSort('full_name')}
+                  className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900 dark:text-gray-300 cursor-pointer hover:text-indigo-600 dark:hover:text-indigo-400 select-none group transition-colors"
+                  title="Click to sort by Name"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span>Name</span>
+                    {sortField === 'full_name' ? (
+                      sortOrder === 'asc' ? (
+                        <ArrowUp className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                      ) : (
+                        <ArrowDown className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="w-3.5 h-3.5 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    )}
+                  </div>
                 </th>
-                <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900 dark:text-gray-300">
-                  Academic Year
+                <th 
+                  scope="col" 
+                  onClick={() => handleSort('academic_year')}
+                  className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900 dark:text-gray-300 cursor-pointer hover:text-indigo-600 dark:hover:text-indigo-400 select-none group transition-colors"
+                  title="Click to sort by Academic Year"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span>Academic Year</span>
+                    {sortField === 'academic_year' ? (
+                      sortOrder === 'asc' ? (
+                        <ArrowUp className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                      ) : (
+                        <ArrowDown className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="w-3.5 h-3.5 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    )}
+                  </div>
                 </th>
                 <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900 dark:text-gray-300">
                   Face Data

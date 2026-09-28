@@ -115,7 +115,9 @@ export function BulkImportModal({
           valid,
           error,
         };
-      }).filter(r => r.student_roll || r.full_name); // Filter out totally blank rows
+      })
+      .filter(r => r.student_roll || r.full_name) // Filter out totally blank rows
+      .sort((a, b) => (a.student_roll || '').localeCompare(b.student_roll || '', undefined, { numeric: true, sensitivity: 'base' }));
 
       setParsedData(parsed);
     } catch (err: any) {
