@@ -66,6 +66,7 @@ export default function LiveScan() {
   const [focusedCamera, setFocusedCamera] = useState<CameraMeta | null>(null);
   const [isModalFullscreen, setIsModalFullscreen] = useState(false);
   const [showQrModal, setShowQrModal] = useState(false);
+  const [isQrFullscreen, setIsQrFullscreen] = useState(false);
   const [showGeofenceModal, setShowGeofenceModal] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [ptzCameraCount, setPtzCameraCount] = useState(1);
@@ -1246,55 +1247,89 @@ export default function LiveScan() {
         {/* Student Mobile Selfie QR Code Modal */}
         {showQrModal && activeSession && (
           <div 
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-150"
-            onClick={() => setShowQrModal(false)}
+            className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/90 backdrop-blur-xl animate-in fade-in duration-150"
+            onClick={() => {
+              setShowQrModal(false);
+              setIsQrFullscreen(false);
+            }}
           >
             <div 
-              className="bg-[#0A0E17] border border-slate-800/90 rounded-3xl p-5 sm:p-7 max-w-md w-full shadow-2xl flex flex-col items-center text-center relative animate-in zoom-in-95 duration-150"
+              className={`bg-[#0A0E17] border border-slate-800/90 shadow-2xl flex flex-col items-center text-center relative animate-in zoom-in-95 duration-150 transition-all ${
+                isQrFullscreen 
+                  ? "fixed inset-0 w-full h-full max-w-none rounded-none p-6 sm:p-10 justify-between overflow-y-auto z-50" 
+                  : "rounded-3xl p-6 sm:p-8 max-w-xl sm:max-w-2xl md:max-w-3xl w-full"
+              }`}
               onClick={(e) => e.stopPropagation()}
             >
-              <button
-                onClick={() => setShowQrModal(false)}
-                className="absolute top-4 right-4 p-1.5 rounded-full bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition-all"
-                title="Close"
-              >
-                <X className="w-4 h-4" />
-              </button>
-
-              <div className="w-11 h-11 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-indigo-400 mb-3 shadow-lg shadow-indigo-500/20">
-                <QrCode className="w-6 h-6" />
+              {/* Header Action Controls */}
+              <div className="absolute top-4 right-4 flex items-center gap-2">
+                <button
+                  onClick={() => setIsQrFullscreen(prev => !prev)}
+                  className="p-2 rounded-xl bg-slate-800/90 text-slate-300 hover:text-white hover:bg-slate-700 transition-all cursor-pointer border border-slate-700/60"
+                  title={isQrFullscreen ? "Exit Projector Mode" : "Expand to Fullscreen Projector Mode"}
+                >
+                  {isQrFullscreen ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
+                </button>
+                <button
+                  onClick={() => {
+                    setShowQrModal(false);
+                    setIsQrFullscreen(false);
+                  }}
+                  className="p-2 rounded-xl bg-slate-800/90 text-slate-300 hover:text-white hover:bg-slate-700 transition-all cursor-pointer border border-slate-700/60"
+                  title="Close"
+                >
+                  <X className="w-5 h-5" />
+                </button>
               </div>
 
-              <h3 className="text-base sm:text-lg font-bold text-white">Student Selfie Attendance QR</h3>
-              <p className="text-xs text-slate-400 mt-1 max-w-xs">
-                Students sitting in the back or out of camera view can scan this QR with their mobile to self-verify.
-              </p>
+              {/* Title & Header */}
+              <div className="flex flex-col items-center max-w-lg mt-1">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center text-white mb-3 shadow-lg shadow-indigo-500/25">
+                  <QrCode className="w-6 h-6" />
+                </div>
 
-              {/* Class Pill */}
-              <div className="mt-3 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-xs text-indigo-300 font-medium">
-                📚 {activeSession.class_name}
+                <h3 className={`${isQrFullscreen ? 'text-2xl sm:text-3xl' : 'text-xl sm:text-2xl'} font-extrabold text-white tracking-tight`}>
+                  Student Selfie Attendance QR
+                </h3>
+                <p className={`${isQrFullscreen ? 'text-sm sm:text-base' : 'text-xs sm:text-sm'} text-slate-400 mt-1.5 leading-relaxed`}>
+                  Students sitting in back rows or outside camera angle can scan this QR code with their mobile phone.
+                </p>
+
+                {/* Class & Location Pill */}
+                <div className="mt-3 px-4 py-1.5 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-xs sm:text-sm text-indigo-300 font-semibold flex items-center gap-2 shadow-inner flex-wrap justify-center">
+                  <span>📚 {activeSession.class_name}</span>
+                  <span className="text-slate-500">•</span>
+                  <span className="text-slate-300">{setupData.hall === "custom" ? (customHallName || "Classroom") : setupData.hall}</span>
+                  <span className="text-slate-500">•</span>
+                  <span className="text-slate-400">{activeSession.instructor_name || "Faculty"}</span>
+                </div>
               </div>
 
-              {/* QR Code Container */}
+              {/* Large High-Contrast QR Code */}
               {(() => {
                 const qrTarget = typeof window !== "undefined" && window.location.hostname && !window.location.hostname.includes("localhost") && !window.location.hostname.includes("127.0.0.1")
                   ? `${window.location.origin}/selfieattend?session_id=${activeSession.id}`
                   : `https://attendance-cd0ishn9x-jims-hospital.vercel.app/selfieattend?session_id=${activeSession.id}`;
                 
+                const qrSize = isQrFullscreen ? 460 : 340;
+
                 return (
-                  <>
-                    <div className="my-5 p-4 bg-white rounded-2xl shadow-2xl border-4 border-indigo-500/20 flex items-center justify-center">
+                  <div className="flex flex-col items-center my-4 sm:my-6 w-full max-w-lg">
+                    <div className={`p-5 sm:p-7 bg-white rounded-3xl shadow-[0_0_60px_rgba(99,102,241,0.25)] border-4 border-indigo-500/30 flex items-center justify-center transition-all ${
+                      isQrFullscreen ? 'scale-105 sm:scale-110' : ''
+                    }`}>
                       <QRCodeSVG
                         value={qrTarget}
-                        size={200}
+                        size={qrSize}
                         level="H"
-                        includeMargin={true}
+                        includeMargin={false}
+                        className="w-full h-auto max-w-[280px] sm:max-w-[360px] md:max-w-[440px]"
                       />
                     </div>
 
-                    {/* Link Box & Copy */}
-                    <div className="w-full flex items-center gap-2 bg-slate-950 border border-slate-800 rounded-xl p-2 text-xs">
-                      <span className="font-mono text-slate-400 truncate flex-1 text-left px-2">
+                    {/* Direct Link Box & Copy */}
+                    <div className="w-full mt-5 flex items-center gap-2 bg-slate-950/90 border border-slate-800 rounded-2xl p-2.5 text-xs shadow-inner">
+                      <span className="font-mono text-slate-300 truncate flex-1 text-left px-2 select-all text-xs sm:text-sm">
                         {qrTarget}
                       </span>
                       <button
@@ -1305,25 +1340,29 @@ export default function LiveScan() {
                             setTimeout(() => setCopiedLink(false), 2000);
                           }
                         }}
-                        className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs flex items-center gap-1 shrink-0 transition-all cursor-pointer shadow"
+                        className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs flex items-center gap-1.5 shrink-0 transition-all cursor-pointer shadow-md shadow-indigo-600/20 active:scale-95"
                       >
-                        {copiedLink ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                        <span>{copiedLink ? "Copied!" : "Copy"}</span>
+                        {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                        <span>{copiedLink ? "Copied!" : "Copy Link"}</span>
                       </button>
                     </div>
-                  </>
+                  </div>
                 );
               })()}
 
-              <div className="mt-4 flex items-center justify-between w-full text-[11px] text-slate-500 pt-3 border-t border-slate-800/80">
-                <span>Project on hall screen for 100% attendance</span>
+              {/* Modal Footer Controls & Tips */}
+              <div className="flex flex-wrap items-center justify-between w-full max-w-xl text-xs text-slate-400 pt-3 border-t border-slate-800/80 gap-2">
+                <span className="flex items-center gap-1.5 text-slate-300">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  Project on big screen • Scannable from across the lecture hall
+                </span>
                 <a 
                   href={`/selfieattend?session_id=${activeSession.id}`} 
                   target="_blank" 
                   rel="noreferrer"
-                  className="text-indigo-400 hover:text-indigo-300 flex items-center gap-1 font-medium"
+                  className="text-indigo-400 hover:text-indigo-300 font-semibold flex items-center gap-1 transition-colors text-xs"
                 >
-                  Open Portal <ExternalLink className="w-3 h-3" />
+                  Open in New Tab <ExternalLink className="w-3.5 h-3.5" />
                 </a>
               </div>
             </div>
