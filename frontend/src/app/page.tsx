@@ -1,5 +1,5 @@
 /* eslint-disable */
-import { Users, UserCheck, UserMinus, Activity, CalendarDays, TrendingUp } from "lucide-react";
+import { Users, UserCheck, CalendarCheck, Activity, CalendarDays, TrendingUp } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import DownloadReportButton from "@/components/DownloadReportButton";
 import { AttendanceChart } from "@/components/AttendanceChart";
@@ -12,15 +12,16 @@ export default async function Dashboard() {
     .from('students')
     .select('*', { count: 'exact', head: true });
 
-  // Get today's date in YYYY-MM-DD
-  const today = new Date().toISOString().split('T')[0];
+  // Get start of today in local date
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
 
-  // Fetch Absent Today
-  const { count: absentToday } = await supabase
+  // Fetch Today's Total Attendances (All students present across all classes today)
+  const { count: todayTotalPresent } = await supabase
     .from('attendance')
     .select('*', { count: 'exact', head: true })
-    .eq('status', 'Absent')
-    .gte('recorded_at', `${today}T00:00:00Z`);
+    .eq('status', 'Present')
+    .gte('recorded_at', startOfToday);
 
   // Fetch Recent Sessions
   const { data: recentSessions } = await supabase
@@ -78,7 +79,7 @@ export default async function Dashboard() {
   const stats = [
     { name: "Total Students", stat: totalStudents?.toString() || "0", icon: Users, color: "text-blue-600 dark:text-blue-400", bg: "bg-blue-100 dark:bg-blue-900/30" },
     { name: "Present Last Class", stat: lastClassPresent.toString(), icon: UserCheck, color: "text-green-600 dark:text-green-400", bg: "bg-green-100 dark:bg-green-900/30" },
-    { name: "Absent Today", stat: absentToday?.toString() || "0", icon: UserMinus, color: "text-red-600 dark:text-red-400", bg: "bg-red-100 dark:bg-red-900/30" },
+    { name: "Today's Total", stat: (todayTotalPresent || 0).toString(), icon: CalendarCheck, color: "text-violet-600 dark:text-violet-400", bg: "bg-violet-100 dark:bg-violet-900/30" },
     { name: "Weekly Attendance Rate", stat: `${attendanceRate}%`, icon: TrendingUp, color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-100 dark:bg-emerald-900/30" },
   ];
 
