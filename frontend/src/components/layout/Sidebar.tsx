@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, ScanLine, Users, FileBarChart, Activity, Menu, X, Smartphone, LogOut } from "lucide-react";
+import { LayoutDashboard, ScanLine, Users, FileBarChart, Activity, Menu, X, Smartphone, LogOut, Sun, Moon } from "lucide-react";
 import { SystemHealth } from "@/components/SystemHealth";
 import { useAuth } from "@/lib/auth";
+import { useTheme } from "next-themes";
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
@@ -22,8 +23,14 @@ function classNames(...classes: string[]) {
 export default function Sidebar() {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const { user, logout } = useAuth();
+  const { theme, setTheme } = useTheme();
   const isStudentPortal = pathname?.startsWith("/selfieattend") || pathname?.startsWith("/self-attendance");
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   return (
     <>
@@ -36,13 +43,24 @@ export default function Sidebar() {
               MedAttend
             </span>
           </div>
-          <button
-            onClick={() => setIsOpen(!isOpen)}
-            className="p-2 -mr-2 rounded-xl text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 focus:outline-none transition-all"
-          >
-            <span className="sr-only">Open sidebar</span>
-            <Menu className="h-6 w-6" aria-hidden="true" />
-          </button>
+          <div className="flex items-center gap-2">
+            {mounted && (
+              <button
+                onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+                className="p-2 rounded-xl text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 transition-all"
+                title="Toggle Theme"
+              >
+                {theme === "dark" ? <Sun className="h-5 w-5 text-amber-400" /> : <Moon className="h-5 w-5 text-indigo-600" />}
+              </button>
+            )}
+            <button
+              onClick={() => setIsOpen(!isOpen)}
+              className="p-2 -mr-2 rounded-xl text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 focus:outline-none transition-all"
+            >
+              <span className="sr-only">Open sidebar</span>
+              <Menu className="h-6 w-6" aria-hidden="true" />
+            </button>
+          </div>
         </div>
       )}
 
@@ -104,9 +122,45 @@ export default function Sidebar() {
           })}
         </nav>
       </div>
-      <div className="flex flex-col shrink-0 border-t border-gray-200 dark:border-gray-800 p-4 gap-4">
+      <div className="flex flex-col shrink-0 border-t border-gray-200 dark:border-gray-800 p-4 gap-3">
+        {/* Theme Toggle Pill */}
+        <div className="flex items-center justify-between bg-gray-100/80 dark:bg-gray-800/80 p-1 rounded-xl border border-gray-200 dark:border-gray-700/60">
+          <span className="text-xs font-semibold text-gray-600 dark:text-gray-300 pl-2">Theme</span>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setTheme("light")}
+              className={classNames(
+                "px-2.5 py-1 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer",
+                mounted && theme === "light"
+                  ? "bg-white text-indigo-600 shadow-sm font-semibold ring-1 ring-black/5"
+                  : "text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
+              )}
+              title="Light Mode"
+            >
+              <Sun className="w-3.5 h-3.5 text-amber-500" />
+              <span>Light</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setTheme("dark")}
+              className={classNames(
+                "px-2.5 py-1 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer",
+                mounted && theme === "dark"
+                  ? "bg-gray-900 text-indigo-400 shadow-sm font-semibold ring-1 ring-white/10"
+                  : "text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
+              )}
+              title="Dark Mode"
+            >
+              <Moon className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Dark</span>
+            </button>
+          </div>
+        </div>
+
         <SystemHealth />
-        <div className="flex items-center justify-between">
+
+        <div className="flex items-center justify-between pt-1">
           <div className="flex items-center min-w-0">
             <div className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-indigo-100 dark:bg-indigo-900/50 border border-indigo-500/20">
               <span className="text-xs font-bold leading-none text-indigo-700 dark:text-indigo-300 tracking-wider">

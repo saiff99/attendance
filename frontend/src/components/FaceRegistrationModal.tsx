@@ -153,15 +153,15 @@ export function FaceRegistrationModal({ isOpen, onClose, studentId, studentName,
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-gray-900 rounded-3xl w-full max-w-md overflow-hidden border border-gray-800 shadow-2xl relative">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 dark:bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="bg-white dark:bg-gray-900 rounded-3xl w-full max-w-md overflow-hidden border border-gray-200 dark:border-gray-800 shadow-2xl relative transition-colors duration-300">
         
         {/* Header */}
         <div className="flex items-center justify-between p-6 pb-2 border-b border-transparent">
-          <h2 className="text-xl font-bold text-white">Face ID Setup</h2>
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white">Face ID Setup</h2>
           <button 
             onClick={onClose}
-            className="text-gray-400 hover:text-white transition-colors bg-gray-800 hover:bg-gray-700 p-2 rounded-full"
+            className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 p-2 rounded-full cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -171,8 +171,8 @@ export function FaceRegistrationModal({ isOpen, onClose, studentId, studentName,
         <div className="p-6 flex flex-col items-center">
           
           <div className="text-center mb-8">
-            <p className="text-gray-400 text-sm">
-              Registering 3D facial profile for <span className="text-white font-semibold">{studentName}</span>
+            <p className="text-gray-500 dark:text-gray-400 text-sm">
+              Registering 3D facial profile for <span className="text-gray-900 dark:text-white font-semibold">{studentName}</span>
             </p>
           </div>
 
@@ -288,10 +288,10 @@ export function FaceRegistrationModal({ isOpen, onClose, studentId, studentName,
           <div className="h-20 flex items-center justify-center text-center w-full">
             {status === 'idle' && (
               <div className="flex flex-col items-center space-y-4 w-full">
-                <p className="text-gray-300 font-medium">Position your face in the frame.</p>
+                <p className="text-gray-600 dark:text-gray-300 font-medium text-sm">Position student face within the circle frame.</p>
                 <button 
                   onClick={startScanning}
-                  className="w-full max-w-[200px] py-3 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold transition-colors flex items-center justify-center"
+                  className="w-full max-w-[200px] py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold transition-colors flex items-center justify-center cursor-pointer shadow-md shadow-indigo-600/20"
                 >
                   <Camera className="w-5 h-5 mr-2" />
                   Get Started
@@ -301,33 +301,33 @@ export function FaceRegistrationModal({ isOpen, onClose, studentId, studentName,
 
             {status === 'scanning' && (
               <div className="flex flex-col items-center">
-                <p className="text-xl font-medium text-white mb-1">
+                <p className="text-xl font-bold text-gray-900 dark:text-white mb-1">
                   {INSTRUCTIONS[instructionIndex]}
                 </p>
               </div>
             )}
 
             {status === 'processing' && (
-              <p className="text-gray-400 font-medium">
+              <p className="text-gray-500 dark:text-gray-400 font-medium">
                 Building 3D composite profile...
               </p>
             )}
 
             {status === 'success' && (
-              <p className="text-emerald-400 font-medium text-lg">
+              <p className="text-emerald-600 dark:text-emerald-400 font-semibold text-lg">
                 Face ID is Now Set Up
               </p>
             )}
 
             {status === 'error' && (
               <div className="flex flex-col items-center w-full">
-                <div className="flex items-center text-red-400 mb-4">
+                <div className="flex items-center text-red-500 mb-4">
                   <AlertCircle className="w-5 h-5 mr-2" />
                   <p className="text-sm font-medium">{errorMessage}</p>
                 </div>
                 <button 
                   onClick={() => setStatus('idle')}
-                  className="px-6 py-2 rounded-full bg-gray-800 hover:bg-gray-700 text-white font-medium transition-colors text-sm"
+                  className="px-6 py-2 rounded-xl bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-800 dark:text-white font-medium transition-colors text-sm cursor-pointer"
                 >
                   Try Again
                 </button>
