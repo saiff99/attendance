@@ -466,8 +466,49 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
     }
   }, [webcamRef]);
 
-  // Convert dataURL to Blob synchronously
-  const dataURLtoBlob = (dataurl: string): Blob => {
+  // Resize and compress base64 data URL to optimized Blob (Crisp 960px @ 0.88 quality, ~60-80KB)
+  const compressImage = async (dataurl: string, maxWidth = 960, maxHeight = 960, quality = 0.88): Promise<Blob> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
+        if (width > height) {
+          if (width > maxWidth) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          }
+        } else {
+          if (height > maxHeight) {
+            width = Math.round((width * maxHeight) / height);
+            height = maxHeight;
+          }
+        }
+
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+        }
+
+        canvas.toBlob((blob) => {
+          if (blob) {
+            resolve(blob);
+          } else {
+            resolve(fallbackDataURLtoBlob(dataurl));
+          }
+        }, "image/jpeg", quality);
+      };
+      img.onerror = () => {
+        resolve(fallbackDataURLtoBlob(dataurl));
+      };
+      img.src = dataurl;
+    });
+  };
+
+  const fallbackDataURLtoBlob = (dataurl: string): Blob => {
     const arr = dataurl.split(',');
     const mimeMatch = arr[0].match(/:(.*?);/);
     const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg';
@@ -496,10 +537,11 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
     setSubmittingAttendance(true);
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 20000);
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
 
     try {
-      const blob = dataURLtoBlob(capturedImage);
+      // Compress the image so mobile 4G upload takes <100ms and never exceeds Vercel limits
+      const blob = await compressImage(capturedImage);
 
       const formData = new FormData();
       formData.append("file", blob, "selfie.jpg");
@@ -522,7 +564,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
         signal: controller.signal,
       }).catch(() => null);
 
-      if (!response || !response.ok) {
+      if (!response) {
         response = await fetch(`${backendUrl}/api/selfie-attendance`, {
           method: "POST",
           headers: {
@@ -535,7 +577,12 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
 
       clearTimeout(timeoutId);
 
-      const data = await response.json();
+      let data: any = {};
+      try {
+        data = await response.json();
+      } catch {
+        data = { detail: `Server response code: ${response.status}` };
+      }
 
       if (!response.ok) {
         throw new Error(data.detail || "Face verification failed.");
@@ -1112,6 +1159,8 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                             audio={false}
                             ref={webcamRef}
                             screenshotFormat="image/jpeg"
+                            screenshotQuality={0.88}
+                            minScreenshotWidth={640}
                             videoConstraints={{
                               facingMode: facingMode,
                               width: { ideal: 1280 },

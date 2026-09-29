@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { fetchBackend } from '@/lib/serverBackend';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
 
 export async function POST(request: Request) {
   try {
@@ -12,12 +13,20 @@ export async function POST(request: Request) {
       body: formData,
     });
 
-    let data;
+    let data: any;
     try {
       data = await res.json();
     } catch {
       const text = await res.text().catch(() => '');
-      data = { detail: text || `Upstream returned status ${res.status}` };
+      let fallbackDetail = text;
+      if (!fallbackDetail || fallbackDetail.includes('<html')) {
+        if (res.status === 503 || res.status === 502) {
+          fallbackDetail = "Face verification AI server is temporarily busy or reconnecting. Please tap 'Try Selfie Again'.";
+        } else {
+          fallbackDetail = `Server returned status ${res.status}`;
+        }
+      }
+      data = { detail: fallbackDetail };
     }
     return NextResponse.json(data, { status: res.status });
   } catch (err: any) {
@@ -28,4 +37,5 @@ export async function POST(request: Request) {
     );
   }
 }
+
 
