@@ -3,5 +3,8 @@
   "python.analysis.extraPaths": [
     "/Users/saif/Desktop/Attendance/Attendance-app/backend/.venv/lib/python3.9/site-packages",
     "/Users/saif/Desktop/Attendance/Attendance-app/backend"
-  ]
+  ],
+  "css.lint.unknownAtRules": "ignore",
+  "scss.lint.unknownAtRules": "ignore",
+  "less.lint.unknownAtRules": "ignore"
 }
