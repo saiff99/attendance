@@ -17,7 +17,9 @@ import {
   DEFAULT_GEOFENCE_CONFIG, 
   calculateDistanceMeters, 
   formatDistance, 
-  getUserCoordinates 
+  getUserCoordinates,
+  decodeSessionMetadata,
+  getLocalGeofence
 } from "@/lib/geofence";
 
 export interface ActiveSession {
@@ -110,7 +112,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
   } | null>(null);
 
   // GPS Geofence States
-  const [geofenceConfig, setGeofenceConfig] = useState<CampusGeofenceConfig>(DEFAULT_GEOFENCE_CONFIG);
+  const [geofenceConfig, setGeofenceConfig] = useState<CampusGeofenceConfig>(() => getLocalGeofence());
   const [userCoords, setUserCoords] = useState<{ latitude: number; longitude: number } | null>(null);
   const [geofenceStatus, setGeofenceStatus] = useState<"idle" | "checking" | "allowed" | "blocked" | "permission_error">("idle");
   const [geofenceDistance, setGeofenceDistance] = useState<number | null>(null);
@@ -118,10 +120,12 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
 
   const backendUrl = getBackendUrl();
 
-  // Load Geofence Configuration from API
+  // Load Geofence Configuration from API / localStorage
   useEffect(() => {
     const loadGeofence = async () => {
       try {
+        const local = getLocalGeofence();
+        if (local) setGeofenceConfig(local);
         const res = await fetch("/api/geofence");
         if (res.ok) {
           const data = await res.json();
@@ -136,10 +140,34 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
     loadGeofence();
   }, []);
 
+  // Determine effective geofence from selected lecture session (if session carried GPS metadata) or global config
+  const effectiveGeofence = useMemo<CampusGeofenceConfig>(() => {
+    if (selectedSession?.instructor_name) {
+      const decoded = decodeSessionMetadata(selectedSession.instructor_name);
+      if (decoded.geofence) {
+        return decoded.geofence;
+      }
+    }
+    return geofenceConfig;
+  }, [selectedSession, geofenceConfig]);
+
+  // When selected session changes, reset or auto-allow if geofence is disabled for this session
+  useEffect(() => {
+    if (!effectiveGeofence.enabled) {
+      setGeofenceStatus("allowed");
+      setGeofenceErrorMessage(null);
+    } else {
+      setGeofenceStatus("idle");
+      setGeofenceDistance(null);
+      setGeofenceErrorMessage(null);
+    }
+  }, [effectiveGeofence]);
+
   // Verify User GPS Location against Geofence boundary
   const verifyUserLocation = useCallback(async (): Promise<boolean> => {
-    if (!geofenceConfig.enabled) {
+    if (!effectiveGeofence.enabled) {
       setGeofenceStatus("allowed");
+      setGeofenceErrorMessage(null);
       return true;
     }
 
@@ -153,19 +181,19 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
       const dist = calculateDistanceMeters(
         coords.latitude,
         coords.longitude,
-        geofenceConfig.latitude,
-        geofenceConfig.longitude
+        effectiveGeofence.latitude,
+        effectiveGeofence.longitude
       );
       setGeofenceDistance(dist);
 
-      if (dist <= geofenceConfig.radiusMeters) {
+      if (dist <= effectiveGeofence.radiusMeters) {
         setGeofenceStatus("allowed");
         setGeofenceErrorMessage(null);
         return true;
       } else {
         setGeofenceStatus("blocked");
         setGeofenceErrorMessage(
-          `Location Boundary Rejection: You are ${formatDistance(dist)} away from the classroom/campus (${geofenceConfig.campusName}). Allowed radius is ${geofenceConfig.radiusMeters}m. Attendance cannot be submitted from home or hostel.`
+          `Location Boundary Rejection: You are ${formatDistance(dist)} away from the classroom/campus (${effectiveGeofence.campusName}). Allowed radius is ${effectiveGeofence.radiusMeters}m. Attendance cannot be submitted from home or hostel.`
         );
         return false;
       }
@@ -176,7 +204,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
       );
       return false;
     }
-  }, [geofenceConfig]);
+  }, [effectiveGeofence]);
 
   // Helper: calculate remaining seconds for any session (5-minute / 300s window)
   const getSessionRemainingSeconds = useCallback((sess: ActiveSession) => {
@@ -664,7 +692,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                           </div>
                           
                           <div className="flex items-center gap-2.5 text-xs text-slate-400 flex-wrap">
-                            <span className="truncate">👨‍🏫 {sess.instructor_name || "Faculty"}</span>
+                            <span className="truncate">👨‍🏫 {decodeSessionMetadata(sess.instructor_name).topic || "Faculty"}</span>
                             {sess.target_academic_year && (
                               <span className="text-[11px] bg-slate-800/80 px-2 py-0.5 rounded text-indigo-300 font-medium">
                                 {sess.target_academic_year}
@@ -892,7 +920,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                     )}
 
                     {/* GPS Geofence Security Verification Status */}
-                    {geofenceConfig.enabled && !student.is_already_present && student.has_face_enrolled && (
+                    {effectiveGeofence.enabled && !student.is_already_present && student.has_face_enrolled && (
                       <div className={`p-3.5 rounded-xl border flex flex-col gap-2 transition-all ${
                         geofenceStatus === "allowed"
                           ? "bg-emerald-950/40 border-emerald-500/40 text-emerald-300 shadow-sm shadow-emerald-950/20"
@@ -934,14 +962,14 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
 
                         {geofenceStatus === "allowed" && (
                           <p className="text-[11px] text-emerald-200/90 leading-relaxed">
-                            ✅ Physical location verified! You are inside <strong>{geofenceConfig.campusName}</strong> ({geofenceDistance !== null ? `${formatDistance(geofenceDistance)} from center` : "within range"}).
+                            ✅ Physical location verified! You are inside <strong>{effectiveGeofence.campusName}</strong> ({geofenceDistance !== null ? `${formatDistance(geofenceDistance)} from center` : "within range"}).
                           </p>
                         )}
 
                         {geofenceStatus === "blocked" && (
                           <div className="space-y-1">
                             <p className="text-[11px] text-rose-200 leading-relaxed font-medium">
-                              ⛔ {geofenceErrorMessage || `You are outside the allowed ${geofenceConfig.radiusMeters}m classroom radius.`}
+                              ⛔ {geofenceErrorMessage || `You are outside the allowed ${effectiveGeofence.radiusMeters}m classroom radius.`}
                             </p>
                             <p className="text-[10px] text-rose-300/80">
                               Proxy attendance from home or hostel is prevented by GPS geofencing.
@@ -957,7 +985,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
 
                         {geofenceStatus === "idle" && (
                           <p className="text-[11px] text-slate-400">
-                            GPS check verifies you are within {geofenceConfig.radiusMeters}m of {geofenceConfig.campusName}.
+                            GPS check verifies you are within {effectiveGeofence.radiusMeters}m of {effectiveGeofence.campusName}.
                           </p>
                         )}
                       </div>
@@ -1022,7 +1050,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
               </button>
 
               <div className="flex items-center gap-2">
-                {geofenceConfig.enabled && geofenceStatus === "allowed" && (
+                {effectiveGeofence.enabled && geofenceStatus === "allowed" && (
                   <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
                     <MapPin className="w-3 h-3 text-emerald-400" />
                     <span>GPS In-Range</span>

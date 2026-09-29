@@ -2,15 +2,25 @@
 
 import { useState, useEffect } from "react";
 import { X, MapPin, ShieldCheck, ShieldAlert, Navigation, Loader2, Check, RefreshCw } from "lucide-react";
-import { CampusGeofenceConfig, DEFAULT_GEOFENCE_CONFIG, calculateDistanceMeters, formatDistance, getUserCoordinates } from "@/lib/geofence";
+import { 
+  CampusGeofenceConfig, 
+  DEFAULT_GEOFENCE_CONFIG, 
+  calculateDistanceMeters, 
+  formatDistance, 
+  getUserCoordinates,
+  getLocalGeofence,
+  saveLocalGeofence
+} from "@/lib/geofence";
+
 
 interface GeofenceModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onConfigSaved?: (config: CampusGeofenceConfig) => void;
 }
 
-export function GeofenceModal({ isOpen, onClose }: GeofenceModalProps) {
-  const [config, setConfig] = useState<CampusGeofenceConfig>(DEFAULT_GEOFENCE_CONFIG);
+export function GeofenceModal({ isOpen, onClose, onConfigSaved }: GeofenceModalProps) {
+  const [config, setConfig] = useState<CampusGeofenceConfig>(() => getLocalGeofence());
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [capturingGPS, setCapturingGPS] = useState(false);
@@ -22,6 +32,8 @@ export function GeofenceModal({ isOpen, onClose }: GeofenceModalProps) {
     if (isOpen) {
       setSavedSuccess(false);
       setGpsError(null);
+      const local = getLocalGeofence();
+      setConfig(local);
       fetchConfig();
     }
   }, [isOpen]);
@@ -34,6 +46,7 @@ export function GeofenceModal({ isOpen, onClose }: GeofenceModalProps) {
         const data = await res.json();
         if (data.config) {
           setConfig(data.config);
+          saveLocalGeofence(data.config);
         }
       }
     } catch (e) {
@@ -47,13 +60,15 @@ export function GeofenceModal({ isOpen, onClose }: GeofenceModalProps) {
     setCapturingGPS(true);
     setGpsError(null);
     try {
-      const coords = await getUserCoordinates();
+      const coords = await getUserCoordinates(12000);
       setCurrentGPS({ latitude: coords.latitude, longitude: coords.longitude });
-      setConfig(prev => ({
-        ...prev,
+      const updated = {
+        ...config,
         latitude: parseFloat(coords.latitude.toFixed(6)),
         longitude: parseFloat(coords.longitude.toFixed(6)),
-      }));
+      };
+      setConfig(updated);
+      saveLocalGeofence(updated);
     } catch (err: any) {
       setGpsError(err.message || "Failed to capture current location");
     } finally {
@@ -65,25 +80,28 @@ export function GeofenceModal({ isOpen, onClose }: GeofenceModalProps) {
     setSaving(true);
     setGpsError(null);
     try {
-      const res = await fetch("/api/geofence", {
+      saveLocalGeofence(config);
+      if (onConfigSaved) {
+        onConfigSaved(config);
+      }
+
+      await fetch("/api/geofence", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(config),
-      });
-      if (res.ok) {
-        setSavedSuccess(true);
-        setTimeout(() => {
-          onClose();
-        }, 1200);
-      } else {
-        throw new Error("Failed to save settings");
-      }
+      }).catch(() => null);
+
+      setSavedSuccess(true);
+      setTimeout(() => {
+        onClose();
+      }, 800);
     } catch (err: any) {
       setGpsError(err.message || "Failed to save geofence configuration");
     } finally {
       setSaving(false);
     }
   };
+
 
   if (!isOpen) return null;
 

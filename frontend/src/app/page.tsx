@@ -3,6 +3,8 @@ import { Users, UserCheck, CalendarCheck, Activity, CalendarDays, TrendingUp } f
 import { supabase } from "@/lib/supabase";
 import DownloadReportButton from "@/components/DownloadReportButton";
 import { AttendanceChart } from "@/components/AttendanceChart";
+import { decodeSessionMetadata } from "@/lib/geofence";
+
 
 export const revalidate = 0; // Dynamic rendering
 
@@ -155,7 +157,7 @@ export default async function Dashboard() {
                         {session.class_name}
                       </td>
                       <td className="px-4 sm:px-6 py-3.5 sm:py-4 whitespace-nowrap text-xs sm:text-sm text-gray-500 dark:text-gray-400">
-                        {session.instructor_name}
+                        {decodeSessionMetadata(session.instructor_name).topic}
                       </td>
                       <td className="px-4 sm:px-6 py-3.5 sm:py-4 whitespace-nowrap text-xs sm:text-sm text-gray-500 dark:text-gray-400">
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${attendanceCount > 0 ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300'}`}>

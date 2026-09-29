@@ -96,3 +96,69 @@ export function getUserCoordinates(
     );
   });
 }
+
+/**
+ * Encodes GPS Geofence config inside session topic/instructor string for seamless cloud sync
+ */
+export function encodeSessionMetadata(topic: string, geofence?: CampusGeofenceConfig | null): string {
+  if (!geofence) return topic;
+  const tag = `[GPS:${geofence.latitude.toFixed(6)},${geofence.longitude.toFixed(6)},${geofence.radiusMeters},${geofence.enabled ? 1 : 0},${encodeURIComponent(geofence.campusName || "Campus")}]`;
+  return `${topic.trim()} ${tag}`.trim();
+}
+
+/**
+ * Decodes GPS Geofence config from session topic/instructor string
+ */
+export function decodeSessionMetadata(rawTopicOrInstructor: string): { topic: string; geofence: CampusGeofenceConfig | null } {
+  if (!rawTopicOrInstructor) return { topic: "", geofence: null };
+  const match = rawTopicOrInstructor.match(/\[GPS:([-\d.]+),([-\d.]+),(\d+),([01])(?:,([^\]]*))?\]/);
+  if (!match) {
+    return { topic: rawTopicOrInstructor.trim(), geofence: null };
+  }
+  const cleanTopic = rawTopicOrInstructor.replace(match[0], "").trim();
+  let campusName = "College Campus / Lecture Hall";
+  if (match[5]) {
+    try {
+      campusName = decodeURIComponent(match[5]);
+    } catch (e) {
+      campusName = match[5];
+    }
+  }
+  return {
+    topic: cleanTopic || "General Lecture",
+    geofence: {
+      latitude: parseFloat(match[1]),
+      longitude: parseFloat(match[2]),
+      radiusMeters: parseInt(match[3], 10),
+      enabled: match[4] === "1",
+      campusName,
+    },
+  };
+}
+
+/**
+ * Save geofence to localStorage
+ */
+export function saveLocalGeofence(config: CampusGeofenceConfig): void {
+  if (typeof window !== "undefined") {
+    try {
+      localStorage.setItem("campus_geofence_config", JSON.stringify(config));
+    } catch (e) {}
+  }
+}
+
+/**
+ * Read geofence from localStorage with fallback
+ */
+export function getLocalGeofence(): CampusGeofenceConfig {
+  if (typeof window !== "undefined") {
+    try {
+      const stored = localStorage.getItem("campus_geofence_config");
+      if (stored) {
+        return JSON.parse(stored);
+      }
+    } catch (e) {}
+  }
+  return DEFAULT_GEOFENCE_CONFIG;
+}
+

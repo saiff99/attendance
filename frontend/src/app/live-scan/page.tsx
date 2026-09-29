@@ -8,7 +8,7 @@ import {
   ChevronUp, ChevronDown, ChevronLeft, ChevronRight, ZoomIn, ZoomOut,
   Grid, Maximize2, Minimize2, Eye, ShieldCheck, RefreshCw, X, Search,
   Clock, Sparkles, ChevronLeft as PrevIcon, ChevronRight as NextIcon,
-  QrCode, Copy, Check, ExternalLink, Smartphone
+  QrCode, Copy, Check, ExternalLink, Smartphone, Navigation
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { supabase } from "@/lib/supabase";
@@ -16,6 +16,17 @@ import { getBackendUrl } from "@/lib/api";
 import Webcam from "react-webcam";
 import { MjpegPlayer } from "@/components/MjpegPlayer";
 import { GeofenceModal } from "@/components/GeofenceModal";
+import { 
+  CampusGeofenceConfig, 
+  DEFAULT_GEOFENCE_CONFIG, 
+  encodeSessionMetadata, 
+  decodeSessionMetadata, 
+  getLocalGeofence, 
+  saveLocalGeofence, 
+  getUserCoordinates, 
+  formatDistance 
+} from "@/lib/geofence";
+
 
 interface CameraMeta {
   index: number;
@@ -68,9 +79,12 @@ export default function LiveScan() {
   const [showQrModal, setShowQrModal] = useState(false);
   const [isQrFullscreen, setIsQrFullscreen] = useState(false);
   const [showGeofenceModal, setShowGeofenceModal] = useState(false);
+  const [sessionGeofence, setSessionGeofence] = useState<CampusGeofenceConfig>(() => getLocalGeofence());
+  const [capturingSessionGPS, setCapturingSessionGPS] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [ptzCameraCount, setPtzCameraCount] = useState(1);
   const [selectedPtzIndex, setSelectedPtzIndex] = useState(0);
+
 
   // Webcam State
   const webcamRef = useRef<Webcam>(null);
@@ -268,7 +282,7 @@ export default function LiveScan() {
         date: today,
         start_time: new Date().toISOString(),
         end_time: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
-        instructor_name: setupData.topic,
+        instructor_name: encodeSessionMetadata(setupData.topic, sessionGeofence),
         target_academic_year: setupData.academic_year
       };
       
@@ -477,23 +491,82 @@ export default function LiveScan() {
             </div>
             
             {/* GPS Geofence Security Card */}
-            <div className="flex items-center justify-between p-3 rounded-xl bg-gray-50 dark:bg-slate-950/70 border border-gray-200 dark:border-slate-800">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                  <MapPin className="w-4 h-4" />
+            <div className="p-3.5 rounded-xl bg-gray-50 dark:bg-slate-950/70 border border-gray-200 dark:border-slate-800 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className={`p-2 rounded-lg ${sessionGeofence.enabled ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' : 'bg-gray-100 dark:bg-slate-800 text-gray-500 dark:text-slate-400'}`}>
+                    <MapPin className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <p className="text-xs font-bold text-gray-900 dark:text-white">Classroom GPS Shield</p>
+                      {sessionGeofence.enabled ? (
+                        <span className="text-[10px] bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 rounded-full font-semibold border border-emerald-300 dark:border-emerald-500/30">Active ({sessionGeofence.radiusMeters}m)</span>
+                      ) : (
+                        <span className="text-[10px] bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400 px-2 py-0.5 rounded-full font-semibold border border-amber-300 dark:border-amber-500/30">Disabled (Open Everywhere)</span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-gray-500 dark:text-slate-400 mt-0.5">
+                      {sessionGeofence.enabled 
+                        ? `Restricts selfie attendance to ${sessionGeofence.radiusMeters}m of this room.`
+                        : "Students can submit selfie attendance without GPS distance restriction."}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-xs font-semibold text-gray-900 dark:text-white">GPS Geofence Shield</p>
-                  <p className="text-[11px] text-gray-500 dark:text-slate-400">Restricts mobile attendance to classroom/campus</p>
-                </div>
+
+                <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                  <input
+                    type="checkbox"
+                    checked={sessionGeofence.enabled}
+                    onChange={(e) => {
+                      const updated = { ...sessionGeofence, enabled: e.target.checked };
+                      setSessionGeofence(updated);
+                      saveLocalGeofence(updated);
+                    }}
+                    className="sr-only peer"
+                  />
+                  <div className="w-9 h-5 bg-gray-300 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+                </label>
               </div>
-              <button
-                type="button"
-                onClick={() => setShowGeofenceModal(true)}
-                className="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-700 dark:text-slate-200 text-xs font-semibold border border-gray-300 dark:border-slate-700/80 transition-all cursor-pointer shadow-sm"
-              >
-                Configure GPS
-              </button>
+
+              {sessionGeofence.enabled && (
+                <div className="flex items-center justify-between pt-1.5 border-t border-gray-200/60 dark:border-slate-800/80">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setCapturingSessionGPS(true);
+                      try {
+                        const coords = await getUserCoordinates(12000);
+                        const updated = {
+                          ...sessionGeofence,
+                          latitude: parseFloat(coords.latitude.toFixed(6)),
+                          longitude: parseFloat(coords.longitude.toFixed(6)),
+                        };
+                        setSessionGeofence(updated);
+                        saveLocalGeofence(updated);
+                        alert(`Classroom GPS set to current location!\nLat: ${updated.latitude}, Lon: ${updated.longitude}`);
+                      } catch (err: any) {
+                        alert(err.message || "Failed to capture current location");
+                      } finally {
+                        setCapturingSessionGPS(false);
+                      }
+                    }}
+                    disabled={capturingSessionGPS}
+                    className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    {capturingSessionGPS ? <Loader2 className="w-3 h-3 animate-spin" /> : <Navigation className="w-3 h-3" />}
+                    <span>Set Classroom GPS to Current Location</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowGeofenceModal(true)}
+                    className="text-[11px] font-semibold text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
+                  >
+                    Customize Radius
+                  </button>
+                </div>
+              )}
             </div>
             
             <div className="pt-3 sm:pt-4">
@@ -513,7 +586,11 @@ export default function LiveScan() {
         </div>
 
         {/* GPS Geofence Modal */}
-        <GeofenceModal isOpen={showGeofenceModal} onClose={() => setShowGeofenceModal(false)} />
+        <GeofenceModal 
+          isOpen={showGeofenceModal} 
+          onClose={() => setShowGeofenceModal(false)} 
+          onConfigSaved={(cfg) => setSessionGeofence(cfg)} 
+        />
       </div>
     );
   }
@@ -552,7 +629,7 @@ export default function LiveScan() {
                 </span>
               </div>
               <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-[11px] sm:text-xs text-gray-500 dark:text-slate-400 mt-0.5">
-                <span className="flex items-center"><Users className="w-3.5 h-3.5 mr-1 text-gray-400 dark:text-slate-500 shrink-0" /> {activeSession.instructor_name}</span>
+                <span className="flex items-center"><Users className="w-3.5 h-3.5 mr-1 text-gray-400 dark:text-slate-500 shrink-0" /> {decodeSessionMetadata(activeSession.instructor_name).topic}</span>
                 <span className="flex items-center"><MapPin className="w-3.5 h-3.5 mr-1 text-gray-400 dark:text-slate-500 shrink-0" /> {setupData.hall === "custom" ? (customHallName || "Custom Hall") : setupData.hall}</span>
                 <span className="text-indigo-600 dark:text-indigo-400 font-medium">Cohort: {activeSession.target_academic_year || "All"}</span>
               </div>
@@ -1301,7 +1378,7 @@ export default function LiveScan() {
                   <span className="text-gray-400 dark:text-slate-500">•</span>
                   <span className="text-gray-700 dark:text-slate-300">{setupData.hall === "custom" ? (customHallName || "Classroom") : setupData.hall}</span>
                   <span className="text-gray-400 dark:text-slate-500">•</span>
-                  <span className="text-gray-600 dark:text-slate-400">{activeSession.instructor_name || "Faculty"}</span>
+                  <span className="text-gray-600 dark:text-slate-400">{decodeSessionMetadata(activeSession.instructor_name).topic || "Faculty"}</span>
                 </div>
               </div>
 
