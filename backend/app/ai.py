@@ -8,12 +8,13 @@ try:
     # buffalo_sc provides ultra-fast (15ms) inference with MobileFaceNet 512D embeddings
     # det_thresh=0.20 enables high recall for small and distant faces in lecture halls
     app_fa = FaceAnalysis(name='buffalo_sc', allowed_modules=['detection', 'recognition'])
-    app_fa.prepare(ctx_id=-1, det_thresh=0.20, det_size=(1024, 1024))
+    app_fa.prepare(ctx_id=-1, det_thresh=0.15, det_size=(640, 640))
     AI_ENABLED = True
-    print("InsightFace AI Engine (buffalo_sc / MobileFaceNet 512D @ 1024x1024) Initialized successfully.")
+    print("InsightFace AI Engine (buffalo_sc / MobileFaceNet 512D @ 640x640) Initialized successfully.")
 except Exception as e:
     AI_ENABLED = False
     print("WARNING: insightface failed to initialize. AI disabled:", e)
+
 
 def calculate_confidence_score(sim: float) -> float:
     """

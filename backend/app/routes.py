@@ -32,18 +32,23 @@ async def enroll_face(student_id: str, file: UploadFile = File(...)):
     
     if AI_ENABLED and app_fa:
         try:
+            import cv2
             image = Image.open(io.BytesIO(contents)).convert('RGB')
-            # InsightFace expects BGR image
             image_np = np.array(image)
-            image_bgr = image_np[:, :, ::-1]
+            image_bgr = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
             
             faces = app_fa.get(image_bgr)
+            if not faces:
+                h, w = image_bgr.shape[:2]
+                if w != 640 or h != 640:
+                    resized = cv2.resize(image_bgr, (640, 640))
+                    faces = app_fa.get(resized)
             
             if len(faces) == 0:
-                raise HTTPException(status_code=400, detail="No faces found in the image.")
-            if len(faces) > 1:
-                raise HTTPException(status_code=400, detail="Multiple faces found. Please upload a picture of just this student.")
-                
+                raise HTTPException(status_code=400, detail="No faces found in the image. Please ensure your face is well-lit.")
+            
+            # Sort by bounding box area to get the primary face
+            faces.sort(key=lambda f: (f.bbox[2]-f.bbox[0])*(f.bbox[3]-f.bbox[1]), reverse=True)
             encoding = faces[0].embedding.tolist()
         except HTTPException:
             raise
@@ -73,24 +78,29 @@ async def enroll_face_burst(student_id: str, files: List[UploadFile] = File(...)
     
     if AI_ENABLED and app_fa:
         try:
+            import cv2
             for file in files:
                 contents = await file.read()
+                if not contents:
+                    continue
                 image = Image.open(io.BytesIO(contents)).convert('RGB')
                 image_np = np.array(image)
-                image_bgr = image_np[:, :, ::-1]
+                image_bgr = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
                 
                 faces = app_fa.get(image_bgr)
+                if not faces:
+                    h, w = image_bgr.shape[:2]
+                    if w != 640 or h != 640:
+                        resized = cv2.resize(image_bgr, (640, 640))
+                        faces = app_fa.get(resized)
                 
-                # Pick dominant face in the frame
-                v_faces = [f for f in faces if getattr(f, 'det_score', 1.0) >= 0.40]
-                if not v_faces and faces:
-                    v_faces = faces
-                if len(v_faces) >= 1:
-                    v_faces.sort(key=lambda f: (f.bbox[2]-f.bbox[0])*(f.bbox[3]-f.bbox[1]), reverse=True)
-                    valid_encodings.append(v_faces[0].embedding)
+                if faces:
+                    # Pick largest face in the frame
+                    faces.sort(key=lambda f: (f.bbox[2]-f.bbox[0])*(f.bbox[3]-f.bbox[1]), reverse=True)
+                    valid_encodings.append(faces[0].embedding)
             
             if not valid_encodings:
-                raise HTTPException(status_code=400, detail="Could not detect a clear face in any of the captured frames. Please try again.")
+                raise HTTPException(status_code=400, detail="Could not detect a clear face in any of the captured frames. Please ensure your face is well-lit and directly facing the camera.")
                 
             # Average the encodings for a highly robust 3D representation
             avg_encoding = np.mean(valid_encodings, axis=0)
@@ -122,6 +132,7 @@ async def enroll_face_burst(student_id: str, files: List[UploadFile] = File(...)
         "message": f"Face data enrolled successfully using {len(valid_encodings)} angles!", 
         "ai_used": AI_ENABLED
     }
+
 
 @router.post("/api/process-attendance")
 async def process_attendance(file: UploadFile = File(...), session_id: str = Form(...)):
@@ -155,9 +166,10 @@ async def process_attendance(file: UploadFile = File(...), session_id: str = For
 
     if AI_ENABLED and app_fa:
         try:
+            import cv2
             image = Image.open(io.BytesIO(contents)).convert('RGB')
             image_np = np.array(image)
-            image_bgr = image_np[:, :, ::-1] # RGB to BGR
+            image_bgr = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
             
             # Detect faces
             faces = app_fa.get(image_bgr)
@@ -488,17 +500,19 @@ async def selfie_attendance(
     # 3. AI Face Recognition Verification
     if AI_ENABLED and app_fa:
         try:
+            import cv2
             image = Image.open(io.BytesIO(contents)).convert('RGB')
             image_np = np.array(image)
-            image_bgr = image_np[:, :, ::-1]
+            image_bgr = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
             
             faces = app_fa.get(image_bgr)
+            if not faces:
+                h, w = image_bgr.shape[:2]
+                if w != 640 or h != 640:
+                    resized = cv2.resize(image_bgr, (640, 640))
+                    faces = app_fa.get(resized)
             
-            # Filter faces with detection confidence >= 0.40
-            valid_faces = [f for f in faces if getattr(f, 'det_score', 1.0) >= 0.40]
-            if not valid_faces and faces:
-                valid_faces = faces
-
+            valid_faces = faces
             if len(valid_faces) == 0:
                 raise HTTPException(status_code=400, detail="No clear face detected in the selfie. Please look directly into the camera in good lighting.")
             

@@ -90,8 +90,8 @@ export function FaceRegistrationModal({ isOpen, onClose, studentId, studentName,
     }
   }, [countdown, status]);
 
-  // Resize and compress base64 data URL to optimized Blob (< 50KB per frame)
-  const compressImage = async (dataurl: string, maxWidth = 640, maxHeight = 640, quality = 0.85): Promise<Blob> => {
+  // Resize and compress base64 data URL to optimized Blob (Crisp 960px @ 0.90 quality, ~60KB per frame)
+  const compressImage = async (dataurl: string, maxWidth = 960, maxHeight = 960, quality = 0.90): Promise<Blob> => {
     return new Promise((resolve) => {
       const img = new Image();
       img.onload = () => {
