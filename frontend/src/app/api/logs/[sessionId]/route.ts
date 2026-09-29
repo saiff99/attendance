@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { fetchBackend } from '@/lib/serverBackend';
 
 export const dynamic = 'force-dynamic';
 
@@ -8,10 +9,7 @@ export async function GET(
 ) {
   try {
     const { sessionId } = await params;
-    const res = await fetch(`http://127.0.0.1:8000/api/logs/${sessionId}`, {
-      headers: { 'ngrok-skip-browser-warning': '69420' },
-      cache: 'no-store',
-    });
+    const res = await fetchBackend(`/api/logs/${sessionId}`, { cache: 'no-store' });
     if (res.ok) {
       const data = await res.json();
       return NextResponse.json(data);

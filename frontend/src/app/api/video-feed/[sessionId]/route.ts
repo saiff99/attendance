@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { fetchBackend } from '@/lib/serverBackend';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,12 +13,8 @@ export async function GET(
     const cameraIndex = searchParams.get('camera_index') || '0';
     const grid = searchParams.get('grid') ?? '1';
 
-    const targetUrl = `http://127.0.0.1:8000/api/video-feed/${sessionId}?camera_index=${cameraIndex}&grid=${grid}`;
-
-    const res = await fetch(targetUrl, {
-      headers: { 'ngrok-skip-browser-warning': '69420' },
-      cache: 'no-store',
-    });
+    const path = `/api/video-feed/${sessionId}?camera_index=${cameraIndex}&grid=${grid}`;
+    const res = await fetchBackend(path, { cache: 'no-store' });
 
     if (!res.ok || !res.body) {
       return new Response('Camera stream unavailable', { status: 502 });
