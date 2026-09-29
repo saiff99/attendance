@@ -9,14 +9,15 @@ export function SystemHealth() {
     const checkHealth = async () => {
       const candidates: string[] = [
         "/api/health", // 1. Same-origin Next.js proxy (always works on Vercel and local)
+        "https://reader-thee-nevertheless-walked.trycloudflare.com/health", // 2. Cloudflare unlimited tunnel
       ];
       
-      // 2. Direct environment backend URL if available
+      // 3. Direct environment backend URL if available
       if (process.env.NEXT_PUBLIC_BACKEND_URL) {
         candidates.push(`${process.env.NEXT_PUBLIC_BACKEND_URL}/health`);
       }
       
-      // 3. Ngrok tunnel direct fallback
+      // 4. Ngrok tunnel direct fallback
       candidates.push("https://silly-unframed-extortion.ngrok-free.dev/health");
 
       // Filter duplicates
