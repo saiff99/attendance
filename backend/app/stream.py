@@ -10,7 +10,7 @@ from app.ai import app_fa, AI_ENABLED, calculate_confidence_score
 
 # High-Performance Zero-Latency FFmpeg RTSP Flags
 os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = (
-    "rtsp_transport;tcp|fflags;nobuffer|flags;low_delay|max_delay;500000|reorder_queue_size;0|timeout;5000000"
+    "rtsp_transport;tcp|fflags;nobuffer|flags;low_delay|max_delay;0|reorder_queue_size;0|buffer_size;1024|probesize;32768|analyzeduration;0"
 )
 
 # Global session-wide deduplication set: session_id -> set of student_ids
@@ -56,11 +56,11 @@ class ThreadedRTSPStream:
         self.source = int(url) if url.isdigit() else url
         self.cap: Optional[cv2.VideoCapture] = None
         
-        # Dual buffers: Low-res for instant grid display (960x540) & HD for AI (1280x720)
+        # Dual buffers: Low-res for instant grid display (640x360) & HD for AI (640x360)
         self.latest_display_frame: Optional[np.ndarray] = None
         self.latest_ai_frame: Optional[np.ndarray] = None
-        self.raw_w = 1280
-        self.raw_h = 720
+        self.raw_w = 640
+        self.raw_h = 360
         
         self.last_faces: List[dict] = []
         self.running = False
@@ -95,8 +95,15 @@ class ThreadedRTSPStream:
                     self.connected = True
                     consecutive_failures = 0
 
-                success, frame = self.cap.read()
-                if not success or frame is None:
+                # FAST HARDWARE FLUSH: Grab pending buffered packets to ensure zero backlog delay
+                grabbed = False
+                for _ in range(3):
+                    if self.cap.grab():
+                        grabbed = True
+                    else:
+                        break
+
+                if not grabbed:
                     consecutive_failures += 1
                     # Tolerate brief H.265 keyframe intervals before destroying stream
                     if consecutive_failures > 20:
@@ -107,7 +114,11 @@ class ThreadedRTSPStream:
                         consecutive_failures = 0
                         time.sleep(1.0)
                     else:
-                        time.sleep(0.04)
+                        time.sleep(0.02)
+                    continue
+
+                success, frame = self.cap.retrieve()
+                if not success or frame is None:
                     continue
 
                 consecutive_failures = 0
@@ -116,19 +127,15 @@ class ThreadedRTSPStream:
                 self.raw_w = w
                 self.raw_h = h
 
-                # Downscale for ultra-smooth display and fast AI processing
-                # 960x540 for Display Grid (16:9)
-                display_frame = cv2.resize(frame, (960, 540), interpolation=cv2.INTER_LINEAR)
-                
-                # 1280x720 for AI analysis
-                if w > 1280:
-                    ai_frame = cv2.resize(frame, (1280, 720), interpolation=cv2.INTER_LINEAR)
-                else:
-                    ai_frame = frame
+                # Downscale immediately to 640x360 for instantaneous zero-lag rendering
+                display_frame = cv2.resize(frame, (640, 360), interpolation=cv2.INTER_LINEAR)
+                ai_frame = display_frame
 
                 with self.lock:
                     self.latest_display_frame = display_frame
                     self.latest_ai_frame = ai_frame
+
+                time.sleep(0.02)
 
             except Exception as e:
                 print(f"Stream capture exception on {self.name}: {e}")
@@ -164,8 +171,8 @@ class ThreadedRTSPStream:
             threading.Thread(target=self._async_ai_worker, args=(ai_input_frame.copy(), session_id), daemon=True).start()
 
         h_f, w_f, _ = frame.shape
-        scale_x = w_f / 1280.0
-        scale_y = h_f / 720.0
+        scale_x = w_f / 640.0
+        scale_y = h_f / 360.0
 
         # Draw cached face overlays on lightweight frame
         for f_info in self.last_faces:

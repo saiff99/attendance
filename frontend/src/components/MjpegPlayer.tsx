@@ -55,23 +55,38 @@ export function MjpegPlayer({
           newBuffer.set(value, buffer.length);
           buffer = newBuffer;
           
-          // Look for JPEG start (FF D8) and end (FF D9)
-          let startIdx = -1;
-          let endIdx = -1;
-          
-          for (let i = 0; i < buffer.length - 1; i++) {
-            if (buffer[i] === 0xFF && buffer[i+1] === 0xD8) {
-              startIdx = i;
+          // FAST-FORWARD TO LATEST FRAME: Find all complete JPEGs and pick the newest one
+          let latestStart = -1;
+          let latestEnd = -1;
+          let pos = 0;
+
+          while (pos < buffer.length - 1) {
+            let s = -1;
+            for (let i = pos; i < buffer.length - 1; i++) {
+              if (buffer[i] === 0xFF && buffer[i + 1] === 0xD8) {
+                s = i;
+                break;
+              }
             }
-            if (buffer[i] === 0xFF && buffer[i+1] === 0xD9 && startIdx !== -1) {
-              endIdx = i + 2;
-              break;
+            if (s === -1) break;
+
+            let e = -1;
+            for (let i = s + 2; i < buffer.length - 1; i++) {
+              if (buffer[i] === 0xFF && buffer[i + 1] === 0xD9) {
+                e = i + 2;
+                break;
+              }
             }
+            if (e === -1) break;
+
+            latestStart = s;
+            latestEnd = e;
+            pos = e;
           }
-          
-          if (startIdx !== -1 && endIdx !== -1) {
-            // Full frame ready
-            const frameData = buffer.slice(startIdx, endIdx);
+
+          if (latestStart !== -1 && latestEnd !== -1) {
+            // Render only the absolute latest frame, dropping any stale queued frames
+            const frameData = buffer.slice(latestStart, latestEnd);
             const blob = new Blob([frameData], { type: 'image/jpeg' });
             const objectUrl = URL.createObjectURL(blob);
             
@@ -81,8 +96,11 @@ export function MjpegPlayer({
             });
             setError(false);
             
-            // Keep the rest of the buffer for the next frame
-            buffer = buffer.slice(endIdx);
+            // Discard everything up to the latest complete frame
+            buffer = buffer.slice(latestEnd);
+          } else if (buffer.length > 500000) {
+            // Safety cap: If buffer grows too large without complete frame, flush it
+            buffer = new Uint8Array();
           }
         }
       } catch (err: any) {
