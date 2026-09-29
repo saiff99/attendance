@@ -10,11 +10,11 @@ interface MjpegPlayerProps {
   paused?: boolean;
 }
 
-export function MjpegPlayer({ 
-  url, 
-  className = "", 
+export function MjpegPlayer({
+  url,
+  className = "",
   fallbackText = "Connecting...",
-  paused = false 
+  paused = false
 }: MjpegPlayerProps) {
   const [frameSrc, setFrameSrc] = useState<string>('');
   const [error, setError] = useState<boolean>(false);
@@ -27,7 +27,7 @@ export function MjpegPlayer({
     let isCancelled = false;
     const abortController = new AbortController();
     setError(false);
-    
+
     const fetchStream = async () => {
       try {
         const response = await fetch(url, {
@@ -36,25 +36,25 @@ export function MjpegPlayer({
           },
           signal: abortController.signal
         });
-        
+
         if (!response.ok || !response.body) {
           throw new Error(`Failed to connect to stream: ${response.statusText}`);
         }
-        
+
         const reader = response.body.getReader();
         let buffer = new Uint8Array();
-        
+
         while (!isCancelled) {
           const { value, done } = await reader.read();
           if (done) break;
           if (!value) continue;
-          
+
           // Append new data to buffer
           const newBuffer = new Uint8Array(buffer.length + value.length);
           newBuffer.set(buffer);
           newBuffer.set(value, buffer.length);
           buffer = newBuffer;
-          
+
           // FAST-FORWARD TO LATEST FRAME: Find all complete JPEGs and pick the newest one
           let latestStart = -1;
           let latestEnd = -1;
@@ -89,13 +89,13 @@ export function MjpegPlayer({
             const frameData = buffer.slice(latestStart, latestEnd);
             const blob = new Blob([frameData], { type: 'image/jpeg' });
             const objectUrl = URL.createObjectURL(blob);
-            
+
             setFrameSrc(prev => {
               if (prev && prev.startsWith('blob:')) URL.revokeObjectURL(prev);
               return objectUrl;
             });
             setError(false);
-            
+
             // Discard everything up to the latest complete frame
             buffer = buffer.slice(latestEnd);
           } else if (buffer.length > 500000) {
@@ -117,9 +117,9 @@ export function MjpegPlayer({
         }
       }
     };
-    
+
     fetchStream();
-    
+
     return () => {
       isCancelled = true;
       abortController.abort();
@@ -149,10 +149,10 @@ export function MjpegPlayer({
   }
 
   return (
-    <img 
-      src={frameSrc} 
+    <img
+      src={frameSrc}
       className={className}
-      alt="CCTV Live Tracking Stream" 
+      alt="CCTV Live Tracking Stream"
     />
   );
 }
