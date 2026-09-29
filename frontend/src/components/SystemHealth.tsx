@@ -7,18 +7,17 @@ export function SystemHealth() {
 
   useEffect(() => {
     const checkHealth = async () => {
-      const candidates: string[] = [];
+      const candidates: string[] = [
+        "/api/health", // 1. Same-origin Next.js proxy (always works on Vercel and local)
+      ];
       
-      // 1. Configured Backend URL from environment
+      // 2. Direct environment backend URL if available
       if (process.env.NEXT_PUBLIC_BACKEND_URL) {
-        candidates.push(process.env.NEXT_PUBLIC_BACKEND_URL);
+        candidates.push(`${process.env.NEXT_PUBLIC_BACKEND_URL}/health`);
       }
       
-      // 2. Localhost standard port
-      candidates.push("http://localhost:8000");
-
-      // 3. Ngrok tunnel fallback
-      candidates.push("https://silly-unframed-extortion.ngrok-free.dev");
+      // 3. Ngrok tunnel direct fallback
+      candidates.push("https://silly-unframed-extortion.ngrok-free.dev/health");
 
       // Filter duplicates
       const uniqueUrls = Array.from(new Set(candidates));
@@ -26,20 +25,20 @@ export function SystemHealth() {
       let connected = false;
 
       for (const url of uniqueUrls) {
-        // Skip http localhost if page is loaded over https (mixed content prevention)
+        // Skip insecure http localhost when browsing on HTTPS (mixed-content prevention)
         if (typeof window !== "undefined" && window.location.protocol === "https:" && url.startsWith("http://")) {
           continue;
         }
 
         try {
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 4000);
+          const timeoutId = setTimeout(() => controller.abort(), 3500);
 
-          const response = await fetch(`${url}/health`, {
+          const response = await fetch(url, {
             method: "GET",
             signal: controller.signal,
             headers: {
-              "ngrok-skip-browser-warning": "true"
+              "ngrok-skip-browser-warning": "69420"
             }
           });
           
