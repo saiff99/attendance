@@ -28,6 +28,7 @@ export async function GET(request: Request) {
     const { data: sessionData, error } = await supabase
       .from('sessions')
       .select('id, class_name, date, start_time, end_time, instructor_name, target_academic_year, created_at')
+      .neq('class_name', '__SYSTEM_CONFIG__')
       .order('created_at', { ascending: false })
       .limit(50);
 

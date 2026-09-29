@@ -41,6 +41,7 @@ export default async function Dashboard() {
   const { data: recentSessions } = await supabase
     .from('sessions')
     .select('id, class_name, instructor_name, created_at, attendance(count)')
+    .neq('class_name', '__SYSTEM_CONFIG__')
     .order('created_at', { ascending: false })
     .limit(5);
 
