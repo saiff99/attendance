@@ -90,8 +90,49 @@ export function FaceRegistrationModal({ isOpen, onClose, studentId, studentName,
     }
   }, [countdown, status]);
 
-  // Convert base64 data URL to Blob
-  const dataURLtoBlob = (dataurl: string) => {
+  // Resize and compress base64 data URL to optimized Blob (< 50KB per frame)
+  const compressImage = async (dataurl: string, maxWidth = 640, maxHeight = 640, quality = 0.85): Promise<Blob> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
+        if (width > height) {
+          if (width > maxWidth) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          }
+        } else {
+          if (height > maxHeight) {
+            width = Math.round((width * maxHeight) / height);
+            height = maxHeight;
+          }
+        }
+
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+        }
+
+        canvas.toBlob((blob) => {
+          if (blob) {
+            resolve(blob);
+          } else {
+            resolve(fallbackDataURLtoBlob(dataurl));
+          }
+        }, "image/jpeg", quality);
+      };
+      img.onerror = () => {
+        resolve(fallbackDataURLtoBlob(dataurl));
+      };
+      img.src = dataurl;
+    });
+  };
+
+  const fallbackDataURLtoBlob = (dataurl: string): Blob => {
     const arr = dataurl.split(',');
     const mimeMatch = arr[0].match(/:(.*?);/);
     const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg';
@@ -110,20 +151,44 @@ export function FaceRegistrationModal({ isOpen, onClose, studentId, studentName,
     try {
       const formData = new FormData();
       
-      framesRef.current.forEach((frameBase64, index) => {
-        const blob = dataURLtoBlob(frameBase64);
-        // Append multiple files with the same field name 'files'
-        formData.append('files', blob, `frame_${index}.jpg`);
-      });
+      for (let i = 0; i < framesRef.current.length; i++) {
+        const frameBase64 = framesRef.current[i];
+        const blob = await compressImage(frameBase64, 640, 640, 0.85);
+        formData.append('files', blob, `frame_${i}.jpg`);
+      }
 
-      const backendUrl = getBackendUrl();
-      const response = await fetch(`${backendUrl}/api/enroll-face-burst/${studentId}`, {
-        method: 'POST',
-        body: formData,
-        headers: {
-          "ngrok-skip-browser-warning": "69420"
+      // 1. Try Same-Origin Next.js API route first
+      let response: Response | null = null;
+      try {
+        response = await fetch(`/api/enroll-face-burst/${studentId}`, {
+          method: 'POST',
+          body: formData,
+        });
+      } catch (proxyErr) {
+        console.warn('Same-origin proxy fetch failed, attempting tunnel fallback...', proxyErr);
+      }
+
+      // 2. Fallback to active Ngrok tunnel if proxy failed or returned 502/504
+      if (!response || (!response.ok && response.status >= 500)) {
+        try {
+          const directRes = await fetch(`https://silly-unframed-extortion.ngrok-free.dev/api/enroll-face-burst/${studentId}`, {
+            method: 'POST',
+            body: formData,
+            headers: {
+              "ngrok-skip-browser-warning": "69420"
+            }
+          });
+          if (directRes.ok || directRes.status < 500) {
+            response = directRes;
+          }
+        } catch (directErr) {
+          console.warn('Direct tunnel fetch failed:', directErr);
         }
-      });
+      }
+
+      if (!response) {
+        throw new Error("Unable to connect to AI vision engine. Please ensure your backend terminal is running.");
+      }
 
       if (!response.ok) {
         let errorDetail = 'Failed to process facial data';
@@ -227,7 +292,8 @@ export function FaceRegistrationModal({ isOpen, onClose, studentId, studentName,
                   audio={false}
                   ref={webcamRef}
                   screenshotFormat="image/jpeg"
-                  videoConstraints={{ facingMode: "user" }}
+                  screenshotQuality={0.85}
+                  videoConstraints={{ facingMode: "user", width: { ideal: 640 }, height: { ideal: 640 } }}
                   className="w-full h-full object-cover transform scale-x-[-1]" // Mirror effect
                 />
               )}

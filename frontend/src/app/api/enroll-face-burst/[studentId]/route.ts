@@ -16,13 +16,20 @@ export async function POST(
       body: formData,
     });
 
-    const data = await res.json();
+    let data;
+    try {
+      data = await res.json();
+    } catch {
+      const text = await res.text().catch(() => '');
+      data = { detail: text || `Upstream returned status ${res.status}` };
+    }
     return NextResponse.json(data, { status: res.status });
   } catch (err: any) {
     console.error('Face enrollment error:', err);
     return NextResponse.json(
-      { detail: err.message || 'Face enrollment AI engine unreachable. Please ensure the backend is running.' },
+      { detail: err.message || 'Face enrollment AI engine unreachable. Please ensure your backend is running.' },
       { status: 500 }
     );
   }
 }
+

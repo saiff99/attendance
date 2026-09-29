@@ -16,7 +16,13 @@ export async function POST(
       body: formData,
     });
 
-    const data = await res.json();
+    let data;
+    try {
+      data = await res.json();
+    } catch {
+      const text = await res.text().catch(() => '');
+      data = { detail: text || `Upstream returned status ${res.status}` };
+    }
     return NextResponse.json(data, { status: res.status });
   } catch (err: any) {
     console.error('Face enrollment single error:', err);
@@ -26,3 +32,4 @@ export async function POST(
     );
   }
 }
+

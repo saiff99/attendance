@@ -12,7 +12,13 @@ export async function POST(request: Request) {
       body: formData,
     });
 
-    const data = await res.json();
+    let data;
+    try {
+      data = await res.json();
+    } catch {
+      const text = await res.text().catch(() => '');
+      data = { detail: text || `Upstream returned status ${res.status}` };
+    }
     return NextResponse.json(data, { status: res.status });
   } catch (err: any) {
     console.error('Selfie attendance error:', err);
@@ -22,3 +28,4 @@ export async function POST(request: Request) {
     );
   }
 }
+

@@ -22,7 +22,7 @@ export async function fetchBackend(path: string, options: RequestInit = {}): Pro
   // Try primary target
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 9000);
+    const timeout = setTimeout(() => controller.abort(), 25000);
     
     const res = await fetch(`${primaryUrl}${normalizedPath}`, {
       ...options,
@@ -31,12 +31,13 @@ export async function fetchBackend(path: string, options: RequestInit = {}): Pro
     });
     clearTimeout(timeout);
     return res;
-  } catch (err) {
+  } catch (err: any) {
+    console.error(`[fetchBackend] Failed to connect to ${primaryUrl}${normalizedPath}:`, err.message);
     // If primary failed (e.g. local 127.0.0.1 was down or unreachable), fallback to the tunnel URL
     if (primaryUrl !== "https://silly-unframed-extortion.ngrok-free.dev") {
       const fallbackUrl = "https://silly-unframed-extortion.ngrok-free.dev";
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 9000);
+      const timeout = setTimeout(() => controller.abort(), 25000);
       
       const res = await fetch(`${fallbackUrl}${normalizedPath}`, {
         ...options,
@@ -49,3 +50,4 @@ export async function fetchBackend(path: string, options: RequestInit = {}): Pro
     throw err;
   }
 }
+
