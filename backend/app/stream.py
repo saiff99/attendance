@@ -79,6 +79,7 @@ class ThreadedRTSPStream:
         self.thread.start()
 
     def _capture_loop(self):
+        consecutive_failures = 0
         while self.running:
             try:
                 if self.cap is None or not self.cap.isOpened():
@@ -89,19 +90,27 @@ class ThreadedRTSPStream:
                         self.cap = cv2.VideoCapture(self.source)
                     self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
                     if not self.cap.isOpened():
-                        time.sleep(2.0)
+                        time.sleep(1.5)
                         continue
                     self.connected = True
+                    consecutive_failures = 0
 
                 success, frame = self.cap.read()
                 if not success or frame is None:
-                    self.connected = False
-                    if self.cap:
-                        self.cap.release()
-                    self.cap = None
-                    time.sleep(1.0)
+                    consecutive_failures += 1
+                    # Tolerate brief H.265 keyframe intervals before destroying stream
+                    if consecutive_failures > 20:
+                        self.connected = False
+                        if self.cap:
+                            self.cap.release()
+                        self.cap = None
+                        consecutive_failures = 0
+                        time.sleep(1.0)
+                    else:
+                        time.sleep(0.04)
                     continue
 
+                consecutive_failures = 0
                 self.connected = True
                 h, w, _ = frame.shape
                 self.raw_w = w
@@ -124,6 +133,9 @@ class ThreadedRTSPStream:
             except Exception as e:
                 print(f"Stream capture exception on {self.name}: {e}")
                 self.connected = False
+                if self.cap:
+                    self.cap.release()
+                self.cap = None
                 time.sleep(2.0)
 
         if self.cap:
@@ -343,8 +355,8 @@ def generate_video_feed(session_id: str, camera_index: int = 0, camera_type: str
     else:
         stream = camera_manager.get_cctv_stream(camera_index)
 
-    jpeg_quality = 68 if is_grid else 78
-    fps_delay = 0.045 if is_grid else 0.035  # ~22 FPS for grid, ~28 FPS for focus
+    jpeg_quality = 65 if is_grid else 80
+    fps_delay = 0.10 if is_grid else 0.04  # ~10 FPS for grid tiles (low network/CPU load), ~25 FPS for focus view
 
     while True:
         frame = stream.get_frame_with_overlays(session_id, is_grid=is_grid)
@@ -363,3 +375,19 @@ def generate_video_feed(session_id: str, camera_index: int = 0, camera_type: str
                b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
 
         time.sleep(fps_delay)
+
+
+def prewarm_all_cctv():
+    """Background worker to start all CCTV streams with staggered delays on boot."""
+    time.sleep(1.0)
+    camera_details = get_camera_details()
+    for idx in range(len(camera_details)):
+        try:
+            camera_manager.get_cctv_stream(idx)
+            time.sleep(0.35)
+        except Exception as e:
+            print(f"Pre-warm error on cam {idx}: {e}")
+
+# Pre-warm streams in background so feeds are instantly available
+threading.Thread(target=prewarm_all_cctv, daemon=True).start()
+
