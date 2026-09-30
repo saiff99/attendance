@@ -39,7 +39,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <>
         {isAuthenticated && <Sidebar />}
         <main className={`flex-1 min-h-screen flex flex-col w-full min-w-0 ${
-          isAuthenticated ? "lg:ml-64" : "lg:ml-0"
+          isAuthenticated ? "lg:pl-64" : "lg:pl-0"
         } pt-0 bg-[#070B12]`}>
           {children}
         </main>
@@ -81,7 +81,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <>
       <Sidebar />
-      <main className="flex-1 lg:ml-64 pt-16 lg:pt-0 min-h-screen flex flex-col w-full min-w-0">
+      <main className="flex-1 lg:pl-64 pt-16 lg:pt-0 min-h-screen flex flex-col w-full min-w-0">
         {children}
       </main>
     </>
