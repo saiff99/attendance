@@ -24,3 +24,8 @@ ngrok http --url=silly-unframed-extortion.ngrok-free.dev 8000
 ```
 
 Then open your browser and go `http://localhost:3000`[↗️](http://localhost:3000)
+
+All Starts in single command
+```
+ngrok http --url=silly-unframed-extortion.ngrok-free.dev 8000
+```
