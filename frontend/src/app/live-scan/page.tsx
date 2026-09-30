@@ -486,7 +486,6 @@ export default function LiveScan() {
                 <option value="2nd Year" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">2nd Year MBBS</option>
                 <option value="3rd Year" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">3rd Year MBBS</option>
                 <option value="4th Year" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">4th Year MBBS</option>
-                <option value="Interns" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">Interns & Residents</option>
               </select>
             </div>
             
