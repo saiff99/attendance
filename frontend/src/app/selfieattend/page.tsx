@@ -82,9 +82,10 @@ export default async function SelfieAttendPortal() {
   return (
     <Suspense 
       fallback={
-        <div className="min-h-screen bg-[#070B12] text-slate-200 flex flex-col items-center justify-center gap-3">
-          <div className="w-10 h-10 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin" />
-          <p className="text-xs text-slate-400 font-medium">Loading Selfie Attendance Portal...</p>
+        <div className="fixed inset-0 z-50 bg-[#070B12] text-slate-200 flex flex-col items-center justify-center gap-3 p-4 text-center select-none">
+          <div className="w-10 h-10 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin mb-1" />
+          <p className="text-sm text-slate-300 font-medium">Loading Selfie Attendance Portal...</p>
+          <p className="text-xs text-slate-500">Initializing session data</p>
         </div>
       }
     >

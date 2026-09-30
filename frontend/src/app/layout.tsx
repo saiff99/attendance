@@ -31,7 +31,7 @@ export default function RootLayout({
       suppressHydrationWarning
       className={`${inter.variable} ${playfair.variable} min-h-screen bg-gray-50 dark:bg-gray-950 antialiased`}
     >
-      <body suppressHydrationWarning className="min-h-screen flex transition-colors duration-300">
+      <body suppressHydrationWarning className="min-h-screen flex flex-col w-full transition-colors duration-300">
         <AuthProvider>
           <ThemeProvider
             attribute="class"
