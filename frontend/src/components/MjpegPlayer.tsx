@@ -118,11 +118,21 @@ export function MjpegPlayer({
       }
     };
 
+    const onNavigate = () => {
+      isCancelled = true;
+      abortController.abort();
+    };
+
+    window.addEventListener('medattend-navigate', onNavigate);
+    window.addEventListener('beforeunload', onNavigate);
+
     fetchStream();
 
     return () => {
       isCancelled = true;
       abortController.abort();
+      window.removeEventListener('medattend-navigate', onNavigate);
+      window.removeEventListener('beforeunload', onNavigate);
       if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
     };
   }, [url, paused, reconnectKey]);

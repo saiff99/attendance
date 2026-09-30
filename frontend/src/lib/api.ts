@@ -1,7 +1,13 @@
 export function getBackendUrl(): string {
-  // Always use same-origin relative endpoints ("") for all client requests
-  // Next.js API routes (/api/*) securely proxy to FastAPI on localhost or Ngrok
-  // This completely eliminates CORS errors, SSL mixed-content blocks, and ngrok interstitial warnings across all domains!
+  // When running locally in browser, connect directly to FastAPI backend on port 8000
+  // This completely frees up Next.js (port 3000) connection pool so 6-camera live scan never blocks page navigation (e.g. Student Directory, Dashboard)!
+  if (typeof window !== "undefined") {
+    const host = window.location.hostname;
+    if (host === "localhost" || host === "127.0.0.1") {
+      return "http://127.0.0.1:8000";
+    }
+  }
+  // When running in production (e.g. Vercel / newshuge.com), use same-origin relative proxy
   return "";
 }
 
