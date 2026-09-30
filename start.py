@@ -15,6 +15,7 @@ from urllib.request import urlopen, Request
 import json
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+FRONTEND_DIR = os.path.join(BASE_DIR, "frontend")
 BACKEND_DIR = os.path.join(BASE_DIR, "backend")
 VENV_PYTHON = os.path.join(BACKEND_DIR, ".venv", "bin", "python")
 VENV_UVICORN = os.path.join(BACKEND_DIR, ".venv", "bin", "uvicorn")
@@ -45,8 +46,11 @@ def cleanup(signum=None, frame=None):
             except Exception:
                 pass
     # Kill any dangling instances
+    os.system("lsof -ti:3000 | xargs kill -9 2>/dev/null || true")
+    os.system("lsof -ti:8000 | xargs kill -9 2>/dev/null || true")
+    os.system("pkill -f 'next-server|next dev' 2>/dev/null || true")
     os.system("pkill -f 'uvicorn main:app' 2>/dev/null || true")
-    os.system(f"pkill -f '{CLOUDFLARED_BIN}' 2>/dev/null || true")
+    os.system("pkill -f 'cloudflared tunnel' 2>/dev/null || true")
     print(f"{GREEN}All services stopped cleanly. Goodbye!{RESET}\n")
     sys.exit(0)
 
@@ -115,6 +119,9 @@ def main():
     print("="*70 + "\n")
 
     # 1. Clean previous lingering processes
+    os.system("lsof -ti:3000 | xargs kill -9 2>/dev/null || true")
+    os.system("lsof -ti:8000 | xargs kill -9 2>/dev/null || true")
+    os.system("pkill -f 'next-server|next dev' 2>/dev/null || true")
     os.system("pkill -f 'uvicorn main:app' 2>/dev/null || true")
     os.system("pkill -f 'cloudflared tunnel' 2>/dev/null || true")
     time.sleep(0.5)
@@ -128,8 +135,27 @@ def main():
         print(f"{RED}Cloudflared binary could not be found or downloaded!{RESET}")
         sys.exit(1)
 
-    # 2. Start Uvicorn AI Backend
-    print(f"{BLUE}[1/3]{RESET} Starting FastAPI Backend + InsightFace AI (Port 8000)...")
+    # 2. Start Next.js Frontend
+    print(f"{BLUE}[1/4]{RESET} Starting Next.js Web Frontend (http://localhost:3000)...")
+    frontend_proc = subprocess.Popen(
+        ["npm", "run", "dev"],
+        cwd=FRONTEND_DIR,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1
+    )
+    processes.append(frontend_proc)
+
+    def log_frontend():
+        for line in iter(frontend_proc.stdout.readline, ""):
+            if "Ready in" in line or "compiled client and server" in line or "Local:" in line:
+                print(f"  {GREEN}✓{RESET} Frontend: {line.strip()}")
+
+    threading.Thread(target=log_frontend, daemon=True).start()
+
+    # 3. Start Uvicorn AI Backend
+    print(f"{BLUE}[2/4]{RESET} Starting FastAPI Backend + InsightFace AI (Port 8000)...")
     uvicorn_proc = subprocess.Popen(
         [VENV_UVICORN, "main:app", "--port", "8000"],
         cwd=BACKEND_DIR,
@@ -150,8 +176,8 @@ def main():
     threading.Thread(target=log_uvicorn, daemon=True).start()
     time.sleep(2)
 
-    # 3. Start Cloudflare Unlimited Tunnel
-    print(f"{BLUE}[2/3]{RESET} Initializing Cloudflare Unlimited Bandwidth Tunnel...")
+    # 4. Start Cloudflare Unlimited Tunnel
+    print(f"{BLUE}[3/4]{RESET} Initializing Cloudflare Unlimited Bandwidth Tunnel...")
     cf_proc = subprocess.Popen(
         [cf_binary, "tunnel", "--url", "http://127.0.0.1:8000"],
         cwd=BACKEND_DIR,
@@ -180,22 +206,23 @@ def main():
         print(f"{RED}Failed to obtain Cloudflare Tunnel URL. Please check your internet connection.{RESET}")
         cleanup()
 
-    # 4. Sync Live Tunnel URL with Supabase
-    print(f"{BLUE}[3/3]{RESET} Syncing Live Tunnel with Cloud Vercel Portal...")
+    # 5. Sync Live Tunnel URL with Supabase
+    print(f"{BLUE}[4/4]{RESET} Syncing Live Tunnel with Cloud Vercel Portal...")
     synced = update_supabase_tunnel_url(tunnel_url)
     if synced:
         print(f"  {GREEN}✓{RESET} Cloud Vercel Portal automatically connected to this Mac!")
     else:
         print(f"  {YELLOW}! Note: Supabase sync warning, but tunnel is active.{RESET}")
 
-    # 5. Display Dashboard
+    # 6. Display Dashboard
     print("\n" + BOLD + GREEN + "╔" + "═"*68 + "╗" + RESET)
     print(f"{BOLD}{GREEN}║  🎉 MedAttend System is 100% ONLINE & READY FOR ATTENDANCE        ║{RESET}")
     print(BOLD + GREEN + "╠" + "═"*68 + "╣" + RESET)
-    print(f"║  {CYAN}Local AI Backend:{RESET}      http://127.0.0.1:8000                            ║")
-    print(f"║  {CYAN}Cloudflare Tunnel:{RESET}     {tunnel_url:<49} ║")
-    print(f"║  {CYAN}Vercel Live Portal:{RESET}    https://newshuge.com/selfieattend                ║")
-    print(f"║  {CYAN}Bandwidth Quota:{RESET}       {GREEN}UNLIMITED FOREVER (No Ngrok Limits){RESET}              ║")
+    print(f"║  {CYAN}Local Web Dashboard:{RESET}  http://localhost:3000                            ║")
+    print(f"║  {CYAN}Local AI Backend:{RESET}     http://127.0.0.1:8000                            ║")
+    print(f"║  {CYAN}Cloudflare Tunnel:{RESET}    {tunnel_url:<49} ║")
+    print(f"║  {CYAN}Vercel Live Portal:{RESET}   https://newshuge.com/selfieattend                ║")
+    print(f"║  {CYAN}Bandwidth Quota:{RESET}      {GREEN}UNLIMITED FOREVER (No Limits){RESET}                    ║")
     print(BOLD + GREEN + "╚" + "═"*68 + "╝" + RESET + "\n")
     print(f"{YELLOW}Press Ctrl+C anytime to stop all services.{RESET}\n")
 
@@ -205,3 +232,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
