@@ -388,11 +388,6 @@ This is to notify you that your ward <strong>[Student Name]</strong> (Roll: <str
                 {testResult && (
                   <p className="text-[11px] text-slate-300 bg-slate-950/80 p-2.5 rounded-lg border border-slate-800 break-words">{testResult}</p>
                 )}
-
-                {/* Helpful note for Meta Sandbox test number */}
-                <div className="p-3 rounded-lg bg-emerald-950/20 border border-emerald-500/20 text-[11px] text-slate-300 leading-relaxed w-full min-w-0 break-words">
-                  💡 <strong className="text-emerald-300">Sandbox টিপ:</strong> মেটার টেস্ট নম্বর হলো <span className="font-mono text-emerald-400 font-bold">+1 555-138-2853</span>। টেস্ট মোডে সম্পূর্ণ নোটিশ মেসেজ সরাসরি পেতে আপনার WhatsApp থেকে এই নম্বরে একবার <strong>"Hi"</strong> পাঠান (২৪ ঘণ্টার সার্ভিস উইন্ডো চালু করতে)।
-                </div>
               </div>
             </>
           )}
