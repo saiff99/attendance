@@ -614,7 +614,7 @@ async def api_whatsapp_test(req: WhatsAppTestRequest):
     """Sends a test WhatsApp message to verify phone & token setup."""
     if req.template_name:
         return send_whatsapp_raw(req.phone, "", template_name=req.template_name)
-    msg = req.message or "🏛️ *MedAttend WhatsApp Alert Verification*\nThis is a verified test message from your Attendance Notification System."
+    msg = req.message or "🏫 *Jagannath Gupta Institute of Medical Sciences & Hospital*\nThis is a verified test message from your Attendance Notification System."
     return send_whatsapp_raw(req.phone, msg)
 
 @router.post("/api/whatsapp/send-absent-alerts")

@@ -202,7 +202,7 @@ def send_session_absentee_alerts(session_id: str) -> dict:
 
         # Formulate rich, respectful, professional WhatsApp alert message
         alert_text = (
-            f"🏛️ *MedAttend Medical College Hub*\n"
+            f"🏫 *Jagannath Gupta Institute of Medical Sciences & Hospital*\n"
             f"⚠️ *Student Attendance Alert Notice*\n\n"
             f"Dear Parent/Guardian,\n"
             f"This is to notify you that your ward *{student_name}* (Roll No: *{student_roll}*) was marked *ABSENT* for today's scheduled class session:\n\n"

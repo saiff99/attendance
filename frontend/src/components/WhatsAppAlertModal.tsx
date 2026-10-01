@@ -198,7 +198,7 @@ export function WhatsAppAlertModal({
                   <span className="text-[10px] text-emerald-400 font-normal">Official Meta Template</span>
                 </div>
                 <div className="p-3 rounded-lg bg-emerald-950/20 border border-emerald-500/20 text-xs text-slate-200 leading-relaxed break-words whitespace-pre-wrap">
-🏛️ <strong className="text-emerald-300">MedAttend Medical College Hub</strong>
+🏫 <strong className="text-emerald-300">Jagannath Gupta Institute of Medical Sciences & Hospital</strong>
 ⚠️ <strong>Student Attendance Alert Notice</strong>
 
 Dear Parent/Guardian,
