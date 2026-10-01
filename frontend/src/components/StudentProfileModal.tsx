@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { X, Calendar as CalendarIcon, CheckCircle2, XCircle } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { getParentPhone, formatPhoneDisplay } from "@/lib/studentContact";
 
 interface StudentProfileModalProps {
   student: any;
@@ -58,8 +59,20 @@ export function StudentProfileModal({ student, isOpen, onClose }: StudentProfile
               {student.full_name.charAt(0)}
             </div>
             <h3 className="text-2xl font-bold text-gray-900 dark:text-white">{student.full_name}</h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Roll No: {student.student_roll}</p>
-            <p className="text-sm text-gray-500 dark:text-gray-400">{student.email}</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Roll No: {student.student_roll} • {student.academic_year || "1st Year"}</p>
+            {getParentPhone(student) ? (
+              <a
+                href={`https://wa.me/${getParentPhone(student)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-semibold hover:bg-emerald-100 transition-colors"
+                title="Chat with Parent on WhatsApp"
+              >
+                <span>📱 Parent WA: {formatPhoneDisplay(getParentPhone(student))}</span>
+              </a>
+            ) : (
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1 italic">No Parent WhatsApp Registered</p>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-4 mb-8">

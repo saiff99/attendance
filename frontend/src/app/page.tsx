@@ -1,6 +1,7 @@
 import { Users, UserCheck, CalendarCheck, Activity, CalendarDays, TrendingUp } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import DownloadReportButton from "@/components/DownloadReportButton";
+import { WhatsAppDashboardButton } from "@/components/WhatsAppDashboardButton";
 import { AttendanceChart } from "@/components/AttendanceChart";
 import { decodeSessionMetadata } from "@/lib/geofence";
 import { FormattedDate } from "@/components/FormattedDate";
@@ -140,13 +141,14 @@ export default async function Dashboard() {
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Subject & Lecture Hall</th>
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Topic Name</th>
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Attendance Count</th>
-                  <th className="px-4 sm:px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Report</th>
+                  <th className="px-4 sm:px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-800">
                 {recentSessions && recentSessions.length > 0 ? recentSessions.map((session: any) => {
                   // Supabase returns count inside an array for one-to-many relationships when queried like attendance(count)
                   const attendanceCount = (session.attendance as any)?.[0]?.count || 0;
+                  const topic = decodeSessionMetadata(session.instructor_name).topic;
                   
                   return (
                     <tr key={session.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
@@ -157,7 +159,7 @@ export default async function Dashboard() {
                         {session.class_name}
                       </td>
                       <td className="px-4 sm:px-6 py-3.5 sm:py-4 whitespace-nowrap text-xs sm:text-sm text-gray-500 dark:text-gray-400">
-                        {decodeSessionMetadata(session.instructor_name).topic}
+                        {topic}
                       </td>
                       <td className="px-4 sm:px-6 py-3.5 sm:py-4 whitespace-nowrap text-xs sm:text-sm text-gray-500 dark:text-gray-400">
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${attendanceCount > 0 ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300'}`}>
@@ -165,7 +167,14 @@ export default async function Dashboard() {
                         </span>
                       </td>
                       <td className="px-4 sm:px-6 py-3.5 sm:py-4 whitespace-nowrap text-right text-xs sm:text-sm font-medium">
-                        <DownloadReportButton sessionId={session.id} sessionName={session.class_name} />
+                        <div className="flex items-center justify-end gap-2">
+                          <WhatsAppDashboardButton 
+                            sessionId={session.id} 
+                            sessionName={session.class_name} 
+                            topicName={topic}
+                          />
+                          <DownloadReportButton sessionId={session.id} sessionName={session.class_name} />
+                        </div>
                       </td>
                     </tr>
                   );

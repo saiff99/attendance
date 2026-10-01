@@ -4,6 +4,7 @@ import { useState, useRef } from "react";
 import { X, UploadCloud, FileSpreadsheet, Download, CheckCircle2, AlertCircle, Loader2, ArrowRight } from "lucide-react";
 import * as XLSX from "xlsx";
 import { supabase } from "@/lib/supabase";
+import { encodeStudentEmail, cleanPhoneNumber } from "@/lib/studentContact";
 
 interface BulkImportModalProps {
   isOpen: boolean;
@@ -17,6 +18,7 @@ interface ParsedStudentRow {
   full_name: string;
   academic_year: string;
   email?: string;
+  parent_phone?: string;
   valid: boolean;
   error?: string;
 }
@@ -87,6 +89,7 @@ export function BulkImportModal({
       const nameKey = keys.find(k => /name|student|full/i.test(k)) || (keys.length > 1 ? keys[1] : "");
       const yearKey = keys.find(k => /year|academic|batch|class|cohort/i.test(k));
       const emailKey = keys.find(k => /email|mail/i.test(k));
+      const phoneKey = keys.find(k => /phone|parent|guardian|mobile|whatsapp|contact/i.test(k));
 
       const parsed: ParsedStudentRow[] = rawRows.map((row) => {
         const roll = String(row[rollKey] || "").trim();
@@ -102,6 +105,9 @@ export function BulkImportModal({
           else year = rawYear;
         }
 
+        const rawPhone = phoneKey && row[phoneKey] ? String(row[phoneKey]).trim() : undefined;
+        const parentPhone = rawPhone ? cleanPhoneNumber(rawPhone) : undefined;
+
         const valid = roll.length > 0 && name.length > 0;
         let error = "";
         if (!roll) error = "Missing Roll";
@@ -112,6 +118,7 @@ export function BulkImportModal({
           full_name: name,
           academic_year: year,
           email: emailKey && row[emailKey] ? String(row[emailKey]).trim() : undefined,
+          parent_phone: parentPhone,
           valid,
           error,
         };
@@ -135,16 +142,19 @@ export function BulkImportModal({
         "Roll Number": "26001",
         "Full Name": "MORSALIM MONDAL",
         "Academic Year": selectedYear || "1st Year",
+        "Parent WhatsApp": "+919876543210",
       },
       {
         "Roll Number": "26002",
         "Full Name": "SK SAIFUDDIN",
         "Academic Year": selectedYear || "1st Year",
+        "Parent WhatsApp": "+919876543211",
       },
       {
         "Roll Number": "26003",
         "Full Name": "RAHUL ROY",
         "Academic Year": selectedYear || "1st Year",
+        "Parent WhatsApp": "+919876543212",
       },
     ];
 
@@ -185,7 +195,7 @@ export function BulkImportModal({
       validStudents.forEach((student) => {
         const cleanRoll = student.student_roll.trim();
         const cleanKey = cleanRoll.toLowerCase();
-        const generatedEmail = student.email || `${cleanRoll.toLowerCase().replace(/\s+/g, '')}@student.local`;
+        const generatedEmail = encodeStudentEmail(cleanRoll, student.parent_phone);
         const academicYear = useFileYear ? student.academic_year : selectedYear;
 
         if (existingMap.has(cleanKey)) {

@@ -597,3 +597,34 @@ async def selfie_attendance(
             }
         raise HTTPException(status_code=500, detail="Failed to save attendance record.")
 
+
+# ==========================================
+# WhatsApp Cloud API Notifications
+# ==========================================
+
+from app.whatsapp import send_whatsapp_raw, send_session_absentee_alerts
+
+class WhatsAppTestRequest(BaseModel):
+    phone: str
+    message: Optional[str] = None
+
+class WhatsAppAlertRequest(BaseModel):
+    session_id: str
+
+@router.post("/api/whatsapp/test")
+async def api_whatsapp_test(req: WhatsAppTestRequest):
+    """Sends a test WhatsApp message to verify phone & token setup."""
+    msg = req.message or "🎉 *MedAttend WhatsApp System Online!*\nThis is a verified test message from your Smart Attendance System."
+    result = send_whatsapp_raw(req.phone, msg)
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail=result.get("error", "Failed to send WhatsApp message"))
+    return result
+
+@router.post("/api/whatsapp/send-absent-alerts")
+async def api_whatsapp_send_absent_alerts(req: WhatsAppAlertRequest):
+    """Dispatches WhatsApp absent notices to parents of all absent students in a session."""
+    result = send_session_absentee_alerts(req.session_id)
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail=result.get("error", "Failed to process absent alerts"))
+    return result
+

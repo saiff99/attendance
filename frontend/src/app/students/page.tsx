@@ -1,13 +1,13 @@
-/* eslint-disable */
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Search, UserPlus, FileDown, MoreHorizontal, X, UploadCloud, Loader2, Edit2, Trash2, Folder, ArrowLeft, Users, FileSpreadsheet, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { Search, UserPlus, FileDown, MoreHorizontal, X, UploadCloud, Loader2, Edit2, Trash2, Folder, ArrowLeft, Users, FileSpreadsheet, ArrowUpDown, ArrowUp, ArrowDown, MessageSquare, Phone } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import type { Student } from "@/types/database";
 import { StudentProfileModal } from "@/components/StudentProfileModal";
 import { FaceRegistrationModal } from "@/components/FaceRegistrationModal";
 import { BulkImportModal } from "@/components/BulkImportModal";
+import { getParentPhone, formatPhoneDisplay, encodeStudentEmail } from "@/lib/studentContact";
 
 export default function StudentDirectory() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -44,7 +44,7 @@ export default function StudentDirectory() {
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
   // Form State
-  const [newStudent, setNewStudent] = useState({ student_roll: '', full_name: '', email: '', academic_year: '1st Year' });
+  const [newStudent, setNewStudent] = useState({ student_roll: '', full_name: '', email: '', academic_year: '1st Year', parent_phone: '' });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Face Registration Modal State
@@ -83,8 +83,8 @@ export default function StudentDirectory() {
     e.preventDefault();
     setIsSubmitting(true);
 
-    // Auto-generate email to satisfy database constraints since we removed it from UI
-    const generatedEmail = `${newStudent.student_roll.toLowerCase().replace(/\s+/g, '')}@student.local`;
+    // Encode parent WhatsApp phone into database email format safely
+    const generatedEmail = encodeStudentEmail(newStudent.student_roll, newStudent.parent_phone);
 
     try {
       if (editingId) {
@@ -164,14 +164,14 @@ export default function StudentDirectory() {
 
   const openEnrollModal = () => {
     setEditingId(null);
-    setNewStudent({ student_roll: '', full_name: '', email: '', academic_year: activeView || '1st Year' });
+    setNewStudent({ student_roll: '', full_name: '', email: '', academic_year: activeView || '1st Year', parent_phone: '' });
     setIsModalOpen(true);
   };
 
   const closeModal = () => {
     setIsModalOpen(false);
     setEditingId(null);
-    setNewStudent({ student_roll: '', full_name: '', email: '', academic_year: activeView || '1st Year' });
+    setNewStudent({ student_roll: '', full_name: '', email: '', academic_year: activeView || '1st Year', parent_phone: '' });
   };
 
   const filteredStudents = students
@@ -230,12 +230,12 @@ export default function StudentDirectory() {
       alert("No students to export.");
       return;
     }
-    const headers = ["Roll Number", "Full Name", "Academic Year", "Email", "Face Data Status"];
+    const headers = ["Roll Number", "Full Name", "Academic Year", "Parent WhatsApp", "Face Data Status"];
     const rows = listToExport.map(s => [
       `"${s.student_roll || ''}"`,
       `"${s.full_name || ''}"`,
       `"${s.academic_year || ''}"`,
-      `"${s.email || ''}"`,
+      `"${getParentPhone(s) || ''}"`,
       `"${s.face_encoding ? 'Active' : 'Missing'}"`
     ]);
     const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
@@ -495,6 +495,9 @@ export default function StudentDirectory() {
                         </div>
                       </th>
                       <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900 dark:text-gray-300">
+                        Parent WhatsApp
+                      </th>
+                      <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900 dark:text-gray-300">
                         Face Data
                       </th>
                       <th scope="col" className="relative py-3.5 pl-3 pr-4 sm:pr-6 text-right text-sm font-semibold text-gray-900 dark:text-gray-300">
@@ -505,19 +508,20 @@ export default function StudentDirectory() {
                   <tbody className="divide-y divide-gray-200 dark:divide-gray-800 bg-white dark:bg-gray-900">
                     {loading ? (
                       <tr>
-                        <td colSpan={6} className="py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+                        <td colSpan={7} className="py-8 text-center text-sm text-gray-500 dark:text-gray-400">
                           Loading students...
                         </td>
                       </tr>
                     ) : filteredStudents.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+                        <td colSpan={7} className="py-8 text-center text-sm text-gray-500 dark:text-gray-400">
                           No students found. Enroll a new student to get started!
                         </td>
                       </tr>
                     ) : (
                       filteredStudents.map((student, idx) => {
                         const isSelected = selectedIds.includes(student.id);
+                        const phone = getParentPhone(student);
                         return (
                           <tr
                             key={student.id}
@@ -560,6 +564,23 @@ export default function StudentDirectory() {
                               </span>
                             </td>
                             <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500 dark:text-gray-400">
+                              {phone ? (
+                                <a
+                                  href={`https://wa.me/${phone}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-mono font-medium hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors"
+                                  title="Chat on WhatsApp"
+                                >
+                                  <MessageSquare className="w-3 h-3 text-emerald-500" />
+                                  <span>{formatPhoneDisplay(phone)}</span>
+                                </a>
+                              ) : (
+                                <span className="text-gray-400 dark:text-gray-600 text-xs italic">Not set</span>
+                              )}
+                            </td>
+                            <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500 dark:text-gray-400">
                               <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset ${student.face_encoding ? 'bg-indigo-50 text-indigo-700 ring-indigo-600/20 dark:bg-indigo-900/30 dark:text-indigo-400 dark:ring-indigo-400/20' : 'bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-900/30 dark:text-amber-400 dark:ring-amber-400/20'
                                 }`}>
                                 {student.face_encoding ? 'Active' : 'Missing'}
@@ -597,7 +618,8 @@ export default function StudentDirectory() {
                                               student_roll: student.student_roll || '',
                                               full_name: student.full_name || '',
                                               email: student.email || '',
-                                              academic_year: student.academic_year || '1st Year'
+                                              academic_year: student.academic_year || '1st Year',
+                                              parent_phone: getParentPhone(student)
                                             });
                                             setEditingId(student.id);
                                             setIsModalOpen(true);
@@ -743,6 +765,23 @@ export default function StudentDirectory() {
                     <option value="3rd Year">3rd Year</option>
                     <option value="4th Year">4th Year</option>
                   </select>
+                </div>
+                <div>
+                  <label htmlFor="parent_phone" className="block text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center justify-between">
+                    <span>Parent WhatsApp Number</span>
+                    <span className="text-[11px] text-emerald-500 font-normal">Optional</span>
+                  </label>
+                  <div className="relative mt-1">
+                    <input
+                      id="parent_phone"
+                      type="tel"
+                      className="block w-full rounded-md border-0 bg-white dark:bg-gray-800 py-2 text-gray-900 dark:text-white ring-1 ring-inset ring-gray-300 dark:ring-gray-700 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6 px-3"
+                      value={newStudent.parent_phone}
+                      onChange={e => setNewStudent({ ...newStudent, parent_phone: e.target.value })}
+                      placeholder="e.g. +91 98765 43210"
+                    />
+                  </div>
+                  <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">Used for automated WhatsApp absentee & attendance alert notices.</p>
                 </div>
 
                 <div className="mt-6 flex justify-end space-x-3 pt-4 border-t border-gray-100 dark:border-gray-800">

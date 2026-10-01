@@ -4,6 +4,7 @@ export interface Student {
   full_name: string;
   email: string;
   academic_year?: string;
+  parent_phone?: string;
   face_encoding?: Record<string, unknown>;
   created_at: string;
 }

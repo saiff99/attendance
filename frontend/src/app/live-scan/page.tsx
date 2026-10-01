@@ -8,7 +8,7 @@ import {
   ChevronUp, ChevronDown, ChevronLeft, ChevronRight, ZoomIn, ZoomOut,
   Grid, Maximize2, Minimize2, Eye, ShieldCheck, RefreshCw, X, Search,
   Clock, Sparkles, ChevronLeft as PrevIcon, ChevronRight as NextIcon,
-  QrCode, Copy, Check, ExternalLink, Smartphone, Navigation
+  QrCode, Copy, Check, ExternalLink, Smartphone, Navigation, MessageSquare
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { supabase } from "@/lib/supabase";
@@ -16,6 +16,7 @@ import { getBackendUrl } from "@/lib/api";
 import Webcam from "react-webcam";
 import { MjpegPlayer } from "@/components/MjpegPlayer";
 import { GeofenceModal } from "@/components/GeofenceModal";
+import { WhatsAppAlertModal } from "@/components/WhatsAppAlertModal";
 import { 
   CampusGeofenceConfig, 
   DEFAULT_GEOFENCE_CONFIG, 
@@ -84,6 +85,7 @@ export default function LiveScan() {
   const [copiedLink, setCopiedLink] = useState(false);
   const [ptzCameraCount, setPtzCameraCount] = useState(1);
   const [selectedPtzIndex, setSelectedPtzIndex] = useState(0);
+  const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false);
 
 
   // Webcam State
@@ -681,6 +683,14 @@ export default function LiveScan() {
               title="Synchronize Attendance Records"
             >
               <RefreshCw className="w-3.5 h-3.5 mr-1 text-gray-400 dark:text-slate-400" /> Sync
+            </button>
+
+            <button
+              onClick={() => setIsWhatsAppModalOpen(true)}
+              className="inline-flex items-center px-3 sm:px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold text-white shadow-md shadow-emerald-600/20 transition-all cursor-pointer active:scale-95"
+              title="Send Absentee WhatsApp Alerts to Parents"
+            >
+              <MessageSquare className="w-3.5 h-3.5 mr-1" /> WhatsApp Alerts
             </button>
 
             <button
@@ -1458,6 +1468,17 @@ export default function LiveScan() {
               </div>
             </div>
           </div>
+        )}
+
+        {/* WhatsApp Absentee Alert Modal */}
+        {activeSession && (
+          <WhatsAppAlertModal
+            isOpen={isWhatsAppModalOpen}
+            onClose={() => setIsWhatsAppModalOpen(false)}
+            sessionId={activeSession.id}
+            sessionName={activeSession.class_name}
+            topicName={decodeSessionMetadata(activeSession.instructor_name).topic}
+          />
         )}
 
         {/* GPS Geofence Modal */}
