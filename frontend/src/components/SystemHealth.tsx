@@ -3,58 +3,37 @@
 import { useEffect, useState } from "react";
 
 export function SystemHealth() {
-  const [isOnline, setIsOnline] = useState<boolean>(true); // Optimistic initial state
+  const [isOnline, setIsOnline] = useState<boolean>(false);
 
   useEffect(() => {
+    let isMounted = true;
+
     const checkHealth = async () => {
-      const candidates: string[] = [
-        "/api/health", // 1. Same-origin Next.js proxy (always works on Vercel and local)
-        "https://reader-thee-nevertheless-walked.trycloudflare.com/health", // 2. Cloudflare unlimited tunnel
-      ];
-      
-      // 3. Direct environment backend URL if available
-      if (process.env.NEXT_PUBLIC_BACKEND_URL) {
-        candidates.push(`${process.env.NEXT_PUBLIC_BACKEND_URL}/health`);
-      }
-      
-      // 4. Ngrok tunnel direct fallback
-      candidates.push("https://silly-unframed-extortion.ngrok-free.dev/health");
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 4500);
 
-      // Filter duplicates
-      const uniqueUrls = Array.from(new Set(candidates));
+        const response = await fetch("/api/health", {
+          method: "GET",
+          signal: controller.signal,
+          cache: "no-store",
+        });
+        clearTimeout(timeoutId);
 
-      let connected = false;
-
-      for (const url of uniqueUrls) {
-        // Skip insecure http localhost when browsing on HTTPS (mixed-content prevention)
-        if (typeof window !== "undefined" && window.location.protocol === "https:" && url.startsWith("http://")) {
-          continue;
-        }
-
-        try {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 3500);
-
-          const response = await fetch(url, {
-            method: "GET",
-            signal: controller.signal,
-            headers: {
-              "ngrok-skip-browser-warning": "69420"
-            }
-          });
-          
-          clearTimeout(timeoutId);
-
-          if (response.ok) {
-            connected = true;
-            break;
+        if (response.ok) {
+          const data = await response.json().catch(() => null);
+          if (isMounted) {
+            setIsOnline(data?.status === "ok" || data?.online === true);
           }
-        } catch {
-          // Try next candidate
+          return;
         }
+      } catch {
+        // Backend offline / fetch failed
       }
 
-      setIsOnline(connected);
+      if (isMounted) {
+        setIsOnline(false);
+      }
     };
 
     // Initial check
@@ -62,11 +41,14 @@ export function SystemHealth() {
 
     // Poll every 8 seconds
     const intervalId = setInterval(checkHealth, 8000);
-    return () => clearInterval(intervalId);
+    return () => {
+      isMounted = false;
+      clearInterval(intervalId);
+    };
   }, []);
 
   return (
-    <div className="flex items-center gap-2 px-4 py-3 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700">
+    <div className="flex items-center gap-2 px-4 py-3 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700 transition-colors">
       <div className="relative flex h-3 w-3">
         {isOnline ? (
           <>
@@ -75,7 +57,7 @@ export function SystemHealth() {
           </>
         ) : (
           <>
-            <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+            <span className="relative inline-flex rounded-full h-3 w-3 bg-rose-500"></span>
           </>
         )}
       </div>
