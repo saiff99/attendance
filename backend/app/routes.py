@@ -614,17 +614,11 @@ class WhatsAppAlertRequest(BaseModel):
 @router.post("/api/whatsapp/test")
 async def api_whatsapp_test(req: WhatsAppTestRequest):
     """Sends a test WhatsApp message to verify phone & token setup."""
-    msg = req.message or "🎉 *MedAttend WhatsApp System Online!*\nThis is a verified test message from your Smart Attendance System."
-    result = send_whatsapp_raw(req.phone, msg)
-    if not result.get("success"):
-        raise HTTPException(status_code=400, detail=result.get("error", "Failed to send WhatsApp message"))
-    return result
+    msg = req.message or "🏛️ *MedAttend WhatsApp Alert Verification*\nThis is a verified test message from your Attendance Notification System."
+    return send_whatsapp_raw(req.phone, msg)
 
 @router.post("/api/whatsapp/send-absent-alerts")
 async def api_whatsapp_send_absent_alerts(req: WhatsAppAlertRequest):
     """Dispatches WhatsApp absent notices to parents of all absent students in a session."""
-    result = send_session_absentee_alerts(req.session_id)
-    if not result.get("success"):
-        raise HTTPException(status_code=400, detail=result.get("error", "Failed to process absent alerts"))
-    return result
+    return send_session_absentee_alerts(req.session_id)
 

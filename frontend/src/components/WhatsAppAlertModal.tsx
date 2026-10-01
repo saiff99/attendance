@@ -258,28 +258,72 @@ export function WhatsAppAlertModal({
               {/* Send Results Banner */}
               {sendResult && (
                 <div
-                  className={`p-4 rounded-xl border text-xs ${
-                    sendResult.success
+                  className={`p-4 rounded-xl border text-xs space-y-2.5 ${
+                    sendResult.success && sendResult.failed_count === 0
                       ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-200"
+                      : sendResult.success && sendResult.sent_count > 0
+                      ? "bg-amber-500/10 border-amber-500/30 text-amber-200"
                       : "bg-rose-500/10 border-rose-500/30 text-rose-200"
                   }`}
                 >
-                  <div className="font-bold mb-1 flex items-center gap-2">
-                    {sendResult.success ? <CheckCircle2 className="w-4 h-4 text-emerald-400" /> : <AlertCircle className="w-4 h-4 text-rose-400" />}
-                    {sendResult.success ? "WhatsApp Alert Dispatch Summary" : "Dispatch Failed"}
+                  <div className="font-bold flex items-center gap-2">
+                    {sendResult.success && sendResult.failed_count === 0 ? (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    ) : (
+                      <AlertCircle className="w-4 h-4 text-amber-400" />
+                    )}
+                    {sendResult.success && sendResult.failed_count === 0
+                      ? "All WhatsApp Alerts Dispatched Successfully!"
+                      : sendResult.success
+                      ? "WhatsApp Dispatch Complete (Partial/Errors)"
+                      : "Dispatch Failed"}
                   </div>
+
                   {sendResult.success ? (
-                    <div className="space-y-1 text-[11px] text-slate-300">
-                      <div>✅ Successfully sent: <strong>{sendResult.sent_count}</strong> parent WhatsApp alerts</div>
+                    <div className="space-y-1.5 text-[11px] text-slate-300">
+                      <div>✅ Successfully sent: <strong className="text-emerald-300">{sendResult.sent_count}</strong> parent WhatsApp alerts</div>
                       {sendResult.missing_phone_count > 0 && (
-                        <div>⚠️ Skipped (no parent phone): <strong>{sendResult.missing_phone_count}</strong> students</div>
+                        <div>⚠️ Skipped (no parent phone): <strong className="text-slate-400">{sendResult.missing_phone_count}</strong> students</div>
                       )}
                       {sendResult.failed_count > 0 && (
-                        <div className="text-rose-300">❌ Delivery failed: <strong>{sendResult.failed_count}</strong></div>
+                        <div className="text-rose-300">❌ Failed to deliver: <strong>{sendResult.failed_count}</strong> alerts</div>
+                      )}
+
+                      {/* Per-student dispatch details */}
+                      {Array.isArray(sendResult.details) && sendResult.details.length > 0 && (
+                        <div className="mt-2 pt-2 border-t border-slate-800/60 space-y-1">
+                          {sendResult.details.map((d: any, idx: number) => (
+                            <div key={idx} className="flex flex-col sm:flex-row sm:items-center justify-between text-[11px] py-1 border-b border-slate-800/40 last:border-0">
+                              <span className="text-slate-300 font-medium">
+                                {d.student_name} ({d.student_roll}) {d.phone ? `• ${d.phone}` : ''}
+                              </span>
+                              <span className={d.status === 'sent' ? 'text-emerald-400' : d.status === 'skipped_no_phone' ? 'text-amber-400' : 'text-rose-400 font-semibold'}>
+                                {d.status === 'sent' ? '✅ Sent' : d.status === 'skipped_no_phone' ? '⚠️ No Phone' : `❌ ${d.error || 'Failed'}`}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Sandbox Restriction Guidance Box */}
+                      {sendResult.failed_count > 0 && JSON.stringify(sendResult.details || '').includes('Sandbox Restriction') && (
+                        <div className="mt-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-200 text-[11px] space-y-1">
+                          <div className="font-bold flex items-center gap-1.5 text-amber-300">
+                            <span>🛡️ Meta Developer Test Sandbox Requirement:</span>
+                          </div>
+                          <p className="text-slate-300 leading-relaxed">
+                            মেটা টেস্ট অ্যাকাউন্টে (Sandbox) মেসেজ পেতে হলে প্রাপকের মোবাইল নম্বরটি Meta Developer পোর্টালে যুক্ত (Whitelist) থাকতে হবে:
+                          </p>
+                          <ol className="list-decimal list-inside space-y-0.5 text-slate-300 pl-1 pt-1">
+                            <li><strong>Meta Developer Portal</strong> &gt; <strong>WhatsApp</strong> &gt; <strong>API Setup</strong> এ যান।</li>
+                            <li><strong>Step 1 (Send and receive messages)</strong> এর নিচে <strong>"To"</strong> ড্রপডাউনের পাশে <strong>"Manage phone number list"</strong> এ ক্লিক করুন।</li>
+                            <li>আপনার ফোন নম্বর (+91...) যুক্ত করে হোয়াটসঅ্যাপে আসা OTP দিয়ে ভেরিফাই করুন।</li>
+                          </ol>
+                        </div>
                       )}
                     </div>
                   ) : (
-                    <div>{sendResult.error || "Failed to send alerts"}</div>
+                    <div className="text-[11px] text-rose-300">{sendResult.error || "Failed to send alerts"}</div>
                   )}
                 </div>
               )}

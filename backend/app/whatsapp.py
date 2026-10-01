@@ -5,7 +5,7 @@ import urllib.request
 import urllib.error
 from datetime import datetime
 from dotenv import load_dotenv
-from app.supabase_client import supabase
+from app.config import supabase
 
 load_dotenv()
 
@@ -103,12 +103,23 @@ def send_whatsapp_raw(to_phone: str, text: str, template_name: str = None) -> di
             return {"success": True, "data": data, "recipient": recipient}
     except urllib.error.HTTPError as e:
         err_msg = e.read().decode("utf-8")
+        fb_err = err_msg
+        err_code = None
         try:
             err_json = json.loads(err_msg)
-            fb_err = err_json.get("error", {}).get("message", err_msg)
+            err_obj = err_json.get("error", {})
+            raw_msg = err_obj.get("message", "")
+            err_code = err_obj.get("code")
+            
+            if err_code == 131030 or "not in allowed list" in raw_msg.lower():
+                fb_err = "Sandbox Restriction: Recipient number is not added to the allowed test list in Meta Developer Portal. (Go to WhatsApp > API Setup > Step 1 > Manage phone number list)."
+            elif err_code == 190 or "session has expired" in raw_msg.lower() or "invalid oauth" in raw_msg.lower():
+                fb_err = "Meta Access Token expired. Please copy a new Temporary Access Token from Meta Developer Portal > WhatsApp > API Setup."
+            elif raw_msg:
+                fb_err = raw_msg
         except Exception:
             fb_err = err_msg
-        return {"success": False, "error": fb_err, "recipient": recipient, "code": e.code}
+        return {"success": False, "error": fb_err, "recipient": recipient, "code": e.code, "meta_code": err_code}
     except Exception as e:
         return {"success": False, "error": str(e), "recipient": recipient}
 
