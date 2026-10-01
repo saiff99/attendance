@@ -141,12 +141,6 @@ export default function LoginPage() {
           </button>
         </form>
 
-        {/* Quick Demo Hint */}
-        <div className="mt-4 p-2.5 rounded-xl bg-slate-950/50 border border-slate-800/80 text-[11px] text-slate-400 text-center">
-          <span>Default Admin Login: </span>
-          <strong className="text-indigo-300 font-mono">admin</strong> / <strong className="text-indigo-300 font-mono">admin123</strong>
-        </div>
-
         {/* Student Redirection Section */}
         <div className="mt-6 pt-5 border-t border-slate-800/80 flex flex-col items-center text-center gap-2">
           <p className="text-xs text-slate-400">Are you a student attending class?</p>
