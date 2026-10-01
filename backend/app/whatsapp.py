@@ -124,6 +124,21 @@ def send_whatsapp_raw(to_phone: str, text: str, template_name: str = None) -> di
         return {"success": False, "error": str(e), "recipient": recipient}
 
 
+def decode_session_topic(raw_instructor: str) -> str:
+    """Strips GPS metadata and extracts clean topic name for WhatsApp notices."""
+    if not raw_instructor:
+        return "General Medical Lecture"
+    # Remove GPS metadata tag: [GPS:22.450226,88.170692,...]
+    cleaned = re.sub(r"\[GPS:[^\]]*\]", "", str(raw_instructor)).strip()
+    if "::" in cleaned:
+        parts = [p.strip() for p in cleaned.split("::") if p.strip()]
+        if len(parts) >= 2:
+            return parts[1]
+        elif parts:
+            return parts[0]
+    return cleaned or "General Medical Lecture"
+
+
 def send_session_absentee_alerts(session_id: str) -> dict:
     """
     Finds all absent students for a given class session and sends personalized WhatsApp alerts
@@ -140,25 +155,20 @@ def send_session_absentee_alerts(session_id: str) -> dict:
     session = sess_res.data[0]
     class_name = session.get("class_name", "Medical Class")
     raw_instructor = session.get("instructor_name", "")
-    
-    # Extract topic from metadata
-    topic = "Class Lecture"
-    if "::" in raw_instructor:
-        topic = raw_instructor.split("::")[0].strip() or topic
-    elif raw_instructor:
-        topic = raw_instructor.strip()
+    topic = decode_session_topic(raw_instructor)
 
     # Format Date & Time in localized representation
     session_date = session.get("date", datetime.now().strftime("%Y-%m-%d"))
     start_time_iso = session.get("start_time")
+    time_display = ""
     if start_time_iso:
         try:
             dt = datetime.fromisoformat(start_time_iso.replace("Z", "+00:00"))
             time_display = dt.strftime("%I:%M %p")
         except Exception:
-            time_display = session_date
-    else:
-        time_display = session_date
+            time_display = ""
+
+    date_time_str = f"{session_date} at {time_display}" if time_display else session_date
 
     # 2. Fetch all registered students (optionally filtered by academic year)
     target_year = session.get("target_academic_year")
@@ -208,7 +218,7 @@ def send_session_absentee_alerts(session_id: str) -> dict:
             f"This is to notify you that your ward *{student_name}* (Roll No: *{student_roll}*) was marked *ABSENT* for today's scheduled class session:\n\n"
             f"📚 *Class / Hall:* {class_name}\n"
             f"👨‍🏫 *Topic:* {topic}\n"
-            f"📅 *Date & Time:* {session_date} at {time_display}\n\n"
+            f"📅 *Date & Time:* {date_time_str}\n\n"
             f"If this is an authorized medical leave or university posting, please disregard this notice or contact the faculty administration."
         )
 
