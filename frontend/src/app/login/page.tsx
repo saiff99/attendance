@@ -2,9 +2,9 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { 
-  Activity, Lock, User, ArrowRight, ShieldCheck, 
-  AlertCircle, Smartphone, Eye, EyeOff, Loader2 
+import {
+  Activity, Lock, User, ArrowRight, ShieldCheck,
+  AlertCircle, Smartphone, Eye, EyeOff, Loader2
 } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth";
@@ -16,7 +16,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  
+
   const usernameInputRef = useRef<HTMLInputElement>(null);
   const { login, isAuthenticated, isLoading } = useAuth();
   const router = useRouter();
@@ -64,7 +64,7 @@ export default function LoginPage() {
 
       {/* Main Login Card with smooth transition */}
       <div className="w-full max-w-md bg-slate-900/90 border border-slate-800/90 rounded-3xl p-6 sm:p-8 shadow-2xl backdrop-blur-xl relative z-10 transition-all duration-300 ease-out">
-        
+
         {/* Header Branding */}
         <div className="flex flex-col items-center text-center mb-6">
           <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center text-white mb-3.5 shadow-xl shadow-indigo-600/30 transition-transform duration-300 hover:scale-105">
@@ -82,11 +82,10 @@ export default function LoginPage() {
         <div className="relative">
           {/* Initial Access Button View */}
           <div
-            className={`grid transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-              !showAdminForm
+            className={`grid transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${!showAdminForm
                 ? "grid-rows-[1fr] opacity-100 scale-100 translate-y-0"
                 : "grid-rows-[0fr] opacity-0 scale-95 -translate-y-2 pointer-events-none"
-            }`}
+              }`}
           >
             <div className="overflow-hidden">
               <button
@@ -102,11 +101,10 @@ export default function LoginPage() {
 
           {/* Form View with Smooth Slide & Height Expansion */}
           <div
-            className={`grid transition-all duration-400 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-              showAdminForm
+            className={`grid transition-all duration-400 ease-[cubic-bezier(0.16,1,0.3,1)] ${showAdminForm
                 ? "grid-rows-[1fr] opacity-100 scale-100 translate-y-0"
                 : "grid-rows-[0fr] opacity-0 scale-95 translate-y-3 pointer-events-none"
-            }`}
+              }`}
           >
             <div className="overflow-hidden">
               <form onSubmit={handleSubmit} className="space-y-4 pt-1">

@@ -187,26 +187,36 @@ export default function LiveScan() {
       return;
     }
     
-    const headers = ["Roll Number", "Full Name", "Status", "Capture Mode", "Confidence (%)", "Recorded At"];
+    const headers = ["Roll Number", "Full Name", "Status", "Capture Mode", "Confidence (%)", "Date & Time Recorded"];
     const rows = logs.map(log => {
       const studentName = log.students?.full_name || "Unknown";
       const studentRoll = log.students?.student_roll || "N/A";
       const status = log.status || "Present";
       const captureMode = log.capture_mode || "AI CCTV";
       const confidence = Math.round((log.confidence_score || 0.9) * 100).toString();
-      const time = new Date(log.recorded_at).toLocaleString();
+      const time = new Date(log.recorded_at).toLocaleString([], {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: true
+      });
       
       return [studentRoll, studentName, status, captureMode, confidence, time]
         .map(cell => `"${cell}"`)
         .join(",");
     });
     
+    const now = new Date();
+    const localDateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     const csvContent = [headers.join(","), ...rows].join("\n");
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `Attendance_${activeSession.class_name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute("download", `Attendance_${activeSession.class_name.replace(/\s+/g, '_')}_${localDateStr}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -273,15 +283,20 @@ export default function LiveScan() {
     e.preventDefault();
     setIsStartingSession(true);
     try {
-      const today = new Date().toISOString().split('T')[0];
+      const now = new Date();
+      const localYear = now.getFullYear();
+      const localMonth = String(now.getMonth() + 1).padStart(2, '0');
+      const localDay = String(now.getDate()).padStart(2, '0');
+      const today = `${localYear}-${localMonth}-${localDay}`;
+      
       const finalHall = setupData.hall === "custom" ? (customHallName.trim() || "Custom Hall") : setupData.hall;
       const className = `${setupData.subject} - ${finalHall}`;
       
       const newSession = {
         class_name: className,
         date: today,
-        start_time: new Date().toISOString(),
-        end_time: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
+        start_time: now.toISOString(),
+        end_time: new Date(now.getTime() + 2 * 60 * 60 * 1000).toISOString(),
         instructor_name: encodeSessionMetadata(setupData.topic, sessionGeofence),
         target_academic_year: setupData.academic_year
       };

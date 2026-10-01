@@ -26,18 +26,25 @@ export default function DownloadReportButton({ sessionId, sessionName }: { sessi
       }
 
       // Generate CSV content
-      const headers = ["Roll Number", "Student Name", "Time Recorded", "Status", "Confidence Score (%)"];
+      const headers = ["Roll Number", "Student Name", "Date & Time Recorded", "Status", "Confidence Score (%)"];
       
       const csvRows = [headers.join(",")];
       
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       data.forEach((record: any) => {
-        const roll = record.students?.student_roll || "N/A";
-        // Escape commas in names
+        const roll = `"${record.students?.student_roll || "N/A"}"`;
         const name = `"${record.students?.full_name || "Unknown"}"`;
-        const time = new Date(record.recorded_at).toLocaleTimeString();
-        const status = record.status;
-        const confidence = Math.round(record.confidence_score * 100);
+        const time = `"${new Date(record.recorded_at).toLocaleString([], {
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+          second: "2-digit",
+          hour12: true
+        })}"`;
+        const status = `"${record.status || "Present"}"`;
+        const confidence = Math.round((record.confidence_score || 1) * 100);
         
         csvRows.push([roll, name, time, status, confidence].join(","));
       });

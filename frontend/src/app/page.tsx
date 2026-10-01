@@ -1,10 +1,9 @@
-/* eslint-disable */
 import { Users, UserCheck, CalendarCheck, Activity, CalendarDays, TrendingUp } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import DownloadReportButton from "@/components/DownloadReportButton";
 import { AttendanceChart } from "@/components/AttendanceChart";
 import { decodeSessionMetadata } from "@/lib/geofence";
-
+import { FormattedDate } from "@/components/FormattedDate";
 
 export const revalidate = 0; // Dynamic rendering
 
@@ -152,7 +151,7 @@ export default async function Dashboard() {
                   return (
                     <tr key={session.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
                       <td className="px-4 sm:px-6 py-3.5 sm:py-4 whitespace-nowrap text-xs sm:text-sm text-gray-500 dark:text-gray-400">
-                        {new Date(session.created_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
+                        <FormattedDate date={session.created_at} />
                       </td>
                       <td className="px-4 sm:px-6 py-3.5 sm:py-4 whitespace-nowrap text-xs sm:text-sm font-medium text-gray-900 dark:text-white">
                         {session.class_name}
