@@ -60,16 +60,28 @@ interface SelfieAttendClientProps {
 export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClientProps) {
   const searchParams = useSearchParams();
   const initialSessionId = searchParams.get("session_id");
+  const hasAutoSelectedRef = useRef<boolean>(false);
 
   // Step Machine: 1: select_session, 2: enter_roll, 3: capture_selfie, 4: result
-  const [step, setStep] = useState<"select_session" | "enter_roll" | "capture_selfie" | "result">("select_session");
+  const [step, setStep] = useState<"select_session" | "enter_roll" | "capture_selfie" | "result">(() => {
+    if (initialSessionId && initialSessions.length > 0) {
+      const found = initialSessions.find(s => s.id === initialSessionId);
+      if (found && (found.remaining_seconds ?? 0) > 0 && !found.is_expired) {
+        return "enter_roll";
+      }
+    }
+    return "select_session";
+  });
   
   // Data States
   const [sessions, setSessions] = useState<ActiveSession[]>(initialSessions);
   const [loadingSessions, setLoadingSessions] = useState<boolean>(initialSessions.length === 0);
   const [selectedSession, setSelectedSession] = useState<ActiveSession | null>(() => {
     if (initialSessionId && initialSessions.length > 0) {
-      return initialSessions.find(s => s.id === initialSessionId) || null;
+      const found = initialSessions.find(s => s.id === initialSessionId);
+      if (found && (found.remaining_seconds ?? 0) > 0 && !found.is_expired) {
+        return found;
+      }
     }
     return null;
   });
@@ -263,9 +275,11 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
 
     setSessions(activeList);
 
-    if (initialSessionId) {
+    // Only auto-select from URL once on the very first mount, and ONLY if the session is STILL VALID (not expired)
+    if (initialSessionId && !hasAutoSelectedRef.current) {
+      hasAutoSelectedRef.current = true;
       const matched = activeList.find(s => s.id === initialSessionId);
-      if (matched) {
+      if (matched && (matched.remaining_seconds ?? 0) > 0 && !matched.is_expired) {
         setSelectedSession(matched);
         setStep("enter_roll");
       }
@@ -332,9 +346,10 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
   useEffect(() => {
     if (initialSessions.length === 0) {
       fetchActiveSessions();
-    } else if (initialSessionId) {
+    } else if (initialSessionId && !hasAutoSelectedRef.current) {
       const matched = initialSessions.find(s => s.id === initialSessionId);
-      if (matched) {
+      if (matched && (matched.remaining_seconds ?? 0) > 0 && !matched.is_expired) {
+        hasAutoSelectedRef.current = true;
         setSelectedSession(matched);
         setStep("enter_roll");
       }
@@ -618,6 +633,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
 
   // Reset to initial state
   const handleReset = () => {
+    hasAutoSelectedRef.current = true;
     setCapturedImage(null);
     setResultData(null);
     setLookupError(null);
@@ -628,6 +644,9 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
     setGeofenceErrorMessage(null);
     setGeofenceDistance(null);
     setStep("select_session");
+    if (typeof window !== "undefined" && window.location.search) {
+      window.history.replaceState({}, '', window.location.pathname);
+    }
     fetchActiveSessions();
   };
 
@@ -827,6 +846,10 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                 </div>
                 <button 
                   onClick={() => {
+                    hasAutoSelectedRef.current = true;
+                    if (typeof window !== "undefined" && window.location.search) {
+                      window.history.replaceState({}, '', window.location.pathname);
+                    }
                     setSelectedSession(null);
                     setStudent(null);
                     setStep("select_session");
