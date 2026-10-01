@@ -328,8 +328,8 @@ export function WhatsAppAlertModal({
                 </div>
               )}
 
-              {/* Test Phone Box */}
-              <div className="pt-2 border-t border-slate-800/80">
+              {/* Test Phone Box & Sandbox Tip */}
+              <div className="pt-3 border-t border-slate-800/80 space-y-2">
                 <form onSubmit={handleSendTestMessage} className="flex flex-col sm:flex-row items-center gap-2">
                   <div className="relative flex-1 w-full">
                     <input
@@ -340,18 +340,55 @@ export function WhatsAppAlertModal({
                       className="w-full pl-3 pr-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500"
                     />
                   </div>
-                  <button
-                    type="submit"
-                    disabled={isTesting || !testPhone.trim()}
-                    className="w-full sm:w-auto px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition-all disabled:opacity-50 cursor-pointer shrink-0 flex items-center justify-center gap-1.5"
-                  >
-                    {isTesting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5 text-emerald-400" />}
-                    Send Test
-                  </button>
+                  <div className="flex items-center gap-2 w-full sm:w-auto">
+                    <button
+                      type="button"
+                      disabled={isTesting || !testPhone.trim()}
+                      onClick={async () => {
+                        if (!testPhone.trim()) return;
+                        setIsTesting(true);
+                        setTestResult(null);
+                        try {
+                          const res = await fetch("/api/whatsapp/test", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ phone: testPhone.trim(), template_name: "hello_world" })
+                          });
+                          const data = await res.json();
+                          if (data.success) {
+                            setTestResult(`✅ Official Meta 'hello_world' Template sent to ${data.recipient || testPhone}! Check your WhatsApp.`);
+                          } else {
+                            setTestResult(`❌ Error: ${data.error || "Failed to deliver"}`);
+                          }
+                        } catch (err: any) {
+                          setTestResult(`❌ Error: ${err.message || "Network error"}`);
+                        } finally {
+                          setIsTesting(false);
+                        }
+                      }}
+                      className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-300 text-xs font-semibold transition-all disabled:opacity-50 cursor-pointer shrink-0 flex items-center gap-1 border border-emerald-500/20"
+                      title="Send Meta Hello World Template"
+                    >
+                      <span>Template Test</span>
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isTesting || !testPhone.trim()}
+                      className="flex-1 sm:flex-initial px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition-all disabled:opacity-50 cursor-pointer shrink-0 flex items-center justify-center gap-1.5"
+                    >
+                      {isTesting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5 text-emerald-400" />}
+                      Send Notice
+                    </button>
+                  </div>
                 </form>
                 {testResult && (
-                  <p className="text-[11px] mt-2 text-slate-300">{testResult}</p>
+                  <p className="text-[11px] text-slate-300 bg-slate-950/80 p-2 rounded-lg border border-slate-800">{testResult}</p>
                 )}
+
+                {/* Helpful note for Meta Sandbox test number */}
+                <div className="p-2.5 rounded-lg bg-emerald-950/20 border border-emerald-500/20 text-[11px] text-slate-300 leading-relaxed">
+                  💡 <strong className="text-emerald-300">Sandbox টিপ:</strong> মেটার টেস্ট নম্বর হলো <span className="font-mono text-emerald-400 font-bold">+1 555-138-2853</span>। টেস্ট মোডে সম্পূর্ণ নোটিশ মেসেজ সরাসরি পেতে আপনার WhatsApp থেকে এই নম্বরে একবার <strong>"Hi"</strong> পাঠান (২৪ ঘণ্টার সার্ভিস উইন্ডো চালু করতে)।
+                </div>
               </div>
             </>
           )}
