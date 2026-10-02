@@ -609,6 +609,9 @@ class WhatsAppTestRequest(BaseModel):
     message: Optional[str] = None
     template_name: Optional[str] = None
 
+class WhatsAppAlertRequest(BaseModel):
+    session_id: str
+
 @router.post("/api/whatsapp/test")
 async def api_whatsapp_test(req: WhatsAppTestRequest):
     """Sends a test WhatsApp message to verify phone & token setup."""
