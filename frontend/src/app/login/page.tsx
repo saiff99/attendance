@@ -83,8 +83,8 @@ export default function LoginPage() {
           {/* Initial Access Button View */}
           <div
             className={`grid transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${!showAdminForm
-                ? "grid-rows-[1fr] opacity-100 scale-100 translate-y-0"
-                : "grid-rows-[0fr] opacity-0 scale-95 -translate-y-2 pointer-events-none"
+              ? "grid-rows-[1fr] opacity-100 scale-100 translate-y-0"
+              : "grid-rows-[0fr] opacity-0 scale-95 -translate-y-2 pointer-events-none"
               }`}
           >
             <div className="overflow-hidden">
@@ -102,8 +102,8 @@ export default function LoginPage() {
           {/* Form View with Smooth Slide & Height Expansion */}
           <div
             className={`grid transition-all duration-400 ease-[cubic-bezier(0.16,1,0.3,1)] ${showAdminForm
-                ? "grid-rows-[1fr] opacity-100 scale-100 translate-y-0"
-                : "grid-rows-[0fr] opacity-0 scale-95 translate-y-3 pointer-events-none"
+              ? "grid-rows-[1fr] opacity-100 scale-100 translate-y-0"
+              : "grid-rows-[0fr] opacity-0 scale-95 translate-y-3 pointer-events-none"
               }`}
           >
             <div className="overflow-hidden">
