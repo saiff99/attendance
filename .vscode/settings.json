@@ -1,8 +1,8 @@
 {
-  "python.defaultInterpreterPath": "/Users/saif/Desktop/Attendance/Attendance-app/backend/.venv/bin/python",
+  "python.defaultInterpreterPath": "${workspaceFolder}/backend/.venv/bin/python",
   "python.analysis.extraPaths": [
-    "/Users/saif/Desktop/Attendance/Attendance-app/backend/.venv/lib/python3.9/site-packages",
-    "/Users/saif/Desktop/Attendance/Attendance-app/backend"
+    "${workspaceFolder}/backend/.venv/lib/python3.9/site-packages",
+    "${workspaceFolder}/backend"
   ],
   "css.lint.unknownAtRules": "ignore",
   "scss.lint.unknownAtRules": "ignore",
