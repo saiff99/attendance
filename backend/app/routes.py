@@ -612,6 +612,16 @@ class WhatsAppTestRequest(BaseModel):
 class WhatsAppAlertRequest(BaseModel):
     session_id: str
 
+class WhatsAppUpdateTokenRequest(BaseModel):
+    token: str
+    phone_id: Optional[str] = None
+
+@router.post("/api/whatsapp/update-token")
+async def api_whatsapp_update_token(req: WhatsAppUpdateTokenRequest):
+    """Updates WhatsApp access token dynamically."""
+    from app.whatsapp import update_whatsapp_credentials
+    return update_whatsapp_credentials(req.token, req.phone_id)
+
 @router.post("/api/whatsapp/test")
 async def api_whatsapp_test(req: WhatsAppTestRequest):
     """Sends a test WhatsApp message to verify phone & token setup."""

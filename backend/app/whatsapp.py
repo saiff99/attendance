@@ -14,6 +14,49 @@ WHATSAPP_PHONE_ID = os.getenv("WHATSAPP_PHONE_ID", "1304612619407965")
 GRAPH_API_VERSION = "v21.0"
 
 
+def update_whatsapp_credentials(token: str, phone_id: str = None) -> dict:
+    """Updates the in-memory and .env WhatsApp token so alerts work instantly."""
+    global WHATSAPP_TOKEN, WHATSAPP_PHONE_ID
+    if token:
+        WHATSAPP_TOKEN = token.strip()
+        os.environ["WHATSAPP_TOKEN"] = token.strip()
+    if phone_id:
+        WHATSAPP_PHONE_ID = phone_id.strip()
+        os.environ["WHATSAPP_PHONE_ID"] = phone_id.strip()
+
+    env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
+    try:
+        lines = []
+        if os.path.exists(env_path):
+            with open(env_path, "r") as f:
+                lines = f.readlines()
+        
+        token_found = False
+        phone_found = False
+        new_lines = []
+        for line in lines:
+            if line.startswith("WHATSAPP_TOKEN="):
+                new_lines.append(f"WHATSAPP_TOKEN={WHATSAPP_TOKEN}\n")
+                token_found = True
+            elif line.startswith("WHATSAPP_PHONE_ID=") and phone_id:
+                new_lines.append(f"WHATSAPP_PHONE_ID={WHATSAPP_PHONE_ID}\n")
+                phone_found = True
+            else:
+                new_lines.append(line)
+        
+        if not token_found:
+            new_lines.append(f"WHATSAPP_TOKEN={WHATSAPP_TOKEN}\n")
+        if phone_id and not phone_found:
+            new_lines.append(f"WHATSAPP_PHONE_ID={WHATSAPP_PHONE_ID}\n")
+            
+        with open(env_path, "w") as f:
+            f.writelines(new_lines)
+    except Exception as e:
+        print("Failed to save token to .env:", e)
+
+    return {"success": True, "message": "WhatsApp Token updated successfully."}
+
+
 def clean_phone_number(phone: str) -> str:
     """Normalizes phone number to international E.164 digits without plus (e.g. 919876543210)."""
     if not phone:

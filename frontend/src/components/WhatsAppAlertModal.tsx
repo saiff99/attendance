@@ -27,10 +27,45 @@ export function WhatsAppAlertModal({
   const [totalCount, setTotalCount] = useState(0);
   const [sendResult, setSendResult] = useState<any | null>(null);
   
-  // Test Message state
+  // Token update state
+  const [newToken, setNewToken] = useState("");
+  const [isUpdatingToken, setIsUpdatingToken] = useState(false);
+  const [tokenUpdateMsg, setTokenUpdateMsg] = useState<string | null>(null);
+
+  // Test send state
   const [testPhone, setTestPhone] = useState("");
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<string | null>(null);
+
+
+  const handleUpdateToken = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newToken.trim()) return;
+    setIsUpdatingToken(true);
+    setTokenUpdateMsg(null);
+    try {
+      const res = await fetch("/api/whatsapp/update-token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: newToken.trim() })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setTokenUpdateMsg("✅ New Access Token saved! Re-dispatching alerts now...");
+        setNewToken("");
+        // Automatically retry dispatching
+        setTimeout(() => {
+          handleSendAlerts();
+        }, 800);
+      } else {
+        setTokenUpdateMsg(`❌ Failed: ${data.error || "Could not update token"}`);
+      }
+    } catch (err: any) {
+      setTokenUpdateMsg(`❌ Failed: ${err.message || "Network error"}`);
+    } finally {
+      setIsUpdatingToken(false);
+    }
+  };
 
   const fetchSessionAbsentees = async () => {
     if (!sessionId) return;
@@ -260,7 +295,7 @@ This is to notify you that your ward <strong>[Student Name]</strong> (Roll: <str
               {/* Send Results Banner */}
               {sendResult && (
                 <div
-                  className={`p-3.5 sm:p-4 rounded-xl border text-xs space-y-2.5 w-full min-w-0 break-words ${
+                  className={`p-3.5 sm:p-4 rounded-xl border text-xs space-y-3 w-full min-w-0 break-words ${
                     sendResult.success && sendResult.failed_count === 0
                       ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-200"
                       : sendResult.success && sendResult.sent_count > 0
@@ -272,7 +307,7 @@ This is to notify you that your ward <strong>[Student Name]</strong> (Roll: <str
                     {sendResult.success && sendResult.failed_count === 0 ? (
                       <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
                     ) : (
-                      <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+                      <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
                     )}
                     <span className="truncate">
                       {sendResult.success && sendResult.failed_count === 0
@@ -284,7 +319,7 @@ This is to notify you that your ward <strong>[Student Name]</strong> (Roll: <str
                   </div>
 
                   {sendResult.success ? (
-                    <div className="space-y-1.5 text-[11px] text-slate-300">
+                    <div className="space-y-2 text-[11px] text-slate-300">
                       <div>✅ Successfully sent: <strong className="text-emerald-300">{sendResult.sent_count}</strong> parent WhatsApp alerts</div>
                       {sendResult.missing_phone_count > 0 && (
                         <div>⚠️ Skipped (no parent phone): <strong className="text-slate-400">{sendResult.missing_phone_count}</strong> students</div>
@@ -295,17 +330,61 @@ This is to notify you that your ward <strong>[Student Name]</strong> (Roll: <str
 
                       {/* Per-student dispatch details */}
                       {Array.isArray(sendResult.details) && sendResult.details.length > 0 && (
-                        <div className="mt-2 pt-2 border-t border-slate-800/60 space-y-1">
+                        <div className="mt-2 pt-2 border-t border-slate-800/60 space-y-1.5 w-full min-w-0">
                           {sendResult.details.map((d: any, idx: number) => (
                             <div key={idx} className="flex items-center justify-between text-[11px] py-1 border-b border-slate-800/40 last:border-0 gap-2 min-w-0">
                               <span className="text-slate-300 font-medium truncate min-w-0 flex-1">
                                 {d.student_name} ({d.student_roll}) {d.phone ? `• ${d.phone}` : ''}
                               </span>
-                              <span className={`shrink-0 ${d.status === 'sent' ? 'text-emerald-400' : d.status === 'skipped_no_phone' ? 'text-amber-400' : 'text-rose-400 font-semibold'}`}>
-                                {d.status === 'sent' ? '✅ Sent' : d.status === 'skipped_no_phone' ? '⚠️ No Phone' : `❌ ${d.error || 'Failed'}`}
+                              <span className={`shrink-0 text-[11px] font-semibold ${
+                                d.status === 'sent'
+                                  ? 'text-emerald-400'
+                                  : d.status === 'skipped_no_phone'
+                                  ? 'text-amber-400'
+                                  : 'text-rose-400'
+                              }`}>
+                                {d.status === 'sent' ? '✅ Sent' : d.status === 'skipped_no_phone' ? '⚠️ No Phone' : '❌ Delivery Failed'}
                               </span>
                             </div>
                           ))}
+                        </div>
+                      )}
+
+                      {/* Token Expired Action Box */}
+                      {sendResult.failed_count > 0 && JSON.stringify(sendResult.details || '').includes('Meta Access Token expired') && (
+                        <div className="mt-3 p-3 rounded-xl bg-rose-950/40 border border-rose-500/30 text-rose-200 text-[11px] space-y-2 w-full min-w-0 break-words">
+                          <div className="font-bold flex items-center gap-1.5 text-rose-300">
+                            <span>🔑 Meta Access Token Expired (টোকেনের মেয়াদ শেষ):</span>
+                          </div>
+                          <p className="text-slate-300 leading-relaxed">
+                            মেটা ডেভেলপার টেস্ট একাউন্টের Temporary Access Token প্রতি ২৪ ঘণ্টা পর এক্সপায়ার হয়ে যায়। নতুন টোকেন দিয়ে সাথে সাথে ঠিক করুন:
+                          </p>
+                          <ol className="list-decimal list-inside space-y-0.5 text-slate-300 pl-1">
+                            <li><strong>developers.facebook.com</strong> &gt; <strong>WhatsApp</strong> &gt; <strong>API Setup</strong> এ যান।</li>
+                            <li><strong>Temporary access token</strong> এর পাশে <strong>Generate Token</strong> বা কপি বাটনে ক্লিক করুন।</li>
+                            <li>নিচের বক্সে নতুন টোকেন পেস্ট করে <strong>"Save &amp; Retry"</strong> চাপুন।</li>
+                          </ol>
+                          
+                          <form onSubmit={handleUpdateToken} className="flex flex-col sm:flex-row items-center gap-2 pt-1 w-full min-w-0">
+                            <input
+                              type="password"
+                              placeholder="Paste new Meta Access Token (EAAX...)"
+                              value={newToken}
+                              onChange={(e) => setNewToken(e.target.value)}
+                              className="w-full min-w-0 flex-1 px-3 py-2 rounded-xl bg-slate-950 border border-rose-500/40 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-rose-400"
+                            />
+                            <button
+                              type="submit"
+                              disabled={isUpdatingToken || !newToken.trim()}
+                              className="w-full sm:w-auto px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-semibold text-xs transition-all disabled:opacity-50 cursor-pointer shrink-0 flex items-center justify-center gap-1.5"
+                            >
+                              {isUpdatingToken ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                              <span>Save &amp; Retry</span>
+                            </button>
+                          </form>
+                          {tokenUpdateMsg && (
+                            <p className="text-[11px] text-slate-200 mt-1">{tokenUpdateMsg}</p>
+                          )}
                         </div>
                       )}
 
