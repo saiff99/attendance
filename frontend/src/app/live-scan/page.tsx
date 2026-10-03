@@ -24,7 +24,8 @@ import {
   decodeSessionMetadata, 
   getLocalGeofence, 
   saveLocalGeofence, 
-  getUserCoordinates, 
+  getUserCoordinates,
+  getCalibratedHighPrecisionGPS,
   formatDistance 
 } from "@/lib/geofence";
 
@@ -552,15 +553,15 @@ export default function LiveScan() {
                     onClick={async () => {
                       setCapturingSessionGPS(true);
                       try {
-                        const coords = await getUserCoordinates(12000);
+                        const coords = await getCalibratedHighPrecisionGPS(undefined, 3500);
                         const updated = {
                           ...sessionGeofence,
-                          latitude: parseFloat(coords.latitude.toFixed(6)),
-                          longitude: parseFloat(coords.longitude.toFixed(6)),
+                          latitude: coords.latitude,
+                          longitude: coords.longitude,
                         };
                         setSessionGeofence(updated);
                         saveLocalGeofence(updated);
-                        alert(`Classroom GPS set to current location!\nLat: ${updated.latitude}, Lon: ${updated.longitude}`);
+                        alert(`Classroom GPS set to calibrated location (Accuracy: ±${coords.accuracy}m)!\nLat: ${updated.latitude}, Lon: ${updated.longitude}`);
                       } catch (err: any) {
                         alert(err.message || "Failed to capture current location");
                       } finally {

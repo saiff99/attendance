@@ -8,6 +8,7 @@ import {
   calculateDistanceMeters, 
   formatDistance, 
   getUserCoordinates,
+  getCalibratedHighPrecisionGPS,
   getLocalGeofence,
   saveLocalGeofence
 } from "@/lib/geofence";
@@ -24,6 +25,8 @@ export function GeofenceModal({ isOpen, onClose, onConfigSaved }: GeofenceModalP
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [capturingGPS, setCapturingGPS] = useState(false);
+  const [gpsStatus, setGpsStatus] = useState<string | null>(null);
+  const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null);
   const [currentGPS, setCurrentGPS] = useState<{ latitude: number; longitude: number } | null>(null);
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [savedSuccess, setSavedSuccess] = useState(false);
@@ -32,6 +35,8 @@ export function GeofenceModal({ isOpen, onClose, onConfigSaved }: GeofenceModalP
     if (isOpen) {
       setSavedSuccess(false);
       setGpsError(null);
+      setGpsStatus(null);
+      setGpsAccuracy(null);
       const local = getLocalGeofence();
       setConfig(local);
       fetchConfig();
@@ -59,18 +64,27 @@ export function GeofenceModal({ isOpen, onClose, onConfigSaved }: GeofenceModalP
   const handleCaptureCurrentLocation = async () => {
     setCapturingGPS(true);
     setGpsError(null);
+    setGpsStatus("Calibrating high-precision GPS satellite signal...");
+    setGpsAccuracy(null);
     try {
-      const coords = await getUserCoordinates(12000);
+      const coords = await getCalibratedHighPrecisionGPS((progress) => {
+        setGpsStatus(`Acquiring satellite lock (Sample ${progress.sampleCount}, Accuracy: ±${progress.bestAccuracy}m)...`);
+      }, 3500);
+
       setCurrentGPS({ latitude: coords.latitude, longitude: coords.longitude });
+      setGpsAccuracy(coords.accuracy);
+      setGpsStatus(`🎯 High-Precision GPS Locked (Accuracy: ±${coords.accuracy}m)`);
+
       const updated = {
         ...config,
-        latitude: parseFloat(coords.latitude.toFixed(6)),
-        longitude: parseFloat(coords.longitude.toFixed(6)),
+        latitude: coords.latitude,
+        longitude: coords.longitude,
       };
       setConfig(updated);
       saveLocalGeofence(updated);
     } catch (err: any) {
-      setGpsError(err.message || "Failed to capture current location");
+      setGpsStatus(null);
+      setGpsError(err.message || "Failed to capture high-precision location");
     } finally {
       setCapturingGPS(false);
     }
@@ -215,6 +229,25 @@ export function GeofenceModal({ isOpen, onClose, onConfigSaved }: GeofenceModalP
                 />
               </div>
             </div>
+
+            {/* GPS Calibration & Accuracy Feedback */}
+            {gpsStatus && !gpsError && (
+              <div className="p-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20 text-indigo-700 dark:text-indigo-300 text-[11px] flex items-center justify-between animate-in fade-in duration-200">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  {capturingGPS ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-500 dark:text-indigo-400 shrink-0" />
+                  ) : (
+                    <Check className="w-3.5 h-3.5 text-emerald-500 dark:text-emerald-400 shrink-0" />
+                  )}
+                  <span className="font-medium truncate">{gpsStatus}</span>
+                </div>
+                {gpsAccuracy !== null && (
+                  <span className="font-mono text-[10px] bg-indigo-100 dark:bg-indigo-500/20 px-2 py-0.5 rounded text-indigo-700 dark:text-indigo-200 shrink-0 ml-2 font-semibold">
+                    ±{gpsAccuracy}m precision
+                  </span>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Radius Slider */}
