@@ -28,3 +28,27 @@ body {
   color: var(--foreground);
   font-family: var(--font-sans), sans-serif;
 }
+
+/* Suppress browser focus outlines and selection boxes on Recharts charts */
+.recharts-responsive-container,
+.recharts-wrapper,
+.recharts-surface,
+.recharts-layer,
+.recharts-bar,
+.recharts-pie,
+.recharts-sector,
+.recharts-legend-wrapper,
+.recharts-tooltip-wrapper,
+svg,
+svg *,
+.recharts-responsive-container:focus,
+.recharts-responsive-container:focus-visible,
+.recharts-wrapper:focus,
+.recharts-wrapper:focus-visible,
+.recharts-surface:focus,
+.recharts-surface:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
