@@ -352,15 +352,15 @@ export function WhatsAppAlertModal({
                       {sendResult.failed_count > 0 && JSON.stringify(sendResult.details || '').includes('Meta Access Token expired') && (
                         <div className="mt-3 p-3 rounded-xl bg-rose-950/40 border border-rose-500/30 text-rose-200 text-[11px] space-y-2 w-full min-w-0 break-words">
                           <div className="font-bold flex items-center gap-1.5 text-rose-300">
-                            <span>🔑 Meta Access Token Expired (টোকেনের মেয়াদ শেষ):</span>
+                            <span>🔑 Meta Access Token Expired:</span>
                           </div>
                           <p className="text-slate-300 leading-relaxed">
-                            মেটা ডেভেলপার টেস্ট একাউন্টের Temporary Access Token প্রতি ২৪ ঘণ্টা পর এক্সপায়ার হয়ে যায়। নতুন টোকেন দিয়ে সাথে সাথে ঠিক করুন:
+                            Meta Developer Temporary Access Tokens expire every 24 hours. Paste a fresh token to resolve immediately:
                           </p>
                           <ol className="list-decimal list-inside space-y-0.5 text-slate-300 pl-1">
-                            <li><strong>developers.facebook.com</strong> &gt; <strong>WhatsApp</strong> &gt; <strong>API Setup</strong> এ যান।</li>
-                            <li><strong>Temporary access token</strong> এর পাশে <strong>Generate Token</strong> বা কপি বাটনে ক্লিক করুন।</li>
-                            <li>নিচের বক্সে নতুন টোকেন পেস্ট করে <strong>"Save &amp; Retry"</strong> চাপুন।</li>
+                            <li>Go to <strong>developers.facebook.com</strong> &gt; <strong>WhatsApp</strong> &gt; <strong>API Setup</strong>.</li>
+                            <li>Click <strong>Generate Token</strong> or copy the <strong>Temporary access token</strong>.</li>
+                            <li>Paste the new token in the box below and click <strong>"Save &amp; Retry"</strong>.</li>
                           </ol>
 
                           <form onSubmit={handleUpdateToken} className="flex flex-col sm:flex-row items-center gap-2 pt-1 w-full min-w-0">
@@ -390,15 +390,15 @@ export function WhatsAppAlertModal({
                       {sendResult.failed_count > 0 && JSON.stringify(sendResult.details || '').includes('Sandbox Restriction') && (
                         <div className="mt-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-200 text-[11px] space-y-1 w-full min-w-0 break-words">
                           <div className="font-bold flex items-center gap-1.5 text-amber-300">
-                            <span>🛡️ Meta Developer Test Sandbox Requirement:</span>
+                            <span>🛡️ Meta Developer Sandbox Requirement:</span>
                           </div>
                           <p className="text-slate-300 leading-relaxed">
-                            মেটা টেস্ট অ্যাকাউন্টে (Sandbox) মেসেজ পেতে হলে প্রাপকের মোবাইল নম্বরটি Meta Developer পোর্টালে যুক্ত (Whitelist) থাকতে হবে:
+                            To receive messages in Meta Developer Test Sandbox, the recipient phone number must be whitelisted:
                           </p>
                           <ol className="list-decimal list-inside space-y-0.5 text-slate-300 pl-1 pt-1">
-                            <li><strong>Meta Developer Portal</strong> &gt; <strong>WhatsApp</strong> &gt; <strong>API Setup</strong> এ যান।</li>
-                            <li><strong>Step 1</strong> এ <strong>"To"</strong> এর পাশে <strong>"Manage phone number list"</strong> এ ক্লিক করুন।</li>
-                            <li>আপনার ফোন নম্বর (+91...) যুক্ত করে OTP দিয়ে ভেরিফাই করুন।</li>
+                            <li>Go to <strong>Meta Developer Portal</strong> &gt; <strong>WhatsApp</strong> &gt; <strong>API Setup</strong>.</li>
+                            <li>In <strong>Step 1</strong>, click <strong>"Manage phone number list"</strong> next to <strong>"To"</strong>.</li>
+                            <li>Add the recipient phone number (+91...) and verify with the OTP.</li>
                           </ol>
                         </div>
                       )}
