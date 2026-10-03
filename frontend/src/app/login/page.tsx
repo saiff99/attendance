@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   Activity, Lock, User, ArrowRight, ShieldCheck,
-  AlertCircle, Smartphone, Eye, EyeOff, Loader2
+  AlertCircle, Smartphone, Eye, EyeOff, Loader2, CheckCircle2
 } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth";
@@ -16,6 +16,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
 
   const usernameInputRef = useRef<HTMLInputElement>(null);
   const { login, isAuthenticated, isLoading } = useAuth();
@@ -46,13 +47,18 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
 
+    // Micro-delay for perceptible, smooth UI feedback
+    await new Promise((r) => setTimeout(r, 300));
+
     const res = await login(username, password);
-    setLoading(false);
 
     if (res.success) {
+      setIsSuccess(true);
+      // Keep loading / success state active until router transitions to dashboard
       router.push("/");
     } else {
-      setError(res.error || "Authentication failed.");
+      setLoading(false);
+      setError(res.error || "Authentication failed. Please check credentials.");
     }
   };
 
@@ -63,7 +69,13 @@ export default function LoginPage() {
       <div className="fixed bottom-10 right-10 w-72 h-72 bg-violet-600/10 blur-[100px] rounded-full pointer-events-none" />
 
       {/* Main Login Card with smooth transition */}
-      <div className="w-full max-w-md bg-slate-900/90 border border-slate-800/90 rounded-3xl p-6 sm:p-8 shadow-2xl backdrop-blur-xl relative z-10 transition-all duration-300 ease-out">
+      <div className="w-full max-w-md bg-slate-900/90 border border-slate-800/90 rounded-3xl p-6 sm:p-8 shadow-2xl backdrop-blur-xl relative z-10 transition-all duration-300 ease-out overflow-hidden">
+        {/* Animated Top Progress Line during loading */}
+        {loading && (
+          <div className="absolute top-0 left-0 right-0 h-1 bg-slate-800 overflow-hidden">
+            <div className="h-full bg-gradient-to-r from-indigo-500 via-violet-400 to-emerald-400 animate-pulse w-full" />
+          </div>
+        )}
 
         {/* Header Branding */}
         <div className="flex flex-col items-center text-center mb-6">
@@ -127,13 +139,14 @@ export default function LoginPage() {
                       ref={usernameInputRef}
                       type="text"
                       required
+                      disabled={loading}
                       value={username}
                       onChange={(e) => {
                         setUsername(e.target.value);
                         setError(null);
                       }}
                       placeholder="e.g. admin"
-                      className="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-950/80 border border-slate-800 text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-sm font-medium transition-all duration-200"
+                      className="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-950/80 border border-slate-800 text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-sm font-medium transition-all duration-200 disabled:opacity-60"
                     />
                   </div>
                 </div>
@@ -149,18 +162,20 @@ export default function LoginPage() {
                     <input
                       type={showPassword ? "text" : "password"}
                       required
+                      disabled={loading}
                       value={password}
                       onChange={(e) => {
                         setPassword(e.target.value);
                         setError(null);
                       }}
                       placeholder="Enter admin password"
-                      className="w-full pl-10 pr-10 py-3 rounded-xl bg-slate-950/80 border border-slate-800 text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-sm font-medium transition-all duration-200"
+                      className="w-full pl-10 pr-10 py-3 rounded-xl bg-slate-950/80 border border-slate-800 text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-sm font-medium transition-all duration-200 disabled:opacity-60"
                     />
                     <button
                       type="button"
+                      disabled={loading}
                       onClick={() => setShowPassword((prev) => !prev)}
-                      className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-500 hover:text-slate-300 transition-colors cursor-pointer"
+                      className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-500 hover:text-slate-300 transition-colors cursor-pointer disabled:opacity-40"
                     >
                       {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
@@ -170,26 +185,40 @@ export default function LoginPage() {
                 <div className="flex items-center gap-2 pt-1">
                   <button
                     type="button"
+                    disabled={loading}
                     onClick={() => {
                       setShowAdminForm(false);
                       setError(null);
                     }}
-                    className="py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold transition-all duration-200 cursor-pointer active:scale-95"
+                    className="py-3.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold transition-all duration-200 cursor-pointer active:scale-95 disabled:opacity-40"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={loading}
-                    className="flex-1 py-3.5 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-500 to-violet-600 hover:from-indigo-500 hover:via-indigo-400 hover:to-violet-500 text-white font-bold text-sm transition-all shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 active:scale-[0.98]"
+                    className={`flex-1 py-3.5 rounded-xl font-bold text-sm transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98] ${
+                      isSuccess
+                        ? "bg-emerald-600 text-white shadow-emerald-600/30"
+                        : loading
+                        ? "bg-indigo-600/90 text-white shadow-indigo-600/30 animate-pulse"
+                        : "bg-gradient-to-r from-indigo-600 via-indigo-500 to-violet-600 hover:from-indigo-500 hover:via-indigo-400 hover:to-violet-500 text-white shadow-indigo-600/30"
+                    }`}
                   >
-                    {loading ? (
+                    {isSuccess ? (
                       <>
-                        <Loader2 className="w-4 h-4 animate-spin" /> Verifying...
+                        <CheckCircle2 className="w-4 h-4 text-emerald-200 animate-bounce" />
+                        <span>Redirecting to Dashboard...</span>
+                      </>
+                    ) : loading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin text-indigo-200" />
+                        <span>Signing In &amp; Verifying...</span>
                       </>
                     ) : (
                       <>
-                        <ShieldCheck className="w-4 h-4" /> Sign In
+                        <ShieldCheck className="w-4 h-4" />
+                        <span>Sign In</span>
                       </>
                     )}
                   </button>
