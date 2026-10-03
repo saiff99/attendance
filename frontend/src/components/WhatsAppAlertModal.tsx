@@ -26,7 +26,7 @@ export function WhatsAppAlertModal({
   const [presentCount, setPresentCount] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
   const [sendResult, setSendResult] = useState<any | null>(null);
-  
+
   // Token update state
   const [newToken, setNewToken] = useState("");
   const [isUpdatingToken, setIsUpdatingToken] = useState(false);
@@ -85,7 +85,7 @@ export function WhatsAppAlertModal({
       let studentQuery = supabase
         .from('students')
         .select('id, student_roll, full_name, email, academic_year, face_encoding');
-      
+
       if (targetYear && targetYear !== 'All Years') {
         studentQuery = studentQuery.eq('academic_year', targetYear);
       }
@@ -174,7 +174,7 @@ export function WhatsAppAlertModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200">
       <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-xl sm:max-w-2xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
-        
+
         {/* Header */}
         <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-slate-800 bg-slate-950/70 shrink-0">
           <div className="flex items-center gap-3 min-w-0">
@@ -233,15 +233,15 @@ export function WhatsAppAlertModal({
                   <span className="text-[10px] text-emerald-400 font-normal">Official Meta Template</span>
                 </div>
                 <div className="p-3 rounded-lg bg-emerald-950/20 border border-emerald-500/20 text-xs text-slate-200 leading-relaxed break-words whitespace-pre-wrap">
-🏫 <strong className="text-emerald-300">Jagannath Gupta Institute of Medical Sciences & Hospital</strong>
-⚠️ <strong>Student Attendance Alert Notice</strong>
+                  🏫 <strong className="text-emerald-300">Jagannath Gupta Institute of Medical Sciences & Hospital</strong>
+                  ⚠️ <strong>Student Attendance Alert Notice</strong>
 
-Dear Parent/Guardian,
-This is to notify you that your ward <strong>[Student Name]</strong> (Roll: <strong>[Roll No]</strong>) was marked <span className="text-rose-400 font-bold">ABSENT</span> for today's class:
+                  Dear Parent/Guardian,
+                  This is to notify you that your ward <strong>[Student Name]</strong> (Roll: <strong>[Roll No]</strong>) was marked <span className="text-rose-400 font-bold">ABSENT</span> for today's class:
 
-📚 <strong>Class:</strong> {sessionName}
-👨‍🏫 <strong>Topic:</strong> {topicName}
-📅 <strong>Date:</strong> {new Date().toLocaleDateString([], { dateStyle: 'medium' })}
+                  📚 <strong>Class:</strong> {sessionName}
+                  👨‍🏫 <strong>Topic:</strong> {topicName}
+                  📅 <strong>Date:</strong> {new Date().toLocaleDateString([], { dateStyle: 'medium' })}
                 </div>
               </div>
 
@@ -295,13 +295,12 @@ This is to notify you that your ward <strong>[Student Name]</strong> (Roll: <str
               {/* Send Results Banner */}
               {sendResult && (
                 <div
-                  className={`p-3.5 sm:p-4 rounded-xl border text-xs space-y-3 w-full min-w-0 break-words ${
-                    sendResult.success && sendResult.failed_count === 0
+                  className={`p-3.5 sm:p-4 rounded-xl border text-xs space-y-3 w-full min-w-0 break-words ${sendResult.success && sendResult.failed_count === 0
                       ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-200"
                       : sendResult.success && sendResult.sent_count > 0
-                      ? "bg-amber-500/10 border-amber-500/30 text-amber-200"
-                      : "bg-rose-500/10 border-rose-500/30 text-rose-200"
-                  }`}
+                        ? "bg-amber-500/10 border-amber-500/30 text-amber-200"
+                        : "bg-rose-500/10 border-rose-500/30 text-rose-200"
+                    }`}
                 >
                   <div className="font-bold flex items-center gap-2">
                     {sendResult.success && sendResult.failed_count === 0 ? (
@@ -313,8 +312,8 @@ This is to notify you that your ward <strong>[Student Name]</strong> (Roll: <str
                       {sendResult.success && sendResult.failed_count === 0
                         ? "All WhatsApp Alerts Dispatched Successfully!"
                         : sendResult.success
-                        ? "WhatsApp Dispatch Complete (Partial/Errors)"
-                        : "Dispatch Failed"}
+                          ? "WhatsApp Dispatch Complete (Partial/Errors)"
+                          : "Dispatch Failed"}
                     </span>
                   </div>
 
@@ -336,13 +335,12 @@ This is to notify you that your ward <strong>[Student Name]</strong> (Roll: <str
                               <span className="text-slate-300 font-medium truncate min-w-0 flex-1">
                                 {d.student_name} ({d.student_roll}) {d.phone ? `• ${d.phone}` : ''}
                               </span>
-                              <span className={`shrink-0 text-[11px] font-semibold ${
-                                d.status === 'sent'
+                              <span className={`shrink-0 text-[11px] font-semibold ${d.status === 'sent'
                                   ? 'text-emerald-400'
                                   : d.status === 'skipped_no_phone'
-                                  ? 'text-amber-400'
-                                  : 'text-rose-400'
-                              }`}>
+                                    ? 'text-amber-400'
+                                    : 'text-rose-400'
+                                }`}>
                                 {d.status === 'sent' ? '✅ Sent' : d.status === 'skipped_no_phone' ? '⚠️ No Phone' : '❌ Delivery Failed'}
                               </span>
                             </div>
@@ -364,7 +362,7 @@ This is to notify you that your ward <strong>[Student Name]</strong> (Roll: <str
                             <li><strong>Temporary access token</strong> এর পাশে <strong>Generate Token</strong> বা কপি বাটনে ক্লিক করুন।</li>
                             <li>নিচের বক্সে নতুন টোকেন পেস্ট করে <strong>"Save &amp; Retry"</strong> চাপুন।</li>
                           </ol>
-                          
+
                           <form onSubmit={handleUpdateToken} className="flex flex-col sm:flex-row items-center gap-2 pt-1 w-full min-w-0">
                             <input
                               type="password"
