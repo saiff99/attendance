@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { MessageSquare, Send, CheckCircle2, AlertCircle, X, Loader2, Phone, ShieldCheck, Users, RefreshCw } from "lucide-react";
+import { MessageSquare, Send, CheckCircle2, AlertCircle, X, Loader2, Phone, ShieldCheck, Users, RefreshCw, Check } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { getParentPhone, formatPhoneDisplay } from "@/lib/studentContact";
 
@@ -26,6 +26,7 @@ export function WhatsAppAlertModal({
   const [presentCount, setPresentCount] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
   const [sendResult, setSendResult] = useState<any | null>(null);
+  const [markingStudentId, setMarkingStudentId] = useState<string | null>(null);
 
   // Token update state
   const [newToken, setNewToken] = useState("");
@@ -36,6 +37,32 @@ export function WhatsAppAlertModal({
   const [testPhone, setTestPhone] = useState("");
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<string | null>(null);
+
+  const handleManualMarkPresent = async (studentId: string) => {
+    if (!sessionId || !studentId) return;
+    setMarkingStudentId(studentId);
+    try {
+      const { error } = await supabase
+        .from('attendance')
+        .upsert(
+          {
+            session_id: sessionId,
+            student_id: studentId,
+            status: 'Present',
+            capture_mode: 'Manual Override',
+            confidence_score: 1.0,
+            recorded_at: new Date().toISOString()
+          },
+          { onConflict: 'session_id,student_id' }
+        );
+      if (error) throw error;
+      await fetchSessionAbsentees();
+    } catch (err: any) {
+      alert("Failed to mark present: " + (err.message || "Unknown error"));
+    } finally {
+      setMarkingStudentId(null);
+    }
+  };
 
 
   const handleUpdateToken = async (e: React.FormEvent) => {
@@ -275,15 +302,29 @@ export function WhatsAppAlertModal({
                             </span>
                             <span className="font-medium text-slate-200 truncate">{student.full_name}</span>
                           </div>
-                          <div className="shrink-0">
+                          <div className="flex items-center gap-2 shrink-0">
                             {phone ? (
                               <span className="inline-flex items-center gap-1 text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full text-[11px]">
                                 <Phone className="w-3 h-3 shrink-0" />
                                 <span>{formatPhoneDisplay(phone)}</span>
                               </span>
                             ) : (
-                              <span className="text-slate-500 text-[11px]">No phone registered</span>
+                              <span className="text-slate-500 text-[11px]">No phone</span>
                             )}
+                            <button
+                              type="button"
+                              disabled={markingStudentId === student.id || isSending}
+                              onClick={() => handleManualMarkPresent(student.id)}
+                              className="px-2.5 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/30 text-[10px] font-semibold flex items-center gap-1 transition-all cursor-pointer disabled:opacity-50 active:scale-95 shadow-sm"
+                              title="1-Click Faculty Override: Mark Present for Burqa/Veil or unscanned student"
+                            >
+                              {markingStudentId === student.id ? (
+                                <Loader2 className="w-3 h-3 animate-spin text-emerald-300" />
+                              ) : (
+                                <Check className="w-3 h-3" />
+                              )}
+                              <span>Mark Present</span>
+                            </button>
                           </div>
                         </div>
                       );

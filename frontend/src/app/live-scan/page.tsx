@@ -8,7 +8,8 @@ import {
   ChevronUp, ChevronDown, ChevronLeft, ChevronRight, ZoomIn, ZoomOut,
   Grid, Maximize2, Minimize2, Eye, ShieldCheck, RefreshCw, X, Search,
   Clock, Sparkles, ChevronLeft as PrevIcon, ChevronRight as NextIcon,
-  QrCode, Copy, Check, ExternalLink, Smartphone, Navigation, MessageSquare
+  QrCode, Copy, Check, ExternalLink, Smartphone, Navigation, MessageSquare,
+  UserCheck, UserX, RotateCcw
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { supabase } from "@/lib/supabase";
@@ -28,7 +29,6 @@ import {
   getCalibratedHighPrecisionGPS,
   formatDistance 
 } from "@/lib/geofence";
-
 
 interface CameraMeta {
   index: number;
@@ -53,8 +53,14 @@ export default function LiveScan() {
   const [activeTab, setActiveTab] = useState<"grid" | "cctv" | "ptz" | "live" | "manual">("grid");
   const [isScanning, setIsScanning] = useState(false);
   
+  // Attendance & Manual Override State
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [logs, setLogs] = useState<any[]>([]);
+  const [sidebarTab, setSidebarTab] = useState<"present" | "absent">("present");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [enrolledStudents, setEnrolledStudents] = useState<any[]>([]);
+  const [markingStudentId, setMarkingStudentId] = useState<string | null>(null);
+  const [undoingLogId, setUndoingLogId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [sessionTime, setSessionTime] = useState("00:00:00");
@@ -260,11 +266,32 @@ export default function LiveScan() {
     }
   };
 
+  const fetchEnrolledStudents = useCallback(async () => {
+    if (!activeSession) return;
+    try {
+      const targetYear = activeSession.target_academic_year;
+      let query = supabase
+        .from('students')
+        .select('id, student_roll, full_name, email, academic_year');
+      
+      if (targetYear && targetYear !== 'All' && targetYear !== 'All Years') {
+        query = query.eq('academic_year', targetYear);
+      }
+      
+      const { data, error } = await query.order('student_roll', { ascending: true });
+      if (error) throw error;
+      setEnrolledStudents(data || []);
+    } catch (err) {
+      console.error("Failed to fetch enrolled students:", err);
+    }
+  }, [activeSession]);
+
   useEffect(() => {
     if (activeSession) {
       fetchLogs();
+      fetchEnrolledStudents();
     }
-  }, [activeSession]);
+  }, [activeSession, fetchEnrolledStudents]);
 
   const fetchLogs = async () => {
     if (!activeSession) return;
@@ -364,12 +391,75 @@ export default function LiveScan() {
   const filteredLogs = useMemo(() => {
     if (!searchQuery.trim()) return logs;
     const q = searchQuery.toLowerCase();
-    return logs.filter(log => {
+    return logs.filter((log: any) => {
       const name = log.students?.full_name?.toLowerCase() || "";
       const roll = log.students?.student_roll?.toString().toLowerCase() || "";
       return name.includes(q) || roll.includes(q);
     });
   }, [logs, searchQuery]);
+
+  // Absent students calculation
+  const presentStudentIds = useMemo(() => {
+    return new Set((logs || []).map((l: any) => l.student_id));
+  }, [logs]);
+
+  const absentStudents = useMemo(() => {
+    return (enrolledStudents || []).filter((s: any) => !presentStudentIds.has(s.id));
+  }, [enrolledStudents, presentStudentIds]);
+
+  const filteredAbsentStudents = useMemo(() => {
+    if (!searchQuery.trim()) return absentStudents;
+    const q = searchQuery.toLowerCase();
+    return absentStudents.filter((s: any) => {
+      const name = s.full_name?.toLowerCase() || "";
+      const roll = s.student_roll?.toString().toLowerCase() || "";
+      return name.includes(q) || roll.includes(q);
+    });
+  }, [absentStudents, searchQuery]);
+
+  // 1-Click Faculty Manual Override Handlers
+  const handleManualMarkPresent = async (studentId: string) => {
+    if (!activeSession || !studentId) return;
+    setMarkingStudentId(studentId);
+    try {
+      const { error } = await supabase
+        .from('attendance')
+        .upsert(
+          {
+            session_id: activeSession.id,
+            student_id: studentId,
+            status: 'Present',
+            capture_mode: 'Manual Override',
+            confidence_score: 1.0,
+            recorded_at: new Date().toISOString()
+          },
+          { onConflict: 'session_id,student_id' }
+        );
+      if (error) throw error;
+      await fetchLogs();
+    } catch (err: any) {
+      alert("Failed to mark present: " + (err.message || "Unknown error"));
+    } finally {
+      setMarkingStudentId(null);
+    }
+  };
+
+  const handleUndoPresent = async (logId: string) => {
+    if (!logId) return;
+    setUndoingLogId(logId);
+    try {
+      const { error } = await supabase
+        .from('attendance')
+        .delete()
+        .eq('id', logId);
+      if (error) throw error;
+      await fetchLogs();
+    } catch (err: any) {
+      alert("Failed to undo attendance: " + (err.message || "Unknown error"));
+    } finally {
+      setUndoingLogId(null);
+    }
+  };
 
   // Modal navigation (Next/Previous camera)
   const handleNextCamera = useCallback((e?: React.MouseEvent) => {
@@ -1123,19 +1213,38 @@ export default function LiveScan() {
             </div>
           </div>
 
-          {/* Right Column: Attendance Feed (Responsive Width, Zero Overflow) */}
+          {/* Right Column: Attendance Feed with Dual Tabs (Present & Absent Override) */}
           <div className="w-full lg:w-[320px] xl:w-[360px] 2xl:w-[390px] flex-shrink-0 bg-white dark:bg-slate-900/80 backdrop-blur-xl rounded-2xl shadow-md dark:shadow-xl border border-gray-200 dark:border-slate-800/90 flex flex-col overflow-hidden transition-colors duration-300">
             
-            {/* Header with Search */}
-            <div className="p-3 sm:p-3.5 border-b border-gray-200 dark:border-slate-800/80 bg-gray-50/80 dark:bg-slate-950/50 flex flex-col gap-2 sm:gap-2.5">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Activity className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-                  <h2 className="font-bold text-gray-900 dark:text-white text-xs uppercase tracking-wider">Live Recognition</h2>
-                  <span className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-[10px] sm:text-[11px] font-bold px-2 py-0.5 rounded-full shadow-sm">
-                    {logs.length} Present
-                  </span>
-                </div>
+            {/* Header with Navigation Tabs & Search */}
+            <div className="p-3 sm:p-3.5 border-b border-gray-200 dark:border-slate-800/80 bg-gray-50/80 dark:bg-slate-950/50 flex flex-col gap-2.5">
+              {/* Dual Tabs: Present vs Absent (Faculty Override) */}
+              <div className="flex items-center gap-1.5 p-1 rounded-xl bg-gray-200/80 dark:bg-slate-900 border border-gray-300/80 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setSidebarTab("present")}
+                  className={`flex-1 py-1.5 px-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    sidebarTab === "present"
+                      ? "bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-sm border border-emerald-500/20"
+                      : "text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
+                  }`}
+                >
+                  <UserCheck className="w-3.5 h-3.5" />
+                  <span>Present ({logs.length})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSidebarTab("absent")}
+                  className={`flex-1 py-1.5 px-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    sidebarTab === "absent"
+                      ? "bg-white dark:bg-slate-800 text-rose-600 dark:text-rose-400 shadow-sm border border-rose-500/20"
+                      : "text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
+                  }`}
+                  title="View absent students & use 1-Click Faculty Override for Burqa/Veil"
+                >
+                  <UserX className="w-3.5 h-3.5" />
+                  <span>Absent ({absentStudents.length})</span>
+                </button>
               </div>
 
               {/* Quick Search Filter */}
@@ -1145,7 +1254,7 @@ export default function LiveScan() {
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search student or roll..."
+                  placeholder={sidebarTab === "present" ? "Search present students..." : "Search absent students to mark..."}
                   className="w-full bg-white dark:bg-slate-950/80 border border-gray-200 dark:border-slate-800 rounded-xl pl-8 pr-3 py-1.5 text-xs text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-indigo-500 transition-all"
                 />
                 {searchQuery && (
@@ -1156,59 +1265,156 @@ export default function LiveScan() {
               </div>
             </div>
 
-            {/* Student Attendance List */}
+            {/* Attendance List Container */}
             <div className="flex-1 overflow-y-auto p-2.5 sm:p-3 space-y-2 max-h-[340px] sm:max-h-[420px] lg:max-h-[calc(100vh-280px)] min-h-[180px] sm:min-h-[260px]">
-              {filteredLogs.length === 0 ? (
-                <div className="text-center py-12 sm:py-16 px-4">
-                  <Eye className="w-7 h-7 sm:w-8 sm:h-8 text-gray-300 dark:text-slate-600 mx-auto mb-2" />
-                  <p className="text-xs font-semibold text-gray-600 dark:text-slate-400">
-                    {searchQuery ? "No matching students found" : "Waiting for face matches..."}
-                  </p>
-                  <p className="text-[10px] sm:text-[11px] text-gray-400 dark:text-slate-500 mt-1">
-                    {searchQuery ? "Try a different search keyword." : "Students detected across any of the 6 cameras will appear here instantly."}
-                  </p>
-                </div>
+              {sidebarTab === "present" ? (
+                /* PRESENT TAB LIST */
+                filteredLogs.length === 0 ? (
+                  <div className="text-center py-12 sm:py-16 px-4">
+                    <Eye className="w-7 h-7 sm:w-8 sm:h-8 text-gray-300 dark:text-slate-600 mx-auto mb-2" />
+                    <p className="text-xs font-semibold text-gray-600 dark:text-slate-400">
+                      {searchQuery ? "No matching students found" : "Waiting for face matches..."}
+                    </p>
+                    <p className="text-[10px] sm:text-[11px] text-gray-400 dark:text-slate-500 mt-1">
+                      {searchQuery ? "Try a different search keyword." : "Students detected across CCTV or manually verified will appear here."}
+                    </p>
+                  </div>
+                ) : (
+                  filteredLogs.map((log: any) => {
+                    const studentName = log.students?.full_name?.toUpperCase() || "UNKNOWN STUDENT";
+                    const studentRoll = log.students?.student_roll || "N/A";
+                    const time = new Date(log.recorded_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                    const confidence = Math.round((log.confidence_score || 0.95) * 100);
+                    const isManual = log.capture_mode === 'Manual Override';
+
+                    return (
+                      <div
+                        key={log.id}
+                        className="flex items-center p-2 sm:p-2.5 rounded-xl border border-gray-200/80 dark:border-slate-800/80 bg-gray-50/70 dark:bg-slate-950/60 hover:bg-white dark:hover:bg-slate-950 hover:border-indigo-400 dark:hover:border-indigo-500/40 hover:shadow-sm transition-all group"
+                      >
+                        {/* Avatar Initials Pill */}
+                        <div className="flex-shrink-0 mr-2 sm:mr-2.5">
+                          <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center text-white font-bold text-[10px] sm:text-[11px] uppercase shadow-md ${
+                            isManual
+                              ? "bg-gradient-to-br from-purple-600 to-indigo-700 shadow-purple-600/20"
+                              : "bg-gradient-to-br from-indigo-600 to-indigo-800 shadow-indigo-600/20"
+                          }`}>
+                            {studentName.substring(0, 2)}
+                          </div>
+                        </div>
+                        
+                        <div className="flex-1 min-w-0 pr-2">
+                          <p className="text-xs font-bold text-gray-900 dark:text-white truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-300 transition-colors">
+                            {studentName}
+                          </p>
+                          <div className="flex items-center gap-1.5 text-[9px] sm:text-[10px] text-gray-500 dark:text-slate-400 mt-0.5">
+                            <span className="font-mono bg-gray-200/80 dark:bg-slate-900 px-1 sm:px-1.5 py-0.5 rounded text-gray-700 dark:text-slate-300 border border-gray-300/80 dark:border-slate-800">
+                              #{studentRoll}
+                            </span>
+                            <span>•</span>
+                            {isManual ? (
+                              <span className="text-purple-600 dark:text-purple-400 font-semibold">Faculty Verified</span>
+                            ) : (
+                              <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{confidence}% match</span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex-shrink-0 text-right flex flex-col items-end gap-1">
+                          <span className="text-[9px] sm:text-[10px] text-gray-500 dark:text-slate-500 font-mono block">{time}</span>
+                          <div className="flex items-center gap-1">
+                            <span className={`inline-flex items-center text-[8px] sm:text-[9px] font-semibold px-1.5 py-0.5 rounded-md ${
+                              isManual
+                                ? "text-purple-700 dark:text-purple-300 bg-purple-500/10 border border-purple-500/20"
+                                : "text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20"
+                            }`}>
+                              {isManual ? "Manual" : "Present"}
+                            </span>
+                            {isManual && (
+                              <button
+                                type="button"
+                                disabled={undoingLogId === log.id}
+                                onClick={() => handleUndoPresent(log.id)}
+                                className="p-1 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded transition-colors cursor-pointer"
+                                title="Undo manual attendance"
+                              >
+                                {undoingLogId === log.id ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <RotateCcw className="w-2.5 h-2.5" />}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )
               ) : (
-                filteredLogs.map((log) => {
-                  const studentName = log.students?.full_name?.toUpperCase() || "UNKNOWN STUDENT";
-                  const studentRoll = log.students?.student_roll || "N/A";
-                  const time = new Date(log.recorded_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-                  const confidence = Math.round((log.confidence_score || 0.95) * 100);
+                /* ABSENT TAB LIST (WITH 1-CLICK FACULTY OVERRIDE) */
+                <div className="space-y-2">
+                  {/* Tip Banner for Teachers */}
+                  <div className="p-2 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 text-[10px] sm:text-[11px] leading-relaxed">
+                    💡 <strong>Faculty Override:</strong> Click <strong>"Mark Present"</strong> for students wearing Burqa/Veil or whose faces were not scanned.
+                  </div>
 
-                  return (
-                    <div
-                      key={log.id}
-                      className="flex items-center p-2 sm:p-2.5 rounded-xl border border-gray-200/80 dark:border-slate-800/80 bg-gray-50/70 dark:bg-slate-950/60 hover:bg-white dark:hover:bg-slate-950 hover:border-indigo-400 dark:hover:border-indigo-500/40 hover:shadow-sm transition-all group"
-                    >
-                      {/* Avatar Initials Pill */}
-                      <div className="flex-shrink-0 mr-2 sm:mr-2.5">
-                        <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-gradient-to-br from-indigo-600 to-indigo-800 flex items-center justify-center text-white font-bold text-[10px] sm:text-[11px] uppercase shadow-md shadow-indigo-600/20">
-                          {studentName.substring(0, 2)}
-                        </div>
-                      </div>
-                      
-                      <div className="flex-1 min-w-0 pr-2">
-                        <p className="text-xs font-bold text-gray-900 dark:text-white truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-300 transition-colors">
-                          {studentName}
-                        </p>
-                        <div className="flex items-center gap-1.5 text-[9px] sm:text-[10px] text-gray-500 dark:text-slate-400 mt-0.5">
-                          <span className="font-mono bg-gray-200/80 dark:bg-slate-900 px-1 sm:px-1.5 py-0.5 rounded text-gray-700 dark:text-slate-300 border border-gray-300/80 dark:border-slate-800">
-                            #{studentRoll}
-                          </span>
-                          <span>•</span>
-                          <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{confidence}% match</span>
-                        </div>
-                      </div>
-
-                      <div className="flex-shrink-0 text-right">
-                        <span className="text-[9px] sm:text-[10px] text-gray-500 dark:text-slate-500 font-mono block">{time}</span>
-                        <span className="inline-flex items-center text-[8px] sm:text-[9px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-md mt-0.5">
-                          Present
-                        </span>
-                      </div>
+                  {filteredAbsentStudents.length === 0 ? (
+                    <div className="text-center py-10 px-4">
+                      <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto mb-2" />
+                      <p className="text-xs font-bold text-gray-900 dark:text-white">
+                        {searchQuery ? "No matching absent students" : "100% Attendance!"}
+                      </p>
+                      <p className="text-[10px] text-gray-400 dark:text-slate-500 mt-0.5">
+                        {searchQuery ? "Try a different search." : "All enrolled students are marked present."}
+                      </p>
                     </div>
-                  );
-                })
+                  ) : (
+                    filteredAbsentStudents.map((student: any) => {
+                      const studentName = student.full_name?.toUpperCase() || "UNKNOWN";
+                      const studentRoll = student.student_roll || "N/A";
+
+                      return (
+                        <div
+                          key={student.id}
+                          className="flex items-center justify-between p-2 sm:p-2.5 rounded-xl border border-gray-200/80 dark:border-slate-800/80 bg-gray-50/70 dark:bg-slate-950/60 hover:bg-white dark:hover:bg-slate-950 hover:border-emerald-500/40 hover:shadow-sm transition-all gap-2 min-w-0"
+                        >
+                          {/* Avatar Initials Pill */}
+                          <div className="flex-shrink-0">
+                            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-gradient-to-br from-slate-700 to-slate-900 border border-slate-700 flex items-center justify-center text-slate-300 font-bold text-[10px] sm:text-[11px] uppercase">
+                              {studentName.substring(0, 2)}
+                            </div>
+                          </div>
+
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-bold text-gray-900 dark:text-slate-200 truncate">
+                              {studentName}
+                            </p>
+                            <div className="flex items-center gap-1.5 text-[9px] sm:text-[10px] text-gray-500 dark:text-slate-400 mt-0.5">
+                              <span className="font-mono bg-gray-200/80 dark:bg-slate-900 px-1.5 py-0.5 rounded text-gray-700 dark:text-slate-300 border border-gray-300/80 dark:border-slate-800">
+                                #{studentRoll}
+                              </span>
+                              <span>•</span>
+                              <span className="text-rose-500 dark:text-rose-400 font-medium">Unverified</span>
+                            </div>
+                          </div>
+
+                          {/* 1-Click Mark Present Button */}
+                          <button
+                            type="button"
+                            disabled={markingStudentId === student.id}
+                            onClick={() => handleManualMarkPresent(student.id)}
+                            className="px-2.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold flex items-center gap-1 transition-all shadow-md shadow-emerald-600/20 active:scale-95 disabled:opacity-50 cursor-pointer shrink-0"
+                            title="1-Click Mark Present for Burqa/Veil or unscanned student"
+                          >
+                            {markingStudentId === student.id ? (
+                              <Loader2 className="w-3 h-3 animate-spin text-white" />
+                            ) : (
+                              <Check className="w-3 h-3" />
+                            )}
+                            <span>Mark Present</span>
+                          </button>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
               )}
             </div>
           </div>
