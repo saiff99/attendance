@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, Fragment } from "react";
 import {
   Search, Download, Users, AlertTriangle, CheckCircle, XCircle, BarChart3,
   ChevronDown, ChevronUp, Shield, UserCheck, UserX, Filter, RefreshCw, FileBarChart
@@ -366,7 +366,7 @@ export default function ReportsPage() {
                     : "from-rose-500 to-pink-600";
 
                   return (
-                    <tbody key={student.id} className="contents">
+                    <Fragment key={student.id}>
                       <tr className={`hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors ${isExpanded ? "bg-indigo-50/30 dark:bg-indigo-950/20" : ""}`}>
                         <td className="px-4 py-3.5">
                           <div className="flex items-center gap-2.5">
@@ -466,7 +466,7 @@ export default function ReportsPage() {
                           </td>
                         </tr>
                       )}
-                    </tbody>
+                    </Fragment>
                   );
                 })}
               </tbody>
