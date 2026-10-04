@@ -383,11 +383,24 @@ async def student_lookup(student_roll: str, session_id: Optional[str] = None):
         student = res.data[0]
         has_face = student.get("face_encoding") is not None and len(student.get("face_encoding") or []) > 0
         
-        # Check if already marked present in this session
+        # Check if already marked present in this session & check target cohort
         is_already_present = False
         attendance_info = None
+        target_academic_year = None
+        cohort_mismatch = False
         
         if session_id:
+            try:
+                sess_res = supabase.table("sessions").select("id, class_name, target_academic_year").eq("id", session_id).execute()
+                if sess_res.data:
+                    target_academic_year = sess_res.data[0].get("target_academic_year")
+                    student_year = student.get("academic_year") or ""
+                    if target_academic_year and target_academic_year not in ("All", "All Years", "All MBBS Batches", ""):
+                        if student_year.strip().lower() != target_academic_year.strip().lower():
+                            cohort_mismatch = True
+            except Exception as e:
+                print("Session lookup error in student-lookup:", e)
+
             att_res = supabase.table("attendance").select(
                 "id, status, capture_mode, confidence_score, recorded_at"
             ).eq("session_id", session_id).eq("student_id", student["id"]).execute()
@@ -412,7 +425,9 @@ async def student_lookup(student_roll: str, session_id: Optional[str] = None):
                 "academic_year": student.get("academic_year") or "MBBS",
                 "has_face_enrolled": has_face,
                 "is_already_present": is_already_present,
-                "attendance_info": attendance_info
+                "attendance_info": attendance_info,
+                "cohort_mismatch": cohort_mismatch,
+                "target_academic_year": target_academic_year
             }
         }
     except HTTPException:
@@ -433,13 +448,13 @@ async def selfie_attendance(
 ):
     """
     Processes a student's mobile selfie, verifies face against student's enrolled embedding using InsightFace AI,
-    and logs attendance if matched (valid within 5-minute window and optional GPS geofence).
+    and logs attendance if matched (valid within 5-minute window, cohort check, and optional GPS geofence).
     """
     clean_roll = student_roll.strip()
     contents = await file.read()
     
-    # 1. Check 5-minute session expiration window
-    session_res = supabase.table("sessions").select("id, start_time, created_at, class_name").eq("id", session_id).execute()
+    # 1. Check 5-minute session expiration window & Target Cohort
+    session_res = supabase.table("sessions").select("id, start_time, created_at, class_name, target_academic_year").eq("id", session_id).execute()
     if not session_res.data:
         raise HTTPException(status_code=404, detail="Lecture session not found.")
         
@@ -477,6 +492,17 @@ async def selfie_attendance(
         raise HTTPException(status_code=404, detail=f"Student with Roll '{clean_roll}' not found.")
         
     student = res.data[0]
+
+    # 3. Check Academic Year / Cohort Match
+    target_year = sess_obj.get("target_academic_year")
+    student_year = student.get("academic_year") or ""
+    if target_year and target_year not in ("All", "All Years", "All MBBS Batches", ""):
+        if student_year.strip().lower() != target_year.strip().lower():
+            raise HTTPException(
+                status_code=403,
+                detail=f"Cohort Restriction: This lecture session is exclusively for '{target_year}' students. You are registered as '{student_year}' and cannot submit attendance for this class."
+            )
+
     if not student.get("face_encoding"):
         raise HTTPException(status_code=400, detail=f"Student {student['full_name']} (Roll: {clean_roll}) does not have face biometric data enrolled yet. Please contact the administrator.")
         

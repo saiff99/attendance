@@ -44,6 +44,8 @@ export interface StudentProfile {
   academic_year: string;
   has_face_enrolled: boolean;
   is_already_present?: boolean;
+  cohort_mismatch?: boolean;
+  target_academic_year?: string | null;
   attendance_info?: {
     id: string;
     status: string;
@@ -422,14 +424,26 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
           }
         }
 
+        const studYear = stud.academic_year || "1st Year";
+        const targetYear = selectedSession?.target_academic_year;
+        const isMismatch = Boolean(
+          targetYear &&
+          targetYear !== "All" &&
+          targetYear !== "All Years" &&
+          studYear &&
+          studYear.trim().toLowerCase() !== targetYear.trim().toLowerCase()
+        );
+
         setStudent({
           id: stud.id,
           student_roll: stud.student_roll,
           full_name: stud.full_name,
-          academic_year: stud.academic_year || "1st Year",
+          academic_year: studYear,
           has_face_enrolled: hasFace,
           is_already_present: isAlreadyPresent,
           attendance_info: attendanceInfo,
+          cohort_mismatch: isMismatch,
+          target_academic_year: targetYear,
         });
         return;
       }
@@ -456,12 +470,26 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
     }
   };
 
-  // Proceed to selfie capture with Geofence check
+  // Proceed to selfie capture with Geofence and Cohort checks
   const handleProceedToSelfie = async () => {
     if (isSelectedExpired) {
       setLookupError("Attendance window for this lecture has expired (5-minute limit).");
       return;
     }
+
+    const targetYear = selectedSession?.target_academic_year;
+    const studentYear = student?.academic_year;
+    if (
+      targetYear &&
+      targetYear !== "All" &&
+      targetYear !== "All Years" &&
+      studentYear &&
+      studentYear.trim().toLowerCase() !== targetYear.trim().toLowerCase()
+    ) {
+      setLookupError(`Cohort Restriction: This session is strictly for ${targetYear} students. Your profile is registered as ${studentYear}.`);
+      return;
+    }
+
     if (geofenceConfig.enabled && geofenceStatus !== "allowed") {
       const allowed = await verifyUserLocation();
       if (!allowed) {
@@ -544,6 +572,23 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
       setResultData({
         success: false,
         message: "The 5-minute attendance window for this lecture has just ended. Attendance could not be recorded.",
+      });
+      setStep("result");
+      return;
+    }
+
+    const targetYear = selectedSession.target_academic_year;
+    const studentYear = student.academic_year;
+    if (
+      targetYear &&
+      targetYear !== "All" &&
+      targetYear !== "All Years" &&
+      studentYear &&
+      studentYear.trim().toLowerCase() !== targetYear.trim().toLowerCase()
+    ) {
+      setResultData({
+        success: false,
+        message: `Cohort Restriction: This attendance session is strictly for '${targetYear}' students. Your profile is registered as '${studentYear}'.`,
       });
       setStep("result");
       return;
@@ -930,173 +975,240 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                 </form>
 
                 {/* Verified Student Profile Preview */}
-                {student && (
-                  <div className={`mt-4 p-4 rounded-2xl border flex flex-col gap-3 animate-in fade-in zoom-in-95 duration-150 ${
-                    student.is_already_present
-                      ? "bg-emerald-950/40 border-emerald-500/50 shadow-lg shadow-emerald-950/30"
-                      : "bg-slate-950/80 border-slate-800"
-                  }`}>
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shrink-0 ${
-                          student.is_already_present
-                            ? "bg-emerald-500/20 border border-emerald-500/50 text-emerald-300"
-                            : "bg-indigo-500/10 border border-indigo-500/30 text-indigo-300"
-                        }`}>
-                          {student.full_name.substring(0, 2).toUpperCase()}
+                {student && (() => {
+                  const isCohortMismatch = Boolean(
+                    selectedSession?.target_academic_year &&
+                    selectedSession.target_academic_year !== "All" &&
+                    selectedSession.target_academic_year !== "All Years" &&
+                    student.academic_year &&
+                    student.academic_year.trim().toLowerCase() !== selectedSession.target_academic_year.trim().toLowerCase()
+                  );
+
+                  return (
+                    <div className={`mt-4 p-4 rounded-2xl border flex flex-col gap-3 animate-in fade-in zoom-in-95 duration-150 ${
+                      isCohortMismatch
+                        ? "bg-rose-950/40 border-rose-500/50 shadow-lg shadow-rose-950/30"
+                        : student.is_already_present
+                        ? "bg-emerald-950/40 border-emerald-500/50 shadow-lg shadow-emerald-950/30"
+                        : "bg-slate-950/80 border-slate-800"
+                    }`}>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shrink-0 ${
+                            isCohortMismatch
+                              ? "bg-rose-500/20 border border-rose-500/50 text-rose-300"
+                              : student.is_already_present
+                              ? "bg-emerald-500/20 border border-emerald-500/50 text-emerald-300"
+                              : "bg-indigo-500/10 border border-indigo-500/30 text-indigo-300"
+                          }`}>
+                            {student.full_name.substring(0, 2).toUpperCase()}
+                          </div>
+                          <div className="min-w-0">
+                            <h4 className="text-sm font-bold text-white truncate">{student.full_name}</h4>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-xs text-slate-400 font-mono">Roll: {student.student_roll}</span>
+                              <span className="text-slate-600">•</span>
+                              <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${
+                                isCohortMismatch 
+                                  ? "bg-rose-500/20 border-rose-500/40 text-rose-300 font-bold" 
+                                  : "bg-slate-800 border-slate-700 text-slate-300"
+                              }`}>
+                                {student.academic_year}
+                              </span>
+                            </div>
+                          </div>
                         </div>
-                        <div className="min-w-0">
-                          <h4 className="text-sm font-bold text-white truncate">{student.full_name}</h4>
-                          <p className="text-xs text-slate-400 font-mono">Roll: {student.student_roll} • {student.academic_year}</p>
-                        </div>
+
+                        {isCohortMismatch ? (
+                          <div 
+                            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40 text-xs font-bold shrink-0 animate-in zoom-in-75 duration-150 shadow-sm"
+                            title="Cohort Mismatch: Not allowed for this session"
+                          >
+                            <ShieldAlert className="w-3.5 h-3.5 text-rose-400" />
+                            <span>Wrong Cohort</span>
+                          </div>
+                        ) : student.is_already_present ? (
+                          <div 
+                            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs font-bold shrink-0 animate-in zoom-in-75 duration-150 shadow-sm"
+                            title="Attendance Already Recorded by CCTV Cameras"
+                          >
+                            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                            <span>Present</span>
+                          </div>
+                        ) : (
+                          <div 
+                            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-500/15 text-red-300 border border-red-500/30 text-xs font-bold shrink-0 animate-in zoom-in-75 duration-150 shadow-sm"
+                            title="Not Yet Detected by CCTV Cameras"
+                          >
+                            <X className="w-3.5 h-3.5 text-red-400" />
+                            <span>Not Present Yet</span>
+                          </div>
+                        )}
                       </div>
 
-                      {student.is_already_present ? (
-                        <div 
-                          className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs font-bold shrink-0 animate-in zoom-in-75 duration-150 shadow-sm"
-                          title="Attendance Already Recorded by CCTV Cameras"
-                        >
-                          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                          <span>Present</span>
+                      {isCohortMismatch ? (
+                        <div className="p-3.5 rounded-xl bg-rose-950/70 border border-rose-500/50 text-rose-200 flex flex-col gap-2 shadow-lg shadow-rose-950/30 animate-in fade-in duration-200">
+                          <div className="flex items-center gap-2 text-rose-300 font-bold text-xs">
+                            <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0" />
+                            <span>Session Restricted: {selectedSession.target_academic_year} Only</span>
+                          </div>
+                          <p className="text-xs text-rose-100 font-medium leading-relaxed">
+                            এই ক্লাস বা attendance session-এ শুধুমাত্র <strong>{selectedSession.target_academic_year}</strong> এর ছাত্র-ছাত্রীরা সেলফি সাবমিট করতে পারবে। আপনার প্রোফাইল <strong>{student.academic_year}</strong> হিসেবে রেজিস্টার করা আছে।
+                          </p>
+                          <div className="text-[11px] text-rose-300/90 bg-rose-900/40 p-2.5 rounded-lg border border-rose-500/30 flex items-center justify-between flex-wrap gap-2">
+                            <span>🎯 Allowed Cohort: <strong className="text-white">{selectedSession.target_academic_year}</strong></span>
+                            <span>👤 Your Profile: <strong className="text-rose-200">{student.academic_year}</strong></span>
+                          </div>
+                        </div>
+                      ) : student.is_already_present ? (
+                        <div className="p-3 rounded-xl bg-emerald-950/60 border border-emerald-500/30 text-xs text-emerald-200 flex flex-col gap-1">
+                          <div className="flex items-center gap-1.5 font-bold text-emerald-300">
+                            <Sparkles className="w-4 h-4 text-emerald-400 shrink-0" />
+                            <span>Attendance Confirmed via CCTV AI!</span>
+                          </div>
+                          <p className="text-[11px] text-slate-300 leading-relaxed">
+                            Your presence was successfully recognized by the classroom CCTV cameras. You do not need to take a selfie!
+                          </p>
                         </div>
                       ) : (
-                        <div 
-                          className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-500/15 text-red-300 border border-red-500/30 text-xs font-bold shrink-0 animate-in zoom-in-75 duration-150 shadow-sm"
-                          title="Not Yet Detected by CCTV Cameras"
-                        >
-                          <X className="w-3.5 h-3.5 text-red-400" />
-                          <span>Not Present Yet</span>
+                        <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-300 flex items-start gap-2">
+                          <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                          <span className="text-[11px] text-slate-300 leading-relaxed">
+                            CCTV cameras haven't caught your face yet. Please click below to capture your selfie and verify attendance.
+                          </span>
                         </div>
                       )}
-                    </div>
 
-                    {student.is_already_present ? (
-                      <div className="p-3 rounded-xl bg-emerald-950/60 border border-emerald-500/30 text-xs text-emerald-200 flex flex-col gap-1">
-                        <div className="flex items-center gap-1.5 font-bold text-emerald-300">
-                          <Sparkles className="w-4 h-4 text-emerald-400 shrink-0" />
-                          <span>Attendance Confirmed via CCTV AI!</span>
-                        </div>
-                        <p className="text-[11px] text-slate-300 leading-relaxed">
-                          Your presence was successfully recognized by the classroom CCTV cameras. You do not need to take a selfie!
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-300 flex items-start gap-2">
-                        <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                        <span className="text-[11px] text-slate-300 leading-relaxed">
-                          CCTV cameras haven't caught your face yet. Please click below to capture your selfie and verify attendance.
-                        </span>
-                      </div>
-                    )}
+                      {/* GPS Geofence Security Verification Status */}
+                      {effectiveGeofence.enabled && !isCohortMismatch && !student.is_already_present && student.has_face_enrolled && (
+                        <div className={`p-3.5 rounded-xl border flex flex-col gap-2 transition-all ${
+                          geofenceStatus === "allowed"
+                            ? "bg-emerald-950/40 border-emerald-500/40 text-emerald-300 shadow-sm shadow-emerald-950/20"
+                            : geofenceStatus === "blocked"
+                            ? "bg-rose-950/60 border-rose-500/50 text-rose-300 shadow-md shadow-rose-950/30"
+                            : geofenceStatus === "permission_error"
+                            ? "bg-amber-950/50 border-amber-500/40 text-amber-300"
+                            : "bg-slate-900/90 border-slate-800 text-slate-300"
+                        }`}>
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <MapPin className={`w-4 h-4 shrink-0 ${
+                                geofenceStatus === "allowed" ? "text-emerald-400" :
+                                geofenceStatus === "blocked" ? "text-rose-400" :
+                                geofenceStatus === "permission_error" ? "text-amber-400" : "text-indigo-400"
+                              }`} />
+                              <span className="font-bold text-xs text-white">
+                                {geofenceStatus === "allowed" ? "GPS Boundary: Verified Inside Campus" :
+                                 geofenceStatus === "blocked" ? "GPS Boundary Check: Outside Campus" :
+                                 geofenceStatus === "permission_error" ? "Location Permission Needed" :
+                                 geofenceStatus === "checking" ? "Checking Classroom GPS Coordinates..." :
+                                 "GPS Geofence Protection"}
+                              </span>
+                            </div>
 
-                    {/* GPS Geofence Security Verification Status */}
-                    {effectiveGeofence.enabled && !student.is_already_present && student.has_face_enrolled && (
-                      <div className={`p-3.5 rounded-xl border flex flex-col gap-2 transition-all ${
-                        geofenceStatus === "allowed"
-                          ? "bg-emerald-950/40 border-emerald-500/40 text-emerald-300 shadow-sm shadow-emerald-950/20"
-                          : geofenceStatus === "blocked"
-                          ? "bg-rose-950/60 border-rose-500/50 text-rose-300 shadow-md shadow-rose-950/30"
-                          : geofenceStatus === "permission_error"
-                          ? "bg-amber-950/50 border-amber-500/40 text-amber-300"
-                          : "bg-slate-900/90 border-slate-800 text-slate-300"
-                      }`}>
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2">
-                            <MapPin className={`w-4 h-4 shrink-0 ${
-                              geofenceStatus === "allowed" ? "text-emerald-400" :
-                              geofenceStatus === "blocked" ? "text-rose-400" :
-                              geofenceStatus === "permission_error" ? "text-amber-400" : "text-indigo-400"
-                            }`} />
-                            <span className="font-bold text-xs text-white">
-                              {geofenceStatus === "allowed" ? "GPS Boundary: Verified Inside Campus" :
-                               geofenceStatus === "blocked" ? "GPS Boundary Check: Outside Campus" :
-                               geofenceStatus === "permission_error" ? "Location Permission Needed" :
-                               geofenceStatus === "checking" ? "Checking Classroom GPS Coordinates..." :
-                               "GPS Geofence Protection"}
-                            </span>
+                            <button
+                              type="button"
+                              onClick={() => verifyUserLocation()}
+                              disabled={geofenceStatus === "checking"}
+                              className="text-[11px] text-indigo-400 hover:text-indigo-300 underline flex items-center gap-1 cursor-pointer disabled:opacity-50 shrink-0 font-medium"
+                            >
+                              {geofenceStatus === "checking" ? (
+                                <><Loader2 className="w-3 h-3 animate-spin" /> Checking...</>
+                              ) : (
+                                <><RefreshCw className="w-3 h-3" /> Re-check GPS</>
+                              )}
+                            </button>
                           </div>
 
+                          {geofenceStatus === "allowed" && (
+                            <p className="text-[11px] text-emerald-200/90 leading-relaxed">
+                              ✅ Physical location verified! You are inside <strong>{effectiveGeofence.campusName}</strong> ({geofenceDistance !== null ? `${formatDistance(geofenceDistance)} from center` : "within range"}).
+                            </p>
+                          )}
+
+                          {geofenceStatus === "blocked" && (
+                            <div className="space-y-1">
+                              <p className="text-[11px] text-rose-200 leading-relaxed font-medium">
+                                ⛔ {geofenceErrorMessage || `You are outside the allowed ${effectiveGeofence.radiusMeters}m classroom radius.`}
+                              </p>
+                              <p className="text-[10px] text-rose-300/80">
+                                Proxy attendance from home or hostel is prevented by GPS geofencing.
+                              </p>
+                            </div>
+                          )}
+
+                          {geofenceStatus === "permission_error" && (
+                            <p className="text-[11px] text-amber-200 leading-relaxed">
+                              ⚠️ {geofenceErrorMessage || "Please allow location access in your mobile browser settings to verify you are in the lecture hall."}
+                            </p>
+                          )}
+
+                          {geofenceStatus === "idle" && (
+                            <p className="text-[11px] text-slate-400">
+                              GPS check verifies you are within {effectiveGeofence.radiusMeters}m of {effectiveGeofence.campusName}.
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      {isCohortMismatch ? (
+                        <div className="flex flex-col gap-2 mt-1">
                           <button
                             type="button"
-                            onClick={() => verifyUserLocation()}
-                            disabled={geofenceStatus === "checking"}
-                            className="text-[11px] text-indigo-400 hover:text-indigo-300 underline flex items-center gap-1 cursor-pointer disabled:opacity-50 shrink-0 font-medium"
+                            disabled
+                            className="w-full py-3 rounded-xl bg-slate-900 text-rose-400/80 border border-rose-500/30 font-bold text-xs cursor-not-allowed flex items-center justify-center gap-2 shadow-inner"
                           >
-                            {geofenceStatus === "checking" ? (
-                              <><Loader2 className="w-3 h-3 animate-spin" /> Checking...</>
-                            ) : (
-                              <><RefreshCw className="w-3 h-3" /> Re-check GPS</>
-                            )}
+                            <ShieldAlert className="w-4 h-4 text-rose-400" />
+                            <span>Submission Blocked • {selectedSession.target_academic_year} Only</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setStudent(null);
+                              setRollInput("");
+                            }}
+                            className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                          >
+                            <RefreshCw className="w-3.5 h-3.5" /> Enter Different Roll Number
                           </button>
                         </div>
-
-                        {geofenceStatus === "allowed" && (
-                          <p className="text-[11px] text-emerald-200/90 leading-relaxed">
-                            ✅ Physical location verified! You are inside <strong>{effectiveGeofence.campusName}</strong> ({geofenceDistance !== null ? `${formatDistance(geofenceDistance)} from center` : "within range"}).
-                          </p>
-                        )}
-
-                        {geofenceStatus === "blocked" && (
-                          <div className="space-y-1">
-                            <p className="text-[11px] text-rose-200 leading-relaxed font-medium">
-                              ⛔ {geofenceErrorMessage || `You are outside the allowed ${effectiveGeofence.radiusMeters}m classroom radius.`}
-                            </p>
-                            <p className="text-[10px] text-rose-300/80">
-                              Proxy attendance from home or hostel is prevented by GPS geofencing.
-                            </p>
-                          </div>
-                        )}
-
-                        {geofenceStatus === "permission_error" && (
-                          <p className="text-[11px] text-amber-200 leading-relaxed">
-                            ⚠️ {geofenceErrorMessage || "Please allow location access in your mobile browser settings to verify you are in the lecture hall."}
-                          </p>
-                        )}
-
-                        {geofenceStatus === "idle" && (
-                          <p className="text-[11px] text-slate-400">
-                            GPS check verifies you are within {effectiveGeofence.radiusMeters}m of {effectiveGeofence.campusName}.
-                          </p>
-                        )}
-                      </div>
-                    )}
-
-                    {!student.has_face_enrolled ? (
-                      <div className="p-2.5 rounded-lg bg-amber-950/50 border border-amber-500/30 text-xs text-amber-300 flex items-center gap-2">
-                        <ShieldAlert className="w-4 h-4 shrink-0 text-amber-400" />
-                        <span>No facial biometric enrolled. Please contact system admin.</span>
-                      </div>
-                    ) : student.is_already_present ? (
-                      <button
-                        onClick={handleReset}
-                        className="w-full py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-emerald-500/30 font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer mt-1"
-                      >
-                        <Check className="w-4 h-4 text-emerald-400" />
-                        <span>Attendance Confirmed • Return to Classes</span>
-                      </button>
-                    ) : (
-                      <button
-                        onClick={handleProceedToSelfie}
-                        disabled={geofenceStatus === "checking" || geofenceStatus === "blocked"}
-                        className={`w-full py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 mt-1 ${
-                          geofenceStatus === "blocked"
-                            ? "bg-slate-800 text-slate-500 border border-slate-700/50 cursor-not-allowed opacity-75"
-                            : geofenceStatus === "checking"
-                            ? "bg-indigo-900/60 text-indigo-200 cursor-wait"
-                            : "bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-lg shadow-emerald-600/25 cursor-pointer"
-                        }`}
-                      >
-                        {geofenceStatus === "checking" ? (
-                          <><Loader2 className="w-4 h-4 animate-spin" /> Verifying Classroom GPS...</>
-                        ) : geofenceStatus === "blocked" ? (
-                          <><ShieldAlert className="w-4 h-4 text-rose-400" /> Blocked • Outside Classroom Boundary</>
-                        ) : (
-                          <><Camera className="w-4 h-4" /> Proceed to Take Selfie</>
-                        )}
-                      </button>
-                    )}
-                  </div>
-                )}
+                      ) : !student.has_face_enrolled ? (
+                        <div className="p-2.5 rounded-lg bg-amber-950/50 border border-amber-500/30 text-xs text-amber-300 flex items-center gap-2">
+                          <ShieldAlert className="w-4 h-4 shrink-0 text-amber-400" />
+                          <span>No facial biometric enrolled. Please contact system admin.</span>
+                        </div>
+                      ) : student.is_already_present ? (
+                        <button
+                          onClick={handleReset}
+                          className="w-full py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-emerald-500/30 font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer mt-1"
+                        >
+                          <Check className="w-4 h-4 text-emerald-400" />
+                          <span>Attendance Confirmed • Return to Classes</span>
+                        </button>
+                      ) : (
+                        <button
+                          onClick={handleProceedToSelfie}
+                          disabled={geofenceStatus === "checking" || geofenceStatus === "blocked"}
+                          className={`w-full py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 mt-1 ${
+                            geofenceStatus === "blocked"
+                              ? "bg-slate-800 text-slate-500 border border-slate-700/50 cursor-not-allowed opacity-75"
+                              : geofenceStatus === "checking"
+                              ? "bg-indigo-900/60 text-indigo-200 cursor-wait"
+                              : "bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-lg shadow-emerald-600/25 cursor-pointer"
+                          }`}
+                        >
+                          {geofenceStatus === "checking" ? (
+                            <><Loader2 className="w-4 h-4 animate-spin" /> Verifying Classroom GPS...</>
+                          ) : geofenceStatus === "blocked" ? (
+                            <><ShieldAlert className="w-4 h-4 text-rose-400" /> Blocked • Outside Classroom Boundary</>
+                          ) : (
+                            <><Camera className="w-4 h-4" /> Proceed to Take Selfie</>
+                          )}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             )}
           </div>

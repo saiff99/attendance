@@ -53,8 +53,30 @@ export async function GET(
 
     let isAlreadyPresent = false;
     let attendanceInfo = null;
+    let targetAcademicYear: string | null = null;
+    let cohortMismatch = false;
 
     if (sessionId) {
+      try {
+        const { data: sessData } = await supabase
+          .from('sessions')
+          .select('id, class_name, target_academic_year')
+          .eq('id', sessionId)
+          .single();
+
+        if (sessData) {
+          targetAcademicYear = sessData.target_academic_year;
+          const studYear = stud.academic_year || '1st Year';
+          if (targetAcademicYear && targetAcademicYear !== 'All' && targetAcademicYear !== 'All Years') {
+            if (studYear.trim().toLowerCase() !== targetAcademicYear.trim().toLowerCase()) {
+              cohortMismatch = true;
+            }
+          }
+        }
+      } catch (e) {
+        console.error('Session lookup error:', e);
+      }
+
       const { data: attData } = await supabase
         .from('attendance')
         .select('id, status, capture_mode, confidence_score, recorded_at')
@@ -77,6 +99,8 @@ export async function GET(
         has_face_enrolled: hasFace,
         is_already_present: isAlreadyPresent,
         attendance_info: attendanceInfo,
+        cohort_mismatch: cohortMismatch,
+        target_academic_year: targetAcademicYear,
       }
     });
   } catch (err: any) {
