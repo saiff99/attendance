@@ -1053,7 +1053,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                             <span>Session Restricted: {selectedSession.target_academic_year} Only</span>
                           </div>
                           <p className="text-xs text-rose-100 font-medium leading-relaxed">
-                            এই ক্লাস বা attendance session-এ শুধুমাত্র <strong>{selectedSession.target_academic_year}</strong> এর ছাত্র-ছাত্রীরা সেলফি সাবমিট করতে পারবে। আপনার প্রোফাইল <strong>{student.academic_year}</strong> হিসেবে রেজিস্টার করা আছে।
+                            This attendance session is strictly restricted to <strong>{selectedSession.target_academic_year}</strong> students. Your profile is registered under <strong>{student.academic_year}</strong>, so you cannot submit attendance for this lecture.
                           </p>
                           <div className="text-[11px] text-rose-300/90 bg-rose-900/40 p-2.5 rounded-lg border border-rose-500/30 flex items-center justify-between flex-wrap gap-2">
                             <span>🎯 Allowed Cohort: <strong className="text-white">{selectedSession.target_academic_year}</strong></span>
