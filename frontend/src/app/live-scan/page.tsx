@@ -429,7 +429,7 @@ export default function LiveScan() {
             session_id: activeSession.id,
             student_id: studentId,
             status: 'Present',
-            capture_mode: 'Manual Override',
+            capture_mode: 'Manual Upload',
             confidence_score: 1.0,
             recorded_at: new Date().toISOString()
           },
@@ -1285,7 +1285,7 @@ export default function LiveScan() {
                     const studentRoll = log.students?.student_roll || "N/A";
                     const time = new Date(log.recorded_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
                     const confidence = Math.round((log.confidence_score || 0.95) * 100);
-                    const isManual = log.capture_mode === 'Manual Override';
+                    const isManual = log.capture_mode === 'Manual Upload' || log.capture_mode === 'Manual Override';
 
                     return (
                       <div

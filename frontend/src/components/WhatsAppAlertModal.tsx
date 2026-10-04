@@ -49,7 +49,7 @@ export function WhatsAppAlertModal({
             session_id: sessionId,
             student_id: studentId,
             status: 'Present',
-            capture_mode: 'Manual Override',
+            capture_mode: 'Manual Upload',
             confidence_score: 1.0,
             recorded_at: new Date().toISOString()
           },
