@@ -1309,7 +1309,7 @@ export default function LiveScan() {
                           </p>
                           <div className="flex items-center gap-1.5 text-[9px] sm:text-[10px] text-gray-500 dark:text-slate-400 mt-0.5">
                             <span className="font-mono bg-gray-200/80 dark:bg-slate-900 px-1 sm:px-1.5 py-0.5 rounded text-gray-700 dark:text-slate-300 border border-gray-300/80 dark:border-slate-800">
-                              #{studentRoll}
+                              {studentRoll}
                             </span>
                             <span>•</span>
                             {isManual ? (
@@ -1388,7 +1388,7 @@ export default function LiveScan() {
                             </p>
                             <div className="flex items-center gap-1.5 text-[9px] sm:text-[10px] text-gray-500 dark:text-slate-400 mt-0.5">
                               <span className="font-mono bg-gray-200/80 dark:bg-slate-900 px-1.5 py-0.5 rounded text-gray-700 dark:text-slate-300 border border-gray-300/80 dark:border-slate-800">
-                                #{studentRoll}
+                                {studentRoll}
                               </span>
                               <span>•</span>
                               <span className="text-rose-500 dark:text-rose-400 font-medium">Unverified</span>
