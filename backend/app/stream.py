@@ -127,9 +127,16 @@ class ThreadedRTSPStream:
                 self.raw_w = w
                 self.raw_h = h
 
-                # Downscale immediately to 640x360 for instantaneous zero-lag rendering
+                # Downscale display frame to 640x360 for instantaneous zero-lag UI rendering
                 display_frame = cv2.resize(frame, (640, 360), interpolation=cv2.INTER_LINEAR)
-                ai_frame = display_frame
+
+                # Prepare 1280x720 16:9 HD frame for high-accuracy background AI face detection (backbencher recall)
+                if w == 1280 and h == 720:
+                    ai_frame = frame
+                elif w >= 1280 or h >= 720:
+                    ai_frame = cv2.resize(frame, (1280, 720), interpolation=cv2.INTER_LINEAR)
+                else:
+                    ai_frame = cv2.resize(frame, (1280, 720), interpolation=cv2.INTER_CUBIC)
 
                 with self.lock:
                     self.latest_display_frame = display_frame
@@ -171,8 +178,8 @@ class ThreadedRTSPStream:
             threading.Thread(target=self._async_ai_worker, args=(ai_input_frame.copy(), session_id), daemon=True).start()
 
         h_f, w_f, _ = frame.shape
-        scale_x = w_f / 640.0
-        scale_y = h_f / 360.0
+        scale_x = w_f / 1280.0
+        scale_y = h_f / 720.0
 
         # Draw cached face overlays on lightweight frame
         for f_info in self.last_faces:
