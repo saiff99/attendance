@@ -1,5 +1,10 @@
 {
-  "python.defaultInterpreterPath": "./backend/.venv/bin/python",
+  "python.defaultInterpreterPath": "backend/.venv/bin/python",
+  "python.venvPath": "./backend",
+  "python.venvFolders": [
+    ".venv",
+    "venv"
+  ],
   "python.analysis.extraPaths": [
     "./backend/.venv/lib/python3.9/site-packages",
     "./backend"
