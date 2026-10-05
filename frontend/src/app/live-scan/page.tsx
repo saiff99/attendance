@@ -196,13 +196,12 @@ export default function LiveScan() {
       return;
     }
     
-    const headers = ["Roll Number", "Full Name", "Status", "Capture Mode", "Confidence (%)", "Date & Time Recorded"];
+    const headers = ["Roll Number", "Full Name", "Status", "Capture Mode", "Date & Time Recorded"];
     const rows = logs.map(log => {
       const studentName = log.students?.full_name || "Unknown";
       const studentRoll = log.students?.student_roll || "N/A";
       const status = log.status || "Present";
       const captureMode = log.capture_mode || "AI CCTV";
-      const confidence = Math.round((log.confidence_score || 0.9) * 100).toString();
       const time = new Date(log.recorded_at).toLocaleString([], {
         year: "numeric",
         month: "short",
@@ -213,7 +212,7 @@ export default function LiveScan() {
         hour12: true
       });
       
-      return [studentRoll, studentName, status, captureMode, confidence, time]
+      return [studentRoll, studentName, status, captureMode, time]
         .map(cell => `"${cell}"`)
         .join(",");
     });

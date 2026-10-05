@@ -26,7 +26,7 @@ export default function DownloadReportButton({ sessionId, sessionName }: { sessi
       }
 
       // Generate CSV content
-      const headers = ["Roll Number", "Student Name", "Date & Time Recorded", "Status", "Confidence Score (%)"];
+      const headers = ["Roll Number", "Student Name", "Date & Time Recorded", "Status"];
       
       const csvRows = [headers.join(",")];
       
@@ -44,9 +44,8 @@ export default function DownloadReportButton({ sessionId, sessionName }: { sessi
           hour12: true
         })}"`;
         const status = `"${record.status || "Present"}"`;
-        const confidence = Math.round((record.confidence_score || 1) * 100);
         
-        csvRows.push([roll, name, time, status, confidence].join(","));
+        csvRows.push([roll, name, time, status].join(","));
       });
       
       const csvContent = csvRows.join("\n");
