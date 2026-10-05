@@ -213,14 +213,23 @@ def send_session_absentee_alerts(session_id: str) -> dict:
 
     date_time_str = f"{session_date} at {time_display}" if time_display else session_date
 
-    # 2. Fetch all registered students (optionally filtered by academic year)
+    # 2. Fetch all registered students (optionally filtered by academic year and sub-batch)
     target_year = session.get("target_academic_year")
     student_query = supabase.table("students").select("id, student_roll, full_name, email, academic_year, face_encoding")
-    if target_year and target_year != "All Years":
-        student_query = student_query.eq("academic_year", target_year)
-    
     students_res = student_query.order("student_roll").execute()
-    all_students = students_res.data or []
+    raw_students = students_res.data or []
+
+    if target_year and target_year not in ("All", "All Years", "All MBBS Batches", ""):
+        t_clean = target_year.strip().lower()
+        all_students = [
+            s for s in raw_students
+            if s.get("academic_year") and (
+                s["academic_year"].strip().lower() == t_clean or
+                ("(" not in t_clean and s["academic_year"].strip().lower().startswith(t_clean))
+            )
+        ]
+    else:
+        all_students = raw_students
 
     if not all_students:
         return {"success": True, "message": "No students registered for this class.", "sent_count": 0, "absent_count": 0}

@@ -108,16 +108,20 @@ export function WhatsAppAlertModal({
 
       const targetYear = session?.target_academic_year;
 
-      // 2. Fetch Enrolled Students
-      let studentQuery = supabase
+      // 2. Fetch Enrolled Students for this specific cohort & sub-batch
+      const { data: rawStudents } = await supabase
         .from('students')
-        .select('id, student_roll, full_name, email, academic_year, face_encoding');
+        .select('id, student_roll, full_name, email, academic_year, face_encoding')
+        .order('student_roll', { ascending: true });
 
-      if (targetYear && targetYear !== 'All Years') {
-        studentQuery = studentQuery.eq('academic_year', targetYear);
-      }
-
-      const { data: allStudents } = await studentQuery.order('student_roll', { ascending: true });
+      const allStudents = (rawStudents || []).filter(s => {
+        if (!targetYear || targetYear === 'All' || targetYear === 'All Years' || targetYear === 'All MBBS Batches') return true;
+        const sYear = (s.academic_year || '').trim().toLowerCase();
+        const tYear = targetYear.trim().toLowerCase();
+        if (sYear === tYear) return true;
+        if (!tYear.includes('(') && sYear.startsWith(tYear)) return true;
+        return false;
+      });
 
       // 3. Fetch Present Attendances
       const { data: attendances } = await supabase

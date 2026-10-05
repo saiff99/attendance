@@ -30,12 +30,22 @@ def get_enrolled_students(session_id: str) -> List[dict]:
         if session_res.data and session_res.data[0].get("target_academic_year"):
             target_year = session_res.data[0]["target_academic_year"]
 
-        query = supabase.table("students").select("id, full_name, face_encoding, student_roll").not_.is_("face_encoding", "null")
-        if target_year and target_year != "All":
-            query = query.eq("academic_year", target_year)
-            
+        query = supabase.table("students").select("id, full_name, face_encoding, student_roll, academic_year").not_.is_("face_encoding", "null")
         students_res = query.execute()
-        enrolled = students_res.data or []
+        all_enrolled = students_res.data or []
+        
+        if target_year and target_year not in ("All", "All Years", "All MBBS Batches", ""):
+            t_clean = target_year.strip().lower()
+            enrolled = [
+                s for s in all_enrolled
+                if s.get("academic_year") and (
+                    s["academic_year"].strip().lower() == t_clean or
+                    ("(" not in t_clean and s["academic_year"].strip().lower().startswith(t_clean))
+                )
+            ]
+        else:
+            enrolled = all_enrolled
+
         session_enrolled_cache[session_id] = enrolled
         session_last_fetch[session_id] = now
         return enrolled

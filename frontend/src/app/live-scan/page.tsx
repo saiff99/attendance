@@ -73,7 +73,8 @@ export default function LiveScan() {
     subject: "",
     hall: "Lecture Hall 1",
     topic: "",
-    academic_year: "All"
+    academic_year: "All",
+    sub_batch: "All"
   });
   const [customHallName, setCustomHallName] = useState("");
   const [isStartingSession, setIsStartingSession] = useState(false);
@@ -269,17 +270,23 @@ export default function LiveScan() {
     if (!activeSession) return;
     try {
       const targetYear = activeSession.target_academic_year;
-      let query = supabase
+      const { data, error } = await supabase
         .from('students')
-        .select('id, student_roll, full_name, email, academic_year');
+        .select('id, student_roll, full_name, email, academic_year')
+        .order('student_roll', { ascending: true });
       
-      if (targetYear && targetYear !== 'All' && targetYear !== 'All Years') {
-        query = query.eq('academic_year', targetYear);
-      }
-      
-      const { data, error } = await query.order('student_roll', { ascending: true });
       if (error) throw error;
-      setEnrolledStudents(data || []);
+      
+      const filtered = (data || []).filter(s => {
+        if (!targetYear || targetYear === 'All' || targetYear === 'All Years' || targetYear === 'All MBBS Batches') return true;
+        const sYear = (s.academic_year || '').trim().toLowerCase();
+        const tYear = targetYear.trim().toLowerCase();
+        if (sYear === tYear) return true;
+        if (!tYear.includes('(') && sYear.startsWith(tYear)) return true;
+        return false;
+      });
+
+      setEnrolledStudents(filtered);
     } catch (err) {
       console.error("Failed to fetch enrolled students:", err);
     }
@@ -321,13 +328,19 @@ export default function LiveScan() {
       const finalHall = setupData.hall === "custom" ? (customHallName.trim() || "Custom Hall") : setupData.hall;
       const className = `${setupData.subject} - ${finalHall}`;
       
+      const targetCohort = setupData.academic_year === "All"
+        ? "All"
+        : (setupData.sub_batch && setupData.sub_batch !== "All"
+            ? `${setupData.academic_year} (${setupData.sub_batch})`
+            : setupData.academic_year);
+
       const newSession = {
         class_name: className,
         date: today,
         start_time: now.toISOString(),
         end_time: new Date(now.getTime() + 2 * 60 * 60 * 1000).toISOString(),
         instructor_name: encodeSessionMetadata(setupData.topic, sessionGeofence),
-        target_academic_year: setupData.academic_year
+        target_academic_year: targetCohort
       };
       
       const { data, error } = await supabase
@@ -580,20 +593,39 @@ export default function LiveScan() {
               />
             </div>
             
-            <div>
-              <label htmlFor="academic_year" className="block text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-slate-400 mb-1.5">Target Student Cohort</label>
-              <select 
-                id="academic_year"
-                className="w-full rounded-xl border border-gray-300 dark:border-slate-800 py-2.5 sm:py-3 px-3.5 sm:px-4 text-gray-900 dark:text-white bg-white dark:bg-slate-950/70 focus:outline-none focus:border-indigo-600 dark:focus:border-indigo-500 focus:ring-1 focus:ring-indigo-600 dark:focus:ring-indigo-500 transition-all text-xs sm:text-sm cursor-pointer shadow-sm"
-                value={setupData.academic_year}
-                onChange={e => setSetupData({...setupData, academic_year: e.target.value})}
-              >
-                <option value="All" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">All MBBS Batches (No Restriction)</option>
-                <option value="1st Year" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">1st Year MBBS</option>
-                <option value="2nd Year" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">2nd Year MBBS</option>
-                <option value="3rd Year" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">3rd Year MBBS</option>
-                <option value="4th Year" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">4th Year MBBS</option>
-              </select>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label htmlFor="academic_year" className="block text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-slate-400 mb-1.5">Target Student Cohort</label>
+                <select 
+                  id="academic_year"
+                  className="w-full rounded-xl border border-gray-300 dark:border-slate-800 py-2.5 sm:py-3 px-3.5 sm:px-4 text-gray-900 dark:text-white bg-white dark:bg-slate-950/70 focus:outline-none focus:border-indigo-600 dark:focus:border-indigo-500 focus:ring-1 focus:ring-indigo-600 dark:focus:border-indigo-500 transition-all text-xs sm:text-sm cursor-pointer shadow-sm"
+                  value={setupData.academic_year}
+                  onChange={e => setSetupData({...setupData, academic_year: e.target.value})}
+                >
+                  <option value="All" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">All MBBS Batches (Full Cohort)</option>
+                  <option value="1st Year" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">1st Year MBBS</option>
+                  <option value="2nd Year" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">2nd Year MBBS</option>
+                  <option value="3rd Year" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">3rd Year MBBS</option>
+                  <option value="4th Year" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">4th Year MBBS</option>
+                </select>
+              </div>
+
+              <div>
+                <label htmlFor="sub_batch" className="block text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-slate-400 mb-1.5">Sub-Batch / Section</label>
+                <select 
+                  id="sub_batch"
+                  disabled={setupData.academic_year === "All"}
+                  className="w-full rounded-xl border border-gray-300 dark:border-slate-800 py-2.5 sm:py-3 px-3.5 sm:px-4 text-gray-900 dark:text-white bg-white dark:bg-slate-950/70 focus:outline-none focus:border-indigo-600 dark:focus:border-indigo-500 focus:ring-1 focus:ring-indigo-600 dark:focus:border-indigo-500 transition-all text-xs sm:text-sm cursor-pointer shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  value={setupData.sub_batch}
+                  onChange={e => setSetupData({...setupData, sub_batch: e.target.value})}
+                >
+                  <option value="All" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">All Batches (Full Class)</option>
+                  <option value="Batch A" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">Batch A (e.g. Roll 1-100)</option>
+                  <option value="Batch B" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">Batch B (e.g. Roll 101-200)</option>
+                  <option value="Batch C" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">Batch C (e.g. Roll 201-300)</option>
+                  <option value="Batch D" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">Batch D</option>
+                </select>
+              </div>
             </div>
             
             {/* GPS Geofence Security Card */}

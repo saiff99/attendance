@@ -976,12 +976,18 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
 
                 {/* Verified Student Profile Preview */}
                 {student && (() => {
+                  const sClean = (student.academic_year || "").trim().toLowerCase();
+                  const tClean = (selectedSession?.target_academic_year || "").trim().toLowerCase();
+                  const isTargetRestricted = Boolean(
+                    tClean &&
+                    tClean !== "all" &&
+                    tClean !== "all years" &&
+                    tClean !== "all mbbs batches"
+                  );
                   const isCohortMismatch = Boolean(
-                    selectedSession?.target_academic_year &&
-                    selectedSession.target_academic_year !== "All" &&
-                    selectedSession.target_academic_year !== "All Years" &&
-                    student.academic_year &&
-                    student.academic_year.trim().toLowerCase() !== selectedSession.target_academic_year.trim().toLowerCase()
+                    isTargetRestricted &&
+                    sClean &&
+                    (sClean !== tClean && (tClean.includes("(") || !sClean.startsWith(tClean)))
                   );
 
                   return (

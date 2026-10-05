@@ -30,6 +30,7 @@ export function BulkImportModal({
   onSuccess,
 }: BulkImportModalProps) {
   const [selectedYear, setSelectedYear] = useState<string>(defaultAcademicYear || "1st Year");
+  const [selectedBatch, setSelectedBatch] = useState<string>("All");
   const [useFileYear, setUseFileYear] = useState<boolean>(!defaultAcademicYear);
   const [file, setFile] = useState<File | null>(null);
   const [parsedData, setParsedData] = useState<ParsedStudentRow[]>([]);
@@ -87,7 +88,8 @@ export function BulkImportModal({
 
       const rollKey = keys.find(k => /roll|id|reg|number/i.test(k)) || keys[0];
       const nameKey = keys.find(k => /name|student|full/i.test(k)) || (keys.length > 1 ? keys[1] : "");
-      const yearKey = keys.find(k => /year|academic|batch|class|cohort/i.test(k));
+      const yearKey = keys.find(k => /year|academic|cohort|grade/i.test(k));
+      const batchKey = keys.find(k => /batch|section|group|division|sec/i.test(k));
       const emailKey = keys.find(k => /email|mail/i.test(k));
       const phoneKey = keys.find(k => /phone|parent|guardian|mobile|whatsapp|contact/i.test(k));
 
@@ -105,6 +107,20 @@ export function BulkImportModal({
           else year = rawYear;
         }
 
+        let batch = selectedBatch;
+        if (batchKey && row[batchKey]) {
+          const rawBatch = String(row[batchKey]).trim();
+          if (/a\b|batch a/i.test(rawBatch)) batch = "Batch A";
+          else if (/b\b|batch b/i.test(rawBatch)) batch = "Batch B";
+          else if (/c\b|batch c/i.test(rawBatch)) batch = "Batch C";
+          else if (/d\b|batch d/i.test(rawBatch)) batch = "Batch D";
+          else if (rawBatch) batch = rawBatch;
+        }
+
+        const finalYear = batch && batch !== "All" && !year.includes("(")
+          ? `${year} (${batch})`
+          : year;
+
         const rawPhone = phoneKey && row[phoneKey] ? String(row[phoneKey]).trim() : undefined;
         const parentPhone = rawPhone ? cleanPhoneNumber(rawPhone) : undefined;
 
@@ -116,7 +132,7 @@ export function BulkImportModal({
         return {
           student_roll: roll,
           full_name: name,
-          academic_year: year,
+          academic_year: finalYear,
           email: emailKey && row[emailKey] ? String(row[emailKey]).trim() : undefined,
           parent_phone: parentPhone,
           valid,
@@ -142,18 +158,21 @@ export function BulkImportModal({
         "Roll Number": "26001",
         "Full Name": "MORSALIM MONDAL",
         "Academic Year": selectedYear || "1st Year",
+        "Batch": "Batch A",
         "Parent WhatsApp": "+919876543210",
       },
       {
-        "Roll Number": "26002",
+        "Roll Number": "26101",
         "Full Name": "SK SAIFUDDIN",
         "Academic Year": selectedYear || "1st Year",
+        "Batch": "Batch B",
         "Parent WhatsApp": "+919876543211",
       },
       {
-        "Roll Number": "26003",
+        "Roll Number": "26201",
         "Full Name": "RAHUL ROY",
         "Academic Year": selectedYear || "1st Year",
+        "Batch": "Batch C",
         "Parent WhatsApp": "+919876543212",
       },
     ];

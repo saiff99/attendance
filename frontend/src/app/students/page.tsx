@@ -44,7 +44,8 @@ export default function StudentDirectory() {
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
   // Form State
-  const [newStudent, setNewStudent] = useState({ student_roll: '', full_name: '', email: '', academic_year: '1st Year', parent_phone: '' });
+  const [newStudent, setNewStudent] = useState({ student_roll: '', full_name: '', email: '', academic_year: '1st Year', sub_batch: 'All', parent_phone: '' });
+  const [activeSubBatch, setActiveSubBatch] = useState<string>('All');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Face Registration Modal State
@@ -85,6 +86,9 @@ export default function StudentDirectory() {
 
     // Encode parent WhatsApp phone into database email format safely
     const generatedEmail = encodeStudentEmail(newStudent.student_roll, newStudent.parent_phone);
+    const combinedYear = newStudent.sub_batch && newStudent.sub_batch !== 'All'
+      ? `${newStudent.academic_year} (${newStudent.sub_batch})`
+      : newStudent.academic_year;
 
     try {
       if (editingId) {
@@ -94,7 +98,7 @@ export default function StudentDirectory() {
             student_roll: newStudent.student_roll,
             full_name: newStudent.full_name,
             email: generatedEmail,
-            academic_year: newStudent.academic_year,
+            academic_year: combinedYear,
           })
           .eq('id', editingId);
 
@@ -106,7 +110,7 @@ export default function StudentDirectory() {
             student_roll: newStudent.student_roll,
             full_name: newStudent.full_name,
             email: generatedEmail,
-            academic_year: newStudent.academic_year,
+            academic_year: combinedYear,
             face_encoding: null
           }]);
 
@@ -164,22 +168,25 @@ export default function StudentDirectory() {
 
   const openEnrollModal = () => {
     setEditingId(null);
-    setNewStudent({ student_roll: '', full_name: '', email: '', academic_year: activeView || '1st Year', parent_phone: '' });
+    setNewStudent({ student_roll: '', full_name: '', email: '', academic_year: activeView || '1st Year', sub_batch: 'All', parent_phone: '' });
     setIsModalOpen(true);
   };
 
   const closeModal = () => {
     setIsModalOpen(false);
     setEditingId(null);
-    setNewStudent({ student_roll: '', full_name: '', email: '', academic_year: activeView || '1st Year', parent_phone: '' });
+    setNewStudent({ student_roll: '', full_name: '', email: '', academic_year: activeView || '1st Year', sub_batch: 'All', parent_phone: '' });
   };
 
   const filteredStudents = students
     .filter(student => {
       const matchesSearch = student.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         student.student_roll?.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesYear = activeView ? student.academic_year === activeView : true;
-      return matchesSearch && matchesYear;
+      const matchesYear = activeView ? (student.academic_year?.startsWith(activeView) ?? false) : true;
+      const matchesSubBatch = activeSubBatch === 'All'
+        ? true
+        : (student.academic_year?.includes(`(${activeSubBatch})`) ?? false);
+      return matchesSearch && matchesYear && matchesSubBatch;
     })
     .sort((a, b) => {
       let comparison = 0;
@@ -351,12 +358,13 @@ export default function StudentDirectory() {
         {!activeView ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
             {yearFolders.map((folder) => {
-              const count = students.filter(s => s.academic_year === folder.id).length;
+              const count = students.filter(s => s.academic_year?.startsWith(folder.id)).length;
               return (
                 <div
                   key={folder.id}
                   onClick={() => {
                     setSelectedIds([]);
+                    setActiveSubBatch('All');
                     setActiveView(folder.id);
                   }}
                   className="group relative bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-5 sm:p-6 hover:shadow-xl transition-all duration-300 cursor-pointer overflow-hidden"
@@ -391,6 +399,34 @@ export default function StudentDirectory() {
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
+              </div>
+
+              {/* Sub-Batch Filter Pills */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+                {['All', 'Batch A', 'Batch B', 'Batch C', 'Batch D'].map((b) => {
+                  const bCount = students.filter(s => {
+                    if (!s.academic_year?.startsWith(activeView)) return false;
+                    return b === 'All' ? true : s.academic_year?.includes(`(${b})`);
+                  }).length;
+                  const isSelected = activeSubBatch === b;
+                  return (
+                    <button
+                      key={b}
+                      type="button"
+                      onClick={() => setActiveSubBatch(b)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                        isSelected
+                          ? 'bg-indigo-600 text-white shadow-sm'
+                          : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                      }`}
+                    >
+                      <span>{b === 'All' ? 'All Batches' : b}</span>
+                      <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${isSelected ? 'bg-indigo-700 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400'}`}>
+                        {bCount}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
 
               {selectedIds.length > 0 && (
@@ -614,11 +650,17 @@ export default function StudentDirectory() {
                                         }`}>
                                         <button
                                           onClick={() => {
+                                            const rawYear = student.academic_year || '1st Year';
+                                            const batchMatch = rawYear.match(/\((Batch [A-D])\)/i);
+                                            const parsedBatch = batchMatch ? batchMatch[1] : 'All';
+                                            const baseYear = rawYear.replace(/\s*\(Batch [A-D]\)/i, '').trim() || '1st Year';
+
                                             setNewStudent({
                                               student_roll: student.student_roll || '',
                                               full_name: student.full_name || '',
                                               email: student.email || '',
-                                              academic_year: student.academic_year || '1st Year',
+                                              academic_year: baseYear,
+                                              sub_batch: parsedBatch,
                                               parent_phone: getParentPhone(student)
                                             });
                                             setEditingId(student.id);
@@ -750,21 +792,39 @@ export default function StudentDirectory() {
                     placeholder="e.g. Emily Chen"
                   />
                 </div>
-                <div>
-                  <label htmlFor="academic_year" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Academic Year</label>
-                  <select
-                    id="academic_year"
-                    required
-                    disabled={!!activeView}
-                    className={`mt-1 block w-full rounded-md border-0 py-2 pl-3 pr-10 ring-1 ring-inset focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6 transition-colors ${activeView ? 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 ring-gray-200 dark:ring-gray-700 cursor-not-allowed' : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white ring-gray-300 dark:ring-gray-700'}`}
-                    value={newStudent.academic_year}
-                    onChange={e => setNewStudent({ ...newStudent, academic_year: e.target.value })}
-                  >
-                    <option value="1st Year">1st Year</option>
-                    <option value="2nd Year">2nd Year</option>
-                    <option value="3rd Year">3rd Year</option>
-                    <option value="4th Year">4th Year</option>
-                  </select>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label htmlFor="academic_year" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Academic Year</label>
+                    <select
+                      id="academic_year"
+                      required
+                      disabled={!!activeView}
+                      className={`mt-1 block w-full rounded-md border-0 py-2 pl-3 pr-10 ring-1 ring-inset focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6 transition-colors ${activeView ? 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 ring-gray-200 dark:ring-gray-700 cursor-not-allowed' : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white ring-gray-300 dark:ring-gray-700'}`}
+                      value={newStudent.academic_year}
+                      onChange={e => setNewStudent({ ...newStudent, academic_year: e.target.value })}
+                    >
+                      <option value="1st Year">1st Year</option>
+                      <option value="2nd Year">2nd Year</option>
+                      <option value="3rd Year">3rd Year</option>
+                      <option value="4th Year">4th Year</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label htmlFor="sub_batch" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Sub-Batch / Section</label>
+                    <select
+                      id="sub_batch"
+                      className="mt-1 block w-full rounded-md border-0 bg-white dark:bg-gray-800 py-2 pl-3 pr-10 text-gray-900 dark:text-white ring-1 ring-inset ring-gray-300 dark:ring-gray-700 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
+                      value={newStudent.sub_batch}
+                      onChange={e => setNewStudent({ ...newStudent, sub_batch: e.target.value })}
+                    >
+                      <option value="All">All / Unassigned</option>
+                      <option value="Batch A">Batch A</option>
+                      <option value="Batch B">Batch B</option>
+                      <option value="Batch C">Batch C</option>
+                      <option value="Batch D">Batch D</option>
+                    </select>
+                  </div>
                 </div>
                 <div>
                   <label htmlFor="parent_phone" className="block text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center justify-between">

@@ -67,8 +67,10 @@ export async function GET(
         if (sessData) {
           targetAcademicYear = sessData.target_academic_year;
           const studYear = stud.academic_year || '1st Year';
-          if (targetAcademicYear && targetAcademicYear !== 'All' && targetAcademicYear !== 'All Years') {
-            if (studYear.trim().toLowerCase() !== targetAcademicYear.trim().toLowerCase()) {
+          if (targetAcademicYear && targetAcademicYear !== 'All' && targetAcademicYear !== 'All Years' && targetAcademicYear !== 'All MBBS Batches') {
+            const sClean = studYear.trim().toLowerCase();
+            const tClean = targetAcademicYear.trim().toLowerCase();
+            if (sClean !== tClean && (tClean.includes('(') || !sClean.startsWith(tClean))) {
               cohortMismatch = true;
             }
           }
