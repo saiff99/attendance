@@ -37,13 +37,13 @@ export default async function Dashboard() {
   const totalRegistered = totalStudents || 0;
   const todayUniqueAbsent = Math.max(0, totalRegistered - todayUniquePresent);
 
-  // Fetch Recent Sessions
+  // Fetch Recent Sessions (Last 10)
   const { data: recentSessions } = await supabase
     .from('sessions')
     .select('id, class_name, instructor_name, created_at, attendance(count)')
     .neq('class_name', '__SYSTEM_CONFIG__')
     .order('created_at', { ascending: false })
-    .limit(5);
+    .limit(10);
 
   const lastClassPresent = recentSessions && recentSessions.length > 0 
     ? ((recentSessions[0].attendance as any)?.[0]?.count || 0)
