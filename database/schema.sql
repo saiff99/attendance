@@ -1,19 +1,22 @@
--- Supabase Schema for Smart Attendance System
+-- Supabase Production Schema for Smart Attendance System (MedAttend)
 
--- Enable uuid-ossp extension for UUID generation (if not already enabled)
+-- 1. Enable uuid-ossp extension for UUID generation
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- Table: students
+-- 2. Table: students
 CREATE TABLE IF NOT EXISTS students (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     student_roll VARCHAR(50) UNIQUE NOT NULL,
     full_name VARCHAR(255) NOT NULL,
     email VARCHAR(255) UNIQUE NOT NULL,
-    face_encoding JSONB, -- Stores vector array or dictionary for face recognition
+    academic_year VARCHAR(50) DEFAULT '1st Year',
+    parent_phone VARCHAR(50),
+    face_encoding JSONB, -- Stores 512D vector embeddings for MobileFaceNet recognition
+    manual_marked_count INTEGER DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Table: sessions
+-- 3. Table: sessions
 CREATE TABLE IF NOT EXISTS sessions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     class_name VARCHAR(255) NOT NULL,
@@ -21,10 +24,11 @@ CREATE TABLE IF NOT EXISTS sessions (
     start_time TIMESTAMP WITH TIME ZONE NOT NULL,
     end_time TIMESTAMP WITH TIME ZONE NOT NULL,
     instructor_name VARCHAR(255) NOT NULL,
+    target_academic_year VARCHAR(50) DEFAULT 'All',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Table: attendance
+-- 4. Table: attendance
 CREATE TABLE IF NOT EXISTS attendance (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     session_id UUID NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
@@ -33,10 +37,14 @@ CREATE TABLE IF NOT EXISTS attendance (
     capture_mode VARCHAR(50) NOT NULL CHECK (capture_mode IN ('Live Scan', 'Manual Upload')),
     confidence_score FLOAT,
     recorded_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(session_id, student_id) -- Prevent duplicate attendance entries
+    UNIQUE(session_id, student_id) -- Prevent duplicate attendance entries per student per session
 );
 
--- Indexes for performance
+-- 5. Performance Indexes
+CREATE INDEX IF NOT EXISTS idx_students_roll ON students(student_roll);
+CREATE INDEX IF NOT EXISTS idx_students_year ON students(academic_year);
+CREATE INDEX IF NOT EXISTS idx_sessions_date ON sessions(date);
+CREATE INDEX IF NOT EXISTS idx_sessions_year ON sessions(target_academic_year);
 CREATE INDEX IF NOT EXISTS idx_attendance_session ON attendance(session_id);
 CREATE INDEX IF NOT EXISTS idx_attendance_student ON attendance(student_id);
-CREATE INDEX IF NOT EXISTS idx_sessions_date ON sessions(date);
+CREATE INDEX IF NOT EXISTS idx_attendance_recorded_at ON attendance(recorded_at);
