@@ -174,7 +174,16 @@ def main():
                 print(f"  {RED}! {line.strip()}{RESET}")
 
     threading.Thread(target=log_uvicorn, daemon=True).start()
-    time.sleep(2)
+    
+    # Fast-poll until Backend port is open and ready (< 400ms)
+    for _ in range(30):
+        try:
+            req = Request("http://127.0.0.1:8000/health", headers={"User-Agent": "MedAttend-Launcher"})
+            with urlopen(req, timeout=0.4) as r:
+                if r.status == 200:
+                    break
+        except Exception:
+            time.sleep(0.1)
 
     # 4. Start Cloudflare Unlimited Tunnel
     print(f"{BLUE}[3/4]{RESET} Initializing Cloudflare Unlimited Bandwidth Tunnel...")

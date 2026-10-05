@@ -45,25 +45,31 @@ export function getServerBackendUrl(): string {
 }
 
 export async function fetchBackend(path: string, options: RequestInit = {}): Promise<Response> {
-  const liveDynamicTunnel = await getLiveTunnelUrl();
-  const primaryUrl = getServerBackendUrl();
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  const isHealthCheck = normalizedPath === '/health';
+  const isCloudEnvironment = Boolean(process.env.VERCEL || (process.env.NODE_ENV === 'production' && !process.env.NEXT_PUBLIC_LOCAL_DEV));
   
   const headers = new Headers(options.headers || {});
   headers.set('ngrok-skip-browser-warning', '69420');
 
   // Candidate URLs to try in priority order:
-  // 1. Live dynamic tunnel URL synced from Mac via Supabase (always newest & active)
-  // 2. Primary URL / Cloudflare fallback
-  // 3. Ngrok tunnel fallback
-  // 4. Localhost
+  // When running locally on Mac/PC, ALWAYS prioritize localhost (1ms instant response!)
   const targets: string[] = [];
+  if (!isCloudEnvironment) {
+    targets.push("http://127.0.0.1:8000");
+  }
+
+  // Live dynamic tunnel URL synced from Mac via Supabase (for Vercel / Remote access)
+  const liveDynamicTunnel = await getLiveTunnelUrl();
   if (liveDynamicTunnel && !targets.includes(liveDynamicTunnel)) {
     targets.push(liveDynamicTunnel);
   }
+
+  const primaryUrl = getServerBackendUrl();
   if (primaryUrl && !targets.includes(primaryUrl)) {
     targets.push(primaryUrl);
   }
+
   if (CLOUDFLARE_TUNNEL && !targets.includes(CLOUDFLARE_TUNNEL)) {
     targets.push(CLOUDFLARE_TUNNEL);
   }
@@ -78,8 +84,12 @@ export async function fetchBackend(path: string, options: RequestInit = {}): Pro
 
   for (const baseUrl of targets) {
     try {
+      const isLocal = baseUrl.includes("127.0.0.1") || baseUrl.includes("localhost");
+      // Use ultra-fast timeout for local checks or health checks, so dead tunnels never hang the UI
+      const timeoutMs = isHealthCheck ? (isLocal ? 1500 : 3000) : (isLocal ? 10000 : 25000);
+      
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 25000);
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
       
       const res = await fetch(`${baseUrl}${normalizedPath}`, {
         ...options,
@@ -105,7 +115,9 @@ export async function fetchBackend(path: string, options: RequestInit = {}): Pro
       // Otherwise try next fallback tunnel
     } catch (err: any) {
       lastError = err;
-      console.warn(`[fetchBackend] Connection to ${baseUrl}${normalizedPath} failed:`, err.message);
+      if (!isHealthCheck) {
+        console.warn(`[fetchBackend] Connection to ${baseUrl}${normalizedPath} failed:`, err.message);
+      }
     }
   }
 

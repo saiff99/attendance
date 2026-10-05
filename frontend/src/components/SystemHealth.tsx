@@ -23,10 +23,14 @@ export function SystemHealth() {
     };
     listeners.add(listener);
 
+    let isChecking = false;
+
     const checkHealth = async () => {
+      if (isChecking) return;
+      isChecking = true;
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 4000);
+        const timeoutId = setTimeout(() => controller.abort(), 2000);
 
         const response = await fetch("/api/health", {
           method: "GET",
@@ -39,26 +43,45 @@ export function SystemHealth() {
           const data = await response.json().catch(() => null);
           const online = data?.status === "ok" || data?.online === true;
           notifyListeners(online);
+          isChecking = false;
           return;
         }
       } catch {
         // Backend offline / fetch failed
+      } finally {
+        isChecking = false;
       }
 
       notifyListeners(false);
     };
 
-    // If we haven't checked in the last 6 seconds or state is null, perform check
-    if (cachedIsOnline === null || Date.now() - lastCheckTimestamp > 6000) {
-      checkHealth();
-    }
+    // Immediate check on component mount
+    checkHealth();
 
-    // Poll every 8 seconds
-    const intervalId = setInterval(checkHealth, 8000);
+    // Fast polling when offline or starting up (1.5s), normal interval when healthy (10s)
+    let timerId: NodeJS.Timeout;
+    const scheduleNextCheck = () => {
+      const delay = cachedIsOnline === true ? 10000 : 1500;
+      timerId = setTimeout(async () => {
+        await checkHealth();
+        scheduleNextCheck();
+      }, delay);
+    };
+
+    scheduleNextCheck();
+
+    // Trigger instant check when tab/window becomes active or network recovers
+    const onFocusOrOnline = () => {
+      checkHealth();
+    };
+    window.addEventListener("focus", onFocusOrOnline);
+    window.addEventListener("online", onFocusOrOnline);
 
     return () => {
       listeners.delete(listener);
-      clearInterval(intervalId);
+      clearTimeout(timerId);
+      window.removeEventListener("focus", onFocusOrOnline);
+      window.removeEventListener("online", onFocusOrOnline);
     };
   }, []);
 
