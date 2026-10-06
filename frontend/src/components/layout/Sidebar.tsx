@@ -24,12 +24,30 @@ export default function Sidebar() {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [hasActiveLiveSession, setHasActiveLiveSession] = useState(false);
   const { user, logout } = useAuth();
   const { theme, setTheme } = useTheme();
   const isStudentPortal = pathname?.startsWith("/selfieattend") || pathname?.startsWith("/self-attendance");
 
   useEffect(() => {
     setMounted(true);
+    const checkActive = () => {
+      if (typeof window !== "undefined") {
+        const activeId = localStorage.getItem("medattend_active_session_id");
+        setHasActiveLiveSession(!!activeId);
+      }
+    };
+
+    checkActive();
+    window.addEventListener("medattend-session-changed", checkActive);
+    window.addEventListener("storage", checkActive);
+    const interval = setInterval(checkActive, 3000);
+
+    return () => {
+      window.removeEventListener("medattend-session-changed", checkActive);
+      window.removeEventListener("storage", checkActive);
+      clearInterval(interval);
+    };
   }, []);
 
   return (
@@ -97,32 +115,39 @@ export default function Sidebar() {
         <nav className="mt-2 flex-1 space-y-1 px-3">
           {navigation.map((item) => {
             const isActive = pathname === item.href;
+            const isLiveScan = item.href === "/live-scan";
             return (
               <Link
                 key={item.name}
                 href={item.href}
                 className={classNames(
                   isActive
-                    ? "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400"
+                    ? "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 font-semibold"
                     : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-indigo-600 dark:hover:text-indigo-400",
                   "group flex items-center rounded-md px-3 py-2.5 text-sm font-medium transition-colors"
                 )}
-                  onClick={() => {
-                    if (typeof window !== "undefined") {
-                      window.dispatchEvent(new CustomEvent("medattend-navigate"));
-                    }
-                    setIsOpen(false);
-                  }}
-                >
-                  <item.icon
-                    className={classNames(
-                      isActive ? "text-indigo-600 dark:text-indigo-400" : "text-gray-400 dark:text-gray-500 group-hover:text-indigo-600 dark:group-hover:text-indigo-400",
-                      "mr-3 h-5 w-5 flex-shrink-0 transition-colors"
-                    )}
-                    aria-hidden="true"
-                  />
-                  {item.name}
-                </Link>
+                onClick={() => {
+                  if (typeof window !== "undefined") {
+                    window.dispatchEvent(new CustomEvent("medattend-navigate"));
+                  }
+                  setIsOpen(false);
+                }}
+              >
+                <item.icon
+                  className={classNames(
+                    isActive ? "text-indigo-600 dark:text-indigo-400" : "text-gray-400 dark:text-gray-500 group-hover:text-indigo-600 dark:group-hover:text-indigo-400",
+                    "mr-3 h-5 w-5 flex-shrink-0 transition-colors"
+                  )}
+                  aria-hidden="true"
+                />
+                <span className="flex-1 truncate">{item.name}</span>
+                {isLiveScan && hasActiveLiveSession && (
+                  <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-500 text-white animate-pulse shadow-sm shadow-rose-500/50 shrink-0 ml-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-white mr-1" />
+                    LIVE
+                  </span>
+                )}
+              </Link>
             );
           })}
         </nav>
