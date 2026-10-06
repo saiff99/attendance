@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, ScanLine, Users, FileBarChart, Activity, Menu, X, Smartphone, LogOut, Sun, Moon } from "lucide-react";
+import { LayoutDashboard, ScanLine, Radio, Users, FileBarChart, Activity, Menu, X, Smartphone, LogOut, Sun, Moon } from "lucide-react";
 import { SystemHealth } from "@/components/SystemHealth";
 import { useAuth } from "@/lib/auth";
 import { useTheme } from "next-themes";
@@ -11,6 +11,7 @@ import { useTheme } from "next-themes";
 const navigation = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
   { name: "Live Scan", href: "/live-scan", icon: ScanLine },
+  { name: "Ongoing", href: "/ongoing", icon: Radio },
   { name: "Student Directory", href: "/students", icon: Users },
   { name: "Selfie Portal", href: "/selfieattend", icon: Smartphone },
   { name: "Reports", href: "/reports", icon: FileBarChart },
@@ -25,16 +26,31 @@ export default function Sidebar() {
   const [isOpen, setIsOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [hasActiveLiveSession, setHasActiveLiveSession] = useState(false);
+  const [ongoingCount, setOngoingCount] = useState<number>(0);
   const { user, logout } = useAuth();
   const { theme, setTheme } = useTheme();
   const isStudentPortal = pathname?.startsWith("/selfieattend") || pathname?.startsWith("/self-attendance");
 
   useEffect(() => {
     setMounted(true);
-    const checkActive = () => {
+    const checkActive = async () => {
       if (typeof window !== "undefined") {
         const activeId = localStorage.getItem("medattend_active_session_id");
         setHasActiveLiveSession(!!activeId);
+
+        try {
+          const res = await fetch("/api/active-sessions", {
+            headers: { "ngrok-skip-browser-warning": "69420" },
+            cache: "no-store"
+          });
+          if (res.ok) {
+            const data = await res.json();
+            const activeList = (data.sessions || []).filter((s: any) => !s.is_expired && s.remaining_seconds > 0);
+            setOngoingCount(activeList.length);
+          }
+        } catch (e) {
+          // silent fallback
+        }
       }
     };
 
@@ -116,6 +132,7 @@ export default function Sidebar() {
           {navigation.map((item) => {
             const isActive = pathname === item.href;
             const isLiveScan = item.href === "/live-scan";
+            const isOngoing = item.href === "/ongoing";
             return (
               <Link
                 key={item.name}
@@ -141,10 +158,15 @@ export default function Sidebar() {
                   aria-hidden="true"
                 />
                 <span className="flex-1 truncate">{item.name}</span>
-                {isLiveScan && hasActiveLiveSession && (
-                  <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-500 text-white animate-pulse shadow-sm shadow-rose-500/50 shrink-0 ml-2">
+                {isOngoing && ongoingCount > 0 && (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500 text-white animate-pulse shadow-sm shadow-rose-500/50 shrink-0 ml-2">
                     <span className="w-1.5 h-1.5 rounded-full bg-white mr-1" />
-                    LIVE
+                    {ongoingCount}
+                  </span>
+                )}
+                {isLiveScan && hasActiveLiveSession && !isOngoing && (
+                  <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 shrink-0 ml-2">
+                    Active
                   </span>
                 )}
               </Link>
