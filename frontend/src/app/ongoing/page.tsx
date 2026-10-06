@@ -214,14 +214,6 @@ export default function OngoingSessionsPage() {
               <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin text-indigo-600 dark:text-indigo-400" : ""}`} />
               <span>{isRefreshing ? "Refreshing..." : "Sync"}</span>
             </button>
-
-            <Link
-              href="/live-scan"
-              className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md shadow-indigo-600/20 flex items-center gap-1.5 transition-all cursor-pointer"
-            >
-              <PlayCircle className="w-4 h-4" />
-              <span>Start New Session</span>
-            </Link>
           </div>
         </div>
 
@@ -246,17 +238,9 @@ export default function OngoingSessionsPage() {
             <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white mb-2">
               No Active Sessions Running
             </h2>
-            <p className="text-xs sm:text-sm text-gray-500 dark:text-slate-400 max-w-md mb-6 leading-relaxed">
+            <p className="text-xs sm:text-sm text-gray-500 dark:text-slate-400 max-w-md leading-relaxed">
               Attendance sessions automatically conclude and vanish from this view once their 5-minute active window elapses. All attendance logs are safely stored in reports.
             </p>
-            <Link
-              href="/live-scan"
-              className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-sm font-bold shadow-lg shadow-indigo-600/30 flex items-center gap-2 transition-all cursor-pointer"
-            >
-              <Camera className="w-4 h-4" />
-              <span>Launch Live Scan Hub</span>
-              <ArrowRight className="w-4 h-4" />
-            </Link>
           </div>
         ) : (
           /* Active Sessions Grid */
