@@ -95,6 +95,41 @@ export default function LiveScan() {
   const [selectedPtzIndex, setSelectedPtzIndex] = useState(0);
   const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false);
 
+  // Compute currently active geofence config (from live session metadata or local default)
+  const activeGeofenceConfig = useMemo<CampusGeofenceConfig>(() => {
+    if (activeSession?.instructor_name) {
+      const decoded = decodeSessionMetadata(activeSession.instructor_name);
+      if (decoded.geofence) return decoded.geofence;
+    }
+    return sessionGeofence;
+  }, [activeSession, sessionGeofence]);
+
+  // Synchronize geofence changes immediately to active session in Supabase & local state
+  const handleGeofenceSaved = async (newConfig: CampusGeofenceConfig) => {
+    setSessionGeofence(newConfig);
+    saveLocalGeofence(newConfig);
+
+    if (activeSession) {
+      try {
+        const cleanTopic = decodeSessionMetadata(activeSession.instructor_name).topic;
+        const updatedInstructor = encodeSessionMetadata(cleanTopic, newConfig);
+
+        const { error } = await supabase
+          .from('sessions')
+          .update({ instructor_name: updatedInstructor })
+          .eq('id', activeSession.id);
+
+        if (!error) {
+          setActiveSession((prev: any) => prev ? { ...prev, instructor_name: updatedInstructor } : null);
+        } else {
+          console.error("Failed to update active session geofence in Supabase:", error);
+        }
+      } catch (err) {
+        console.error("Error updating active session geofence:", err);
+      }
+    }
+  };
+
 
   // Webcam State
   const webcamRef = useRef<Webcam>(null);
@@ -727,7 +762,8 @@ export default function LiveScan() {
         <GeofenceModal 
           isOpen={showGeofenceModal} 
           onClose={() => setShowGeofenceModal(false)} 
-          onConfigSaved={(cfg) => setSessionGeofence(cfg)} 
+          initialConfig={activeGeofenceConfig}
+          onConfigSaved={handleGeofenceSaved} 
         />
       </div>
     );
@@ -784,10 +820,15 @@ export default function LiveScan() {
             {/* GPS Geofence Configuration Button */}
             <button
               onClick={() => setShowGeofenceModal(true)}
-              className="inline-flex items-center px-3 sm:px-3.5 py-1.5 rounded-lg bg-white dark:bg-slate-800/80 hover:bg-gray-50 dark:hover:bg-slate-700/80 border border-gray-300 dark:border-slate-700/60 text-xs font-semibold text-emerald-600 dark:text-emerald-400 shadow-sm transition-all cursor-pointer shrink-0"
+              className={`inline-flex items-center px-3 sm:px-3.5 py-1.5 rounded-lg border text-xs font-semibold shadow-sm transition-all cursor-pointer shrink-0 ${
+                activeGeofenceConfig.enabled
+                  ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-600/50 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/50'
+                  : 'bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-600/50 text-amber-700 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/50'
+              }`}
               title="Configure Classroom GPS Geofence boundary"
             >
-              <MapPin className="w-3.5 h-3.5 mr-1.5 text-emerald-500 dark:text-emerald-400" /> GPS Geofence
+              <MapPin className="w-3.5 h-3.5 mr-1.5" />
+              <span>GPS Shield: {activeGeofenceConfig.enabled ? `Active (${activeGeofenceConfig.radiusMeters}m)` : 'OFF (Everywhere)'}</span>
             </button>
 
             {/* Student Selfie QR Code Trigger Button */}
@@ -1720,7 +1761,12 @@ export default function LiveScan() {
         )}
 
         {/* GPS Geofence Modal */}
-        <GeofenceModal isOpen={showGeofenceModal} onClose={() => setShowGeofenceModal(false)} />
+        <GeofenceModal 
+          isOpen={showGeofenceModal} 
+          onClose={() => setShowGeofenceModal(false)} 
+          initialConfig={activeGeofenceConfig}
+          onConfigSaved={handleGeofenceSaved}
+        />
 
         {/* Scanning Animation Styles */}
         <style dangerouslySetInnerHTML={{__html: `

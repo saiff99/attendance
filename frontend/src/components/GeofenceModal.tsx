@@ -17,12 +17,13 @@ import {
 interface GeofenceModalProps {
   isOpen: boolean;
   onClose: () => void;
+  initialConfig?: CampusGeofenceConfig;
   onConfigSaved?: (config: CampusGeofenceConfig) => void;
 }
 
-export function GeofenceModal({ isOpen, onClose, onConfigSaved }: GeofenceModalProps) {
-  const [config, setConfig] = useState<CampusGeofenceConfig>(() => getLocalGeofence());
-  const [loading, setLoading] = useState(true);
+export function GeofenceModal({ isOpen, onClose, initialConfig, onConfigSaved }: GeofenceModalProps) {
+  const [config, setConfig] = useState<CampusGeofenceConfig>(() => initialConfig || getLocalGeofence());
+  const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [capturingGPS, setCapturingGPS] = useState(false);
   const [gpsStatus, setGpsStatus] = useState<string | null>(null);
@@ -37,11 +38,16 @@ export function GeofenceModal({ isOpen, onClose, onConfigSaved }: GeofenceModalP
       setGpsError(null);
       setGpsStatus(null);
       setGpsAccuracy(null);
-      const local = getLocalGeofence();
-      setConfig(local);
-      fetchConfig();
+      if (initialConfig) {
+        setConfig(initialConfig);
+        setLoading(false);
+      } else {
+        const local = getLocalGeofence();
+        setConfig(local);
+        fetchConfig();
+      }
     }
-  }, [isOpen]);
+  }, [isOpen, initialConfig]);
 
   const fetchConfig = async () => {
     setLoading(true);

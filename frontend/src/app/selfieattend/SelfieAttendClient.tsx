@@ -277,6 +277,13 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
 
     setSessions(activeList);
 
+    // Keep selectedSession synced with latest metadata in real-time (e.g. GPS shield toggles during live session)
+    setSelectedSession(prev => {
+      if (!prev) return null;
+      const updated = activeList.find(s => s.id === prev.id);
+      return updated ? { ...prev, ...updated } : prev;
+    });
+
     // Only auto-select from URL once on the very first mount, and ONLY if the session is STILL VALID (not expired)
     if (initialSessionId && !hasAutoSelectedRef.current) {
       hasAutoSelectedRef.current = true;
@@ -357,6 +364,21 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
       }
     }
   }, [fetchActiveSessions, initialSessions, initialSessionId]);
+
+  // Poll active sessions every 3.5s and on window focus to catch live GPS shield toggles in real-time
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchActiveSessions();
+    }, 3500);
+
+    const onFocus = () => fetchActiveSessions();
+    window.addEventListener("focus", onFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [fetchActiveSessions]);
 
   // Lookup student by roll & check live CCTV attendance
   const handleVerifyRoll = async (e: React.FormEvent) => {
@@ -1114,7 +1136,10 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
 
                             <button
                               type="button"
-                              onClick={() => verifyUserLocation()}
+                              onClick={async () => {
+                                await fetchActiveSessions();
+                                verifyUserLocation();
+                              }}
                               disabled={geofenceStatus === "checking"}
                               className="text-[11px] text-indigo-400 hover:text-indigo-300 underline flex items-center gap-1 cursor-pointer disabled:opacity-50 shrink-0 font-medium"
                             >
