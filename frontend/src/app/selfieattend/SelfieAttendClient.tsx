@@ -296,8 +296,10 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
   }, [initialSessionId]);
 
   // Fetch active sessions client-side
-  const fetchActiveSessions = useCallback(async () => {
-    setLoadingSessions(true);
+  const fetchActiveSessions = useCallback(async (showFullLoader = false) => {
+    if (showFullLoader || sessions.length === 0) {
+      setLoadingSessions(true);
+    }
     try {
       // 1. Try Same-Origin Next.js API route first
       try {
@@ -350,11 +352,11 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
     } finally {
       setLoadingSessions(false);
     }
-  }, [backendUrl, processSessionsList]);
+  }, [backendUrl, processSessionsList, sessions.length]);
 
   useEffect(() => {
     if (initialSessions.length === 0) {
-      fetchActiveSessions();
+      fetchActiveSessions(true);
     } else if (initialSessionId && !hasAutoSelectedRef.current) {
       const matched = initialSessions.find(s => s.id === initialSessionId);
       if (matched && (matched.remaining_seconds ?? 0) > 0 && !matched.is_expired) {
@@ -364,21 +366,6 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
       }
     }
   }, [fetchActiveSessions, initialSessions, initialSessionId]);
-
-  // Poll active sessions every 3.5s and on window focus to catch live GPS shield toggles in real-time
-  useEffect(() => {
-    const interval = setInterval(() => {
-      fetchActiveSessions();
-    }, 3500);
-
-    const onFocus = () => fetchActiveSessions();
-    window.addEventListener("focus", onFocus);
-
-    return () => {
-      clearInterval(interval);
-      window.removeEventListener("focus", onFocus);
-    };
-  }, [fetchActiveSessions]);
 
   // Lookup student by roll & check live CCTV attendance
   const handleVerifyRoll = async (e: React.FormEvent) => {
@@ -762,7 +749,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                   </p>
                 </div>
                 <button 
-                  onClick={fetchActiveSessions} 
+                  onClick={() => fetchActiveSessions()} 
                   disabled={loadingSessions}
                   className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all cursor-pointer"
                   title="Refresh Sessions"
@@ -786,7 +773,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                     </p>
                   </div>
                   <button
-                    onClick={fetchActiveSessions}
+                    onClick={() => fetchActiveSessions()}
                     className="mt-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-1.5 transition-all shadow-md shadow-indigo-600/25 cursor-pointer"
                   >
                     <RefreshCw className="w-3.5 h-3.5" />
