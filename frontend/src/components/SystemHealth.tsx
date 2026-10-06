@@ -24,13 +24,14 @@ export function SystemHealth() {
     listeners.add(listener);
 
     let isChecking = false;
+    let consecutiveFailures = 0;
 
     const checkHealth = async () => {
       if (isChecking) return;
       isChecking = true;
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 2000);
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
 
         const response = await fetch("/api/health", {
           method: "GET",
@@ -42,26 +43,33 @@ export function SystemHealth() {
         if (response.ok) {
           const data = await response.json().catch(() => null);
           const online = data?.status === "ok" || data?.online === true;
-          notifyListeners(online);
-          isChecking = false;
-          return;
+          if (online) {
+            consecutiveFailures = 0;
+            notifyListeners(true);
+            isChecking = false;
+            return;
+          }
         }
       } catch {
-        // Backend offline / fetch failed
+        // Backend offline / fetch timed out
       } finally {
         isChecking = false;
       }
 
-      notifyListeners(false);
+      consecutiveFailures += 1;
+      // Only mark offline if failed 2 consecutive times to avoid false alarms during AI processing
+      if (consecutiveFailures >= 2) {
+        notifyListeners(false);
+      }
     };
 
     // Immediate check on component mount
     checkHealth();
 
-    // Fast polling when offline or starting up (1.5s), normal interval when healthy (10s)
+    // Regular stable polling interval: 15s when online, 5s when offline
     let timerId: NodeJS.Timeout;
     const scheduleNextCheck = () => {
-      const delay = cachedIsOnline === true ? 10000 : 1500;
+      const delay = cachedIsOnline === true ? 15000 : 5000;
       timerId = setTimeout(async () => {
         await checkHealth();
         scheduleNextCheck();

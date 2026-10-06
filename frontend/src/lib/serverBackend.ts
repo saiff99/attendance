@@ -85,8 +85,8 @@ export async function fetchBackend(path: string, options: RequestInit = {}): Pro
   for (const baseUrl of targets) {
     try {
       const isLocal = baseUrl.includes("127.0.0.1") || baseUrl.includes("localhost");
-      // Use ultra-fast timeout for local checks or health checks, so dead tunnels never hang the UI
-      const timeoutMs = isHealthCheck ? (isLocal ? 1500 : 3000) : (isLocal ? 10000 : 25000);
+      // Use reasonable timeout for health checks so momentary AI processing doesn't abort
+      const timeoutMs = isHealthCheck ? (isLocal ? 4000 : 6000) : (isLocal ? 12000 : 25000);
       
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), timeoutMs);
