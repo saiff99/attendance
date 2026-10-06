@@ -164,11 +164,6 @@ export default function Sidebar() {
                     {ongoingCount}
                   </span>
                 )}
-                {isLiveScan && hasActiveLiveSession && !isOngoing && (
-                  <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 shrink-0 ml-2">
-                    Active
-                  </span>
-                )}
               </Link>
             );
           })}
