@@ -2,6 +2,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import Link from "next/link";
 import { 
   Camera, Upload, CheckCircle2, PlayCircle, StopCircle, Activity, Loader2, 
   ArrowLeft, BookOpen, Users, MapPin, Video, Download, Focus, 
@@ -9,7 +10,7 @@ import {
   Grid, Maximize2, Minimize2, Eye, ShieldCheck, RefreshCw, X, Search,
   Clock, Sparkles, ChevronLeft as PrevIcon, ChevronRight as NextIcon,
   QrCode, Copy, Check, ExternalLink, Smartphone, Navigation, MessageSquare,
-  UserCheck, UserX, RotateCcw
+  UserCheck, UserX, RotateCcw, Radio
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { supabase } from "@/lib/supabase";
@@ -70,8 +71,6 @@ export default function LiveScan() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [activeSession, setActiveSession] = useState<any>(null);
   const [isLoadingSession, setIsLoadingSession] = useState(true);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [availableOngoingSession, setAvailableOngoingSession] = useState<any>(null);
   const [setupData, setSetupData] = useState({
     subject: "",
     hall: "Lecture Hall 1",
@@ -82,12 +81,15 @@ export default function LiveScan() {
   const [customHallName, setCustomHallName] = useState("");
   const [isStartingSession, setIsStartingSession] = useState(false);
 
-  // Auto-restore Active Session on Navigation or Page Reload
+  // Auto-restore Active Session on Navigation, Page Reload, or via URL param (from Ongoing page)
   useEffect(() => {
     let isMounted = true;
     const restoreSession = async () => {
       try {
-        const savedId = typeof window !== "undefined" ? localStorage.getItem("medattend_active_session_id") : null;
+        const urlParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+        const paramSessionId = urlParams ? urlParams.get("session_id") : null;
+        const savedId = paramSessionId || (typeof window !== "undefined" ? localStorage.getItem("medattend_active_session_id") : null);
+
         if (savedId) {
           const { data, error } = await supabase
             .from('sessions')
@@ -96,37 +98,16 @@ export default function LiveScan() {
             .single();
 
           if (data && !error && isMounted) {
-            const sessionStart = new Date(data.start_time || data.created_at || Date.now()).getTime();
-            const elapsedHours = (Date.now() - sessionStart) / (1000 * 60 * 60);
-            // If session was created within the last 12 hours, restore it automatically
-            if (elapsedHours < 12) {
-              setActiveSession(data);
-              setIsLoadingSession(false);
-              return;
-            } else {
-              localStorage.removeItem("medattend_active_session_id");
-              localStorage.removeItem("medattend_active_session_title");
-              window.dispatchEvent(new Event("medattend-session-changed"));
-            }
-          }
-        }
-
-        // Check if there is an active session from today (created within the last 3 hours)
-        const now = new Date();
-        const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-        const { data: recent, error: recentError } = await supabase
-          .from('sessions')
-          .select('*')
-          .neq('class_name', '__SYSTEM_CONFIG__')
-          .order('created_at', { ascending: false })
-          .limit(1);
-
-        if (recent && recent.length > 0 && !recentError && isMounted) {
-          const latest = recent[0];
-          const latestMs = new Date(latest.start_time || latest.created_at || 0).getTime();
-          const diffHours = (Date.now() - latestMs) / (1000 * 60 * 60);
-          if (diffHours < 3 && (latest.date === todayStr || latest.created_at?.startsWith(todayStr))) {
-            setAvailableOngoingSession(latest);
+            localStorage.setItem("medattend_active_session_id", data.id);
+            localStorage.setItem("medattend_active_session_title", data.class_name);
+            window.dispatchEvent(new Event("medattend-session-changed"));
+            setActiveSession(data);
+            setIsLoadingSession(false);
+            return;
+          } else {
+            localStorage.removeItem("medattend_active_session_id");
+            localStorage.removeItem("medattend_active_session_title");
+            window.dispatchEvent(new Event("medattend-session-changed"));
           }
         }
       } catch (e) {
@@ -459,7 +440,6 @@ export default function LiveScan() {
       }
 
       setActiveSession(data);
-      setAvailableOngoingSession(null);
     } catch (error: any) {
       console.error("Failed to create session:", error);
       alert(`Failed to start session: ${error.message || JSON.stringify(error)}`);
@@ -478,9 +458,11 @@ export default function LiveScan() {
       localStorage.removeItem("medattend_active_session_id");
       localStorage.removeItem("medattend_active_session_title");
       window.dispatchEvent(new Event("medattend-session-changed"));
+      if (window.location.search) {
+        window.history.replaceState({}, "", window.location.pathname);
+      }
     }
     setActiveSession(null);
-    setAvailableOngoingSession(null);
   };
 
   const handleProcessAttendance = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -658,44 +640,6 @@ export default function LiveScan() {
         <div className="bg-white dark:bg-slate-900/90 backdrop-blur-2xl border border-gray-200 dark:border-slate-800 rounded-2xl sm:rounded-3xl shadow-xl dark:shadow-2xl max-w-xl w-full p-5 sm:p-8 relative overflow-hidden transition-colors duration-300">
           {/* Subtle Ambient Glow */}
           <div className="absolute top-0 left-1/2 -translate-x-1/2 w-80 h-32 bg-indigo-500/10 blur-3xl rounded-full pointer-events-none" />
-
-          {/* Ongoing Session Found Card */}
-          {availableOngoingSession && (
-            <div className="mb-5 sm:mb-6 p-4 sm:p-4.5 rounded-2xl bg-gradient-to-r from-indigo-500/10 via-purple-500/10 to-emerald-500/10 border border-indigo-500/30 dark:border-indigo-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 relative z-10 shadow-sm animate-in fade-in slide-in-from-top-2 duration-300">
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping shrink-0" />
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
-                    Live Session in Progress
-                  </span>
-                </div>
-                <p className="text-sm font-bold text-gray-900 dark:text-white truncate">
-                  {availableOngoingSession.class_name}
-                </p>
-                <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-slate-400 mt-0.5">
-                  <span>Started: {new Date(availableOngoingSession.start_time || availableOngoingSession.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                  <span>•</span>
-                  <span>Cohort: {availableOngoingSession.target_academic_year || "All"}</span>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  if (typeof window !== "undefined") {
-                    localStorage.setItem("medattend_active_session_id", availableOngoingSession.id);
-                    localStorage.setItem("medattend_active_session_title", availableOngoingSession.class_name);
-                    window.dispatchEvent(new Event("medattend-session-changed"));
-                  }
-                  setActiveSession(availableOngoingSession);
-                  setAvailableOngoingSession(null);
-                }}
-                className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md shadow-indigo-600/30 flex items-center justify-center gap-1.5 transition-all shrink-0 cursor-pointer"
-              >
-                <PlayCircle className="w-4 h-4" />
-                Resume Live Session
-              </button>
-            </div>
-          )}
 
           <div className="text-center mb-6 sm:mb-8 relative z-10">
             <div className="w-14 h-14 sm:w-16 sm:h-16 bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20 rounded-2xl flex items-center justify-center mx-auto mb-3.5 text-indigo-600 dark:text-indigo-400 shadow-inner">
@@ -923,10 +867,18 @@ export default function LiveScan() {
           <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 min-w-0">
             <button 
               onClick={handleEndSession} 
-              className="px-2.5 sm:px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 dark:bg-slate-800/80 dark:hover:bg-slate-700/80 text-xs font-semibold text-gray-700 hover:text-gray-900 dark:text-slate-300 dark:hover:text-white border border-gray-300 dark:border-slate-700/60 flex items-center transition-all shrink-0 shadow-sm cursor-pointer"
+              className="px-2.5 sm:px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/50 text-xs font-semibold text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-900/60 flex items-center transition-all shrink-0 shadow-sm cursor-pointer"
             >
-              <ArrowLeft className="w-3.5 h-3.5 mr-1" /> End Session
+              <StopCircle className="w-3.5 h-3.5 mr-1" /> End Session
             </button>
+
+            <Link
+              href="/ongoing"
+              className="px-2.5 sm:px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 dark:bg-slate-800/80 dark:hover:bg-slate-700/80 text-xs font-semibold text-gray-700 hover:text-gray-900 dark:text-slate-300 dark:hover:text-white border border-gray-300 dark:border-slate-700/60 flex items-center transition-all shrink-0 shadow-sm"
+              title="View all currently active lecture halls"
+            >
+              <Radio className="w-3.5 h-3.5 mr-1 text-rose-500 animate-pulse" /> Ongoing Halls
+            </Link>
             
             <div className="h-5 w-px bg-gray-200 dark:bg-slate-800 hidden sm:block" />
 

@@ -144,7 +144,7 @@ export default function OngoingSessionsPage() {
       localStorage.setItem("medattend_active_session_title", session.class_name);
       window.dispatchEvent(new Event("medattend-session-changed"));
     }
-    router.push("/live-scan");
+    router.push(`/live-scan?session_id=${session.id}`);
   };
 
   // End Session Early
