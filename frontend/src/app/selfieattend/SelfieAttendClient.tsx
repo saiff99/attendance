@@ -78,6 +78,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
   // Data States
   const [sessions, setSessions] = useState<ActiveSession[]>(initialSessions);
   const [loadingSessions, setLoadingSessions] = useState<boolean>(initialSessions.length === 0);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [selectedSession, setSelectedSession] = useState<ActiveSession | null>(() => {
     if (initialSessionId && initialSessions.length > 0) {
       const found = initialSessions.find(s => s.id === initialSessionId);
@@ -297,9 +298,11 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
 
   // Fetch active sessions client-side
   const fetchActiveSessions = useCallback(async (showFullLoader = false) => {
+    setIsRefreshing(true);
     if (showFullLoader || sessions.length === 0) {
       setLoadingSessions(true);
     }
+    const startTime = Date.now();
     try {
       // 1. Try Same-Origin Next.js API route first
       try {
@@ -350,7 +353,17 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
     } catch (err) {
       console.error("Failed to load active sessions:", err);
     } finally {
-      setLoadingSessions(false);
+      const elapsed = Date.now() - startTime;
+      const minSpinMs = 600;
+      if (elapsed < minSpinMs) {
+        setTimeout(() => {
+          setIsRefreshing(false);
+          setLoadingSessions(false);
+        }, minSpinMs - elapsed);
+      } else {
+        setIsRefreshing(false);
+        setLoadingSessions(false);
+      }
     }
   }, [backendUrl, processSessionsList, sessions.length]);
 
@@ -750,11 +763,11 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                 </div>
                 <button 
                   onClick={() => fetchActiveSessions()} 
-                  disabled={loadingSessions}
-                  className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all cursor-pointer"
+                  disabled={isRefreshing || loadingSessions}
+                  className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all cursor-pointer disabled:opacity-60"
                   title="Refresh Sessions"
                 >
-                  <RefreshCw className={`w-4 h-4 ${loadingSessions ? "animate-spin text-indigo-400" : ""}`} />
+                  <RefreshCw className={`w-4 h-4 ${isRefreshing ? "animate-spin text-indigo-400" : ""}`} />
                 </button>
               </div>
 
@@ -774,10 +787,11 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                   </div>
                   <button
                     onClick={() => fetchActiveSessions()}
-                    className="mt-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-1.5 transition-all shadow-md shadow-indigo-600/25 cursor-pointer"
+                    disabled={isRefreshing || loadingSessions}
+                    className="mt-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-1.5 transition-all shadow-md shadow-indigo-600/25 cursor-pointer disabled:opacity-60"
                   >
-                    <RefreshCw className="w-3.5 h-3.5" />
-                    Check Again
+                    <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin" : ""}`} />
+                    <span>{isRefreshing ? "Refreshing..." : "Check Again"}</span>
                   </button>
                 </div>
               ) : (
