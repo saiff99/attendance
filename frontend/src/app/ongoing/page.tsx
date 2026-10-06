@@ -49,7 +49,7 @@ export default function OngoingSessionsPage() {
 
       if (res.ok) {
         const data = await res.json();
-        if (data.sessions) {
+        if (data && data.sessions && Array.isArray(data.sessions)) {
           // Filter strictly for sessions that are NOT expired (remaining_seconds > 0)
           const activeOnly = data.sessions.filter((s: ActiveSessionItem) => !s.is_expired && s.remaining_seconds > 0);
           setSessions(activeOnly);
@@ -60,18 +60,43 @@ export default function OngoingSessionsPage() {
       // 2. Fallback: Query Supabase directly
       const now = new Date();
       const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      const startOfTodayIso = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
       const nowUtc = Date.now();
 
       const { data: sessionData, error } = await supabase
         .from("sessions")
         .select("id, class_name, date, start_time, end_time, instructor_name, target_academic_year, created_at")
         .neq("class_name", "__SYSTEM_CONFIG__")
-        .eq("date", todayStr)
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .limit(50);
 
       if (!error && sessionData) {
+        const todaySessions = sessionData.filter((s: any) => {
+          const dateVal = s.date || "";
+          const createdVal = s.created_at || "";
+          return dateVal === todayStr || createdVal.startsWith(todayStr) || createdVal >= startOfTodayIso;
+        });
+
+        const sessionIds = todaySessions.map((s: any) => s.id);
+        const attendanceMap: Record<string, number> = {};
+
+        if (sessionIds.length > 0) {
+          const { data: attData } = await supabase
+            .from("attendance")
+            .select("session_id")
+            .in("session_id", sessionIds);
+
+          if (attData) {
+            attData.forEach((att: any) => {
+              if (att.session_id) {
+                attendanceMap[att.session_id] = (attendanceMap[att.session_id] || 0) + 1;
+              }
+            });
+          }
+        }
+
         const enhanced: ActiveSessionItem[] = [];
-        for (const s of sessionData) {
+        for (const s of todaySessions) {
           const timeStr = s.start_time || s.created_at;
           if (!timeStr) continue;
 
@@ -80,15 +105,9 @@ export default function OngoingSessionsPage() {
           const rem = Math.max(0, 300 - elapsedSec);
 
           if (rem > 0) {
-            // Count attendances
-            const { count } = await supabase
-              .from("attendance")
-              .select("id", { count: "exact", head: true })
-              .eq("session_id", s.id);
-
             enhanced.push({
               ...s,
-              attendance_count: count || 0,
+              attendance_count: attendanceMap[s.id] || 0,
               remaining_seconds: rem,
               is_expired: false,
               window_duration_seconds: 300
@@ -109,9 +128,23 @@ export default function OngoingSessionsPage() {
     fetchActiveSessions();
     const pollInterval = setInterval(() => {
       fetchActiveSessions(true);
-    }, 4000);
+    }, 3000);
 
-    return () => clearInterval(pollInterval);
+    // Realtime Supabase subscription for instant attendance and session updates
+    const channel = supabase
+      .channel("ongoing_attendance_realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "attendance" }, () => {
+        fetchActiveSessions(true);
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "sessions" }, () => {
+        fetchActiveSessions(true);
+      })
+      .subscribe();
+
+    return () => {
+      clearInterval(pollInterval);
+      supabase.removeChannel(channel);
+    };
   }, [fetchActiveSessions]);
 
   // Local 1-second countdown ticker

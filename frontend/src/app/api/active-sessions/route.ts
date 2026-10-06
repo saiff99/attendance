@@ -5,22 +5,25 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
   try {
-    // 1. Try local FastAPI backend first (port 8000)
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000';
+    // 1. Try local FastAPI backend first
     try {
-      const res = await fetch('http://127.0.0.1:8000/api/active-sessions', {
+      const res = await fetch(`${backendUrl}/api/active-sessions`, {
         headers: { 'ngrok-skip-browser-warning': '69420' },
         cache: 'no-store',
         next: { revalidate: 0 },
       });
       if (res.ok) {
         const data = await res.json();
-        return NextResponse.json(data);
+        if (data && data.sessions && Array.isArray(data.sessions)) {
+          return NextResponse.json(data);
+        }
       }
     } catch (e) {
       // Backend offline or unreachable, fall back to Supabase
     }
 
-    // 2. Fallback to Supabase Cloud directly from Next.js server
+    // 2. Query Supabase directly
     const now = new Date();
     const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     const startOfTodayIso = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
@@ -43,6 +46,25 @@ export async function GET(request: Request) {
       return dateVal === todayStr || createdVal.startsWith(todayStr) || createdVal >= startOfTodayIso;
     });
 
+    // Query exact attendance records for all sessions today
+    const sessionIds = todaySessions.map((s: any) => s.id);
+    const attendanceMap: Record<string, number> = {};
+
+    if (sessionIds.length > 0) {
+      const { data: attData } = await supabase
+        .from('attendance')
+        .select('session_id')
+        .in('session_id', sessionIds);
+
+      if (attData) {
+        attData.forEach((att: any) => {
+          if (att.session_id) {
+            attendanceMap[att.session_id] = (attendanceMap[att.session_id] || 0) + 1;
+          }
+        });
+      }
+    }
+
     const nowUtc = Date.now();
     const sessions = todaySessions.map((s: any) => {
       const timeStr = s.start_time || s.created_at;
@@ -63,7 +85,7 @@ export async function GET(request: Request) {
         instructor_name: s.instructor_name,
         target_academic_year: s.target_academic_year,
         created_at: s.created_at,
-        attendance_count: 0,
+        attendance_count: attendanceMap[s.id] || 0,
         remaining_seconds: remainingSeconds,
         is_expired: isExpired,
         window_duration_seconds: 300,
