@@ -109,7 +109,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <Sidebar />
       <main className="flex-1 lg:pl-64 pt-16 lg:pt-0 min-h-screen flex flex-col w-full min-w-0">
         {/* Global Live Session Banner when browsing other tabs */}
-        {hasLiveSession && pathname !== "/live-scan" && (
+        {hasLiveSession && pathname !== "/live-scan" && pathname !== "/ongoing" && (
           <div className="bg-gradient-to-r from-rose-600 via-indigo-600 to-violet-600 text-white px-4 py-2 sm:py-2.5 text-xs font-medium flex items-center justify-between shadow-md z-30 transition-all sticky top-16 lg:top-0">
             <div className="flex items-center gap-2.5 min-w-0">
               <span className="relative flex h-2.5 w-2.5 shrink-0">
@@ -117,15 +117,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-400"></span>
               </span>
               <span className="truncate">
-                <strong className="uppercase font-bold tracking-wider mr-1.5 text-rose-100">Live Session Running:</strong>
-                <span className="text-white font-semibold">{liveSessionTitle || "Attendance in progress"}</span>
+                <strong className="uppercase font-bold tracking-wider mr-1.5 text-rose-100">Live Attendance Active:</strong>
+                <span className="text-white font-semibold">{liveSessionTitle || "Lecture in progress"}</span>
               </span>
             </div>
             <Link
-              href="/live-scan"
+              href="/ongoing"
               className="ml-3 px-3 py-1 rounded-lg bg-white/20 hover:bg-white/30 text-white text-xs font-bold backdrop-blur-sm border border-white/25 flex items-center gap-1.5 shrink-0 transition-all shadow-sm"
             >
-              <span>Return to Live Hub</span>
+              <span>View Ongoing Halls</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </Link>
           </div>

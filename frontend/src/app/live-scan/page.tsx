@@ -81,34 +81,36 @@ export default function LiveScan() {
   const [customHallName, setCustomHallName] = useState("");
   const [isStartingSession, setIsStartingSession] = useState(false);
 
-  // Auto-restore Active Session on Navigation, Page Reload, or via URL param (from Ongoing page)
+  // Auto-restore Active Session ONLY when session_id query param is present in URL (e.g. from Ongoing page or new session launch)
   useEffect(() => {
     let isMounted = true;
     const restoreSession = async () => {
       try {
         const urlParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
         const paramSessionId = urlParams ? urlParams.get("session_id") : null;
-        const savedId = paramSessionId || (typeof window !== "undefined" ? localStorage.getItem("medattend_active_session_id") : null);
 
-        if (savedId) {
+        if (paramSessionId) {
           const { data, error } = await supabase
             .from('sessions')
             .select('*')
-            .eq('id', savedId)
+            .eq('id', paramSessionId)
             .single();
 
           if (data && !error && isMounted) {
-            localStorage.setItem("medattend_active_session_id", data.id);
-            localStorage.setItem("medattend_active_session_title", data.class_name);
-            window.dispatchEvent(new Event("medattend-session-changed"));
+            if (typeof window !== "undefined") {
+              localStorage.setItem("medattend_active_session_id", data.id);
+              localStorage.setItem("medattend_active_session_title", data.class_name);
+              window.dispatchEvent(new Event("medattend-session-changed"));
+            }
             setActiveSession(data);
             setIsLoadingSession(false);
             return;
-          } else {
-            localStorage.removeItem("medattend_active_session_id");
-            localStorage.removeItem("medattend_active_session_title");
-            window.dispatchEvent(new Event("medattend-session-changed"));
           }
+        }
+
+        // If no session_id is in the URL, keep activeSession null so user can start any new session anytime
+        if (isMounted) {
+          setActiveSession(null);
         }
       } catch (e) {
         console.error("Error restoring active session:", e);
@@ -437,6 +439,7 @@ export default function LiveScan() {
         localStorage.setItem("medattend_active_session_id", data.id);
         localStorage.setItem("medattend_active_session_title", data.class_name);
         window.dispatchEvent(new Event("medattend-session-changed"));
+        window.history.pushState({}, "", `/live-scan?session_id=${data.id}`);
       }
 
       setActiveSession(data);
@@ -445,6 +448,13 @@ export default function LiveScan() {
       alert(`Failed to start session: ${error.message || JSON.stringify(error)}`);
     } finally {
       setIsStartingSession(false);
+    }
+  };
+
+  const handleBackToSetup = () => {
+    setActiveSession(null);
+    if (typeof window !== "undefined" && window.location.search) {
+      window.history.replaceState({}, "", window.location.pathname);
     }
   };
 
@@ -866,19 +876,28 @@ export default function LiveScan() {
         <div className="mb-3 sm:mb-4 bg-white dark:bg-slate-900/80 backdrop-blur-xl border border-gray-200 dark:border-slate-800/90 rounded-2xl p-3 sm:p-4 shadow-sm dark:shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-3 transition-colors duration-300">
           <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 min-w-0">
             <button 
-              onClick={handleEndSession} 
-              className="px-2.5 sm:px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/50 text-xs font-semibold text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-900/60 flex items-center transition-all shrink-0 shadow-sm cursor-pointer"
+              onClick={handleBackToSetup} 
+              className="px-2.5 sm:px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 dark:bg-slate-800/80 dark:hover:bg-slate-700/80 text-xs font-semibold text-gray-700 hover:text-gray-900 dark:text-slate-300 dark:hover:text-white border border-gray-300 dark:border-slate-700/60 flex items-center transition-all shrink-0 shadow-sm cursor-pointer"
+              title="Return to Live Scan setup form to start a new attendance session"
             >
-              <StopCircle className="w-3.5 h-3.5 mr-1" /> End Session
+              <ArrowLeft className="w-3.5 h-3.5 mr-1" /> Back to Setup
             </button>
 
             <Link
               href="/ongoing"
-              className="px-2.5 sm:px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 dark:bg-slate-800/80 dark:hover:bg-slate-700/80 text-xs font-semibold text-gray-700 hover:text-gray-900 dark:text-slate-300 dark:hover:text-white border border-gray-300 dark:border-slate-700/60 flex items-center transition-all shrink-0 shadow-sm"
+              className="px-2.5 sm:px-3 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/50 text-xs font-semibold text-indigo-700 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/60 flex items-center transition-all shrink-0 shadow-sm"
               title="View all currently active lecture halls"
             >
               <Radio className="w-3.5 h-3.5 mr-1 text-rose-500 animate-pulse" /> Ongoing Halls
             </Link>
+
+            <button 
+              onClick={handleEndSession} 
+              className="px-2.5 sm:px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/50 text-xs font-semibold text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-900/60 flex items-center transition-all shrink-0 shadow-sm cursor-pointer"
+              title="Conclude and end this lecture attendance session"
+            >
+              <StopCircle className="w-3.5 h-3.5 mr-1" /> End Session
+            </button>
             
             <div className="h-5 w-px bg-gray-200 dark:bg-slate-800 hidden sm:block" />
 
