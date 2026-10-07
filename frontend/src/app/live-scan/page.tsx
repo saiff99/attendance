@@ -136,6 +136,7 @@ export default function LiveScan() {
   const [showGeofenceModal, setShowGeofenceModal] = useState(false);
   const [sessionGeofence, setSessionGeofence] = useState<CampusGeofenceConfig>(() => getLocalGeofence());
   const [capturingSessionGPS, setCapturingSessionGPS] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
   const [ptzCameraCount, setPtzCameraCount] = useState(1);
   const [selectedPtzIndex, setSelectedPtzIndex] = useState(0);
   const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false);
