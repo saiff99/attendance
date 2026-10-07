@@ -359,11 +359,14 @@ export default function LiveScan() {
       if (error) throw error;
       
       const filtered = (data || []).filter(s => {
-        if (!targetYear || targetYear === 'All' || targetYear === 'All Years' || targetYear === 'All MBBS Batches') return true;
+        if (!targetYear || targetYear === 'All' || targetYear === 'All Years' || targetYear === 'All MBBS Batches' || targetYear.includes('All Group')) return true;
         const sYear = (s.academic_year || '').trim().toLowerCase();
         const tYear = targetYear.trim().toLowerCase();
         if (sYear === tYear) return true;
         if (!tYear.includes('(') && sYear.startsWith(tYear)) return true;
+        const normalizedSYear = sYear.replace(/\bbatch\b/g, 'group');
+        const normalizedTYear = tYear.replace(/\bbatch\b/g, 'group');
+        if (normalizedSYear === normalizedTYear) return true;
         return false;
       });
 
@@ -738,7 +741,7 @@ export default function LiveScan() {
               </div>
 
               <div>
-                <label htmlFor="sub_batch" className="block text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-slate-400 mb-1.5">Sub-Batch / Section</label>
+                <label htmlFor="sub_batch" className="block text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-slate-400 mb-1.5">Sub-Group / Section</label>
                 <select 
                   id="sub_batch"
                   disabled={setupData.academic_year === "All"}
@@ -746,11 +749,10 @@ export default function LiveScan() {
                   value={setupData.sub_batch}
                   onChange={e => setSetupData({...setupData, sub_batch: e.target.value})}
                 >
-                  <option value="All" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">All Batches (Full Class)</option>
-                  <option value="Batch A" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">Batch A (e.g. Roll 1-100)</option>
-                  <option value="Batch B" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">Batch B (e.g. Roll 101-200)</option>
-                  <option value="Batch C" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">Batch C (e.g. Roll 201-300)</option>
-                  <option value="Batch D" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">Batch D</option>
+                  <option value="All" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">All Group (Full Class)</option>
+                  <option value="Group A" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">Group A (e.g. Roll 1-100)</option>
+                  <option value="Group B" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">Group B (e.g. Roll 101-200)</option>
+                  <option value="Group C" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">Group C (e.g. Roll 201-300)</option>
                 </select>
               </div>
             </div>

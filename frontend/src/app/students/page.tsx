@@ -185,7 +185,8 @@ export default function StudentDirectory() {
       const matchesYear = activeView ? (student.academic_year?.startsWith(activeView) ?? false) : true;
       const matchesSubBatch = activeSubBatch === 'All'
         ? true
-        : (student.academic_year?.includes(`(${activeSubBatch})`) ?? false);
+        : ((student.academic_year?.includes(`(${activeSubBatch})`) || 
+            (activeSubBatch.startsWith('Group') && student.academic_year?.includes(`(${activeSubBatch.replace('Group', 'Batch')})`))) ?? false);
       return matchesSearch && matchesYear && matchesSubBatch;
     })
     .sort((a, b) => {
@@ -401,12 +402,13 @@ export default function StudentDirectory() {
                 />
               </div>
 
-              {/* Sub-Batch Filter Pills */}
+              {/* Sub-Group Filter Pills */}
               <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
-                {['All', 'Batch A', 'Batch B', 'Batch C', 'Batch D'].map((b) => {
+                {['All', 'Group A', 'Group B', 'Group C'].map((b) => {
                   const bCount = students.filter(s => {
                     if (!s.academic_year?.startsWith(activeView)) return false;
-                    return b === 'All' ? true : s.academic_year?.includes(`(${b})`);
+                    if (b === 'All') return true;
+                    return s.academic_year?.includes(`(${b})`) || (b.startsWith('Group') && s.academic_year?.includes(`(${b.replace('Group', 'Batch')})`));
                   }).length;
                   const isSelected = activeSubBatch === b;
                   return (
@@ -420,7 +422,7 @@ export default function StudentDirectory() {
                           : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
                       }`}
                     >
-                      <span>{b === 'All' ? 'All Batches' : b}</span>
+                      <span>{b === 'All' ? 'All Group' : b}</span>
                       <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${isSelected ? 'bg-indigo-700 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400'}`}>
                         {bCount}
                       </span>
@@ -811,18 +813,17 @@ export default function StudentDirectory() {
                   </div>
 
                   <div>
-                    <label htmlFor="sub_batch" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Sub-Batch / Section</label>
+                    <label htmlFor="sub_batch" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Sub-Group / Section</label>
                     <select
                       id="sub_batch"
                       className="mt-1 block w-full rounded-md border-0 bg-white dark:bg-gray-800 py-2 pl-3 pr-10 text-gray-900 dark:text-white ring-1 ring-inset ring-gray-300 dark:ring-gray-700 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
                       value={newStudent.sub_batch}
                       onChange={e => setNewStudent({ ...newStudent, sub_batch: e.target.value })}
                     >
-                      <option value="All">All / Unassigned</option>
-                      <option value="Batch A">Batch A</option>
-                      <option value="Batch B">Batch B</option>
-                      <option value="Batch C">Batch C</option>
-                      <option value="Batch D">Batch D</option>
+                      <option value="All">All Group / Unassigned</option>
+                      <option value="Group A">Group A</option>
+                      <option value="Group B">Group B</option>
+                      <option value="Group C">Group C</option>
                     </select>
                   </div>
                 </div>

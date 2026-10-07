@@ -110,10 +110,9 @@ export function BulkImportModal({
         let batch = selectedBatch;
         if (batchKey && row[batchKey]) {
           const rawBatch = String(row[batchKey]).trim();
-          if (/a\b|batch a/i.test(rawBatch)) batch = "Batch A";
-          else if (/b\b|batch b/i.test(rawBatch)) batch = "Batch B";
-          else if (/c\b|batch c/i.test(rawBatch)) batch = "Batch C";
-          else if (/d\b|batch d/i.test(rawBatch)) batch = "Batch D";
+          if (/a\b|group a|batch a/i.test(rawBatch)) batch = "Group A";
+          else if (/b\b|group b|batch b/i.test(rawBatch)) batch = "Group B";
+          else if (/c\b|group c|batch c/i.test(rawBatch)) batch = "Group C";
           else if (rawBatch) batch = rawBatch;
         }
 
@@ -158,21 +157,21 @@ export function BulkImportModal({
         "Roll Number": "26001",
         "Full Name": "MORSALIM MONDAL",
         "Academic Year": selectedYear || "1st Year",
-        "Batch": "Batch A",
+        "Group": "Group A",
         "Parent WhatsApp": "+919876543210",
       },
       {
         "Roll Number": "26101",
         "Full Name": "SK SAIFUDDIN",
         "Academic Year": selectedYear || "1st Year",
-        "Batch": "Batch B",
+        "Group": "Group B",
         "Parent WhatsApp": "+919876543211",
       },
       {
         "Roll Number": "26201",
         "Full Name": "RAHUL ROY",
         "Academic Year": selectedYear || "1st Year",
-        "Batch": "Batch C",
+        "Group": "Group C",
         "Parent WhatsApp": "+919876543212",
       },
     ];
