@@ -8,9 +8,9 @@ from typing import Dict, List, Optional, Set
 from app.config import supabase, get_camera_urls, get_camera_details, get_ptz_urls
 from app.ai import app_fa, AI_ENABLED, calculate_confidence_score
 
-# High-Performance Zero-Latency FFmpeg RTSP Flags
+# High-Performance Robust FFmpeg RTSP Flags (eliminates packet drop, gray smearing & blur)
 os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = (
-    "rtsp_transport;tcp|fflags;nobuffer|flags;low_delay|max_delay;0|reorder_queue_size;0|buffer_size;1024|probesize;32768|analyzeduration;0"
+    "rtsp_transport;tcp|buffer_size;1048576|max_delay;500000|reorder_queue_size;100|stimeout;5000000"
 )
 
 # Global session-wide deduplication set: session_id -> set of student_ids
@@ -122,9 +122,11 @@ class ThreadedRTSPStream:
                 self.raw_w = w
                 self.raw_h = h
 
-                # Downscale display frame to 640x360 for zero-latency UI rendering and fast AI
+                # Downscale display frame using INTER_AREA for crisp, sharp and non-blurry rendering
                 if w == 640 and h == 360:
                     display_frame = frame
+                elif w > 640 or h > 360:
+                    display_frame = cv2.resize(frame, (640, 360), interpolation=cv2.INTER_AREA)
                 else:
                     display_frame = cv2.resize(frame, (640, 360), interpolation=cv2.INTER_LINEAR)
 
@@ -402,8 +404,8 @@ def generate_video_feed(session_id: str, camera_index: int = 0, camera_type: str
     else:
         stream = camera_manager.get_cctv_stream(camera_index)
 
-    jpeg_quality = 65 if is_grid else 80
-    fps_delay = 0.10 if is_grid else 0.04
+    jpeg_quality = 80 if is_grid else 90
+    fps_delay = 0.08 if is_grid else 0.04
 
     while True:
         frame = stream.get_frame_with_overlays(session_id, is_grid=is_grid)
