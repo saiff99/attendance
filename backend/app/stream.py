@@ -152,7 +152,7 @@ class ThreadedRTSPStream:
             self.cap = None
 
     def get_frame_with_overlays(self, session_id: str, is_grid: bool = True) -> Optional[np.ndarray]:
-        """Returns live frame with overlays instantly (<0.2ms)."""
+        """Returns live frame with overlays instantly (<0.2ms). Optimized for ultra-lightweight grid preview."""
         ai_coordinator.set_active_session(session_id)
         now = time.time()
 
@@ -200,6 +200,10 @@ class ThreadedRTSPStream:
         # Camera title overlay
         cv2.putText(frame, self.name, (12, 22), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 0, 0), 3)
         cv2.putText(frame, self.name, (12, 22), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 255), 1)
+
+        # Downscale grid frames to 480x270 for ultra-lightweight browser rendering
+        if is_grid and (w_f > 480 or h_f > 270):
+            frame = cv2.resize(frame, (480, 270), interpolation=cv2.INTER_AREA)
 
         return frame
 
@@ -442,8 +446,8 @@ async def generate_video_feed(session_id: str, camera_index: int = 0, camera_typ
     else:
         stream = camera_manager.get_cctv_stream(camera_index)
 
-    jpeg_quality = 80 if is_grid else 90
-    fps_delay = 0.08 if is_grid else 0.04
+    jpeg_quality = 48 if is_grid else 75
+    fps_delay = 0.12 if is_grid else 0.05
 
     while True:
         frame = stream.get_frame_with_overlays(session_id, is_grid=is_grid)

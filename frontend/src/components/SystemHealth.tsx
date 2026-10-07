@@ -30,33 +30,6 @@ export function SystemHealth() {
       if (isChecking) return;
       isChecking = true;
       try {
-        const isLocalHost = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-        
-        // On localhost, probe port 8000 directly for 0.5ms instant response
-        if (isLocalHost) {
-          try {
-            const directCtrl = new AbortController();
-            const directTimeout = setTimeout(() => directCtrl.abort(), 2000);
-            const directRes = await fetch("http://127.0.0.1:8000/health", {
-              method: "GET",
-              signal: directCtrl.signal,
-              cache: "no-store",
-            });
-            clearTimeout(directTimeout);
-            if (directRes.ok) {
-              const directData = await directRes.json().catch(() => null);
-              if (directData?.status === "ok" || directData?.status === "Online") {
-                consecutiveFailures = 0;
-                notifyListeners(true);
-                isChecking = false;
-                return;
-              }
-            }
-          } catch {
-            // Direct fetch fallback to /api/health
-          }
-        }
-
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 6000);
 

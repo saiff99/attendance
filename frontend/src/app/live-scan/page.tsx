@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { supabase } from "@/lib/supabase";
-import { getBackendUrl } from "@/lib/api";
+import { getBackendUrl, getVideoBackendUrl } from "@/lib/api";
 import Webcam from "react-webcam";
 import { MjpegPlayer } from "@/components/MjpegPlayer";
 import { GeofenceModal } from "@/components/GeofenceModal";
@@ -1082,7 +1082,7 @@ export default function LiveScan() {
 
                           <div className="w-full h-full flex items-center justify-center bg-black">
                             <MjpegPlayer
-                              url={`${backendUrl}/api/video-feed/${activeSession.id}?camera_index=${cam.index}&grid=1`}
+                              url={`${getVideoBackendUrl(cam.index)}/api/video-feed/${activeSession.id}?camera_index=${cam.index}&grid=1`}
                               className="w-full h-full object-contain"
                               fallbackText="Connecting..."
                               paused={focusedCamera !== null}
@@ -1122,7 +1122,7 @@ export default function LiveScan() {
 
                           <div className="w-full h-full flex items-center justify-center bg-black">
                             <MjpegPlayer
-                              url={`${backendUrl}/api/video-feed/${activeSession.id}?camera_index=${cam.index}&grid=1`}
+                              url={`${getVideoBackendUrl(cam.index)}/api/video-feed/${activeSession.id}?camera_index=${cam.index}&grid=1`}
                               className="w-full h-full object-contain"
                               fallbackText="Connecting..."
                               paused={focusedCamera !== null}
@@ -1156,7 +1156,7 @@ export default function LiveScan() {
                   <div className="absolute inset-0 w-full h-full bg-black flex items-center justify-center">
                     <MjpegPlayer
                       key={selectedCctvIndex}
-                      url={`${backendUrl}/api/video-feed/${activeSession.id}?camera_index=${selectedCctvIndex}&grid=0`}
+                      url={`${getVideoBackendUrl(selectedCctvIndex)}/api/video-feed/${activeSession.id}?camera_index=${selectedCctvIndex}&grid=0`}
                       className="w-full h-full object-contain"
                     />
 
@@ -1191,7 +1191,7 @@ export default function LiveScan() {
                   <div className="absolute inset-0 w-full h-full bg-black flex items-center justify-center">
                     <MjpegPlayer
                       key={selectedPtzIndex}
-                      url={`${backendUrl}/api/ptz-video-feed/${activeSession.id}?camera_index=${selectedPtzIndex}&grid=0`}
+                      url={`${getVideoBackendUrl(selectedPtzIndex)}/api/ptz-video-feed/${activeSession.id}?camera_index=${selectedPtzIndex}&grid=0`}
                       className="w-full h-full object-contain"
                     />
 
@@ -1687,7 +1687,7 @@ export default function LiveScan() {
                 }`}>
                 <MjpegPlayer
                   key={focusedCamera.id}
-                  url={`${backendUrl}/api/video-feed/${activeSession.id}?camera_index=${focusedCamera.index}&grid=0`}
+                  url={`${getVideoBackendUrl(focusedCamera.index)}/api/video-feed/${activeSession.id}?camera_index=${focusedCamera.index}&grid=0`}
                   className="w-full h-full object-contain"
                   fallbackText="Connecting to Camera Stream..."
                   paused={false}

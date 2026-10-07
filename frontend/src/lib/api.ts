@@ -1,6 +1,4 @@
 export function getBackendUrl(): string {
-  // When running locally in browser, connect directly to FastAPI backend on port 8000
-  // This completely frees up Next.js (port 3000) connection pool so 6-camera live scan never blocks page navigation (e.g. Student Directory, Dashboard)!
   if (typeof window !== "undefined") {
     const host = window.location.hostname;
     if (host === "localhost" || host === "127.0.0.1") {
@@ -8,6 +6,17 @@ export function getBackendUrl(): string {
     }
   }
   // When running in production (e.g. Vercel / newshuge.com), use same-origin relative proxy
+  return "";
+}
+
+export function getVideoBackendUrl(cameraIndex: number = 0): string {
+  if (typeof window !== "undefined") {
+    const host = window.location.hostname;
+    if (host === "localhost" || host === "127.0.0.1") {
+      // Shard connections across localhost and 127.0.0.1 so Chrome's 6-connection per host limit is never exhausted
+      return cameraIndex % 2 === 0 ? "http://localhost:8000" : "http://127.0.0.1:8000";
+    }
+  }
   return "";
 }
 
