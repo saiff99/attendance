@@ -86,9 +86,16 @@ export default function StudentDirectory() {
 
     // Encode parent WhatsApp phone into database email format safely
     const generatedEmail = encodeStudentEmail(newStudent.student_roll, newStudent.parent_phone);
+    
+    // Strip any existing parenthesized groups/batches to prevent duplicate stacking like "(Group A) (Group B)"
+    const cleanBaseYear = (newStudent.academic_year || '1st Year')
+      .replace(/\s*\(((?:Group|Batch)\s*[^)]+)\)/gi, '')
+      .replace(/\s*\([^)]*\)/gi, '')
+      .trim() || '1st Year';
+
     const combinedYear = newStudent.sub_batch && newStudent.sub_batch !== 'All'
-      ? `${newStudent.academic_year} (${newStudent.sub_batch})`
-      : newStudent.academic_year;
+      ? `${cleanBaseYear} (${newStudent.sub_batch})`
+      : cleanBaseYear;
 
     try {
       if (editingId) {
@@ -653,9 +660,15 @@ export default function StudentDirectory() {
                                         <button
                                           onClick={() => {
                                             const rawYear = student.academic_year || '1st Year';
-                                            const batchMatch = rawYear.match(/\((Batch [A-D])\)/i);
-                                            const parsedBatch = batchMatch ? batchMatch[1] : 'All';
-                                            const baseYear = rawYear.replace(/\s*\(Batch [A-D]\)/i, '').trim() || '1st Year';
+                                            // Extract all parenthesized groups or batches
+                                            const matches = [...rawYear.matchAll(/\(((?:Group|Batch)\s*[^)]+)\)/gi)];
+                                            let parsedBatch = 'All';
+                                            if (matches.length > 0) {
+                                              const lastMatch = matches[matches.length - 1][1].trim();
+                                              parsedBatch = lastMatch.replace(/^Batch\s*/i, 'Group ');
+                                            }
+                                            // Strip ALL (Group X) / (Batch X) parentheticals to extract pure base academic year
+                                            const baseYear = rawYear.replace(/\s*\(((?:Group|Batch)\s*[^)]+)\)/gi, '').replace(/\s*\([^)]*\)/gi, '').trim() || '1st Year';
 
                                             setNewStudent({
                                               student_roll: student.student_roll || '',
