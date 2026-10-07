@@ -136,10 +136,34 @@ export default function LiveScan() {
   const [showGeofenceModal, setShowGeofenceModal] = useState(false);
   const [sessionGeofence, setSessionGeofence] = useState<CampusGeofenceConfig>(() => getLocalGeofence());
   const [capturingSessionGPS, setCapturingSessionGPS] = useState(false);
-  const [copiedLink, setCopiedLink] = useState(false);
   const [ptzCameraCount, setPtzCameraCount] = useState(1);
   const [selectedPtzIndex, setSelectedPtzIndex] = useState(0);
   const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false);
+
+  // Auto-Tour Camera Cycle State for Single Camera View
+  const [isAutoTourActive, setIsAutoTourActive] = useState(false);
+  const [tourIntervalSeconds, setTourIntervalSeconds] = useState(8);
+  const [tourCountdown, setTourCountdown] = useState(8);
+
+  // Auto-Tour Timer Effect
+  useEffect(() => {
+    if (!isAutoTourActive || activeTab !== "cctv") {
+      setTourCountdown(tourIntervalSeconds);
+      return;
+    }
+
+    const timer = setInterval(() => {
+      setTourCountdown((prev) => {
+        if (prev <= 1) {
+          setSelectedCctvIndex((curr) => (curr + 1) % cctvCameras.length);
+          return tourIntervalSeconds;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [isAutoTourActive, activeTab, tourIntervalSeconds, cctvCameras.length]);
 
   // Compute currently active geofence config (from live session metadata or local default)
   const activeGeofenceConfig = useMemo<CampusGeofenceConfig>(() => {
@@ -1134,23 +1158,96 @@ export default function LiveScan() {
                   </div>
                 </div>
               ) : activeTab === "cctv" ? (
-                /* SINGLE CAMERA VIEW */
+                /* SINGLE CAMERA VIEW WITH AUTO-TOUR */
                 <div className="flex-1 flex flex-col items-center justify-center bg-slate-950 rounded-2xl relative overflow-hidden group aspect-video min-h-[240px] sm:min-h-[360px] lg:min-h-[440px] border border-slate-800">
-                  <div className="absolute top-3 left-3 sm:top-4 sm:left-4 z-20 bg-slate-900/90 backdrop-blur-md rounded-xl shadow-xl border border-slate-700/70 text-xs flex items-center pr-2">
-                    <div className="pl-2.5 sm:pl-3 py-1.5 sm:py-2 border-r border-slate-700/70">
-                      <Video className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-400" />
+                  {/* Top Control Bar: Camera Dropdown + Quick Prev/Next + Auto-Tour Control */}
+                  <div className="absolute top-3 left-3 sm:top-4 sm:left-4 z-20 flex flex-wrap items-center gap-1.5 sm:gap-2">
+                    {/* Camera Selector Dropdown */}
+                    <div className="bg-slate-900/90 backdrop-blur-md rounded-xl shadow-xl border border-slate-700/70 text-xs flex items-center pr-2">
+                      <div className="pl-2.5 sm:pl-3 py-1.5 sm:py-2 border-r border-slate-700/70">
+                        <Video className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-400" />
+                      </div>
+                      <select
+                        className="py-1.5 sm:py-2 pl-2 pr-5 sm:pr-6 border-0 bg-transparent text-white font-medium focus:ring-0 cursor-pointer outline-none w-full max-w-[140px] sm:max-w-[200px] text-xs sm:text-sm truncate"
+                        value={selectedCctvIndex}
+                        onChange={(e) => {
+                          setSelectedCctvIndex(Number(e.target.value));
+                          setTourCountdown(tourIntervalSeconds);
+                        }}
+                      >
+                        {cctvCameras.map((cam) => (
+                          <option key={cam.id} value={cam.index} className="bg-slate-900 text-white">
+                            {cam.name} ({cam.position} - {cam.row.split(' ')[0]})
+                          </option>
+                        ))}
+                      </select>
                     </div>
-                    <select
-                      className="py-1.5 sm:py-2 pl-2 pr-5 sm:pr-6 border-0 bg-transparent text-white font-medium focus:ring-0 cursor-pointer outline-none w-full max-w-[160px] sm:max-w-[280px] text-xs sm:text-sm truncate"
-                      value={selectedCctvIndex}
-                      onChange={(e) => setSelectedCctvIndex(Number(e.target.value))}
+
+                    {/* Quick Prev / Next Buttons */}
+                    <div className="flex items-center gap-1 bg-slate-900/90 backdrop-blur-md rounded-xl p-1 border border-slate-700/70 shadow-xl">
+                      <button
+                        onClick={() => {
+                          setSelectedCctvIndex((prev) => (prev - 1 + cctvCameras.length) % cctvCameras.length);
+                          setTourCountdown(tourIntervalSeconds);
+                        }}
+                        className="p-1 sm:p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 transition-colors"
+                        title="Previous Camera"
+                      >
+                        <PrevIcon className="w-4 h-4" />
+                      </button>
+                      <span className="text-[11px] font-bold px-1 text-indigo-400">
+                        {selectedCctvIndex + 1}/{cctvCameras.length}
+                      </span>
+                      <button
+                        onClick={() => {
+                          setSelectedCctvIndex((prev) => (prev + 1) % cctvCameras.length);
+                          setTourCountdown(tourIntervalSeconds);
+                        }}
+                        className="p-1 sm:p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 transition-colors"
+                        title="Next Camera"
+                      >
+                        <NextIcon className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    {/* Auto-Tour Toggle Button */}
+                    <button
+                      onClick={() => {
+                        setIsAutoTourActive((prev) => !prev);
+                        setTourCountdown(tourIntervalSeconds);
+                      }}
+                      className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl text-xs font-semibold backdrop-blur-md shadow-xl border transition-all ${
+                        isAutoTourActive
+                          ? "bg-emerald-500/25 text-emerald-300 border-emerald-500/50 shadow-emerald-500/20 shadow-lg"
+                          : "bg-slate-900/90 text-slate-300 hover:text-white hover:bg-slate-800 border-slate-700/70"
+                      }`}
+                      title={isAutoTourActive ? "Pause Auto-Scan Tour" : "Start Auto-Scan Tour"}
                     >
-                      {cctvCameras.map((cam) => (
-                        <option key={cam.id} value={cam.index} className="bg-slate-900 text-white">
-                          {cam.name}
-                        </option>
-                      ))}
-                    </select>
+                      <RotateCcw className={`w-3.5 h-3.5 ${isAutoTourActive ? "animate-spin text-emerald-400" : "text-indigo-400"}`} />
+                      <span>{isAutoTourActive ? `Touring (${tourCountdown}s)` : "Auto-Tour"}</span>
+                      {isAutoTourActive && (
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping ml-0.5" />
+                      )}
+                    </button>
+
+                    {/* Tour Interval Speed Selector */}
+                    {isAutoTourActive && (
+                      <select
+                        value={tourIntervalSeconds}
+                        onChange={(e) => {
+                          const val = Number(e.target.value);
+                          setTourIntervalSeconds(val);
+                          setTourCountdown(val);
+                        }}
+                        className="bg-slate-900/90 backdrop-blur-md text-emerald-400 font-bold border border-emerald-500/40 rounded-xl px-2 py-1.5 text-xs outline-none cursor-pointer"
+                        title="Change Tour Interval Speed"
+                      >
+                        <option value={5} className="bg-slate-900 text-white">5s Cycle</option>
+                        <option value={8} className="bg-slate-900 text-white">8s Cycle</option>
+                        <option value={12} className="bg-slate-900 text-white">12s Cycle</option>
+                        <option value={15} className="bg-slate-900 text-white">15s Cycle</option>
+                      </select>
+                    )}
                   </div>
 
                   <div className="absolute inset-0 w-full h-full bg-black flex items-center justify-center">
