@@ -10,7 +10,7 @@ import {
   Grid, Maximize2, Minimize2, Eye, ShieldCheck, RefreshCw, X, Search,
   Clock, Sparkles, ChevronLeft as PrevIcon, ChevronRight as NextIcon,
   QrCode, Copy, Check, ExternalLink, Smartphone, Navigation, MessageSquare,
-  UserCheck, UserX, RotateCcw, Radio
+  UserCheck, UserX, RotateCcw, Radio, AlertCircle
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { supabase } from "@/lib/supabase";
@@ -64,6 +64,13 @@ export default function LiveScan() {
   const [undoingLogId, setUndoingLogId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
+  const [uploadResultModal, setUploadResultModal] = useState<{
+    isOpen: boolean;
+    count: number;
+    recognized: Array<{ name: string; confidence?: number }>;
+    isError?: boolean;
+    errorMessage?: string;
+  } | null>(null);
   const [sessionTime, setSessionTime] = useState("00:00:00");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -529,10 +536,22 @@ export default function LiveScan() {
 
       const result = await response.json();
       await fetchLogs();
-      alert(`Attendance recorded! Identified ${result.recognized?.length || 0} students.`);
+      const recognizedList = result.recognized || [];
+      setUploadResultModal({
+        isOpen: true,
+        count: recognizedList.length,
+        recognized: recognizedList,
+        isError: false
+      });
     } catch (error: any) {
       console.error("Processing failed", error);
-      alert(`Failed to process photo: ${error.message}`);
+      setUploadResultModal({
+        isOpen: true,
+        count: 0,
+        recognized: [],
+        isError: true,
+        errorMessage: error.message || "Failed to process photo."
+      });
     } finally {
       setIsProcessing(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -1959,6 +1978,158 @@ export default function LiveScan() {
           initialConfig={activeGeofenceConfig}
           onConfigSaved={handleGeofenceSaved}
         />
+
+        {/* Centered Animated Modal for Manual Photo Upload Attendance Result */}
+        {uploadResultModal?.isOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+            <div className="relative w-full max-w-md bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl p-6 sm:p-7 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+              {/* Ambient Background Glows */}
+              <div className={`absolute -top-20 -right-20 w-44 h-44 rounded-full blur-3xl pointer-events-none ${uploadResultModal.isError ? 'bg-rose-500/15' : uploadResultModal.count > 0 ? 'bg-emerald-500/20' : 'bg-amber-500/20'}`} />
+              <div className={`absolute -bottom-20 -left-20 w-44 h-44 rounded-full blur-3xl pointer-events-none ${uploadResultModal.isError ? 'bg-rose-500/10' : uploadResultModal.count > 0 ? 'bg-teal-500/20' : 'bg-indigo-500/15'}`} />
+
+              {/* Close Button */}
+              <button
+                onClick={() => setUploadResultModal(null)}
+                className="absolute top-4 right-4 p-2 rounded-full text-gray-400 hover:text-gray-600 dark:hover:text-white bg-gray-100 dark:bg-slate-800/80 hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors z-10 cursor-pointer"
+                aria-label="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
+
+              {uploadResultModal.isError ? (
+                /* ERROR STATE */
+                <div className="flex flex-col items-center text-center">
+                  <div className="w-16 h-16 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-500 flex items-center justify-center mb-4 shadow-lg shadow-rose-500/10 animate-bounce">
+                    <AlertCircle className="w-8 h-8" />
+                  </div>
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Processing Failed</h3>
+                  <p className="text-sm text-gray-600 dark:text-slate-300 mb-6 bg-rose-50 dark:bg-rose-950/40 p-3 rounded-xl border border-rose-200 dark:border-rose-900/50 w-full text-left font-mono text-xs break-words">
+                    {uploadResultModal.errorMessage || "An unexpected error occurred while analyzing the image."}
+                  </p>
+                  <div className="flex gap-2.5 w-full">
+                    <button
+                      onClick={() => {
+                        setUploadResultModal(null);
+                        fileInputRef.current?.click();
+                      }}
+                      className="flex-1 py-2.5 px-4 rounded-xl font-semibold text-xs text-white bg-indigo-600 hover:bg-indigo-500 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md"
+                    >
+                      <Upload className="w-4 h-4" /> Try Another Photo
+                    </button>
+                    <button
+                      onClick={() => setUploadResultModal(null)}
+                      className="py-2.5 px-5 rounded-xl font-semibold text-xs text-gray-700 dark:text-slate-300 bg-gray-100 hover:bg-gray-200 dark:bg-slate-800 dark:hover:bg-slate-700 transition-all cursor-pointer"
+                    >
+                      Close
+                    </button>
+                  </div>
+                </div>
+              ) : uploadResultModal.count > 0 ? (
+                /* SUCCESS WITH RECOGNIZED STUDENTS */
+                <div className="flex flex-col items-center text-center">
+                  <div className="relative mb-4">
+                    <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-400 text-white flex items-center justify-center shadow-xl shadow-emerald-500/30">
+                      <Sparkles className="w-8 h-8 animate-pulse" />
+                    </div>
+                    <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-emerald-600 border-2 border-white dark:border-slate-900 flex items-center justify-center text-white">
+                      <Check className="w-3.5 h-3.5" />
+                    </div>
+                  </div>
+
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-1">Attendance Recorded!</h3>
+                  <p className="text-xs text-gray-500 dark:text-slate-400 mb-4">AI ArcFace 512D recognition processed successfully</p>
+
+                  <div className="w-full bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 rounded-2xl p-3.5 mb-4 flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold text-sm">
+                        {uploadResultModal.count}
+                      </div>
+                      <div className="text-left">
+                        <p className="text-xs font-bold text-emerald-800 dark:text-emerald-300">
+                          {uploadResultModal.count === 1 ? '1 Student Identified' : `${uploadResultModal.count} Students Identified`}
+                        </p>
+                        <p className="text-[11px] text-emerald-600 dark:text-emerald-400">Marked present in this session</p>
+                      </div>
+                    </div>
+                    <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500 text-white uppercase tracking-wider">
+                      Verified
+                    </span>
+                  </div>
+
+                  {/* List of recognized students */}
+                  {uploadResultModal.recognized.length > 0 && (
+                    <div className="w-full max-h-48 overflow-y-auto rounded-xl border border-gray-200 dark:border-slate-800/80 divide-y divide-gray-100 dark:divide-slate-800 mb-5 text-left bg-gray-50/50 dark:bg-slate-950/40">
+                      {uploadResultModal.recognized.map((student, idx) => (
+                        <div key={idx} className="p-2.5 flex items-center justify-between gap-2 hover:bg-emerald-500/5 transition-colors">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="w-6 h-6 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-xs font-bold shrink-0">
+                              {idx + 1}
+                            </div>
+                            <span className="text-xs font-semibold text-gray-900 dark:text-slate-100 truncate">
+                              {student.name}
+                            </span>
+                          </div>
+                          {student.confidence !== undefined && (
+                            <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800/80 shrink-0">
+                              {Math.round(student.confidence)}% Match
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="flex gap-2.5 w-full">
+                    <button
+                      onClick={() => {
+                        setUploadResultModal(null);
+                        fileInputRef.current?.click();
+                      }}
+                      className="py-2.5 px-3.5 rounded-xl font-semibold text-xs text-gray-700 dark:text-slate-300 bg-gray-100 hover:bg-gray-200 dark:bg-slate-800 dark:hover:bg-slate-700 transition-all flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
+                      title="Upload another classroom photo"
+                    >
+                      <Upload className="w-3.5 h-3.5" /> Upload More
+                    </button>
+                    <button
+                      onClick={() => setUploadResultModal(null)}
+                      className="flex-1 py-2.5 px-4 rounded-xl font-bold text-xs text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 transition-all shadow-lg shadow-emerald-500/25 cursor-pointer flex items-center justify-center gap-1.5"
+                    >
+                      <CheckCircle2 className="w-4 h-4" /> Got It
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* 0 STUDENTS IDENTIFIED */
+                <div className="flex flex-col items-center text-center">
+                  <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-500 flex items-center justify-center mb-4 shadow-lg shadow-amber-500/10">
+                    <Users className="w-8 h-8" />
+                  </div>
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-1">No Faces Identified</h3>
+                  <p className="text-xs text-gray-500 dark:text-slate-400 mb-5">
+                    The AI engine could not match any faces from this photo with enrolled students. Ensure students are enrolled and photo is sufficiently bright.
+                  </p>
+                  <div className="flex gap-2.5 w-full">
+                    <button
+                      onClick={() => {
+                        setUploadResultModal(null);
+                        fileInputRef.current?.click();
+                      }}
+                      className="flex-1 py-2.5 px-4 rounded-xl font-bold text-xs text-white bg-indigo-600 hover:bg-indigo-500 transition-all shadow-md cursor-pointer flex items-center justify-center gap-1.5"
+                    >
+                      <Upload className="w-4 h-4" /> Try Clearer Photo
+                    </button>
+                    <button
+                      onClick={() => setUploadResultModal(null)}
+                      className="py-2.5 px-5 rounded-xl font-semibold text-xs text-gray-700 dark:text-slate-300 bg-gray-100 hover:bg-gray-200 dark:bg-slate-800 dark:hover:bg-slate-700 transition-all cursor-pointer"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Scanning Animation Styles */}
         <style dangerouslySetInnerHTML={{
