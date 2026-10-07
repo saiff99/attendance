@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 // Global cache across page navigations in the SPA
 let cachedIsOnline: boolean | null = null;
 let lastCheckTimestamp = 0;
+let globalConsecutiveFailures = 0;
 const listeners = new Set<(status: boolean | null) => void>();
 
 function notifyListeners(status: boolean | null) {
@@ -24,7 +25,6 @@ export function SystemHealth() {
     listeners.add(listener);
 
     let isChecking = false;
-    let consecutiveFailures = 0;
 
     const checkHealth = async () => {
       if (isChecking) return;
@@ -44,7 +44,7 @@ export function SystemHealth() {
           const data = await response.json().catch(() => null);
           const online = data?.status === "ok" || data?.online === true;
           if (online) {
-            consecutiveFailures = 0;
+            globalConsecutiveFailures = 0;
             notifyListeners(true);
             isChecking = false;
             return;
@@ -56,15 +56,17 @@ export function SystemHealth() {
         isChecking = false;
       }
 
-      consecutiveFailures += 1;
-      // Only mark offline if failed 3 consecutive times to avoid false alarms during AI spikes
-      if (consecutiveFailures >= 3) {
+      globalConsecutiveFailures += 1;
+      // Only mark offline if failed 4 consecutive times to avoid false alarms during page rendering / dev compilation
+      if (globalConsecutiveFailures >= 4) {
         notifyListeners(false);
       }
     };
 
-    // Immediate check on component mount
-    checkHealth();
+    // If we haven't checked in the last 10s or have no cached status, check now
+    if (cachedIsOnline === null || Date.now() - lastCheckTimestamp > 10000) {
+      checkHealth();
+    }
 
     // Regular stable polling interval: 15s when online, 5s when offline
     let timerId: NodeJS.Timeout;
