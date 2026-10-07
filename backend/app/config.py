@@ -56,3 +56,69 @@ def get_ptz_urls():
     urls_str = os.getenv("PTZ_URLS", "0")
     return [url.strip() for url in urls_str.split(",") if url.strip()]
 
+
+import re
+from typing import Optional
+
+def is_cohort_matching(target_cohort: Optional[str], student_year: Optional[str]) -> bool:
+    """
+    Checks if a student's academic year / sub-group is permitted for a session's target cohort.
+    
+    Rules:
+    1. If target_cohort is 'All', 'All Years', 'All MBBS Batches', 'All Group', empty or None:
+       -> ALLOW ALL students from any year/group.
+    2. If target_cohort specifies a Base Year without a sub-group (e.g. '1st Year', '1st Year MBBS', '2nd Year'):
+       -> ALLOW ALL students belonging to that base year (including Group A, Group B, Group C, or unassigned).
+    3. If target_cohort specifies a specific Sub-Group (e.g. '1st Year (Group B)'):
+       -> ALLOW ONLY students who belong to that base year AND that specific sub-group.
+    """
+    if not target_cohort:
+        return True
+    
+    t = str(target_cohort).strip()
+    t_lower = t.lower()
+    
+    if (
+        not t
+        or t_lower in ("all", "all years", "all mbbs batches", "all group")
+        or "all group" in t_lower
+        or "full cohort" in t_lower
+    ):
+        return True
+        
+    if not student_year:
+        return False
+        
+    s = str(student_year).strip()
+    s_lower = s.lower()
+    
+    def get_base_year(val: str) -> str:
+        clean = re.sub(r"\s*\([^)]*\)", "", val)
+        clean = re.sub(r"\s*mbbs", "", clean, flags=re.IGNORECASE)
+        return clean.strip().lower()
+        
+    target_base = get_base_year(t)
+    student_base = get_base_year(s)
+    
+    if target_base and student_base and target_base != student_base:
+        t_digit = re.search(r"\b\d+", target_base)
+        s_digit = re.search(r"\b\d+", student_base)
+        if t_digit and s_digit and t_digit.group(0) != s_digit.group(0):
+            return False
+        if not t_digit or not s_digit:
+            if not student_base.startswith(target_base) and not target_base.startswith(student_base):
+                return False
+                
+    # Check specific sub-group requirement
+    target_group_match = re.search(r"\(((?:Group|Batch)\s*[^)]+)\)", t, re.IGNORECASE)
+    if target_group_match:
+        required_group = re.sub(r"^batch\s*", "group ", target_group_match.group(1).strip(), flags=re.IGNORECASE).lower()
+        student_group_match = re.search(r"\(((?:Group|Batch)\s*[^)]+)\)", s, re.IGNORECASE)
+        if not student_group_match:
+            return False
+        student_group = re.sub(r"^batch\s*", "group ", student_group_match.group(1).strip(), flags=re.IGNORECASE).lower()
+        return required_group == student_group
+        
+    return True
+
+

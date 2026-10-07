@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { isCohortMatching } from '@/lib/cohort';
 
 export const dynamic = 'force-dynamic';
 
@@ -67,13 +68,7 @@ export async function GET(
         if (sessData) {
           targetAcademicYear = sessData.target_academic_year;
           const studYear = stud.academic_year || '1st Year';
-          if (targetAcademicYear && targetAcademicYear !== 'All' && targetAcademicYear !== 'All Years' && targetAcademicYear !== 'All MBBS Batches') {
-            const sClean = studYear.trim().toLowerCase();
-            const tClean = targetAcademicYear.trim().toLowerCase();
-            if (sClean !== tClean && (tClean.includes('(') || !sClean.startsWith(tClean))) {
-              cohortMismatch = true;
-            }
-          }
+          cohortMismatch = !isCohortMatching(targetAcademicYear, studYear);
         }
       } catch (e) {
         console.error('Session lookup error:', e);

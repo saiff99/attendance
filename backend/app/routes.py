@@ -9,7 +9,7 @@ from fastapi.responses import StreamingResponse
 from typing import List, Optional
 from pydantic import BaseModel
 
-from app.config import supabase, get_camera_urls, get_camera_details, get_ptz_urls
+from app.config import supabase, get_camera_urls, get_camera_details, get_ptz_urls, is_cohort_matching
 from app.ai import app_fa, AI_ENABLED, calculate_confidence_score
 from app.stream import generate_video_feed
 
@@ -156,17 +156,7 @@ async def process_attendance(file: UploadFile = File(...), session_id: str = For
     students_res = query.execute()
     all_enrolled = students_res.data or []
 
-    if target_year and target_year not in ("All", "All Years", "All MBBS Batches", ""):
-        t_clean = target_year.strip().lower()
-        enrolled_students = [
-            s for s in all_enrolled
-            if s.get("academic_year") and (
-                s["academic_year"].strip().lower() == t_clean or
-                ("(" not in t_clean and s["academic_year"].strip().lower().startswith(t_clean))
-            )
-        ]
-    else:
-        enrolled_students = all_enrolled
+    enrolled_students = [s for s in all_enrolled if is_cohort_matching(target_year, s.get("academic_year"))]
     
     if not enrolled_students:
         raise HTTPException(status_code=400, detail="No students have enrolled face data yet.")
@@ -423,11 +413,8 @@ async def student_lookup(student_roll: str, session_id: Optional[str] = None):
                 if sess_res.data:
                     target_academic_year = sess_res.data[0].get("target_academic_year")
                     student_year = student.get("academic_year") or ""
-                    if target_academic_year and target_academic_year not in ("All", "All Years", "All MBBS Batches", ""):
-                        t_clean = target_academic_year.strip().lower()
-                        s_clean = student_year.strip().lower()
-                        if s_clean != t_clean and ("(" in t_clean or not s_clean.startswith(t_clean)):
-                            cohort_mismatch = True
+                    if not is_cohort_matching(target_academic_year, student_year):
+                        cohort_mismatch = True
             except Exception as e:
                 print("Session lookup error in student-lookup:", e)
 
@@ -526,14 +513,11 @@ async def selfie_attendance(
     # 3. Check Academic Year / Cohort / Sub-Batch Match
     target_year = sess_obj.get("target_academic_year")
     student_year = student.get("academic_year") or ""
-    if target_year and target_year not in ("All", "All Years", "All MBBS Batches", ""):
-        t_clean = target_year.strip().lower()
-        s_clean = student_year.strip().lower()
-        if s_clean != t_clean and ("(" in t_clean or not s_clean.startswith(t_clean)):
-            raise HTTPException(
-                status_code=403,
-                detail=f"Cohort Restriction: This lecture session is exclusively for '{target_year}' students. You are registered as '{student_year}' and cannot submit attendance for this class."
-            )
+    if not is_cohort_matching(target_year, student_year):
+        raise HTTPException(
+            status_code=403,
+            detail=f"Cohort Restriction: This lecture session is exclusively for '{target_year}' students. You are registered as '{student_year}' and cannot submit attendance for this class."
+        )
 
     if not student.get("face_encoding"):
         raise HTTPException(status_code=400, detail=f"Student {student['full_name']} (Roll: {clean_roll}) does not have face biometric data enrolled yet. Please contact the administrator.")

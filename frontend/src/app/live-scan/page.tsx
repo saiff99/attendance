@@ -30,6 +30,7 @@ import {
   getCalibratedHighPrecisionGPS,
   formatDistance
 } from "@/lib/geofence";
+import { isCohortMatching } from "@/lib/cohort";
 
 interface CameraMeta {
   index: number;
@@ -390,17 +391,7 @@ export default function LiveScan() {
 
       if (error) throw error;
 
-      const filtered = (data || []).filter(s => {
-        if (!targetYear || targetYear === 'All' || targetYear === 'All Years' || targetYear === 'All MBBS Batches' || targetYear.includes('All Group')) return true;
-        const sYear = (s.academic_year || '').trim().toLowerCase();
-        const tYear = targetYear.trim().toLowerCase();
-        if (sYear === tYear) return true;
-        if (!tYear.includes('(') && sYear.startsWith(tYear)) return true;
-        const normalizedSYear = sYear.replace(/\bbatch\b/g, 'group');
-        const normalizedTYear = tYear.replace(/\bbatch\b/g, 'group');
-        if (normalizedSYear === normalizedTYear) return true;
-        return false;
-      });
+      const filtered = (data || []).filter(s => isCohortMatching(targetYear, s.academic_year));
 
       setEnrolledStudents(filtered);
     } catch (err) {

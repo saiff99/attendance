@@ -5,7 +5,7 @@ import threading
 import numpy as np
 from numpy.linalg import norm
 from typing import Dict, List, Optional, Set
-from app.config import supabase, get_camera_urls, get_camera_details, get_ptz_urls
+from app.config import supabase, get_camera_urls, get_camera_details, get_ptz_urls, is_cohort_matching
 from app.ai import app_fa, AI_ENABLED, calculate_confidence_score
 
 from starlette.requests import Request
@@ -36,17 +36,7 @@ def get_enrolled_students(session_id: str) -> List[dict]:
         students_res = query.execute()
         all_enrolled = students_res.data or []
         
-        if target_year and target_year not in ("All", "All Years", "All MBBS Batches", ""):
-            t_clean = target_year.strip().lower()
-            enrolled = [
-                s for s in all_enrolled
-                if s.get("academic_year") and (
-                    s["academic_year"].strip().lower() == t_clean or
-                    ("(" not in t_clean and s["academic_year"].strip().lower().startswith(t_clean))
-                )
-            ]
-        else:
-            enrolled = all_enrolled
+        enrolled = [s for s in all_enrolled if is_cohort_matching(target_year, s.get("academic_year"))]
 
         session_enrolled_cache[session_id] = enrolled
         session_last_fetch[session_id] = now

@@ -21,6 +21,7 @@ import {
   decodeSessionMetadata,
   getLocalGeofence
 } from "@/lib/geofence";
+import { isCohortMatching } from "@/lib/cohort";
 
 export interface ActiveSession {
   id: string;
@@ -448,13 +449,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
 
         const studYear = stud.academic_year || "1st Year";
         const targetYear = selectedSession?.target_academic_year;
-        const isMismatch = Boolean(
-          targetYear &&
-          targetYear !== "All" &&
-          targetYear !== "All Years" &&
-          studYear &&
-          studYear.trim().toLowerCase() !== targetYear.trim().toLowerCase()
-        );
+        const isMismatch = !isCohortMatching(targetYear, studYear);
 
         setStudent({
           id: stud.id,
@@ -501,13 +496,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
 
     const targetYear = selectedSession?.target_academic_year;
     const studentYear = student?.academic_year;
-    if (
-      targetYear &&
-      targetYear !== "All" &&
-      targetYear !== "All Years" &&
-      studentYear &&
-      studentYear.trim().toLowerCase() !== targetYear.trim().toLowerCase()
-    ) {
+    if (!isCohortMatching(targetYear, studentYear)) {
       setLookupError(`Cohort Restriction: This session is strictly for ${targetYear} students. Your profile is registered as ${studentYear}.`);
       return;
     }
@@ -601,13 +590,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
 
     const targetYear = selectedSession.target_academic_year;
     const studentYear = student.academic_year;
-    if (
-      targetYear &&
-      targetYear !== "All" &&
-      targetYear !== "All Years" &&
-      studentYear &&
-      studentYear.trim().toLowerCase() !== targetYear.trim().toLowerCase()
-    ) {
+    if (!isCohortMatching(targetYear, studentYear)) {
       setResultData({
         success: false,
         message: `Cohort Restriction: This attendance session is strictly for '${targetYear}' students. Your profile is registered as '${studentYear}'.`,
@@ -999,18 +982,9 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
 
                 {/* Verified Student Profile Preview */}
                 {student && (() => {
-                  const sClean = (student.academic_year || "").trim().toLowerCase();
-                  const tClean = (selectedSession?.target_academic_year || "").trim().toLowerCase();
-                  const isTargetRestricted = Boolean(
-                    tClean &&
-                    tClean !== "all" &&
-                    tClean !== "all years" &&
-                    tClean !== "all mbbs batches"
-                  );
-                  const isCohortMismatch = Boolean(
-                    isTargetRestricted &&
-                    sClean &&
-                    (sClean !== tClean && (tClean.includes("(") || !sClean.startsWith(tClean)))
+                  const isCohortMismatch = !isCohortMatching(
+                    selectedSession?.target_academic_year,
+                    student.academic_year
                   );
 
                   return (

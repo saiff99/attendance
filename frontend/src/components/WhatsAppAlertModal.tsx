@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { MessageSquare, Send, CheckCircle2, AlertCircle, X, Loader2, Phone, ShieldCheck, Users, RefreshCw, Check } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { getParentPhone, formatPhoneDisplay } from "@/lib/studentContact";
+import { isCohortMatching } from "@/lib/cohort";
 
 interface WhatsAppAlertModalProps {
   isOpen: boolean;
@@ -114,14 +115,7 @@ export function WhatsAppAlertModal({
         .select('id, student_roll, full_name, email, academic_year, face_encoding')
         .order('student_roll', { ascending: true });
 
-      const allStudents = (rawStudents || []).filter(s => {
-        if (!targetYear || targetYear === 'All' || targetYear === 'All Years' || targetYear === 'All MBBS Batches') return true;
-        const sYear = (s.academic_year || '').trim().toLowerCase();
-        const tYear = targetYear.trim().toLowerCase();
-        if (sYear === tYear) return true;
-        if (!tYear.includes('(') && sYear.startsWith(tYear)) return true;
-        return false;
-      });
+      const allStudents = (rawStudents || []).filter(s => isCohortMatching(targetYear, s.academic_year));
 
       // 3. Fetch Present Attendances
       const { data: attendances } = await supabase
