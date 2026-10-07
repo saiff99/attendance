@@ -52,12 +52,28 @@ export async function fetchBackend(path: string, options: RequestInit = {}): Pro
   const headers = new Headers(options.headers || {});
   headers.set('ngrok-skip-browser-warning', '69420');
 
-  // Candidate URLs to try in priority order:
-  // When running locally on Mac/PC, ALWAYS prioritize localhost (1ms instant response!)
-  const targets: string[] = [];
+  // Fast-Path: When running locally on Mac/PC, ALWAYS check localhost directly (1ms instant response!)
   if (!isCloudEnvironment) {
-    targets.push("http://127.0.0.1:8000");
+    try {
+      const localTimeout = isHealthCheck ? 3000 : 10000;
+      const ctrl = new AbortController();
+      const tId = setTimeout(() => ctrl.abort(), localTimeout);
+      const localRes = await fetch(`http://127.0.0.1:8000${normalizedPath}`, {
+        ...options,
+        headers,
+        signal: options.signal || ctrl.signal,
+      });
+      clearTimeout(tId);
+      if (localRes.ok || (localRes.status >= 400 && localRes.status < 500 && localRes.status !== 403)) {
+        return localRes;
+      }
+    } catch {
+      // Localhost not ready or busy, fallback to dynamic tunnel / remote targets
+    }
   }
+
+  // Candidate URLs to try in priority order:
+  const targets: string[] = [];
 
   // Live dynamic tunnel URL synced from Mac via Supabase (for Vercel / Remote access)
   const liveDynamicTunnel = await getLiveTunnelUrl();
