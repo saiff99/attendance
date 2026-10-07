@@ -8,9 +8,11 @@ from typing import Dict, List, Optional, Set
 from app.config import supabase, get_camera_urls, get_camera_details, get_ptz_urls
 from app.ai import app_fa, AI_ENABLED, calculate_confidence_score
 
+from starlette.requests import Request
+
 # High-Performance Robust FFmpeg RTSP Flags (stable over Tailscale VPN without dropped frames or freezes)
 os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = (
-    "rtsp_transport;tcp|buffer_size;1048576|max_delay;500000|reorder_queue_size;100|stimeout;10000000"
+    "rtsp_transport;tcp|buffer_size;1048576|max_delay;500000|reorder_queue_size;100|stimeout;2500000"
 )
 
 # Global session-wide deduplication set: session_id -> set of student_ids
@@ -397,6 +399,7 @@ class CentralAICoordinator:
                     if not stream.running:
                         continue
 
+                    ai_frame = None
                     with stream.lock:
                         # 1. Must have an active frame
                         if stream.latest_ai_frame is None:
@@ -414,8 +417,12 @@ class CentralAICoordinator:
                         ai_frame = stream.latest_ai_frame.copy()
                         stream.last_ai_processed_time = stream.last_frame_time
 
-                    stream._process_ai(ai_frame, session_id)
-                    time.sleep(0.08)  # Gentle yield to keep CPU cool and prevent thread/GIL contention
+                    if ai_frame is not None:
+                        stream._process_ai(ai_frame, session_id)
+                        time.sleep(0.08)  # Yield between camera AI processes
+
+                # Sleep between scan cycles so worker never spins when idle or waiting for frames
+                time.sleep(0.15)
 
             except Exception as e:
                 time.sleep(0.5)
@@ -436,49 +443,68 @@ def create_placeholder_frame(text: str, width: int = 640, height: int = 360) -> 
     return frame
 
 
-async def generate_video_feed(session_id: str, camera_index: int = 0, camera_type: str = "cctv", is_grid: bool = True):
+async def generate_video_feed(
+    session_id: str,
+    request: Optional[Request] = None,
+    camera_index: int = 0,
+    camera_type: str = "cctv",
+    is_grid: bool = True
+):
     """
-    High-Performance Async Generator yielding live MJPEG multipart frames directly on event loop.
-    Eliminates threadpool saturation and keeps HTTP health endpoints (<1ms) ultra-responsive.
+    High-Performance Async Generator yielding live MJPEG multipart frames.
+    Instantly terminates when client disconnects or switches views, eliminating ghost socket leaks
+    and preventing event loop starvation.
     """
     if camera_type == "ptz":
         stream = camera_manager.get_ptz_stream(camera_index)
     else:
         stream = camera_manager.get_cctv_stream(camera_index)
 
-    jpeg_quality = 48 if is_grid else 75
+    jpeg_quality = 45 if is_grid else 70
     fps_delay = 0.12 if is_grid else 0.05
 
-    while True:
-        frame = stream.get_frame_with_overlays(session_id, is_grid=is_grid)
-        if frame is None:
-            placeholder_text = "Connecting..."
-            frame = create_placeholder_frame(placeholder_text)
+    try:
+        while True:
+            # Immediate disconnect check to free event loop and socket
+            if request and await request.is_disconnected():
+                break
 
-        # Ultra-fast JPEG encoding with tuned quality
-        ret, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, jpeg_quality])
-        if not ret:
+            frame = stream.get_frame_with_overlays(session_id, is_grid=is_grid)
+            if frame is None:
+                placeholder_text = "Connecting..."
+                frame = create_placeholder_frame(placeholder_text)
+
+            # Ultra-fast JPEG encoding with tuned quality
+            ret, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, jpeg_quality])
+            if not ret:
+                await asyncio.sleep(fps_delay)
+                continue
+
+            frame_bytes = buffer.tobytes()
+            yield (b'--frame\r\n'
+                   b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+
             await asyncio.sleep(fps_delay)
-            continue
-
-        frame_bytes = buffer.tobytes()
-        yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
-
-        await asyncio.sleep(fps_delay)
+    except (asyncio.CancelledError, GeneratorExit):
+        pass
+    except Exception:
+        pass
 
 
 
 def prewarm_all_cctv():
-    """Background worker to start all CCTV streams with staggered delays on boot."""
-    time.sleep(1.0)
-    camera_details = get_camera_details()
-    for idx in range(len(camera_details)):
-        try:
-            camera_manager.get_cctv_stream(idx)
-            time.sleep(0.35)
-        except Exception as e:
-            print(f"Pre-warm error on cam {idx}: {e}")
+    """Background worker to gently initialize CCTV streams on boot without blocking."""
+    time.sleep(2.0)
+    try:
+        camera_details = get_camera_details()
+        for idx in range(len(camera_details)):
+            try:
+                camera_manager.get_cctv_stream(idx)
+                time.sleep(0.5)
+            except Exception as e:
+                print(f"Pre-warm error on cam {idx}: {e}")
+    except Exception:
+        pass
 
 # Pre-warm streams in background so feeds are instantly available
 threading.Thread(target=prewarm_all_cctv, daemon=True).start()

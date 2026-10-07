@@ -14,7 +14,7 @@ export async function GET(
     const grid = searchParams.get('grid') ?? '0';
 
     const path = `/api/ptz-video-feed/${sessionId}?camera_index=${cameraIndex}&grid=${grid}`;
-    const res = await fetchBackend(path, { cache: 'no-store' });
+    const res = await fetchBackend(path, { cache: 'no-store', signal: request.signal });
 
     if (!res.ok || !res.body) {
       return new Response('PTZ stream unavailable', { status: 502 });
