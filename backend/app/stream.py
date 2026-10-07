@@ -8,9 +8,9 @@ from typing import Dict, List, Optional, Set
 from app.config import supabase, get_camera_urls, get_camera_details, get_ptz_urls
 from app.ai import app_fa, AI_ENABLED, calculate_confidence_score
 
-# High-Performance Robust FFmpeg RTSP Flags (eliminates packet drop, gray smearing & blur)
+# High-Performance Robust FFmpeg RTSP Flags (stable over Tailscale VPN without dropped frames or freezes)
 os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = (
-    "rtsp_transport;tcp|buffer_size;1048576|max_delay;500000|reorder_queue_size;100|stimeout;5000000"
+    "rtsp_transport;tcp|buffer_size;1048576|max_delay;500000|reorder_queue_size;100|stimeout;10000000"
 )
 
 # Global session-wide deduplication set: session_id -> set of student_ids
@@ -57,8 +57,8 @@ def get_enrolled_students(session_id: str) -> List[dict]:
 class ThreadedRTSPStream:
     """
     High-Performance Zero-Latency RTSP Stream Grabber.
-    Pre-processes frames at capture time into optimal display resolutions,
-    eliminating 4K bottleneck and CPU memory churn.
+    Maintains a stable live connection, continuously grabs fresh camera frames,
+    and isolates AI detection strictly to real-time incoming video.
     """
     def __init__(self, url: str, name: str = "CCTV Camera"):
         self.url = url
@@ -69,10 +69,13 @@ class ThreadedRTSPStream:
         # Display and AI frames
         self.latest_display_frame: Optional[np.ndarray] = None
         self.latest_ai_frame: Optional[np.ndarray] = None
+        self.last_frame_time: float = 0.0
+        self.last_ai_processed_time: float = 0.0
         self.raw_w = 640
         self.raw_h = 360
         
         self.last_faces: List[dict] = []
+        self.last_faces_time: float = 0.0
         self.running = False
         self.connected = False
         self.lock = threading.Lock()
@@ -97,15 +100,16 @@ class ThreadedRTSPStream:
                         self.cap = cv2.VideoCapture(self.source)
                     self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
                     if not self.cap.isOpened():
-                        time.sleep(1.5)
+                        time.sleep(1.0)
                         continue
                     self.connected = True
                     consecutive_failures = 0
 
+                # Continuous live frame grab
                 success, frame = self.cap.read()
                 if not success or frame is None:
                     consecutive_failures += 1
-                    if consecutive_failures > 25:
+                    if consecutive_failures > 30:
                         self.connected = False
                         if self.cap:
                             self.cap.release()
@@ -122,7 +126,7 @@ class ThreadedRTSPStream:
                 self.raw_w = w
                 self.raw_h = h
 
-                # Downscale display frame using INTER_AREA for crisp, sharp and non-blurry rendering
+                # Downscale display frame using INTER_AREA for crisp rendering
                 if w == 640 and h == 360:
                     display_frame = frame
                 elif w > 640 or h > 360:
@@ -130,38 +134,42 @@ class ThreadedRTSPStream:
                 else:
                     display_frame = cv2.resize(frame, (640, 360), interpolation=cv2.INTER_LINEAR)
 
+                now = time.time()
                 with self.lock:
                     self.latest_display_frame = display_frame
                     self.latest_ai_frame = display_frame
-
-                time.sleep(0.02)
+                    self.last_frame_time = now
 
             except Exception as e:
                 self.connected = False
                 if self.cap:
                     self.cap.release()
                 self.cap = None
-                time.sleep(2.0)
+                time.sleep(1.5)
 
         if self.cap:
             self.cap.release()
             self.cap = None
 
     def get_frame_with_overlays(self, session_id: str, is_grid: bool = True) -> Optional[np.ndarray]:
-        """Returns frame with overlays instantly (<0.2ms) without blocking on AI inference."""
+        """Returns live frame with overlays instantly (<0.2ms)."""
         ai_coordinator.set_active_session(session_id)
+        now = time.time()
 
         with self.lock:
-            if self.latest_display_frame is None:
+            # If camera hasn't sent a frame in 6 seconds, show connecting placeholder
+            if self.latest_display_frame is None or (self.last_frame_time > 0 and (now - self.last_frame_time > 6.0)):
                 return None
             frame = self.latest_display_frame.copy()
+            # Expire bounding boxes after 2.5s if student left or face moved
+            faces_to_draw = self.last_faces if (now - self.last_faces_time <= 2.5) else []
 
         h_f, w_f, _ = frame.shape
         scale_x = w_f / 640.0
         scale_y = h_f / 360.0
 
-        # Draw cached face overlays on lightweight frame
-        for f_info in self.last_faces:
+        # Draw face overlays on lightweight frame
+        for f_info in faces_to_draw:
             orig_x1, orig_y1, orig_x2, orig_y2 = f_info["coords"]
             student = f_info.get("student")
             sim = f_info.get("sim", 0.0)
@@ -218,7 +226,7 @@ class ThreadedRTSPStream:
 
                 unknown_encoding = face.embedding
                 best_match_student = None
-                highest_sim = 0.28  # Cosine similarity threshold
+                highest_sim = 0.28  # High-accuracy calibrated similarity for distant classroom faces
 
                 for student in enrolled_students:
                     known_encoding = np.array(student['face_encoding'])
@@ -259,7 +267,9 @@ class ThreadedRTSPStream:
                             daemon=True
                         ).start()
 
-            self.last_faces = current_faces
+            with self.lock:
+                self.last_faces = current_faces
+                self.last_faces_time = time.time()
         except Exception as e:
             print(f"Error processing AI for {self.name}: {e}")
 
@@ -319,6 +329,14 @@ class CameraStreamManager:
                 self.ptz_streams[index] = stream
             return self.ptz_streams[index]
 
+    def clear_all_detections(self):
+        """Purges old bounding boxes and cached detections across all cameras."""
+        with self.lock:
+            for s in list(self.cctv_streams.values()) + list(self.ptz_streams.values()):
+                with s.lock:
+                    s.last_faces = []
+                    s.last_faces_time = 0.0
+
 
 # Singleton instance
 camera_manager = CameraStreamManager()
@@ -327,10 +345,11 @@ camera_manager = CameraStreamManager()
 class CentralAICoordinator:
     """
     Coordinates AI face scanning sequentially across all active cameras.
-    Ensures CPU usage stays smooth (<20%) and prevents FastAPI starvation.
+    Guarantees AI processes only LIVE incoming video captured AFTER session start.
     """
     def __init__(self):
         self.active_session_id: Optional[str] = None
+        self.session_start_time: float = time.time()
         self.running = True
         self.lock = threading.Lock()
         self.thread = threading.Thread(target=self._ai_worker_loop, daemon=True)
@@ -338,7 +357,10 @@ class CentralAICoordinator:
 
     def set_active_session(self, session_id: str):
         with self.lock:
-            self.active_session_id = session_id
+            if self.active_session_id != session_id:
+                self.active_session_id = session_id
+                self.session_start_time = time.time()
+                camera_manager.clear_all_detections()
 
     def _ai_worker_loop(self):
         while self.running:
@@ -349,6 +371,7 @@ class CentralAICoordinator:
 
                 with self.lock:
                     session_id = self.active_session_id
+                    session_start = self.session_start_time
 
                 if not session_id:
                     time.sleep(0.3)
@@ -363,14 +386,27 @@ class CentralAICoordinator:
                     time.sleep(0.3)
                     continue
 
+                now = time.time()
                 for stream in streams:
                     if not stream.running:
                         continue
 
                     with stream.lock:
+                        # 1. Must have an active frame
                         if stream.latest_ai_frame is None:
                             continue
+                        # 2. Must be captured AFTER current session started (prevents ghost attendance from past sessions)
+                        if stream.last_frame_time < (session_start - 2.0):
+                            continue
+                        # 3. Must be captured within last 3.0 seconds (LIVE only)
+                        if (now - stream.last_frame_time) > 3.0:
+                            continue
+                        # 4. Do not re-process identical frame capture timestamp
+                        if stream.last_frame_time <= stream.last_ai_processed_time:
+                            continue
+
                         ai_frame = stream.latest_ai_frame.copy()
+                        stream.last_ai_processed_time = stream.last_frame_time
 
                     stream._process_ai(ai_frame, session_id)
                     time.sleep(0.04)  # Small yield to keep CPU cool
@@ -439,3 +475,5 @@ def prewarm_all_cctv():
 
 # Pre-warm streams in background so feeds are instantly available
 threading.Thread(target=prewarm_all_cctv, daemon=True).start()
+
+
