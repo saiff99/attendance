@@ -3,9 +3,9 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import Link from "next/link";
-import { 
-  Camera, Upload, CheckCircle2, PlayCircle, StopCircle, Activity, Loader2, 
-  ArrowLeft, BookOpen, Users, MapPin, Video, Download, Focus, 
+import {
+  Camera, Upload, CheckCircle2, PlayCircle, StopCircle, Activity, Loader2,
+  ArrowLeft, BookOpen, Users, MapPin, Video, Download, Focus,
   ChevronUp, ChevronDown, ChevronLeft, ChevronRight, ZoomIn, ZoomOut,
   Grid, Maximize2, Minimize2, Eye, ShieldCheck, RefreshCw, X, Search,
   Clock, Sparkles, ChevronLeft as PrevIcon, ChevronRight as NextIcon,
@@ -19,16 +19,16 @@ import Webcam from "react-webcam";
 import { MjpegPlayer } from "@/components/MjpegPlayer";
 import { GeofenceModal } from "@/components/GeofenceModal";
 import { WhatsAppAlertModal } from "@/components/WhatsAppAlertModal";
-import { 
-  CampusGeofenceConfig, 
-  DEFAULT_GEOFENCE_CONFIG, 
-  encodeSessionMetadata, 
-  decodeSessionMetadata, 
-  getLocalGeofence, 
-  saveLocalGeofence, 
+import {
+  CampusGeofenceConfig,
+  DEFAULT_GEOFENCE_CONFIG,
+  encodeSessionMetadata,
+  decodeSessionMetadata,
+  getLocalGeofence,
+  saveLocalGeofence,
   getUserCoordinates,
   getCalibratedHighPrecisionGPS,
-  formatDistance 
+  formatDistance
 } from "@/lib/geofence";
 
 interface CameraMeta {
@@ -53,7 +53,7 @@ const DEFAULT_CAMERAS: CameraMeta[] = [
 export default function LiveScan() {
   const [activeTab, setActiveTab] = useState<"grid" | "cctv" | "ptz" | "live" | "manual">("grid");
   const [isScanning, setIsScanning] = useState(false);
-  
+
   // Attendance & Manual Override State
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [logs, setLogs] = useState<any[]>([]);
@@ -66,7 +66,7 @@ export default function LiveScan() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [sessionTime, setSessionTime] = useState("00:00:00");
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
+
   // Session State
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [activeSession, setActiveSession] = useState<any>(null);
@@ -246,7 +246,7 @@ export default function LiveScan() {
         }
       })
       .catch(err => console.error("Failed to fetch camera count", err));
-      
+
     // Fetch available PTZ cameras
     fetch(`${backendUrl}/api/ptz-cameras`, {
       headers: { "ngrok-skip-browser-warning": "69420" }
@@ -261,7 +261,7 @@ export default function LiveScan() {
     const backendUrl = getBackendUrl();
     fetch(`${backendUrl}/api/ptz/move`, {
       method: 'POST',
-      headers: { 
+      headers: {
         'Content-Type': 'application/json',
         'ngrok-skip-browser-warning': '69420'
       },
@@ -277,7 +277,7 @@ export default function LiveScan() {
       alert("No attendance logs to export.");
       return;
     }
-    
+
     const headers = ["Roll Number", "Full Name", "Status", "Capture Mode", "Date & Time Recorded"];
     const rows = logs.map(log => {
       const studentName = log.students?.full_name || "Unknown";
@@ -293,12 +293,12 @@ export default function LiveScan() {
         second: "2-digit",
         hour12: true
       });
-      
+
       return [studentRoll, studentName, status, captureMode, time]
         .map(cell => `"${cell}"`)
         .join(",");
     });
-    
+
     const now = new Date();
     const localDateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     const csvContent = [headers.join(","), ...rows].join("\n");
@@ -314,7 +314,7 @@ export default function LiveScan() {
 
   const captureAndProcess = async () => {
     if (!webcamRef.current || !activeSession) return;
-    
+
     const imageSrc = webcamRef.current.getScreenshot();
     if (!imageSrc) return;
 
@@ -322,7 +322,7 @@ export default function LiveScan() {
       const res = await fetch(imageSrc);
       const blob = await res.blob();
       const file = new File([blob], "capture.jpg", { type: "image/jpeg" });
-      
+
       const formData = new FormData();
       formData.append('file', file);
       formData.append('session_id', activeSession.id);
@@ -355,9 +355,9 @@ export default function LiveScan() {
         .from('students')
         .select('id, student_roll, full_name, email, academic_year')
         .order('student_roll', { ascending: true });
-      
+
       if (error) throw error;
-      
+
       const filtered = (data || []).filter(s => {
         if (!targetYear || targetYear === 'All' || targetYear === 'All Years' || targetYear === 'All MBBS Batches' || targetYear.includes('All Group')) return true;
         const sYear = (s.academic_year || '').trim().toLowerCase();
@@ -391,7 +391,7 @@ export default function LiveScan() {
         .select('*, students(student_roll, full_name)')
         .eq('session_id', activeSession.id)
         .order('recorded_at', { ascending: false });
-      
+
       if (error) throw error;
       setLogs(data || []);
     } catch (error) {
@@ -408,15 +408,15 @@ export default function LiveScan() {
       const localMonth = String(now.getMonth() + 1).padStart(2, '0');
       const localDay = String(now.getDate()).padStart(2, '0');
       const today = `${localYear}-${localMonth}-${localDay}`;
-      
+
       const finalHall = setupData.hall === "custom" ? (customHallName.trim() || "Custom Hall") : setupData.hall;
       const className = `${setupData.subject} - ${finalHall}`;
-      
+
       const targetCohort = setupData.academic_year === "All"
         ? "All"
         : (setupData.sub_batch && setupData.sub_batch !== "All"
-            ? `${setupData.academic_year} (${setupData.sub_batch})`
-            : setupData.academic_year);
+          ? `${setupData.academic_year} (${setupData.sub_batch})`
+          : setupData.academic_year);
 
       const newSession = {
         class_name: className,
@@ -426,18 +426,18 @@ export default function LiveScan() {
         instructor_name: encodeSessionMetadata(setupData.topic, sessionGeofence),
         target_academic_year: targetCohort
       };
-      
+
       const { data, error } = await supabase
         .from('sessions')
         .insert([newSession])
         .select()
         .single();
-        
+
       if (error) {
         console.error("Supabase Error:", error);
         throw error;
       }
-      
+
       if (typeof window !== "undefined") {
         localStorage.setItem("medattend_active_session_id", data.id);
         localStorage.setItem("medattend_active_session_title", data.class_name);
@@ -665,24 +665,24 @@ export default function LiveScan() {
           <form onSubmit={handleStartSession} className="space-y-3.5 sm:space-y-4 relative z-10">
             <div>
               <label htmlFor="subject" className="block text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-slate-400 mb-1.5">Subject / Department</label>
-              <input 
+              <input
                 id="subject"
                 required
-                type="text" 
-                className="w-full rounded-xl border border-gray-300 dark:border-slate-800 py-2.5 sm:py-3 px-3.5 sm:px-4 text-gray-900 dark:text-white bg-white dark:bg-slate-950/70 placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-indigo-600 dark:focus:border-indigo-500 focus:ring-1 focus:ring-indigo-600 dark:focus:ring-indigo-500 transition-all text-xs sm:text-sm shadow-sm" 
+                type="text"
+                className="w-full rounded-xl border border-gray-300 dark:border-slate-800 py-2.5 sm:py-3 px-3.5 sm:px-4 text-gray-900 dark:text-white bg-white dark:bg-slate-950/70 placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-indigo-600 dark:focus:border-indigo-500 focus:ring-1 focus:ring-indigo-600 dark:focus:ring-indigo-500 transition-all text-xs sm:text-sm shadow-sm"
                 value={setupData.subject}
-                onChange={e => setSetupData({...setupData, subject: e.target.value})}
+                onChange={e => setSetupData({ ...setupData, subject: e.target.value })}
                 placeholder="e.g. Department of Anatomy & Physiology"
               />
             </div>
 
             <div>
               <label htmlFor="hall" className="block text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-slate-400 mb-1.5">Lecture / Examination Hall</label>
-              <select 
+              <select
                 id="hall"
                 className="w-full rounded-xl border border-gray-300 dark:border-slate-800 py-2.5 sm:py-3 px-3.5 sm:px-4 text-gray-900 dark:text-white bg-white dark:bg-slate-950/70 focus:outline-none focus:border-indigo-600 dark:focus:border-indigo-500 focus:ring-1 focus:ring-indigo-600 dark:focus:ring-indigo-500 transition-all text-xs sm:text-sm cursor-pointer shadow-sm"
                 value={setupData.hall}
-                onChange={e => setSetupData({...setupData, hall: e.target.value})}
+                onChange={e => setSetupData({ ...setupData, hall: e.target.value })}
               >
                 <option value="Lecture Hall 1" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">Lecture Hall 1</option>
                 <option value="Lecture Hall 2" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">Lecture Hall 2</option>
@@ -712,25 +712,25 @@ export default function LiveScan() {
 
             <div>
               <label htmlFor="topic" className="block text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-slate-400 mb-1.5">Topic / Professor Name</label>
-              <input 
+              <input
                 id="topic"
                 required
-                type="text" 
-                className="w-full rounded-xl border border-gray-300 dark:border-slate-800 py-2.5 sm:py-3 px-3.5 sm:px-4 text-gray-900 dark:text-white bg-white dark:bg-slate-950/70 placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-indigo-600 dark:focus:border-indigo-500 focus:ring-1 focus:ring-indigo-600 dark:focus:ring-indigo-500 transition-all text-xs sm:text-sm shadow-sm" 
+                type="text"
+                className="w-full rounded-xl border border-gray-300 dark:border-slate-800 py-2.5 sm:py-3 px-3.5 sm:px-4 text-gray-900 dark:text-white bg-white dark:bg-slate-950/70 placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-indigo-600 dark:focus:border-indigo-500 focus:ring-1 focus:ring-indigo-600 dark:focus:ring-indigo-500 transition-all text-xs sm:text-sm shadow-sm"
                 value={setupData.topic}
-                onChange={e => setSetupData({...setupData, topic: e.target.value})}
+                onChange={e => setSetupData({ ...setupData, topic: e.target.value })}
                 placeholder="e.g. Prof. Dr. A. K. Rahman - Cardiovascular Pathology"
               />
             </div>
-            
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label htmlFor="academic_year" className="block text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-slate-400 mb-1.5">Target Student Cohort</label>
-                <select 
+                <select
                   id="academic_year"
                   className="w-full rounded-xl border border-gray-300 dark:border-slate-800 py-2.5 sm:py-3 px-3.5 sm:px-4 text-gray-900 dark:text-white bg-white dark:bg-slate-950/70 focus:outline-none focus:border-indigo-600 dark:focus:border-indigo-500 focus:ring-1 focus:ring-indigo-600 dark:focus:border-indigo-500 transition-all text-xs sm:text-sm cursor-pointer shadow-sm"
                   value={setupData.academic_year}
-                  onChange={e => setSetupData({...setupData, academic_year: e.target.value})}
+                  onChange={e => setSetupData({ ...setupData, academic_year: e.target.value })}
                 >
                   <option value="All" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">All MBBS Batches (Full Cohort)</option>
                   <option value="1st Year" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">1st Year MBBS</option>
@@ -742,12 +742,12 @@ export default function LiveScan() {
 
               <div>
                 <label htmlFor="sub_batch" className="block text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-slate-400 mb-1.5">Sub-Group / Section</label>
-                <select 
+                <select
                   id="sub_batch"
                   disabled={setupData.academic_year === "All"}
                   className="w-full rounded-xl border border-gray-300 dark:border-slate-800 py-2.5 sm:py-3 px-3.5 sm:px-4 text-gray-900 dark:text-white bg-white dark:bg-slate-950/70 focus:outline-none focus:border-indigo-600 dark:focus:border-indigo-500 focus:ring-1 focus:ring-indigo-600 dark:focus:border-indigo-500 transition-all text-xs sm:text-sm cursor-pointer shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                   value={setupData.sub_batch}
-                  onChange={e => setSetupData({...setupData, sub_batch: e.target.value})}
+                  onChange={e => setSetupData({ ...setupData, sub_batch: e.target.value })}
                 >
                   <option value="All" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">All Group (Full Class)</option>
                   <option value="Group A" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">Group A (e.g. Roll 1-100)</option>
@@ -756,7 +756,7 @@ export default function LiveScan() {
                 </select>
               </div>
             </div>
-            
+
             {/* GPS Geofence Security Card */}
             <div className="p-3.5 rounded-xl bg-gray-50 dark:bg-slate-950/70 border border-gray-200 dark:border-slate-800 space-y-2.5">
               <div className="flex items-center justify-between">
@@ -774,7 +774,7 @@ export default function LiveScan() {
                       )}
                     </div>
                     <p className="text-[11px] text-gray-500 dark:text-slate-400 mt-0.5">
-                      {sessionGeofence.enabled 
+                      {sessionGeofence.enabled
                         ? `Restricts selfie attendance to ${sessionGeofence.radiusMeters}m of this room.`
                         : "Students can submit selfie attendance without GPS distance restriction."}
                     </p>
@@ -835,7 +835,7 @@ export default function LiveScan() {
                 </div>
               )}
             </div>
-            
+
             <div className="pt-3 sm:pt-4">
               <button
                 type="submit"
@@ -853,11 +853,11 @@ export default function LiveScan() {
         </div>
 
         {/* GPS Geofence Modal */}
-        <GeofenceModal 
-          isOpen={showGeofenceModal} 
-          onClose={() => setShowGeofenceModal(false)} 
+        <GeofenceModal
+          isOpen={showGeofenceModal}
+          onClose={() => setShowGeofenceModal(false)}
           initialConfig={activeGeofenceConfig}
-          onConfigSaved={handleGeofenceSaved} 
+          onConfigSaved={handleGeofenceSaved}
         />
       </div>
     );
@@ -866,19 +866,19 @@ export default function LiveScan() {
   return (
     <div className="w-full min-h-screen bg-gray-50 dark:bg-[#070B12] text-gray-900 dark:text-slate-100 flex flex-col p-2.5 sm:p-4 lg:p-5 overflow-x-hidden box-border transition-colors duration-300">
       <div className="w-full max-w-[1720px] mx-auto flex-1 flex flex-col min-w-0">
-        <input 
-          type="file" 
-          accept="image/*" 
-          className="hidden" 
-          ref={fileInputRef} 
-          onChange={handleProcessAttendance} 
+        <input
+          type="file"
+          accept="image/*"
+          className="hidden"
+          ref={fileInputRef}
+          onChange={handleProcessAttendance}
         />
 
         {/* Top Header Command Bar */}
         <div className="mb-3 sm:mb-4 bg-white dark:bg-slate-900/80 backdrop-blur-xl border border-gray-200 dark:border-slate-800/90 rounded-2xl p-3 sm:p-4 shadow-sm dark:shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-3 transition-colors duration-300">
           <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 min-w-0">
-            <button 
-              onClick={handleBackToSetup} 
+            <button
+              onClick={handleBackToSetup}
               className="px-2.5 sm:px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 dark:bg-slate-800/80 dark:hover:bg-slate-700/80 text-xs font-semibold text-gray-700 hover:text-gray-900 dark:text-slate-300 dark:hover:text-white border border-gray-300 dark:border-slate-700/60 flex items-center transition-all shrink-0 shadow-sm cursor-pointer"
               title="Return to Live Scan setup form to start a new attendance session"
             >
@@ -893,14 +893,14 @@ export default function LiveScan() {
               <Radio className="w-3.5 h-3.5 mr-1 text-rose-500 animate-pulse" /> Ongoing Halls
             </Link>
 
-            <button 
-              onClick={handleEndSession} 
+            <button
+              onClick={handleEndSession}
               className="px-2.5 sm:px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/50 text-xs font-semibold text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-900/60 flex items-center transition-all shrink-0 shadow-sm cursor-pointer"
               title="Conclude and end this lecture attendance session"
             >
               <StopCircle className="w-3.5 h-3.5 mr-1" /> End Session
             </button>
-            
+
             <div className="h-5 w-px bg-gray-200 dark:bg-slate-800 hidden sm:block" />
 
             <div className="min-w-0">
@@ -931,11 +931,10 @@ export default function LiveScan() {
             {/* GPS Geofence Configuration Button */}
             <button
               onClick={() => setShowGeofenceModal(true)}
-              className={`inline-flex items-center px-3 sm:px-3.5 py-1.5 rounded-lg border text-xs font-semibold shadow-sm transition-all cursor-pointer shrink-0 ${
-                activeGeofenceConfig.enabled
+              className={`inline-flex items-center px-3 sm:px-3.5 py-1.5 rounded-lg border text-xs font-semibold shadow-sm transition-all cursor-pointer shrink-0 ${activeGeofenceConfig.enabled
                   ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-600/50 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/50'
                   : 'bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-600/50 text-amber-700 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/50'
-              }`}
+                }`}
               title="Configure Classroom GPS Geofence boundary"
             >
               <MapPin className="w-3.5 h-3.5 mr-1.5" />
@@ -978,63 +977,58 @@ export default function LiveScan() {
 
         {/* Main Dashboard Layout (Zero Horizontal Scroll) */}
         <div className="flex-1 flex flex-col lg:flex-row gap-3 sm:gap-4 min-h-0 w-full">
-          
+
           {/* Left Column: Visualizer & Camera Matrix */}
           <div className="flex-1 flex flex-col bg-white dark:bg-slate-900/80 backdrop-blur-xl rounded-2xl shadow-sm dark:shadow-xl border border-gray-200 dark:border-slate-800/90 overflow-hidden min-w-0 transition-colors duration-300">
-            
+
             {/* Segmented Mode Selector (Touch-Scrollable on Mobile) */}
             <div className="p-1.5 sm:p-2 border-b border-gray-200 dark:border-slate-800/80 bg-gray-50 dark:bg-slate-950/40 flex items-center gap-1.5 overflow-x-auto no-scrollbar scroll-smooth">
               <button
                 onClick={() => setActiveTab("grid")}
-                className={`flex-1 min-w-[85px] sm:min-w-[100px] py-2 px-2.5 sm:px-3 text-xs font-semibold rounded-xl flex items-center justify-center whitespace-nowrap transition-all ${
-                  activeTab === "grid"
+                className={`flex-1 min-w-[85px] sm:min-w-[100px] py-2 px-2.5 sm:px-3 text-xs font-semibold rounded-xl flex items-center justify-center whitespace-nowrap transition-all ${activeTab === "grid"
                     ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
                     : "text-gray-600 hover:text-gray-900 hover:bg-gray-200/70 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800/60"
-                }`}
+                  }`}
               >
                 <Grid className="w-3.5 h-3.5 mr-1.5" />
                 Multi Cam
               </button>
               <button
                 onClick={() => setActiveTab("cctv")}
-                className={`flex-1 min-w-[75px] sm:min-w-[90px] py-2 px-2.5 sm:px-3 text-xs font-semibold rounded-xl flex items-center justify-center whitespace-nowrap transition-all ${
-                  activeTab === "cctv"
+                className={`flex-1 min-w-[75px] sm:min-w-[90px] py-2 px-2.5 sm:px-3 text-xs font-semibold rounded-xl flex items-center justify-center whitespace-nowrap transition-all ${activeTab === "cctv"
                     ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
                     : "text-gray-600 hover:text-gray-900 hover:bg-gray-200/70 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800/60"
-                }`}
+                  }`}
               >
                 <Video className="w-3.5 h-3.5 mr-1.5" />
                 Single
               </button>
               <button
                 onClick={() => setActiveTab("ptz")}
-                className={`flex-1 min-w-[65px] sm:min-w-[80px] py-2 px-2.5 sm:px-3 text-xs font-semibold rounded-xl flex items-center justify-center whitespace-nowrap transition-all ${
-                  activeTab === "ptz"
+                className={`flex-1 min-w-[65px] sm:min-w-[80px] py-2 px-2.5 sm:px-3 text-xs font-semibold rounded-xl flex items-center justify-center whitespace-nowrap transition-all ${activeTab === "ptz"
                     ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
                     : "text-gray-600 hover:text-gray-900 hover:bg-gray-200/70 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800/60"
-                }`}
+                  }`}
               >
                 <Focus className="w-3.5 h-3.5 mr-1.5" />
                 PTZ
               </button>
               <button
                 onClick={() => setActiveTab("live")}
-                className={`flex-1 min-w-[80px] sm:min-w-[90px] py-2 px-2.5 sm:px-3 text-xs font-semibold rounded-xl flex items-center justify-center whitespace-nowrap transition-all ${
-                  activeTab === "live"
+                className={`flex-1 min-w-[80px] sm:min-w-[90px] py-2 px-2.5 sm:px-3 text-xs font-semibold rounded-xl flex items-center justify-center whitespace-nowrap transition-all ${activeTab === "live"
                     ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
                     : "text-gray-600 hover:text-gray-900 hover:bg-gray-200/70 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800/60"
-                }`}
+                  }`}
               >
                 <Camera className="w-3.5 h-3.5 mr-1.5" />
                 Webcam
               </button>
               <button
                 onClick={() => setActiveTab("manual")}
-                className={`flex-1 min-w-[75px] sm:min-w-[85px] py-2 px-2.5 sm:px-3 text-xs font-semibold rounded-xl flex items-center justify-center whitespace-nowrap transition-all ${
-                  activeTab === "manual"
+                className={`flex-1 min-w-[75px] sm:min-w-[85px] py-2 px-2.5 sm:px-3 text-xs font-semibold rounded-xl flex items-center justify-center whitespace-nowrap transition-all ${activeTab === "manual"
                     ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
                     : "text-gray-600 hover:text-gray-900 hover:bg-gray-200/70 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800/60"
-                }`}
+                  }`}
               >
                 <Upload className="w-3.5 h-3.5 mr-1.5" />
                 Upload
@@ -1066,8 +1060,8 @@ export default function LiveScan() {
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-2.5">
                       {backRowCameras.map((cam) => (
-                        <div 
-                          key={cam.id} 
+                        <div
+                          key={cam.id}
                           className="group relative rounded-xl overflow-hidden bg-slate-950 border border-slate-800/90 shadow-lg aspect-video flex flex-col cursor-pointer transition-all hover:border-indigo-500/80 hover:shadow-indigo-500/10"
                           onClick={() => setFocusedCamera(cam)}
                         >
@@ -1078,7 +1072,7 @@ export default function LiveScan() {
                           </div>
 
                           {/* Top-Right Maximize Button (Always visible on touch/mobile) */}
-                          <button 
+                          <button
                             onClick={(e) => { e.stopPropagation(); setFocusedCamera(cam); }}
                             className="absolute top-2 right-2 z-10 p-1.5 rounded-md bg-black/70 text-white/80 hover:text-white hover:bg-black/90 opacity-80 sm:opacity-0 group-hover:opacity-100 transition-all"
                             title="Maximize Camera"
@@ -1087,7 +1081,7 @@ export default function LiveScan() {
                           </button>
 
                           <div className="w-full h-full flex items-center justify-center bg-black">
-                            <MjpegPlayer 
+                            <MjpegPlayer
                               url={`${backendUrl}/api/video-feed/${activeSession.id}?camera_index=${cam.index}&grid=1`}
                               className="w-full h-full object-contain"
                               fallbackText="Connecting..."
@@ -1108,8 +1102,8 @@ export default function LiveScan() {
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-2.5">
                       {frontRowCameras.map((cam) => (
-                        <div 
-                          key={cam.id} 
+                        <div
+                          key={cam.id}
                           className="group relative rounded-xl overflow-hidden bg-slate-950 border border-slate-800/90 shadow-lg aspect-video flex flex-col cursor-pointer transition-all hover:border-indigo-500/80 hover:shadow-indigo-500/10"
                           onClick={() => setFocusedCamera(cam)}
                         >
@@ -1118,7 +1112,7 @@ export default function LiveScan() {
                             {cam.name}
                           </div>
 
-                          <button 
+                          <button
                             onClick={(e) => { e.stopPropagation(); setFocusedCamera(cam); }}
                             className="absolute top-2 right-2 z-10 p-1.5 rounded-md bg-black/70 text-white/80 hover:text-white hover:bg-black/90 opacity-80 sm:opacity-0 group-hover:opacity-100 transition-all"
                             title="Maximize Camera"
@@ -1127,7 +1121,7 @@ export default function LiveScan() {
                           </button>
 
                           <div className="w-full h-full flex items-center justify-center bg-black">
-                            <MjpegPlayer 
+                            <MjpegPlayer
                               url={`${backendUrl}/api/video-feed/${activeSession.id}?camera_index=${cam.index}&grid=1`}
                               className="w-full h-full object-contain"
                               fallbackText="Connecting..."
@@ -1160,12 +1154,12 @@ export default function LiveScan() {
                   </div>
 
                   <div className="absolute inset-0 w-full h-full bg-black flex items-center justify-center">
-                    <MjpegPlayer 
+                    <MjpegPlayer
                       key={selectedCctvIndex}
-                      url={`${backendUrl}/api/video-feed/${activeSession.id}?camera_index=${selectedCctvIndex}&grid=0`} 
+                      url={`${backendUrl}/api/video-feed/${activeSession.id}?camera_index=${selectedCctvIndex}&grid=0`}
                       className="w-full h-full object-contain"
                     />
-                    
+
                     <div className="absolute top-3 right-3 sm:top-4 sm:right-4 bg-black/70 backdrop-blur-sm rounded-full px-2.5 sm:px-3 py-1 flex items-center shadow-lg border border-white/10">
                       <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-red-500 animate-pulse mr-1.5 sm:mr-2" />
                       <span className="text-white text-[10px] sm:text-[11px] font-semibold tracking-wider">LIVE 4K AI</span>
@@ -1195,12 +1189,12 @@ export default function LiveScan() {
                   )}
 
                   <div className="absolute inset-0 w-full h-full bg-black flex items-center justify-center">
-                    <MjpegPlayer 
+                    <MjpegPlayer
                       key={selectedPtzIndex}
-                      url={`${backendUrl}/api/ptz-video-feed/${activeSession.id}?camera_index=${selectedPtzIndex}&grid=0`} 
+                      url={`${backendUrl}/api/ptz-video-feed/${activeSession.id}?camera_index=${selectedPtzIndex}&grid=0`}
                       className="w-full h-full object-contain"
                     />
-                    
+
                     <div className="absolute top-3 right-3 sm:top-4 sm:right-4 bg-black/70 backdrop-blur-sm rounded-full px-2.5 sm:px-3 py-1 flex items-center shadow-lg border border-white/10 z-20">
                       <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-blue-500 animate-pulse mr-1.5 sm:mr-2" />
                       <span className="text-white text-[10px] sm:text-[11px] font-semibold tracking-wider">PTZ ACTIVE</span>
@@ -1209,10 +1203,10 @@ export default function LiveScan() {
                     {/* PTZ Joystick (Touch-friendly & Responsive Scale) */}
                     <div className="absolute bottom-3 left-3 sm:bottom-6 sm:left-6 z-20 flex flex-col items-center gap-1.5 sm:gap-2 bg-slate-950/85 backdrop-blur-md p-2.5 sm:p-3.5 rounded-2xl border border-slate-800 shadow-2xl scale-90 sm:scale-100 origin-bottom-left">
                       <div className="text-slate-400 text-[9px] font-bold tracking-widest uppercase">PTZ Control</div>
-                      
+
                       <div className="grid grid-cols-3 gap-1">
                         <div />
-                        <button 
+                        <button
                           onMouseDown={() => startPtzMove('up')}
                           onMouseUp={stopPtzMove}
                           onMouseLeave={stopPtzMove}
@@ -1223,7 +1217,7 @@ export default function LiveScan() {
                           <ChevronUp className="w-4 h-4" />
                         </button>
                         <div />
-                        <button 
+                        <button
                           onMouseDown={() => startPtzMove('left')}
                           onMouseUp={stopPtzMove}
                           onMouseLeave={stopPtzMove}
@@ -1233,13 +1227,13 @@ export default function LiveScan() {
                         >
                           <ChevronLeft className="w-4 h-4" />
                         </button>
-                        <button 
+                        <button
                           onClick={stopPtzMove}
                           className="w-7 h-7 sm:w-8 sm:h-8 bg-slate-900 rounded-full flex items-center justify-center text-slate-500"
                         >
                           <div className="w-2 h-2 rounded-full bg-slate-500" />
                         </button>
-                        <button 
+                        <button
                           onMouseDown={() => startPtzMove('right')}
                           onMouseUp={stopPtzMove}
                           onMouseLeave={stopPtzMove}
@@ -1250,7 +1244,7 @@ export default function LiveScan() {
                           <ChevronRight className="w-4 h-4" />
                         </button>
                         <div />
-                        <button 
+                        <button
                           onMouseDown={() => startPtzMove('down')}
                           onMouseUp={stopPtzMove}
                           onMouseLeave={stopPtzMove}
@@ -1264,7 +1258,7 @@ export default function LiveScan() {
                       </div>
 
                       <div className="flex gap-1.5 mt-1 pt-1.5 sm:pt-2 border-t border-slate-800 w-full justify-center">
-                        <button 
+                        <button
                           onMouseDown={() => startPtzMove('zoom_out')}
                           onMouseUp={stopPtzMove}
                           onMouseLeave={stopPtzMove}
@@ -1274,7 +1268,7 @@ export default function LiveScan() {
                         >
                           <ZoomOut className="w-3.5 h-3.5" />
                         </button>
-                        <button 
+                        <button
                           onMouseDown={() => startPtzMove('zoom_in')}
                           onMouseUp={stopPtzMove}
                           onMouseLeave={stopPtzMove}
@@ -1309,7 +1303,7 @@ export default function LiveScan() {
                       </select>
                     </div>
                   )}
-                  
+
                   <div className="absolute inset-0 w-full h-full">
                     <div className="w-full h-full bg-black flex items-center justify-center relative overflow-hidden">
                       <Webcam
@@ -1319,7 +1313,7 @@ export default function LiveScan() {
                         videoConstraints={{ deviceId: selectedDeviceId }}
                         className="w-full h-full object-cover"
                       />
-                      
+
                       {isScanning && (
                         <div className="absolute inset-0 border-2 border-indigo-500/30 m-4 sm:m-8 rounded-lg pointer-events-none">
                           <div className="absolute top-0 left-0 w-12 sm:w-16 h-12 sm:h-16 border-t-4 border-l-4 border-indigo-500 -mt-1 -ml-1" />
@@ -1329,7 +1323,7 @@ export default function LiveScan() {
                           <div className="absolute top-1/2 left-0 w-full h-0.5 bg-indigo-400/50 shadow-[0_0_8px_rgba(99,102,241,0.8)] animate-scan" />
                         </div>
                       )}
-                      
+
                       {!isScanning && (
                         <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center backdrop-blur-sm transition-all">
                           <Camera className="w-10 h-10 sm:w-14 sm:h-14 text-slate-500 mb-2 sm:mb-3" />
@@ -1341,7 +1335,7 @@ export default function LiveScan() {
                 </div>
               ) : (
                 /* PHOTO UPLOAD */
-                <div 
+                <div
                   onClick={() => !isProcessing && fileInputRef.current?.click()}
                   className={`flex-1 flex flex-col items-center justify-center border-2 border-dashed border-slate-800 rounded-2xl bg-slate-950/60 hover:bg-slate-950 hover:border-indigo-500/50 transition-all aspect-video min-h-[240px] sm:min-h-[360px] lg:min-h-[440px] p-4 ${!isProcessing ? 'cursor-pointer' : 'opacity-70 cursor-not-allowed'}`}
                 >
@@ -1365,9 +1359,8 @@ export default function LiveScan() {
                 {activeTab === "live" ? (
                   <button
                     onClick={() => setIsScanning(!isScanning)}
-                    className={`w-full sm:w-auto flex items-center justify-center px-4 py-1.5 rounded-xl font-semibold text-xs text-white shadow-md transition-all ${
-                      isScanning ? "bg-red-600 hover:bg-red-500" : "bg-indigo-600 hover:bg-indigo-500"
-                    }`}
+                    className={`w-full sm:w-auto flex items-center justify-center px-4 py-1.5 rounded-xl font-semibold text-xs text-white shadow-md transition-all ${isScanning ? "bg-red-600 hover:bg-red-500" : "bg-indigo-600 hover:bg-indigo-500"
+                      }`}
                   >
                     {isScanning ? (
                       <><StopCircle className="w-3.5 h-3.5 mr-1.5" /> Stop Scan</>
@@ -1376,7 +1369,7 @@ export default function LiveScan() {
                     )}
                   </button>
                 ) : activeTab === "manual" ? (
-                  <button 
+                  <button
                     disabled={isProcessing}
                     onClick={() => fileInputRef.current?.click()}
                     className="w-full sm:w-auto flex items-center justify-center px-4 py-1.5 rounded-xl font-semibold text-xs text-white bg-indigo-600 hover:bg-indigo-500 shadow-md transition-all disabled:opacity-50"
@@ -1398,7 +1391,7 @@ export default function LiveScan() {
 
           {/* Right Column: Attendance Feed with Dual Tabs (Present & Absent Override) */}
           <div className="w-full lg:w-[320px] xl:w-[360px] 2xl:w-[390px] flex-shrink-0 bg-white dark:bg-slate-900/80 backdrop-blur-xl rounded-2xl shadow-md dark:shadow-xl border border-gray-200 dark:border-slate-800/90 flex flex-col overflow-hidden transition-colors duration-300">
-            
+
             {/* Header with Navigation Tabs & Search */}
             <div className="p-3 sm:p-3.5 border-b border-gray-200 dark:border-slate-800/80 bg-gray-50/80 dark:bg-slate-950/50 flex flex-col gap-2.5">
               {/* Dual Tabs: Present vs Absent (Faculty Override) */}
@@ -1406,11 +1399,10 @@ export default function LiveScan() {
                 <button
                   type="button"
                   onClick={() => setSidebarTab("present")}
-                  className={`flex-1 py-1.5 px-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                    sidebarTab === "present"
+                  className={`flex-1 py-1.5 px-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${sidebarTab === "present"
                       ? "bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-sm border border-emerald-500/20"
                       : "text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
-                  }`}
+                    }`}
                 >
                   <UserCheck className="w-3.5 h-3.5" />
                   <span>Present ({logs.length})</span>
@@ -1418,11 +1410,10 @@ export default function LiveScan() {
                 <button
                   type="button"
                   onClick={() => setSidebarTab("absent")}
-                  className={`flex-1 py-1.5 px-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                    sidebarTab === "absent"
+                  className={`flex-1 py-1.5 px-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${sidebarTab === "absent"
                       ? "bg-white dark:bg-slate-800 text-rose-600 dark:text-rose-400 shadow-sm border border-rose-500/20"
                       : "text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
-                  }`}
+                    }`}
                   title="View absent students & use 1-Click Faculty Override for Burqa/Veil"
                 >
                   <UserX className="w-3.5 h-3.5" />
@@ -1433,7 +1424,7 @@ export default function LiveScan() {
               {/* Quick Search Filter */}
               <div className="relative">
                 <Search className="w-3.5 h-3.5 text-gray-400 dark:text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input 
+                <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
@@ -1477,15 +1468,14 @@ export default function LiveScan() {
                       >
                         {/* Avatar Initials Pill */}
                         <div className="flex-shrink-0 mr-2 sm:mr-2.5">
-                          <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center text-white font-bold text-[10px] sm:text-[11px] uppercase shadow-md ${
-                            isManual
+                          <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center text-white font-bold text-[10px] sm:text-[11px] uppercase shadow-md ${isManual
                               ? "bg-gradient-to-br from-purple-600 to-indigo-700 shadow-purple-600/20"
                               : "bg-gradient-to-br from-indigo-600 to-indigo-800 shadow-indigo-600/20"
-                          }`}>
+                            }`}>
                             {studentName.substring(0, 2)}
                           </div>
                         </div>
-                        
+
                         <div className="flex-1 min-w-0 pr-2">
                           <p className="text-xs font-bold text-gray-900 dark:text-white truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-300 transition-colors">
                             {studentName}
@@ -1506,11 +1496,10 @@ export default function LiveScan() {
                         <div className="flex-shrink-0 text-right flex flex-col items-end gap-1">
                           <span className="text-[9px] sm:text-[10px] text-gray-500 dark:text-slate-500 font-mono block">{time}</span>
                           <div className="flex items-center gap-1">
-                            <span className={`inline-flex items-center text-[8px] sm:text-[9px] font-semibold px-1.5 py-0.5 rounded-md ${
-                              isManual
+                            <span className={`inline-flex items-center text-[8px] sm:text-[9px] font-semibold px-1.5 py-0.5 rounded-md ${isManual
                                 ? "text-purple-700 dark:text-purple-300 bg-purple-500/10 border border-purple-500/20"
                                 : "text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20"
-                            }`}>
+                              }`}>
                               {isManual ? "Manual" : "Present"}
                             </span>
                             {isManual && (
@@ -1606,24 +1595,22 @@ export default function LiveScan() {
         {/* Studio Camera Focus Modal */}
         {/* Studio Camera Focus Modal (Enlarged Widescreen / Fullscreen) */}
         {focusedCamera && (
-          <div 
-            className={`fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md transition-all ${
-              isModalFullscreen ? "p-0" : "p-2 sm:p-4 md:p-6 lg:p-7"
-            }`}
+          <div
+            className={`fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md transition-all ${isModalFullscreen ? "p-0" : "p-2 sm:p-4 md:p-6 lg:p-7"
+              }`}
             onClick={() => {
               setFocusedCamera(null);
               setIsModalFullscreen(false);
             }}
           >
-            <div 
-              className={`bg-[#0A0E17] border border-slate-800/90 shadow-2xl flex flex-col relative transition-all duration-200 overflow-hidden ${
-                isModalFullscreen 
-                  ? "w-screen h-screen rounded-none border-0" 
+            <div
+              className={`bg-[#0A0E17] border border-slate-800/90 shadow-2xl flex flex-col relative transition-all duration-200 overflow-hidden ${isModalFullscreen
+                  ? "w-screen h-screen rounded-none border-0"
                   : "w-full max-w-6xl xl:max-w-7xl 2xl:max-w-[1680px] max-h-[94vh] rounded-2xl sm:rounded-3xl"
-              }`}
+                }`}
               onClick={(e) => e.stopPropagation()}
             >
-              
+
               {/* Modal Top Bar */}
               <div className="flex items-center justify-between px-3 py-2.5 sm:px-5 sm:py-3.5 border-b border-slate-800/80 bg-slate-900/95 shrink-0">
                 <div className="flex items-center gap-2 sm:gap-3 min-w-0">
@@ -1645,11 +1632,10 @@ export default function LiveScan() {
                     <button
                       key={cam.id}
                       onClick={() => setFocusedCamera(cam)}
-                      className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition-all ${
-                        focusedCamera.id === cam.id
+                      className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition-all ${focusedCamera.id === cam.id
                           ? "bg-indigo-600 text-white shadow"
                           : "text-slate-400 hover:text-white hover:bg-slate-800/80"
-                      }`}
+                        }`}
                     >
                       {cam.name}
                     </button>
@@ -1658,21 +1644,21 @@ export default function LiveScan() {
 
                 <div className="flex items-center gap-1 sm:gap-2 shrink-0">
                   {/* Camera Switcher Shortcuts */}
-                  <button 
+                  <button
                     onClick={handlePrevCamera}
                     className="p-1.5 sm:p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-all border border-slate-700/60"
                     title="Previous Camera (←)"
                   >
                     <PrevIcon className="w-4 h-4" />
                   </button>
-                  <button 
+                  <button
                     onClick={handleNextCamera}
                     className="p-1.5 sm:p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-all border border-slate-700/60"
                     title="Next Camera (→)"
                   >
                     <NextIcon className="w-4 h-4" />
                   </button>
-                  
+
                   {/* Fullscreen Toggle Button */}
                   <button
                     onClick={() => setIsModalFullscreen(prev => !prev)}
@@ -1697,10 +1683,9 @@ export default function LiveScan() {
               </div>
 
               {/* Video Player Container */}
-              <div className={`relative flex-1 min-h-0 bg-black flex items-center justify-center overflow-hidden w-full ${
-                isModalFullscreen ? "h-full" : "aspect-video max-h-[78vh]"
-              }`}>
-                <MjpegPlayer 
+              <div className={`relative flex-1 min-h-0 bg-black flex items-center justify-center overflow-hidden w-full ${isModalFullscreen ? "h-full" : "aspect-video max-h-[78vh]"
+                }`}>
+                <MjpegPlayer
                   key={focusedCamera.id}
                   url={`${backendUrl}/api/video-feed/${activeSession.id}?camera_index=${focusedCamera.index}&grid=0`}
                   className="w-full h-full object-contain"
@@ -1720,7 +1705,7 @@ export default function LiveScan() {
                     • Use <kbd className="px-1.5 py-0.5 bg-slate-800 rounded border border-slate-700 font-sans text-[10px]">←</kbd> <kbd className="px-1.5 py-0.5 bg-slate-800 rounded border border-slate-700 font-sans text-[10px]">→</kbd> to switch cameras • <kbd className="px-1.5 py-0.5 bg-slate-800 rounded border border-slate-700 font-sans text-[10px]">F</kbd> for fullscreen • <kbd className="px-1.5 py-0.5 bg-slate-800 rounded border border-slate-700 font-sans text-[10px]">Esc</kbd> to close
                   </span>
                 </div>
-                <button 
+                <button
                   onClick={() => {
                     setFocusedCamera(null);
                     setIsModalFullscreen(false);
@@ -1737,19 +1722,18 @@ export default function LiveScan() {
 
         {/* Student Mobile Selfie QR Code Modal */}
         {showQrModal && activeSession && (
-          <div 
+          <div
             className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/75 backdrop-blur-xl animate-in fade-in duration-150"
             onClick={() => {
               setShowQrModal(false);
               setIsQrFullscreen(false);
             }}
           >
-            <div 
-              className={`bg-white dark:bg-[#0A0E17] border border-gray-200 dark:border-slate-800/90 shadow-2xl flex flex-col items-center text-center relative animate-in zoom-in-95 duration-150 transition-all ${
-                isQrFullscreen 
-                  ? "fixed inset-0 w-full h-full max-w-none rounded-none p-6 sm:p-10 justify-between overflow-y-auto z-50" 
+            <div
+              className={`bg-white dark:bg-[#0A0E17] border border-gray-200 dark:border-slate-800/90 shadow-2xl flex flex-col items-center text-center relative animate-in zoom-in-95 duration-150 transition-all ${isQrFullscreen
+                  ? "fixed inset-0 w-full h-full max-w-none rounded-none p-6 sm:p-10 justify-between overflow-y-auto z-50"
                   : "rounded-3xl p-6 sm:p-8 max-w-xl sm:max-w-2xl md:max-w-3xl w-full"
-              }`}
+                }`}
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header Action Controls */}
@@ -1801,14 +1785,13 @@ export default function LiveScan() {
                 const qrTarget = typeof window !== "undefined" && window.location.hostname && !window.location.hostname.includes("localhost") && !window.location.hostname.includes("127.0.0.1")
                   ? `${window.location.origin}/selfieattend?session_id=${activeSession.id}`
                   : `https://attendance-cd0ishn9x-jims-hospital.vercel.app/selfieattend?session_id=${activeSession.id}`;
-                
+
                 const qrSize = isQrFullscreen ? 460 : 340;
 
                 return (
                   <div className="flex flex-col items-center my-4 sm:my-6 w-full max-w-lg">
-                    <div className={`p-5 sm:p-7 bg-white rounded-3xl shadow-[0_0_60px_rgba(99,102,241,0.25)] border-4 border-indigo-500/30 flex items-center justify-center transition-all ${
-                      isQrFullscreen ? 'scale-105 sm:scale-110' : ''
-                    }`}>
+                    <div className={`p-5 sm:p-7 bg-white rounded-3xl shadow-[0_0_60px_rgba(99,102,241,0.25)] border-4 border-indigo-500/30 flex items-center justify-center transition-all ${isQrFullscreen ? 'scale-105 sm:scale-110' : ''
+                      }`}>
                       <QRCodeSVG
                         value={qrTarget}
                         size={qrSize}
@@ -1847,9 +1830,9 @@ export default function LiveScan() {
                   <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
                   Project on big screen • Scannable from across the lecture hall
                 </span>
-                <a 
-                  href={`/selfieattend?session_id=${activeSession.id}`} 
-                  target="_blank" 
+                <a
+                  href={`/selfieattend?session_id=${activeSession.id}`}
+                  target="_blank"
                   rel="noreferrer"
                   className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 dark:hover:text-indigo-300 font-semibold flex items-center gap-1 transition-colors text-xs"
                 >
@@ -1872,15 +1855,16 @@ export default function LiveScan() {
         )}
 
         {/* GPS Geofence Modal */}
-        <GeofenceModal 
-          isOpen={showGeofenceModal} 
-          onClose={() => setShowGeofenceModal(false)} 
+        <GeofenceModal
+          isOpen={showGeofenceModal}
+          onClose={() => setShowGeofenceModal(false)}
           initialConfig={activeGeofenceConfig}
           onConfigSaved={handleGeofenceSaved}
         />
 
         {/* Scanning Animation Styles */}
-        <style dangerouslySetInnerHTML={{__html: `
+        <style dangerouslySetInnerHTML={{
+          __html: `
           @keyframes scan {
             0% { top: 0%; }
             50% { top: 100%; }

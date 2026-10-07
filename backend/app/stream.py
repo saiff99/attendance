@@ -57,7 +57,7 @@ def get_enrolled_students(session_id: str) -> List[dict]:
 class ThreadedRTSPStream:
     """
     High-Performance Zero-Latency RTSP Stream Grabber.
-    Pre-processes frames at capture time into optimal display and AI resolutions,
+    Pre-processes frames at capture time into optimal display resolutions,
     eliminating 4K bottleneck and CPU memory churn.
     """
     def __init__(self, url: str, name: str = "CCTV Camera"):
@@ -66,7 +66,7 @@ class ThreadedRTSPStream:
         self.source = int(url) if url.isdigit() else url
         self.cap: Optional[cv2.VideoCapture] = None
         
-        # Dual buffers: Low-res for instant grid display (640x360) & HD for AI (640x360)
+        # Display and AI frames
         self.latest_display_frame: Optional[np.ndarray] = None
         self.latest_ai_frame: Optional[np.ndarray] = None
         self.raw_w = 640
@@ -77,9 +77,6 @@ class ThreadedRTSPStream:
         self.connected = False
         self.lock = threading.Lock()
         self.thread: Optional[threading.Thread] = None
-        
-        self.last_ai_time = 0.0
-        self.ai_busy = False
 
     def start(self):
         if self.running:
@@ -105,18 +102,10 @@ class ThreadedRTSPStream:
                     self.connected = True
                     consecutive_failures = 0
 
-                # FAST HARDWARE FLUSH: Grab pending buffered packets to ensure zero backlog delay
-                grabbed = False
-                for _ in range(3):
-                    if self.cap.grab():
-                        grabbed = True
-                    else:
-                        break
-
-                if not grabbed:
+                success, frame = self.cap.read()
+                if not success or frame is None:
                     consecutive_failures += 1
-                    # Tolerate brief H.265 keyframe intervals before destroying stream
-                    if consecutive_failures > 20:
+                    if consecutive_failures > 25:
                         self.connected = False
                         if self.cap:
                             self.cap.release()
@@ -124,11 +113,7 @@ class ThreadedRTSPStream:
                         consecutive_failures = 0
                         time.sleep(1.0)
                     else:
-                        time.sleep(0.02)
-                    continue
-
-                success, frame = self.cap.retrieve()
-                if not success or frame is None:
+                        time.sleep(0.04)
                     continue
 
                 consecutive_failures = 0
@@ -137,25 +122,19 @@ class ThreadedRTSPStream:
                 self.raw_w = w
                 self.raw_h = h
 
-                # Downscale display frame to 640x360 for instantaneous zero-lag UI rendering
-                display_frame = cv2.resize(frame, (640, 360), interpolation=cv2.INTER_LINEAR)
-
-                # Prepare 1280x720 16:9 HD frame for high-accuracy background AI face detection (backbencher recall)
-                if w == 1280 and h == 720:
-                    ai_frame = frame
-                elif w >= 1280 or h >= 720:
-                    ai_frame = cv2.resize(frame, (1280, 720), interpolation=cv2.INTER_LINEAR)
+                # Downscale display frame to 640x360 for zero-latency UI rendering and fast AI
+                if w == 640 and h == 360:
+                    display_frame = frame
                 else:
-                    ai_frame = cv2.resize(frame, (1280, 720), interpolation=cv2.INTER_CUBIC)
+                    display_frame = cv2.resize(frame, (640, 360), interpolation=cv2.INTER_LINEAR)
 
                 with self.lock:
                     self.latest_display_frame = display_frame
-                    self.latest_ai_frame = ai_frame
+                    self.latest_ai_frame = display_frame
 
                 time.sleep(0.02)
 
             except Exception as e:
-                print(f"Stream capture exception on {self.name}: {e}")
                 self.connected = False
                 if self.cap:
                     self.cap.release()
@@ -168,28 +147,16 @@ class ThreadedRTSPStream:
 
     def get_frame_with_overlays(self, session_id: str, is_grid: bool = True) -> Optional[np.ndarray]:
         """Returns frame with overlays instantly (<0.2ms) without blocking on AI inference."""
-        with self.lock:
-            if is_grid:
-                if self.latest_display_frame is None:
-                    return None
-                frame = self.latest_display_frame.copy()
-            else:
-                if self.latest_ai_frame is None:
-                    return None
-                frame = self.latest_ai_frame.copy()
-            
-            ai_input_frame = self.latest_ai_frame
+        ai_coordinator.set_active_session(session_id)
 
-        now = time.time()
-        # Trigger non-blocking AI inference in background worker every 0.6s
-        if AI_ENABLED and app_fa and not self.ai_busy and ai_input_frame is not None and (now - self.last_ai_time >= 0.6):
-            self.last_ai_time = now
-            self.ai_busy = True
-            threading.Thread(target=self._async_ai_worker, args=(ai_input_frame.copy(), session_id), daemon=True).start()
+        with self.lock:
+            if self.latest_display_frame is None:
+                return None
+            frame = self.latest_display_frame.copy()
 
         h_f, w_f, _ = frame.shape
-        scale_x = w_f / 1280.0
-        scale_y = h_f / 720.0
+        scale_x = w_f / 640.0
+        scale_y = h_f / 360.0
 
         # Draw cached face overlays on lightweight frame
         for f_info in self.last_faces:
@@ -197,7 +164,6 @@ class ThreadedRTSPStream:
             student = f_info.get("student")
             sim = f_info.get("sim", 0.0)
 
-            # Map coordinates from 1280x720 AI scale to current display scale
             x1 = int(orig_x1 * scale_x)
             y1 = int(orig_y1 * scale_y)
             x2 = int(orig_x2 * scale_x)
@@ -226,13 +192,6 @@ class ThreadedRTSPStream:
         cv2.putText(frame, self.name, (12, 22), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 255), 1)
 
         return frame
-
-    def _async_ai_worker(self, frame: np.ndarray, session_id: str):
-        """Runs AI detection asynchronously so video streaming is never delayed."""
-        try:
-            self._process_ai(frame, session_id)
-        finally:
-            self.ai_busy = False
 
     def _process_ai(self, frame: np.ndarray, session_id: str):
         """Detects faces in the frame and matches against enrolled students."""
@@ -287,27 +246,34 @@ class ThreadedRTSPStream:
                     "sim": highest_sim
                 })
 
-                # Record attendance only once per student across all cameras
+                # Record attendance only once per student across all cameras (async non-blocking)
                 if best_match_student:
                     student_id = best_match_student['id']
                     if student_id not in recognized_set:
-                        try:
-                            conf_score = calculate_confidence_score(float(highest_sim))
-                            supabase.table("attendance").insert({
-                                "session_id": session_id,
-                                "student_id": student_id,
-                                "status": "Present",
-                                "capture_mode": "Live Scan",
-                                "confidence_score": conf_score
-                            }).execute()
-                            recognized_set.add(student_id)
-                            print(f"[ATTENDANCE] Recorded {best_match_student['full_name']} from {self.name} ({conf_score * 100:.0f}%)")
-                        except Exception as e:
-                            recognized_set.add(student_id)
+                        recognized_set.add(student_id)
+                        threading.Thread(
+                            target=self._save_attendance_async,
+                            args=(session_id, student_id, best_match_student['full_name'], highest_sim),
+                            daemon=True
+                        ).start()
 
             self.last_faces = current_faces
         except Exception as e:
             print(f"Error processing AI for {self.name}: {e}")
+
+    def _save_attendance_async(self, session_id: str, student_id: str, student_name: str, highest_sim: float):
+        try:
+            conf_score = calculate_confidence_score(float(highest_sim))
+            supabase.table("attendance").insert({
+                "session_id": session_id,
+                "student_id": student_id,
+                "status": "Present",
+                "capture_mode": "Live Scan",
+                "confidence_score": conf_score
+            }).execute()
+            print(f"[ATTENDANCE] Recorded {student_name} from {self.name} ({conf_score * 100:.0f}%)")
+        except Exception as e:
+            print(f"Error saving attendance: {e}")
 
     def stop(self):
         self.running = False
@@ -356,6 +322,63 @@ class CameraStreamManager:
 camera_manager = CameraStreamManager()
 
 
+class CentralAICoordinator:
+    """
+    Coordinates AI face scanning sequentially across all active cameras.
+    Ensures CPU usage stays smooth (<20%) and prevents FastAPI starvation.
+    """
+    def __init__(self):
+        self.active_session_id: Optional[str] = None
+        self.running = True
+        self.lock = threading.Lock()
+        self.thread = threading.Thread(target=self._ai_worker_loop, daemon=True)
+        self.thread.start()
+
+    def set_active_session(self, session_id: str):
+        with self.lock:
+            self.active_session_id = session_id
+
+    def _ai_worker_loop(self):
+        while self.running:
+            try:
+                if not AI_ENABLED or not app_fa:
+                    time.sleep(1.0)
+                    continue
+
+                with self.lock:
+                    session_id = self.active_session_id
+
+                if not session_id:
+                    time.sleep(0.3)
+                    continue
+
+                with camera_manager.lock:
+                    active_cctv = list(camera_manager.cctv_streams.values())
+                    active_ptz = list(camera_manager.ptz_streams.values())
+                
+                streams = active_cctv + active_ptz
+                if not streams:
+                    time.sleep(0.3)
+                    continue
+
+                for stream in streams:
+                    if not stream.running:
+                        continue
+
+                    with stream.lock:
+                        if stream.latest_ai_frame is None:
+                            continue
+                        ai_frame = stream.latest_ai_frame.copy()
+
+                    stream._process_ai(ai_frame, session_id)
+                    time.sleep(0.04)  # Small yield to keep CPU cool
+
+            except Exception as e:
+                time.sleep(0.5)
+
+ai_coordinator = CentralAICoordinator()
+
+
 def create_placeholder_frame(text: str, width: int = 640, height: int = 360) -> np.ndarray:
     """Creates a sleek dark placeholder frame when a camera is connecting/offline."""
     frame = np.zeros((height, width, 3), dtype=np.uint8)
@@ -380,7 +403,7 @@ def generate_video_feed(session_id: str, camera_index: int = 0, camera_type: str
         stream = camera_manager.get_cctv_stream(camera_index)
 
     jpeg_quality = 65 if is_grid else 80
-    fps_delay = 0.10 if is_grid else 0.04  # ~10 FPS for grid tiles (low network/CPU load), ~25 FPS for focus view
+    fps_delay = 0.10 if is_grid else 0.04
 
     while True:
         frame = stream.get_frame_with_overlays(session_id, is_grid=is_grid)
@@ -414,4 +437,3 @@ def prewarm_all_cctv():
 
 # Pre-warm streams in background so feeds are instantly available
 threading.Thread(target=prewarm_all_cctv, daemon=True).start()
-
