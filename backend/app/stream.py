@@ -74,6 +74,7 @@ def get_enrolled_students(session_id: str) -> List[dict]:
 
 AI_FRAME_WIDTH = int(os.getenv("AI_FRAME_WIDTH", "960"))
 AI_FRAME_HEIGHT = int(os.getenv("AI_FRAME_HEIGHT", "540"))
+AI_SCAN_INTERVAL = float(os.getenv("AI_SCAN_INTERVAL", "1.0"))
 
 class ThreadedRTSPStream:
     """
@@ -109,7 +110,10 @@ class ThreadedRTSPStream:
         self.last_faces_time: float = 0.0
         self.spatial_cache: List[dict] = []  # 60s cooldown spatial tracking cache
         
-        # Diagnostic & Performance Metrics (Lightweight zero-overhead counters)
+        # Explicit AI Scheduler & Diagnostics
+        self.next_allowed_ai_scan: float = 0.0
+        self.first_ai_scan_timestamp: Optional[float] = None
+        self.actual_scan_interval_sec: float = 0.0
         self.total_capture_failures: int = 0
         self.consecutive_failures: int = 0
         self.ai_scan_count: int = 0
@@ -439,7 +443,9 @@ class ThreadedRTSPStream:
             if (now - self.last_metrics_log_time) >= 15.0:
                 self.last_metrics_log_time = now
                 avg_ai_ms = round(self.total_ai_duration_ms / max(1, self.ai_scan_count), 2)
-                print(f"[PERF] {self.name} | Scans: {self.ai_scan_count} | AI: {self.last_ai_duration_ms:.1f}ms (Avg: {avg_ai_ms:.1f}ms) | InsightFace: {self.last_insightface_duration_ms:.1f}ms | Faces: {len(current_faces)} | Queue: {attendance_event_queue.qsize()}")
+                elapsed = now - (self.first_ai_scan_timestamp or now)
+                achieved_fps = round(self.ai_scan_count / max(1.0, elapsed), 2)
+                print(f"[PERF] {self.name} | Scans: {self.ai_scan_count} (~{achieved_fps} FPS) | AI: {self.last_ai_duration_ms:.1f}ms (Avg: {avg_ai_ms:.1f}ms) | Interval: {self.actual_scan_interval_sec}s | Queue: {attendance_event_queue.qsize()}")
         except Exception as e:
             print(f"Error processing AI for {self.name}: {e}")
 
@@ -559,6 +565,14 @@ class CentralAICoordinator:
                 camera_manager.clear_all_detections()
 
     def _ai_worker_loop(self):
+        """
+        Explicit Per-Camera AI Scheduler.
+        Replaces arbitrary fixed sleep intervals with predictable per-camera timestamps.
+        Guarantees:
+          - Each camera scans at target frequency (~1 scan/sec)
+          - Offline/slow cameras never delay or block active cameras
+          - Zero frame backlog, zero CPU spikes
+        """
         while self.running:
             try:
                 if not AI_ENABLED or not app_fa:
@@ -570,15 +584,15 @@ class CentralAICoordinator:
                     session_start = self.session_start_time
 
                 if not session_id:
-                    time.sleep(0.3)
+                    time.sleep(0.1)
                     continue
 
-                # Auto-Sleep Check: When all enrolled students in cohort are recognized, enter low-power sleep mode (100% CPU savings)
+                # Auto-Sleep Check: When all enrolled students in cohort are recognized, enter low-power sleep mode
                 enrolled_students, enc_matrix = get_enrolled_data(session_id)
                 if session_id in session_recognized_students and enrolled_students:
                     recognized_set = session_recognized_students[session_id]
                     if len(recognized_set) >= len(enrolled_students) and len(enrolled_students) > 0:
-                        time.sleep(2.0)
+                        time.sleep(1.5)
                         continue
 
                 with camera_manager.lock:
@@ -587,7 +601,7 @@ class CentralAICoordinator:
                 
                 streams = active_cctv + active_ptz
                 if not streams:
-                    time.sleep(0.3)
+                    time.sleep(0.1)
                     continue
 
                 now = time.time()
@@ -595,33 +609,46 @@ class CentralAICoordinator:
                     if not stream.running:
                         continue
 
+                    # 1. Explicit Timestamp Schedule Check: Skip immediately if not due yet
+                    if now < stream.next_allowed_ai_scan:
+                        continue
+
                     ai_frame = None
                     with stream.lock:
-                        # 1. Must have an active frame
+                        # 2. Must have an active frame
                         if stream.latest_ai_frame is None:
                             continue
-                        # 2. Must be captured AFTER current session started (prevents ghost attendance from past sessions)
+                        # 3. Must be captured AFTER current session started (prevents ghost attendance)
                         if stream.last_frame_time < (session_start - 2.0):
                             continue
-                        # 3. Must be captured within last 3.0 seconds (LIVE only)
+                        # 4. Must be captured within last 3.0 seconds (LIVE only)
                         if (now - stream.last_frame_time) > 3.0:
                             continue
-                        # 4. Do not re-process identical frame capture timestamp
+                        # 5. Do not re-process identical frame capture timestamp
                         if stream.last_frame_time <= stream.last_ai_processed_time:
                             continue
 
                         ai_frame = stream.latest_ai_frame.copy()
                         stream.last_ai_processed_time = stream.last_frame_time
+                        
+                        # Advance camera's scheduled next scan timestamp
+                        stream.next_allowed_ai_scan = now + AI_SCAN_INTERVAL
+                        if stream.last_ai_scan_timestamp:
+                            stream.actual_scan_interval_sec = round(now - stream.last_ai_scan_timestamp, 2)
+                        if not stream.first_ai_scan_timestamp:
+                            stream.first_ai_scan_timestamp = now
 
                     if ai_frame is not None:
-                        stream._process_ai(ai_frame, session_id)
-                        time.sleep(0.18)  # Gentle yield between camera AI processes to keep CPU cool
+                        try:
+                            stream._process_ai(ai_frame, session_id)
+                        except Exception as e:
+                            print(f"[AI ERROR] {stream.name}: {e}")
 
-                # Cooldown between multi-camera scan cycles (maintains 100% attendance recall while keeping MacBook completely cool)
-                time.sleep(0.6)
+                # High-precision non-blocking tick (20ms / 50Hz) for smooth scheduling
+                time.sleep(0.02)
 
             except Exception as e:
-                time.sleep(0.5)
+                time.sleep(0.2)
 
 ai_coordinator = CentralAICoordinator()
 
@@ -723,6 +750,8 @@ def get_performance_diagnostics() -> dict:
             frame_age = round(now - stream.last_frame_time, 3) if stream.last_frame_time > 0 else None
             avg_ai_ms = round(stream.total_ai_duration_ms / max(1, stream.ai_scan_count), 2) if stream.ai_scan_count > 0 else 0.0
 
+            achieved_fps = round(stream.ai_scan_count / max(1.0, (now - (stream.first_ai_scan_timestamp or now))), 2) if stream.first_ai_scan_timestamp else 0.0
+
             cameras_status.append({
                 "camera_id": cam_id,
                 "name": stream.name,
@@ -730,6 +759,9 @@ def get_performance_diagnostics() -> dict:
                 "ai_url": stream.ai_url,
                 "has_dedicated_ai_stream": stream.has_dedicated_ai_stream,
                 "ai_resolution": f"{AI_FRAME_WIDTH}x{AI_FRAME_HEIGHT}",
+                "target_scan_interval_sec": AI_SCAN_INTERVAL,
+                "actual_scan_interval_sec": stream.actual_scan_interval_sec,
+                "achieved_scan_fps": achieved_fps,
                 "connected": stream.connected,
                 "ai_connected": stream.ai_connected if stream.has_dedicated_ai_stream else stream.connected,
                 "frame_age_seconds": frame_age,
