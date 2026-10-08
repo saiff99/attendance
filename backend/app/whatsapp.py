@@ -1,6 +1,9 @@
 import os
 import re
 import json
+import time
+import queue
+import threading
 import urllib.request
 import urllib.error
 from datetime import datetime
@@ -12,6 +15,27 @@ load_dotenv()
 WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN", "")
 WHATSAPP_PHONE_ID = os.getenv("WHATSAPP_PHONE_ID", "1304612619407965")
 GRAPH_API_VERSION = "v21.0"
+
+# Dedicated Thread-Safe Bounded Queue for WhatsApp Alerts
+whatsapp_event_queue: queue.Queue = queue.Queue(maxsize=1000)
+
+def _whatsapp_worker_loop():
+    """Background worker that pulls WhatsApp tasks from the queue and dispatches them sequentially."""
+    while True:
+        try:
+            task = whatsapp_event_queue.get()
+            fn = task.get("fn")
+            args = task.get("args", ())
+            kwargs = task.get("kwargs", {})
+            if callable(fn):
+                fn(*args, **kwargs)
+            whatsapp_event_queue.task_done()
+        except Exception as e:
+            print(f"[WHATSAPP WORKER ERROR] {e}")
+            time.sleep(1.0)
+
+# Start persistent WhatsApp Background Worker Thread
+threading.Thread(target=_whatsapp_worker_loop, daemon=True).start()
 
 
 def update_whatsapp_credentials(token: str, phone_id: str = None) -> dict:

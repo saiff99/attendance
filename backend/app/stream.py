@@ -72,6 +72,9 @@ def get_enrolled_students(session_id: str) -> List[dict]:
     return enrolled
 
 
+AI_FRAME_WIDTH = int(os.getenv("AI_FRAME_WIDTH", "640"))
+AI_FRAME_HEIGHT = int(os.getenv("AI_FRAME_HEIGHT", "360"))
+
 class ThreadedRTSPStream:
     """
     High-Performance Zero-Latency RTSP Stream Grabber.
@@ -89,8 +92,8 @@ class ThreadedRTSPStream:
         self.latest_ai_frame: Optional[np.ndarray] = None
         self.last_frame_time: float = 0.0
         self.last_ai_processed_time: float = 0.0
-        self.raw_w = 640
-        self.raw_h = 360
+        self.raw_w = AI_FRAME_WIDTH
+        self.raw_h = AI_FRAME_HEIGHT
         
         self.last_faces: List[dict] = []
         self.last_faces_time: float = 0.0
@@ -109,6 +112,8 @@ class ThreadedRTSPStream:
 
     def _capture_loop(self):
         consecutive_failures = 0
+        reconnect_delay = 1.0
+
         while self.running:
             try:
                 if self.cap is None or not self.cap.isOpened():
@@ -119,10 +124,13 @@ class ThreadedRTSPStream:
                         self.cap = cv2.VideoCapture(self.source)
                     self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
                     if not self.cap.isOpened():
-                        time.sleep(1.0)
+                        # Exponential backoff on reconnect failure (1s -> 1.5s -> 2.25s ... max 8.0s)
+                        time.sleep(reconnect_delay)
+                        reconnect_delay = min(reconnect_delay * 1.5, 8.0)
                         continue
                     self.connected = True
                     consecutive_failures = 0
+                    reconnect_delay = 1.0
 
                 # Continuous live frame grab
                 success, frame = self.cap.read()
@@ -134,22 +142,24 @@ class ThreadedRTSPStream:
                             self.cap.release()
                         self.cap = None
                         consecutive_failures = 0
-                        time.sleep(1.0)
+                        time.sleep(reconnect_delay)
+                        reconnect_delay = min(reconnect_delay * 1.5, 8.0)
                     else:
                         time.sleep(0.04)
                     continue
 
                 consecutive_failures = 0
                 self.connected = True
+                reconnect_delay = 1.0
                 h, w, _ = frame.shape
                 self.raw_w = w
                 self.raw_h = h
 
-                # Fast SIMD-accelerated downscaling for crisp and cool rendering
-                if w == 640 and h == 360:
+                # Fast SIMD-accelerated downscaling to configured resolution (default: 640x360)
+                if w == AI_FRAME_WIDTH and h == AI_FRAME_HEIGHT:
                     display_frame = frame
                 else:
-                    display_frame = cv2.resize(frame, (640, 360), interpolation=cv2.INTER_LINEAR)
+                    display_frame = cv2.resize(frame, (AI_FRAME_WIDTH, AI_FRAME_HEIGHT), interpolation=cv2.INTER_LINEAR)
 
                 now = time.time()
                 with self.lock:
@@ -162,7 +172,8 @@ class ThreadedRTSPStream:
                 if self.cap:
                     self.cap.release()
                 self.cap = None
-                time.sleep(1.5)
+                time.sleep(reconnect_delay)
+                reconnect_delay = min(reconnect_delay * 1.5, 8.0)
 
         if self.cap:
             self.cap.release()

@@ -709,5 +709,5 @@ async def api_whatsapp_test(req: WhatsAppTestRequest):
 @router.post("/api/whatsapp/send-absent-alerts")
 async def api_whatsapp_send_absent_alerts(req: WhatsAppAlertRequest):
     """Dispatches WhatsApp absent notices to parents of all absent students in a session."""
-    return send_session_absentee_alerts(req.session_id)
+    return await asyncio.to_thread(send_session_absentee_alerts, req.session_id)
 
