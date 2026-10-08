@@ -1,7 +1,7 @@
 import { supabase } from '@/lib/supabase';
 
-const CLOUDFLARE_TUNNEL = "https://reader-thee-nevertheless-walked.trycloudflare.com";
-const NGROK_TUNNEL = "https://silly-unframed-extortion.ngrok-free.dev";
+const CLOUDFLARE_TUNNEL = "";
+const NGROK_TUNNEL = "";
 
 let cachedTunnelUrl: string | null = null;
 let lastCacheTime = 0;
@@ -37,10 +37,6 @@ export function getServerBackendUrl(): string {
   if (process.env.NEXT_PUBLIC_BACKEND_URL && !process.env.NEXT_PUBLIC_BACKEND_URL.includes("localhost") && !process.env.NEXT_PUBLIC_BACKEND_URL.includes("127.0.0.1")) {
     return process.env.NEXT_PUBLIC_BACKEND_URL;
   }
-  // When running on Vercel or cloud production, default to Cloudflare's unlimited bandwidth tunnel
-  if (process.env.VERCEL || process.env.NODE_ENV === 'production') {
-    return CLOUDFLARE_TUNNEL;
-  }
   return "http://127.0.0.1:8000";
 }
 
@@ -64,7 +60,7 @@ export async function fetchBackend(path: string, options: RequestInit = {}): Pro
         signal: options.signal || ctrl.signal,
       });
       clearTimeout(tId);
-      if (localRes.ok || (localRes.status >= 400 && localRes.status < 500 && localRes.status !== 403)) {
+      if (localRes.ok || (localRes.status >= 400 && localRes.status < 500)) {
         return localRes;
       }
     } catch {
@@ -86,12 +82,6 @@ export async function fetchBackend(path: string, options: RequestInit = {}): Pro
     targets.push(primaryUrl);
   }
 
-  if (CLOUDFLARE_TUNNEL && !targets.includes(CLOUDFLARE_TUNNEL)) {
-    targets.push(CLOUDFLARE_TUNNEL);
-  }
-  if (NGROK_TUNNEL && !targets.includes(NGROK_TUNNEL)) {
-    targets.push(NGROK_TUNNEL);
-  }
   if (!targets.includes("http://127.0.0.1:8000")) {
     targets.push("http://127.0.0.1:8000");
   }
@@ -115,17 +105,8 @@ export async function fetchBackend(path: string, options: RequestInit = {}): Pro
       clearTimeout(timeout);
 
       // If response is good or valid application error (400, 401, 403, 404, 422), return it
-      // Only retry alternative tunnel if there is a proxy/quota failure (502, 503, 504, or ngrok 403 quota)
-      if (res.ok || (res.status >= 400 && res.status < 500 && res.status !== 403)) {
+      if (res.ok || (res.status >= 400 && res.status < 500)) {
         return res;
-      }
-
-      // Check if 403 is an ngrok bandwidth quota error
-      if (res.status === 403) {
-        const text = await res.clone().text().catch(() => '');
-        if (!text.includes('ERR_NGROK_725') && !text.includes('bandwidth limit')) {
-          return res; // Real application 403, return it
-        }
       }
 
       // Otherwise try next fallback tunnel
