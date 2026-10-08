@@ -620,16 +620,10 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
         formData.append("distance_meters", geofenceDistance.toString());
       }
 
-      let response = await fetch("/api/selfie-attendance", {
-        method: "POST",
-        headers: {
-          "ngrok-skip-browser-warning": "69420",
-        },
-        body: formData,
-        signal: controller.signal,
-      }).catch(() => null);
+      let response: Response | null = null;
 
-      if (!response) {
+      // 1. Direct Local Fast-Path: If backendUrl is active (e.g. localhost / LAN), connect direct in 1ms
+      if (backendUrl) {
         response = await fetch(`${backendUrl}/api/selfie-attendance`, {
           method: "POST",
           headers: {
@@ -637,7 +631,20 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
           },
           body: formData,
           signal: controller.signal,
-        });
+        }).catch(() => null);
+      }
+
+      // 2. Next.js Proxy Path: For Vercel Cloud or fallback
+      if (!response || !response.ok) {
+        const proxyRes = await fetch("/api/selfie-attendance", {
+          method: "POST",
+          headers: {
+            "ngrok-skip-browser-warning": "69420",
+          },
+          body: formData,
+          signal: controller.signal,
+        }).catch(() => null);
+        if (proxyRes) response = proxyRes;
       }
 
       clearTimeout(timeoutId);
