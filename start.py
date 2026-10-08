@@ -172,10 +172,10 @@ def main():
 
     threading.Thread(target=log_frontend, daemon=True).start()
 
-    # 3. Start Uvicorn AI Backend (Production mode without --reload for maximum AI stability)
+    # 3. Start Uvicorn AI Backend
     print(f"{BLUE}[2/4]{RESET} Starting FastAPI Backend + InsightFace AI (Port 8000)...")
     uvicorn_proc = subprocess.Popen(
-        [VENV_UVICORN, "main:app", "--host", "0.0.0.0", "--port", "8000"],
+        [VENV_UVICORN, "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"],
         cwd=BACKEND_DIR,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
