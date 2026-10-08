@@ -179,7 +179,7 @@ async def process_attendance(file: UploadFile = File(...), session_id: str = For
                     
                 unknown_encoding = face.embedding
                 best_match_student = None
-                highest_sim = 0.28 # Calibrated similarity threshold (cosine similarity) for distant faces
+                highest_sim = 0.42 # High-precision calibrated similarity threshold (cosine similarity >= 0.42)
                 
                 for student in enrolled_students:
                     known_encoding = np.array(student['face_encoding'])
@@ -578,8 +578,8 @@ async def selfie_attendance(
                     
             sim = float(np.dot(known_encoding, unknown_encoding) / (norm(known_encoding) * norm(unknown_encoding)))
             
-            # High precision threshold for single-face selfie verification (ArcFace cosine similarity >= 0.35)
-            if sim < 0.35:
+            # High precision threshold for single-face selfie verification (ArcFace cosine similarity >= 0.40)
+            if sim < 0.40:
                 raise HTTPException(status_code=400, detail=f"Face mismatch! The captured selfie does not match the registered face for {student['full_name']} (Roll {clean_roll}).")
                 
             confidence_score = calculate_confidence_score(sim)

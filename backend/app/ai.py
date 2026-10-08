@@ -45,12 +45,12 @@ except Exception as e:
 
 def calculate_confidence_score(sim: float) -> float:
     """
-    Maps a raw ArcFace cosine similarity score (typically 0.28 to 0.70+ for valid matches)
-    into a polished, intuitive confidence score ranging from 0.75 to 0.99 for live reporting.
+    Maps a raw ArcFace cosine similarity score (typically 0.42 to 0.75+ for valid matches)
+    into an intuitive confidence score ranging from 0.80 to 0.99 for live reporting.
     """
-    if sim < 0.28:
+    if sim < 0.42:
         return round(float(sim), 2)
-    # Map [0.28, 0.70] to [0.75, 0.99]
-    clamped_sim = min(max(sim, 0.28), 0.70)
-    mapped = 0.75 + ((clamped_sim - 0.28) / (0.70 - 0.28)) * (0.99 - 0.75)
+    # Map [0.42, 0.75] to [0.80, 0.99]
+    clamped_sim = min(max(sim, 0.42), 0.75)
+    mapped = 0.80 + ((clamped_sim - 0.42) / (0.75 - 0.42)) * (0.99 - 0.80)
     return round(float(mapped), 2)

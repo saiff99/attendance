@@ -249,7 +249,7 @@ class ThreadedRTSPStream:
                     highest_sim = float(sims[best_idx])
                     best_match_student = None
 
-                    if highest_sim >= 0.28:
+                    if highest_sim >= 0.42:
                         best_match_student = enrolled_students[best_idx]
 
                     h_img, w_img, _ = frame.shape
