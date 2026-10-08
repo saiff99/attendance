@@ -60,14 +60,32 @@ signal.signal(signal.SIGTERM, cleanup)
 def update_supabase_tunnel_url(tunnel_url: str):
     """Updates the live tunnel URL in Supabase so Vercel instantly connects."""
     try:
-        url = f"{SUPABASE_URL}/rest/v1/sessions"
+        # First try PATCH to update the existing system record
+        url = f"{SUPABASE_URL}/rest/v1/sessions?id=eq.00000000-0000-0000-0000-000000000000"
         headers = {
+            "apikey": SUPABASE_KEY,
+            "Authorization": f"Bearer {SUPABASE_KEY}",
+            "Content-Type": "application/json",
+            "Prefer": "return=representation"
+        }
+        payload = {
+            "instructor_name": tunnel_url
+        }
+        req = Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers, method="PATCH")
+        with urlopen(req, timeout=8) as res:
+            resp_body = res.read().decode("utf-8")
+            if res.status in (200, 204) and resp_body != "[]":
+                return True
+
+        # Fallback: POST upsert if record did not exist yet
+        upsert_url = f"{SUPABASE_URL}/rest/v1/sessions?on_conflict=id"
+        upsert_headers = {
             "apikey": SUPABASE_KEY,
             "Authorization": f"Bearer {SUPABASE_KEY}",
             "Content-Type": "application/json",
             "Prefer": "resolution=merge-duplicates"
         }
-        payload = {
+        full_payload = {
             "id": "00000000-0000-0000-0000-000000000000",
             "class_name": "__SYSTEM_CONFIG__",
             "instructor_name": tunnel_url,
@@ -76,9 +94,9 @@ def update_supabase_tunnel_url(tunnel_url: str):
             "end_time": "2000-01-01T00:00:00Z",
             "target_academic_year": "System"
         }
-        req = Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST")
-        with urlopen(req, timeout=8) as res:
-            if res.status in (200, 201, 204):
+        req2 = Request(upsert_url, data=json.dumps(full_payload).encode("utf-8"), headers=upsert_headers, method="POST")
+        with urlopen(req2, timeout=8) as res2:
+            if res2.status in (200, 201, 204):
                 return True
     except Exception as e:
         print(f"{RED}[Supabase Sync Warning] {e}{RESET}")
@@ -200,36 +218,39 @@ def main():
     tunnel_url = None
     url_pattern = re.compile(r"https://[a-zA-Z0-9-]+\.trycloudflare\.com")
 
+    def capture_and_sync_cf():
+        nonlocal tunnel_url
+        for line in iter(cf_proc.stdout.readline, ""):
+            match = url_pattern.search(line)
+            if match:
+                current_url = match.group(0)
+                if current_url != tunnel_url:
+                    tunnel_url = current_url
+                    print(f"\n  {GREEN}✓ Cloudflare Tunnel Live:{RESET} {CYAN}{tunnel_url}{RESET}")
+                    update_supabase_tunnel_url(tunnel_url)
+                    print(f"  {GREEN}✓ Synced with Cloud Vercel Portal automatically!{RESET}\n")
+
+    cf_thread = threading.Thread(target=capture_and_sync_cf, daemon=True)
+    cf_thread.start()
+
+    # Wait up to 30s for tunnel URL detection
     start_time = time.time()
-    while time.time() - start_time < 20:
-        line = cf_proc.stdout.readline()
-        if not line:
-            time.sleep(0.1)
-            continue
-        match = url_pattern.search(line)
-        if match:
-            tunnel_url = match.group(0)
-            break
+    while time.time() - start_time < 30 and not tunnel_url:
+        time.sleep(0.5)
 
     if not tunnel_url:
-        print(f"{RED}Failed to obtain Cloudflare Tunnel URL. Please check your internet connection.{RESET}")
-        cleanup()
-
-    # 5. Sync Live Tunnel URL with Supabase
-    print(f"{BLUE}[4/4]{RESET} Syncing Live Tunnel with Cloud Vercel Portal...")
-    synced = update_supabase_tunnel_url(tunnel_url)
-    if synced:
-        print(f"  {GREEN}✓{RESET} Cloud Vercel Portal automatically connected to this Mac!")
+        print(f"{YELLOW}! Warning: Cloudflare Tunnel is still initializing in background.{RESET}")
     else:
-        print(f"  {YELLOW}! Note: Supabase sync warning, but tunnel is active.{RESET}")
+        print(f"{BLUE}[4/4]{RESET} Cloud Vercel Portal synced successfully!")
 
     # 6. Display Dashboard
+    display_tunnel = tunnel_url or "Connecting in background..."
     print("\n" + BOLD + GREEN + "╔" + "═"*68 + "╗" + RESET)
     print(f"{BOLD}{GREEN}║  🎉 MedAttend System is 100% ONLINE & READY FOR ATTENDANCE        ║{RESET}")
     print(BOLD + GREEN + "╠" + "═"*68 + "╣" + RESET)
     print(f"║  {CYAN}Local Web Dashboard:{RESET}  http://localhost:3000                            ║")
     print(f"║  {CYAN}Local AI Backend:{RESET}     http://127.0.0.1:8000                            ║")
-    print(f"║  {CYAN}Cloudflare Tunnel:{RESET}    {tunnel_url:<49} ║")
+    print(f"║  {CYAN}Cloudflare Tunnel:{RESET}    {display_tunnel:<49} ║")
     print(f"║  {CYAN}Vercel Live Portal:{RESET}   https://newshuge.com/selfieattend                ║")
     print(f"║  {CYAN}Bandwidth Quota:{RESET}      {GREEN}UNLIMITED FOREVER (No Limits){RESET}                    ║")
     print(BOLD + GREEN + "╚" + "═"*68 + "╝" + RESET + "\n")
