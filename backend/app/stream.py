@@ -1,6 +1,7 @@
 import os
 import cv2
 import time
+import queue
 import threading
 import numpy as np
 from numpy.linalg import norm
@@ -14,6 +15,9 @@ from starlette.requests import Request
 os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = (
     "rtsp_transport;tcp|buffer_size;1048576|max_delay;500000|reorder_queue_size;100|stimeout;2500000"
 )
+
+# Global Bounded Attendance Event Queue (decouples AI loop from database blocking I/O)
+attendance_event_queue: queue.Queue = queue.Queue(maxsize=1000)
 
 # Global session-wide deduplication set: session_id -> set of student_ids
 session_recognized_students: Dict[str, Set[str]] = {}
@@ -310,16 +314,21 @@ class ThreadedRTSPStream:
                         "in_cooldown": in_cooldown
                     })
 
-                    # Record attendance only once per student across all cameras (async non-blocking)
+                    # Record attendance via dedicated queue (100% thread-safe, 0 OS thread explosion overhead)
                     if best_match_student:
                         student_id = best_match_student['id']
                         if student_id not in recognized_set:
                             recognized_set.add(student_id)
-                            threading.Thread(
-                                target=self._save_attendance_async,
-                                args=(session_id, student_id, best_match_student['full_name'], highest_sim),
-                                daemon=True
-                            ).start()
+                            try:
+                                attendance_event_queue.put_nowait({
+                                    "session_id": session_id,
+                                    "student_id": student_id,
+                                    "student_name": best_match_student['full_name'],
+                                    "highest_sim": highest_sim,
+                                    "camera_name": self.name
+                                })
+                            except queue.Full:
+                                pass
 
             with self.lock:
                 self.last_faces = current_faces
@@ -327,8 +336,28 @@ class ThreadedRTSPStream:
         except Exception as e:
             print(f"Error processing AI for {self.name}: {e}")
 
-    def _save_attendance_async(self, session_id: str, student_id: str, student_name: str, highest_sim: float):
+    def stop(self):
+        self.running = False
+        if self.thread:
+            self.thread.join(timeout=1.0)
+
+
+def _db_attendance_worker_loop():
+    """
+    Dedicated Single Database Attendance Consumer Worker.
+    Processes attendance events sequentially/in batches from the bounded event queue.
+    Completely isolates Supabase HTTP database I/O from the AI recognition loop,
+    eliminating OS thread spawning overhead and network jitter.
+    """
+    while True:
         try:
+            event = attendance_event_queue.get()
+            session_id = event["session_id"]
+            student_id = event["student_id"]
+            student_name = event["student_name"]
+            highest_sim = event["highest_sim"]
+            camera_name = event["camera_name"]
+
             conf_score = calculate_confidence_score(float(highest_sim))
             supabase.table("attendance").insert({
                 "session_id": session_id,
@@ -337,14 +366,14 @@ class ThreadedRTSPStream:
                 "capture_mode": "Live Scan",
                 "confidence_score": conf_score
             }).execute()
-            print(f"[ATTENDANCE] Recorded {student_name} from {self.name} ({conf_score * 100:.0f}%)")
+            print(f"[ATTENDANCE] Recorded {student_name} from {camera_name} ({conf_score * 100:.0f}%)")
+            attendance_event_queue.task_done()
         except Exception as e:
-            print(f"Error saving attendance: {e}")
+            print(f"[ATTENDANCE WORKER ERROR] {e}")
+            time.sleep(0.5)
 
-    def stop(self):
-        self.running = False
-        if self.thread:
-            self.thread.join(timeout=1.0)
+# Start dedicated background Database Attendance Worker
+threading.Thread(target=_db_attendance_worker_loop, daemon=True).start()
 
 
 class CameraStreamManager:
