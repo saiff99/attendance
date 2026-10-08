@@ -16,8 +16,15 @@ except Exception as e:
     supabase = None
 
 def get_camera_urls():
-    """Returns a list of camera URLs parsed from the CCTV_URLS env variable."""
+    """Returns a list of primary/main camera URLs parsed from the CCTV_URLS env variable."""
     urls_str = os.getenv("CCTV_URLS", "0")
+    return [url.strip() for url in urls_str.split(",") if url.strip()]
+
+def get_cctv_ai_urls():
+    """Returns a list of optional AI sub-stream URLs parsed from CCTV_AI_URLS env variable."""
+    urls_str = os.getenv("CCTV_AI_URLS", "")
+    if not urls_str.strip():
+        return []
     return [url.strip() for url in urls_str.split(",") if url.strip()]
 
 CAMERA_PRESETS = [
@@ -30,8 +37,9 @@ CAMERA_PRESETS = [
 ]
 
 def get_camera_details():
-    """Returns detailed metadata for all configured CCTV cameras."""
+    """Returns detailed metadata for all configured CCTV cameras including main and AI sub-streams."""
     urls = get_camera_urls()
+    ai_urls = get_cctv_ai_urls()
     details = []
     for idx, url in enumerate(urls):
         preset = CAMERA_PRESETS[idx] if idx < len(CAMERA_PRESETS) else {
@@ -40,6 +48,8 @@ def get_camera_details():
             "position": f"Cam {idx + 1}",
             "ip": url.split("@")[-1].split(":")[0] if "@" in url else "Local"
         }
+        # Fallback: If no dedicated AI sub-stream is defined, use the primary stream URL
+        ai_url = ai_urls[idx] if idx < len(ai_urls) and ai_urls[idx] else url
         details.append({
             "index": idx,
             "id": f"cam-{idx + 1}",
@@ -47,7 +57,8 @@ def get_camera_details():
             "row": preset["row"],
             "position": preset["position"],
             "ip": preset["ip"],
-            "url": url
+            "url": url,
+            "ai_url": ai_url
         })
     return details
 

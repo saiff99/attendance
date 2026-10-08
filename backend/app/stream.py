@@ -6,7 +6,7 @@ import threading
 import numpy as np
 from numpy.linalg import norm
 from typing import Dict, List, Optional, Set
-from app.config import supabase, get_camera_urls, get_camera_details, get_ptz_urls, is_cohort_matching
+from app.config import supabase, get_camera_urls, get_cctv_ai_urls, get_camera_details, get_ptz_urls, is_cohort_matching
 from app.ai import app_fa, AI_ENABLED, calculate_confidence_score
 
 from starlette.requests import Request
@@ -72,25 +72,35 @@ def get_enrolled_students(session_id: str) -> List[dict]:
     return enrolled
 
 
-AI_FRAME_WIDTH = int(os.getenv("AI_FRAME_WIDTH", "640"))
-AI_FRAME_HEIGHT = int(os.getenv("AI_FRAME_HEIGHT", "360"))
+AI_FRAME_WIDTH = int(os.getenv("AI_FRAME_WIDTH", "960"))
+AI_FRAME_HEIGHT = int(os.getenv("AI_FRAME_HEIGHT", "540"))
 
 class ThreadedRTSPStream:
     """
     High-Performance Zero-Latency RTSP Stream Grabber.
-    Maintains a stable live connection, continuously grabs fresh camera frames,
-    and isolates AI detection strictly to real-time incoming video.
+    Maintains dual stream support:
+      - Primary/Main Stream (for crisp live UI monitoring)
+      - Dedicated AI Sub-Stream (for fast, high-accuracy face recognition in large 300+ student halls)
+    Safely falls back to Primary Stream when no dedicated AI Sub-Stream is configured.
     """
-    def __init__(self, url: str, name: str = "CCTV Camera"):
+    def __init__(self, url: str, name: str = "CCTV Camera", ai_url: Optional[str] = None):
         self.url = url
         self.name = name
-        self.source = int(url) if url.isdigit() else url
+        self.source = int(url) if str(url).isdigit() else url
+        
+        # Dedicated AI Sub-stream or Main Stream Fallback
+        self.ai_url = ai_url if (ai_url and str(ai_url).strip()) else url
+        self.ai_source = int(self.ai_url) if str(self.ai_url).isdigit() else self.ai_url
+        self.has_dedicated_ai_stream = (self.ai_url != self.url)
+        
         self.cap: Optional[cv2.VideoCapture] = None
+        self.ai_cap: Optional[cv2.VideoCapture] = None
         
         # Display and AI frames
         self.latest_display_frame: Optional[np.ndarray] = None
         self.latest_ai_frame: Optional[np.ndarray] = None
         self.last_frame_time: float = 0.0
+        self.last_ai_frame_time: float = 0.0
         self.last_ai_processed_time: float = 0.0
         self.raw_w = AI_FRAME_WIDTH
         self.raw_h = AI_FRAME_HEIGHT
@@ -111,8 +121,10 @@ class ThreadedRTSPStream:
 
         self.running = False
         self.connected = False
+        self.ai_connected = False
         self.lock = threading.Lock()
         self.thread: Optional[threading.Thread] = None
+        self.ai_thread: Optional[threading.Thread] = None
 
     def start(self):
         if self.running:
@@ -120,6 +132,10 @@ class ThreadedRTSPStream:
         self.running = True
         self.thread = threading.Thread(target=self._capture_loop, daemon=True)
         self.thread.start()
+        
+        if self.has_dedicated_ai_stream:
+            self.ai_thread = threading.Thread(target=self._ai_capture_loop, daemon=True)
+            self.ai_thread.start()
 
     def _capture_loop(self):
         self.consecutive_failures = 0
@@ -167,7 +183,7 @@ class ThreadedRTSPStream:
                 self.raw_w = w
                 self.raw_h = h
 
-                # Fast SIMD-accelerated downscaling to configured resolution (default: 640x360)
+                # Downscaling for crisp display preview and AI fallback
                 if w == AI_FRAME_WIDTH and h == AI_FRAME_HEIGHT:
                     display_frame = frame
                 else:
@@ -176,7 +192,9 @@ class ThreadedRTSPStream:
                 now = time.time()
                 with self.lock:
                     self.latest_display_frame = display_frame
-                    self.latest_ai_frame = display_frame
+                    if not self.has_dedicated_ai_stream:
+                        self.latest_ai_frame = display_frame
+                        self.last_ai_frame_time = now
                     self.last_frame_time = now
 
             except Exception as e:
@@ -191,6 +209,52 @@ class ThreadedRTSPStream:
         if self.cap:
             self.cap.release()
             self.cap = None
+
+    def _ai_capture_loop(self):
+        """Dedicated capture loop for native AI sub-stream (only active when CCTV_AI_URLS is configured)."""
+        reconnect_delay = 1.0
+        while self.running:
+            try:
+                if self.ai_cap is None or not self.ai_cap.isOpened():
+                    self.ai_connected = False
+                    if isinstance(self.ai_source, str):
+                        self.ai_cap = cv2.VideoCapture(self.ai_source, cv2.CAP_FFMPEG)
+                    else:
+                        self.ai_cap = cv2.VideoCapture(self.ai_source)
+                    self.ai_cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                    if not self.ai_cap.isOpened():
+                        time.sleep(reconnect_delay)
+                        reconnect_delay = min(reconnect_delay * 1.5, 8.0)
+                        continue
+                    self.ai_connected = True
+                    reconnect_delay = 1.0
+
+                success, frame = self.ai_cap.read()
+                if not success or frame is None:
+                    time.sleep(0.04)
+                    continue
+
+                self.ai_connected = True
+                h, w, _ = frame.shape
+                if w != AI_FRAME_WIDTH or h != AI_FRAME_HEIGHT:
+                    frame = cv2.resize(frame, (AI_FRAME_WIDTH, AI_FRAME_HEIGHT), interpolation=cv2.INTER_LINEAR)
+
+                now = time.time()
+                with self.lock:
+                    self.latest_ai_frame = frame
+                    self.last_ai_frame_time = now
+
+            except Exception:
+                self.ai_connected = False
+                if self.ai_cap:
+                    self.ai_cap.release()
+                self.ai_cap = None
+                time.sleep(reconnect_delay)
+                reconnect_delay = min(reconnect_delay * 1.5, 8.0)
+
+        if self.ai_cap:
+            self.ai_cap.release()
+            self.ai_cap = None
 
     def get_frame_with_overlays(self, session_id: str, is_grid: bool = True) -> Optional[np.ndarray]:
         """Returns live frame with overlays instantly (<0.2ms). Optimized for ultra-lightweight grid preview."""
@@ -434,12 +498,15 @@ class CameraStreamManager:
                     cam_meta = camera_details[index]
                     stream_name = cam_meta['name']
                     stream_url = cam_meta['url']
+                    ai_url = cam_meta.get('ai_url', stream_url)
                 else:
                     urls = get_camera_urls()
+                    ai_urls = get_cctv_ai_urls()
                     stream_url = urls[index] if index < len(urls) else "0"
+                    ai_url = ai_urls[index] if index < len(ai_urls) else stream_url
                     stream_name = f"Camera {index + 1}"
 
-                stream = ThreadedRTSPStream(stream_url, stream_name)
+                stream = ThreadedRTSPStream(stream_url, stream_name, ai_url=ai_url)
                 stream.start()
                 self.cctv_streams[index] = stream
 
@@ -660,7 +727,11 @@ def get_performance_diagnostics() -> dict:
                 "camera_id": cam_id,
                 "name": stream.name,
                 "url": stream.url,
+                "ai_url": stream.ai_url,
+                "has_dedicated_ai_stream": stream.has_dedicated_ai_stream,
+                "ai_resolution": f"{AI_FRAME_WIDTH}x{AI_FRAME_HEIGHT}",
                 "connected": stream.connected,
+                "ai_connected": stream.ai_connected if stream.has_dedicated_ai_stream else stream.connected,
                 "frame_age_seconds": frame_age,
                 "consecutive_failures": stream.consecutive_failures,
                 "total_capture_failures": stream.total_capture_failures,
