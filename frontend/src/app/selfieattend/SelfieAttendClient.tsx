@@ -649,6 +649,10 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
 
       clearTimeout(timeoutId);
 
+      if (!response) {
+        throw new Error("Backend server is unreachable. Please ensure the backend is running.");
+      }
+
       let data: any = {};
       try {
         data = await response.json();
