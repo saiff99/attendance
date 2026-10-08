@@ -7,7 +7,7 @@ import numpy as np
 from numpy.linalg import norm
 from typing import Dict, List, Optional, Set
 from app.config import supabase, get_camera_urls, get_cctv_ai_urls, get_camera_details, get_ptz_urls, is_cohort_matching
-from app.ai import app_fa, AI_ENABLED, calculate_confidence_score
+from app.ai import app_fa, AI_ENABLED, AI_DET_THRESH, AI_DET_SIZE, calculate_confidence_score
 
 from starlette.requests import Request
 
@@ -347,7 +347,7 @@ class ThreadedRTSPStream:
                 h_img, w_img, _ = frame.shape
 
                 for face in faces:
-                    if hasattr(face, 'det_score') and face.det_score < 0.20:
+                    if hasattr(face, 'det_score') and face.det_score < AI_DET_THRESH:
                         continue
 
                     box = face.bbox.astype(int)
@@ -782,6 +782,8 @@ def get_performance_diagnostics() -> dict:
         "timestamp": now,
         "ai_enabled": AI_ENABLED,
         "ai_hardware_acceleration": active_engine,
+        "detector_size": AI_DET_SIZE,
+        "detector_threshold": AI_DET_THRESH,
         "active_session_id": ai_coordinator.active_session_id,
         "attendance_queue_size": attendance_event_queue.qsize(),
         "total_active_cameras": len(cameras_status),
