@@ -488,9 +488,7 @@ async def generate_video_feed(
                    b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
 
             await asyncio.sleep(fps_delay)
-    except (asyncio.CancelledError, GeneratorExit):
-        pass
-    except Exception:
+    except (asyncio.CancelledError, GeneratorExit, Exception, BaseException):
         pass
 
 
