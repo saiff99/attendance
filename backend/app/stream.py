@@ -90,6 +90,7 @@ class ThreadedRTSPStream:
         
         self.last_faces: List[dict] = []
         self.last_faces_time: float = 0.0
+        self.spatial_cache: List[dict] = []  # 60s cooldown spatial tracking cache
         self.running = False
         self.connected = False
         self.lock = threading.Lock()
@@ -209,6 +210,10 @@ class ThreadedRTSPStream:
                 cv2.rectangle(frame, (x1, max(0, y1 - badge_h)), (x1 + label_size[0] + 6, max(0, y1)), (0, 0, 200), -1)
                 cv2.putText(frame, label, (x1 + 3, max(0, y1 - 4)), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1)
 
+            # Draw active cooldown badge if student is in cooldown
+            if f_info.get("in_cooldown"):
+                cv2.circle(frame, (x2 - 8, y1 + 8), 4, (0, 220, 255), -1)
+
         # Camera title overlay
         cv2.putText(frame, self.name, (12, 22), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 0, 0), 3)
         cv2.putText(frame, self.name, (12, 22), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 255), 1)
@@ -220,12 +225,17 @@ class ThreadedRTSPStream:
         return frame
 
     def _process_ai(self, frame: np.ndarray, session_id: str):
-        """Detects faces in the frame and matches against enrolled students with vectorized SIMD acceleration."""
+        """Detects faces in the frame and matches against enrolled students with 60s cooldown & spatial tracking."""
         try:
             enrolled_students, enc_matrix = get_enrolled_data(session_id)
             faces = app_fa.get(frame)
 
             current_faces = []
+            now = time.time()
+            COOLDOWN_SECONDS = 60.0
+
+            # Prune stale spatial tracking cache older than 75s
+            self.spatial_cache = [e for e in self.spatial_cache if (now - e.get("last_matched_time", 0)) <= 75.0]
 
             if session_id not in session_recognized_students:
                 session_recognized_students[session_id] = set()
@@ -233,36 +243,71 @@ class ThreadedRTSPStream:
             recognized_set = session_recognized_students[session_id]
 
             if faces and len(faces) > 0 and enc_matrix is not None and len(enrolled_students) > 0:
+                h_img, w_img, _ = frame.shape
+
                 for face in faces:
                     if hasattr(face, 'det_score') and face.det_score < 0.20:
                         continue
 
-                    unknown_encoding = face.embedding.astype(np.float32)
-                    u_norm = float(norm(unknown_encoding))
-                    if u_norm < 1e-6:
-                        continue
-                    unknown_unit = unknown_encoding / u_norm
-
-                    # Ultra-fast vectorized cosine similarity via matrix dot product (0.01ms)
-                    sims = np.dot(enc_matrix, unknown_unit)
-                    best_idx = int(np.argmax(sims))
-                    highest_sim = float(sims[best_idx])
-                    best_match_student = None
-
-                    if highest_sim >= 0.42:
-                        best_match_student = enrolled_students[best_idx]
-
-                    h_img, w_img, _ = frame.shape
                     box = face.bbox.astype(int)
                     x1 = max(0, min(box[0], w_img - 1))
                     y1 = max(0, min(box[1], h_img - 1))
                     x2 = max(0, min(box[2], w_img - 1))
                     y2 = max(0, min(box[3], h_img - 1))
+                    cx = (x1 + x2) / 2.0
+                    cy = (y1 + y2) / 2.0
+
+                    best_match_student = None
+                    highest_sim = 0.0
+                    in_cooldown = False
+
+                    # 1. Check Spatial 60-second Cooldown Cache (Zero CPU Embedding matching & Zero DB hit)
+                    matched_cache_entry = None
+                    for cache_entry in self.spatial_cache:
+                        if (now - cache_entry.get("last_matched_time", 0)) < COOLDOWN_SECONDS:
+                            prev_cx, prev_cy = cache_entry.get("center", (0, 0))
+                            dist_sq = (cx - prev_cx) ** 2 + (cy - prev_cy) ** 2
+                            # If face center is within 90px of previous frame location
+                            if dist_sq < (90 ** 2):
+                                matched_cache_entry = cache_entry
+                                break
+
+                    if matched_cache_entry:
+                        # Re-use cached identification without running expensive matrix dot product
+                        best_match_student = matched_cache_entry["student"]
+                        highest_sim = matched_cache_entry["sim"]
+                        matched_cache_entry["coords"] = (x1, y1, x2, y2)
+                        matched_cache_entry["center"] = (cx, cy)
+                        matched_cache_entry["last_matched_time"] = now
+                        in_cooldown = True
+                    else:
+                        # 2. Compute full vectorized cosine similarity via matrix dot product
+                        unknown_encoding = face.embedding.astype(np.float32)
+                        u_norm = float(norm(unknown_encoding))
+                        if u_norm < 1e-6:
+                            continue
+                        unknown_unit = unknown_encoding / u_norm
+
+                        sims = np.dot(enc_matrix, unknown_unit)
+                        best_idx = int(np.argmax(sims))
+                        highest_sim = float(sims[best_idx])
+
+                        if highest_sim >= 0.42:
+                            best_match_student = enrolled_students[best_idx]
+                            # Register in spatial tracking cache
+                            self.spatial_cache.append({
+                                "coords": (x1, y1, x2, y2),
+                                "center": (cx, cy),
+                                "student": best_match_student,
+                                "sim": highest_sim,
+                                "last_matched_time": now
+                            })
 
                     current_faces.append({
                         "coords": (x1, y1, x2, y2),
                         "student": best_match_student,
-                        "sim": highest_sim
+                        "sim": highest_sim,
+                        "in_cooldown": in_cooldown
                     })
 
                     # Record attendance only once per student across all cameras (async non-blocking)
@@ -345,6 +390,7 @@ class CameraStreamManager:
                 with s.lock:
                     s.last_faces = []
                     s.last_faces_time = 0.0
+                    s.spatial_cache = []
 
 
 import asyncio
@@ -387,6 +433,14 @@ class CentralAICoordinator:
                 if not session_id:
                     time.sleep(0.3)
                     continue
+
+                # Auto-Sleep Check: When all enrolled students in cohort are recognized, enter low-power sleep mode (100% CPU savings)
+                enrolled_students, enc_matrix = get_enrolled_data(session_id)
+                if session_id in session_recognized_students and enrolled_students:
+                    recognized_set = session_recognized_students[session_id]
+                    if len(recognized_set) >= len(enrolled_students) and len(enrolled_students) > 0:
+                        time.sleep(2.0)
+                        continue
 
                 with camera_manager.lock:
                     active_cctv = list(camera_manager.cctv_streams.values())
