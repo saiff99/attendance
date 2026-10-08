@@ -51,7 +51,7 @@ export async function fetchBackend(path: string, options: RequestInit = {}): Pro
   // Fast-Path: When running locally on Mac/PC, ALWAYS check localhost directly (1ms instant response!)
   if (!isCloudEnvironment) {
     try {
-      const localTimeout = isHealthCheck ? 3000 : 10000;
+      const localTimeout = isHealthCheck ? 3000 : 45000;
       const ctrl = new AbortController();
       const tId = setTimeout(() => ctrl.abort(), localTimeout);
       const localRes = await fetch(`http://127.0.0.1:8000${normalizedPath}`, {
@@ -91,8 +91,8 @@ export async function fetchBackend(path: string, options: RequestInit = {}): Pro
   for (const baseUrl of targets) {
     try {
       const isLocal = baseUrl.includes("127.0.0.1") || baseUrl.includes("localhost");
-      // Use reasonable timeout for health checks so momentary AI processing doesn't abort
-      const timeoutMs = isHealthCheck ? (isLocal ? 4000 : 6000) : (isLocal ? 12000 : 25000);
+      // Use reasonable timeout for health checks, 45s for deep AI face analysis
+      const timeoutMs = isHealthCheck ? (isLocal ? 4000 : 6000) : 45000;
       
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), timeoutMs);
