@@ -2,6 +2,8 @@ import io
 import time
 import random
 import asyncio
+from datetime import datetime, timezone
+import dateutil.parser
 import numpy as np
 from PIL import Image
 from numpy.linalg import norm
@@ -13,6 +15,25 @@ from pydantic import BaseModel
 from app.config import supabase, get_camera_urls, get_camera_details, get_ptz_urls, is_cohort_matching
 from app.ai import app_fa, AI_ENABLED, calculate_confidence_score
 from app.stream import generate_video_feed
+
+def parse_iso_datetime(time_str: str) -> datetime:
+    """Robust ISO 8601 parser compatible with Supabase timestamps and Python 3.9."""
+    if not time_str:
+        return datetime.now(timezone.utc)
+    try:
+        dt = dateutil.parser.isoparse(time_str)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+    except Exception:
+        clean = time_str.replace("Z", "+00:00")
+        try:
+            dt = datetime.fromisoformat(clean)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt
+        except Exception:
+            return datetime.now(timezone.utc)
 
 router = APIRouter()
 
@@ -365,15 +386,14 @@ async def get_active_sessions():
             
             if time_str:
                 try:
-                    # Clean up fractional seconds for standard ISO parsing
-                    clean_time = time_str.replace("Z", "+00:00")
-                    start_dt = datetime.fromisoformat(clean_time)
+                    start_dt = parse_iso_datetime(time_str)
                     elapsed_seconds = (now_utc - start_dt).total_seconds()
                     # 5-minute window = 300 seconds
                     rem = int(300 - elapsed_seconds)
                     remaining_seconds = max(0, rem)
                     is_expired = remaining_seconds <= 0
-                except Exception:
+                except Exception as err:
+                    print(f"Error calculating remaining time for session {s.get('id')}: {err}")
                     remaining_seconds = 0
                     is_expired = True
 
@@ -490,9 +510,8 @@ async def selfie_attendance(
     sess_obj = session_res.data[0]
     time_str = sess_obj.get("start_time") or sess_obj.get("created_at")
     if time_str:
-        from datetime import datetime, timezone
         try:
-            start_dt = datetime.fromisoformat(time_str.replace("Z", "+00:00"))
+            start_dt = parse_iso_datetime(time_str)
             now_dt = datetime.now(timezone.utc)
             elapsed = (now_dt - start_dt).total_seconds()
             

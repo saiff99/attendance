@@ -206,7 +206,8 @@ def send_session_absentee_alerts(session_id: str) -> dict:
     time_display = ""
     if start_time_iso:
         try:
-            dt = datetime.fromisoformat(start_time_iso.replace("Z", "+00:00"))
+            import dateutil.parser
+            dt = dateutil.parser.isoparse(start_time_iso)
             time_display = dt.strftime("%I:%M %p")
         except Exception:
             time_display = ""
