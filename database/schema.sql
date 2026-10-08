@@ -34,10 +34,10 @@ CREATE TABLE IF NOT EXISTS attendance (
     session_id UUID NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
     student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
     status VARCHAR(50) NOT NULL CHECK (status IN ('Present', 'Absent')),
-    capture_mode VARCHAR(50) NOT NULL CHECK (capture_mode IN ('Live Scan', 'Manual Upload')),
+    capture_mode VARCHAR(50) NOT NULL CHECK (capture_mode IN ('Live Scan', 'Manual Upload', 'Selfie Scan', 'Manual Entry')),
     confidence_score FLOAT,
     recorded_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(session_id, student_id) -- Prevent duplicate attendance entries per student per session
+    CONSTRAINT unique_session_student UNIQUE(session_id, student_id) -- Database-level duplicate prevention
 );
 
 -- 5. Performance Indexes

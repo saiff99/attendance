@@ -263,16 +263,16 @@ async def process_attendance(file: UploadFile = File(...), session_id: str = For
     results = []
     for student in recognized_students:
         try:
-            supabase.table("attendance").insert({
+            supabase.table("attendance").upsert({
                 "session_id": session_id,
                 "student_id": student['id'],
                 "status": "Present",
                 "capture_mode": "Manual Upload",
                 "confidence_score": student['confidence']
-            }).execute()
+            }, on_conflict="session_id,student_id").execute()
             results.append({"name": student['full_name'], "confidence": student['confidence']})
         except Exception as e:
-            print(f"Duplicate or error for {student['full_name']}:", str(e))
+            print(f"Attendance recorded/duplicate for {student['full_name']}:", str(e))
             # If UNIQUE constraint fails (already scanned today), we ignore it.
             pass
 
@@ -640,13 +640,13 @@ async def selfie_attendance(
         
     # 4. Record Attendance in Supabase
     try:
-        supabase.table("attendance").insert({
+        supabase.table("attendance").upsert({
             "session_id": session_id,
             "student_id": student["id"],
             "status": "Present",
-            "capture_mode": "Live Scan",
+            "capture_mode": "Selfie Scan",
             "confidence_score": confidence_score
-        }).execute()
+        }, on_conflict="session_id,student_id").execute()
         
         # Sync memory cache if stream is currently active
         try:

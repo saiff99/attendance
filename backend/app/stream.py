@@ -499,9 +499,9 @@ class ThreadedRTSPStream:
 def _db_attendance_worker_loop():
     """
     Dedicated Single Database Attendance Consumer Worker.
-    Processes attendance events sequentially/in batches from the bounded event queue.
-    Completely isolates Supabase HTTP database I/O from the AI recognition loop,
-    eliminating OS thread spawning overhead and network jitter.
+    Processes attendance events sequentially from the bounded event queue.
+    Uses database-level deduplication and graceful conflict handling to guarantee
+    that concurrent camera detections never create duplicate attendance records.
     """
     while True:
         try:
@@ -513,14 +513,24 @@ def _db_attendance_worker_loop():
             camera_name = event["camera_name"]
 
             conf_score = calculate_confidence_score(float(highest_sim))
-            supabase.table("attendance").insert({
-                "session_id": session_id,
-                "student_id": student_id,
-                "status": "Present",
-                "capture_mode": "Live Scan",
-                "confidence_score": conf_score
-            }).execute()
-            print(f"[ATTENDANCE] Recorded {student_name} from {camera_name} ({conf_score * 100:.0f}%)")
+            
+            # Database-level atomic upsert with conflict resolution
+            try:
+                supabase.table("attendance").upsert({
+                    "session_id": session_id,
+                    "student_id": student_id,
+                    "status": "Present",
+                    "capture_mode": "Live Scan",
+                    "confidence_score": conf_score
+                }, on_conflict="session_id,student_id").execute()
+                print(f"[ATTENDANCE] Recorded {student_name} from {camera_name} ({conf_score * 100:.0f}%)")
+            except Exception as insert_err:
+                err_str = str(insert_err).lower()
+                if "duplicate" in err_str or "unique" in err_str or "23505" in err_str:
+                    print(f"[ATTENDANCE] {student_name} already marked for session {session_id} (Deduplicated at DB level)")
+                else:
+                    print(f"[ATTENDANCE DB ERROR] {insert_err}")
+
             attendance_event_queue.task_done()
         except Exception as e:
             print(f"[ATTENDANCE WORKER ERROR] {e}")
