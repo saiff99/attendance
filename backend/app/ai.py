@@ -40,6 +40,7 @@ try:
     print(f"  ✓ Hardware Acceleration: {active_engine} (Apple Neural Engine NPU Active)")
 except Exception as e:
     AI_ENABLED = False
+    active_engine = "Disabled"
     print("WARNING: insightface failed to initialize. AI disabled:", e)
 
 

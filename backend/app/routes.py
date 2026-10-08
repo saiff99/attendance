@@ -48,6 +48,16 @@ async def read_root():
 async def health_check():
     return {"status": "ok", "ai_enabled": AI_ENABLED}
 
+@router.get("/health/performance")
+@router.get("/api/health/performance")
+async def health_performance():
+    """
+    Lightweight performance & diagnostic endpoint for all configured cameras,
+    AI inference duration, FPS metrics, and queue status.
+    """
+    from app.stream import get_performance_diagnostics
+    return get_performance_diagnostics()
+
 @router.post("/api/enroll-face/{student_id}")
 async def enroll_face(student_id: str, file: UploadFile = File(...)):
     contents = await file.read()

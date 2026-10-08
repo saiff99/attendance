@@ -98,6 +98,17 @@ class ThreadedRTSPStream:
         self.last_faces: List[dict] = []
         self.last_faces_time: float = 0.0
         self.spatial_cache: List[dict] = []  # 60s cooldown spatial tracking cache
+        
+        # Diagnostic & Performance Metrics (Lightweight zero-overhead counters)
+        self.total_capture_failures: int = 0
+        self.consecutive_failures: int = 0
+        self.ai_scan_count: int = 0
+        self.last_ai_duration_ms: float = 0.0
+        self.total_ai_duration_ms: float = 0.0
+        self.last_insightface_duration_ms: float = 0.0
+        self.last_ai_scan_timestamp: Optional[float] = None
+        self.last_metrics_log_time: float = 0.0
+
         self.running = False
         self.connected = False
         self.lock = threading.Lock()
@@ -111,7 +122,7 @@ class ThreadedRTSPStream:
         self.thread.start()
 
     def _capture_loop(self):
-        consecutive_failures = 0
+        self.consecutive_failures = 0
         reconnect_delay = 1.0
 
         while self.running:
@@ -129,26 +140,27 @@ class ThreadedRTSPStream:
                         reconnect_delay = min(reconnect_delay * 1.5, 8.0)
                         continue
                     self.connected = True
-                    consecutive_failures = 0
+                    self.consecutive_failures = 0
                     reconnect_delay = 1.0
 
                 # Continuous live frame grab
                 success, frame = self.cap.read()
                 if not success or frame is None:
-                    consecutive_failures += 1
-                    if consecutive_failures > 30:
+                    self.total_capture_failures += 1
+                    self.consecutive_failures += 1
+                    if self.consecutive_failures > 30:
                         self.connected = False
                         if self.cap:
                             self.cap.release()
                         self.cap = None
-                        consecutive_failures = 0
+                        self.consecutive_failures = 0
                         time.sleep(reconnect_delay)
                         reconnect_delay = min(reconnect_delay * 1.5, 8.0)
                     else:
                         time.sleep(0.04)
                     continue
 
-                consecutive_failures = 0
+                self.consecutive_failures = 0
                 self.connected = True
                 reconnect_delay = 1.0
                 h, w, _ = frame.shape
@@ -169,6 +181,7 @@ class ThreadedRTSPStream:
 
             except Exception as e:
                 self.connected = False
+                self.total_capture_failures += 1
                 if self.cap:
                     self.cap.release()
                 self.cap = None
@@ -193,8 +206,8 @@ class ThreadedRTSPStream:
             faces_to_draw = self.last_faces if (now - self.last_faces_time <= 2.5) else []
 
         h_f, w_f, _ = frame.shape
-        scale_x = w_f / 640.0
-        scale_y = h_f / 360.0
+        scale_x = w_f / float(AI_FRAME_WIDTH)
+        scale_y = h_f / float(AI_FRAME_HEIGHT)
 
         # Draw face overlays on lightweight frame
         for f_info in faces_to_draw:
@@ -241,9 +254,14 @@ class ThreadedRTSPStream:
 
     def _process_ai(self, frame: np.ndarray, session_id: str):
         """Detects faces in the frame and matches against enrolled students with 60s cooldown & spatial tracking."""
+        t0 = time.perf_counter()
+        insightface_ms = 0.0
         try:
             enrolled_students, enc_matrix = get_enrolled_data(session_id)
+            
+            t_if_start = time.perf_counter()
             faces = app_fa.get(frame)
+            insightface_ms = (time.perf_counter() - t_if_start) * 1000.0
 
             current_faces = []
             now = time.time()
@@ -341,9 +359,23 @@ class ThreadedRTSPStream:
                             except queue.Full:
                                 pass
 
+            t_end = time.perf_counter()
+            total_ai_ms = (t_end - t0) * 1000.0
+
             with self.lock:
                 self.last_faces = current_faces
                 self.last_faces_time = time.time()
+                self.ai_scan_count += 1
+                self.last_ai_duration_ms = round(total_ai_ms, 2)
+                self.total_ai_duration_ms += total_ai_ms
+                self.last_insightface_duration_ms = round(insightface_ms, 2)
+                self.last_ai_scan_timestamp = time.time()
+
+            # Throttled console logging (every 15 seconds per camera)
+            if (now - self.last_metrics_log_time) >= 15.0:
+                self.last_metrics_log_time = now
+                avg_ai_ms = round(self.total_ai_duration_ms / max(1, self.ai_scan_count), 2)
+                print(f"[PERF] {self.name} | Scans: {self.ai_scan_count} | AI: {self.last_ai_duration_ms:.1f}ms (Avg: {avg_ai_ms:.1f}ms) | InsightFace: {self.last_insightface_duration_ms:.1f}ms | Faces: {len(current_faces)} | Queue: {attendance_event_queue.qsize()}")
         except Exception as e:
             print(f"Error processing AI for {self.name}: {e}")
 
@@ -603,5 +635,54 @@ def prewarm_all_cctv():
 
 # Pre-warm streams in background so feeds are instantly available
 threading.Thread(target=prewarm_all_cctv, daemon=True).start()
+
+
+def get_performance_diagnostics() -> dict:
+    """
+    Lightweight runtime performance diagnostics aggregator.
+    Measures per-camera connection health, frame latency, AI inference speeds,
+    and event queue sizes without introducing runtime overhead.
+    """
+    now = time.time()
+    cameras_status = []
+
+    with camera_manager.lock:
+        cctv_items = [(f"cctv_{idx}", stream) for idx, stream in camera_manager.cctv_streams.items()]
+        ptz_items = [(f"ptz_{idx}", stream) for idx, stream in camera_manager.ptz_streams.items()]
+        all_streams = cctv_items + ptz_items
+
+    for cam_id, stream in all_streams:
+        with stream.lock:
+            frame_age = round(now - stream.last_frame_time, 3) if stream.last_frame_time > 0 else None
+            avg_ai_ms = round(stream.total_ai_duration_ms / max(1, stream.ai_scan_count), 2) if stream.ai_scan_count > 0 else 0.0
+
+            cameras_status.append({
+                "camera_id": cam_id,
+                "name": stream.name,
+                "url": stream.url,
+                "connected": stream.connected,
+                "frame_age_seconds": frame_age,
+                "consecutive_failures": stream.consecutive_failures,
+                "total_capture_failures": stream.total_capture_failures,
+                "ai_scan_count": stream.ai_scan_count,
+                "last_ai_duration_ms": stream.last_ai_duration_ms,
+                "avg_ai_duration_ms": avg_ai_ms,
+                "last_insightface_duration_ms": stream.last_insightface_duration_ms,
+                "last_ai_scan_timestamp": stream.last_ai_scan_timestamp,
+                "active_spatial_cache_count": len(stream.spatial_cache)
+            })
+
+    from app.ai import active_engine
+
+    return {
+        "status": "healthy",
+        "timestamp": now,
+        "ai_enabled": AI_ENABLED,
+        "ai_hardware_acceleration": active_engine,
+        "active_session_id": ai_coordinator.active_session_id,
+        "attendance_queue_size": attendance_event_queue.qsize(),
+        "total_active_cameras": len(cameras_status),
+        "cameras": cameras_status
+    }
 
 
