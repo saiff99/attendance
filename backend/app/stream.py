@@ -76,6 +76,11 @@ AI_FRAME_WIDTH = int(os.getenv("AI_FRAME_WIDTH", "960"))
 AI_FRAME_HEIGHT = int(os.getenv("AI_FRAME_HEIGHT", "540"))
 AI_SCAN_INTERVAL = float(os.getenv("AI_SCAN_INTERVAL", "1.0"))
 
+# Robust Spatial Tracking & Cooldown Tuning
+FACE_TRACK_CACHE_SECONDS = float(os.getenv("FACE_TRACK_CACHE_SECONDS", "60.0"))
+FACE_TRACK_DISTANCE_PX = float(os.getenv("FACE_TRACK_DISTANCE_PX", "80.0"))
+FACE_TRACK_REVERIFY_SECONDS = float(os.getenv("FACE_TRACK_REVERIFY_SECONDS", "8.0"))
+
 class ThreadedRTSPStream:
     """
     High-Performance Zero-Latency RTSP Stream Grabber.
@@ -333,10 +338,9 @@ class ThreadedRTSPStream:
 
             current_faces = []
             now = time.time()
-            COOLDOWN_SECONDS = 60.0
 
-            # Prune stale spatial tracking cache older than 75s
-            self.spatial_cache = [e for e in self.spatial_cache if (now - e.get("last_matched_time", 0)) <= 75.0]
+            # Prune stale spatial tracking cache older than expiration
+            self.spatial_cache = [e for e in self.spatial_cache if (now - e.get("last_matched_time", 0)) <= (FACE_TRACK_CACHE_SECONDS + 15.0)]
 
             if session_id not in session_recognized_students:
                 session_recognized_students[session_id] = set()
@@ -357,51 +361,88 @@ class ThreadedRTSPStream:
                     y2 = max(0, min(box[3], h_img - 1))
                     cx = (x1 + x2) / 2.0
                     cy = (y1 + y2) / 2.0
+                    bw = max(1, x2 - x1)
+                    bh = max(1, y2 - y1)
+                    current_area = bw * bh
+
+                    # Extract & normalize face embedding
+                    unknown_encoding = face.embedding.astype(np.float32)
+                    u_norm = float(norm(unknown_encoding))
+                    if u_norm < 1e-6:
+                        continue
+                    unknown_unit = unknown_encoding / u_norm
 
                     best_match_student = None
                     highest_sim = 0.0
                     in_cooldown = False
 
-                    # 1. Check Spatial 60-second Cooldown Cache (Zero CPU Embedding matching & Zero DB hit)
+                    # Multi-Condition Robust Spatial Verification:
+                    # 1. Fresh timestamp (< FACE_TRACK_CACHE_SECONDS)
+                    # 2. Spatial proximity (< FACE_TRACK_DISTANCE_PX)
+                    # 3. Bounding box size ratio consistency (0.4x to 2.5x)
+                    # 4. Periodic embedding re-verification (every ~8s or 6 reuses) via ultra-fast 1x1 dot product
                     matched_cache_entry = None
                     for cache_entry in self.spatial_cache:
-                        if (now - cache_entry.get("last_matched_time", 0)) < COOLDOWN_SECONDS:
-                            prev_cx, prev_cy = cache_entry.get("center", (0, 0))
-                            dist_sq = (cx - prev_cx) ** 2 + (cy - prev_cy) ** 2
-                            # If face center is within 90px of previous frame location
-                            if dist_sq < (90 ** 2):
-                                matched_cache_entry = cache_entry
-                                break
+                        if (now - cache_entry.get("last_matched_time", 0)) > FACE_TRACK_CACHE_SECONDS:
+                            continue
+
+                        prev_cx, prev_cy = cache_entry.get("center", (0, 0))
+                        dist_sq = (cx - prev_cx) ** 2 + (cy - prev_cy) ** 2
+                        if dist_sq > (FACE_TRACK_DISTANCE_PX ** 2):
+                            continue
+
+                        prev_area = cache_entry.get("box_area", current_area)
+                        ratio = current_area / max(1.0, float(prev_area))
+                        if ratio < 0.4 or ratio > 2.5:
+                            continue
+
+                        # Periodic Re-verification against cached student's verified embedding
+                        needs_reverify = (now - cache_entry.get("last_reverify_time", 0)) >= FACE_TRACK_REVERIFY_SECONDS or cache_entry.get("reuse_count", 0) >= 6
+                        if needs_reverify:
+                            cached_emb = cache_entry.get("encoding")
+                            if cached_emb is not None:
+                                reverify_sim = float(np.dot(cached_emb, unknown_unit))
+                                if reverify_sim < 0.40:
+                                    # Identity changed or nearby person swapped! Reject cache reuse.
+                                    continue
+                                else:
+                                    cache_entry["sim"] = reverify_sim
+                            cache_entry["last_reverify_time"] = now
+                            cache_entry["reuse_count"] = 0
+                            cache_entry["encoding"] = unknown_unit
+                        else:
+                            cache_entry["reuse_count"] = cache_entry.get("reuse_count", 0) + 1
+
+                        matched_cache_entry = cache_entry
+                        break
 
                     if matched_cache_entry:
-                        # Re-use cached identification without running expensive matrix dot product
+                        # Re-use verified identity
                         best_match_student = matched_cache_entry["student"]
                         highest_sim = matched_cache_entry["sim"]
                         matched_cache_entry["coords"] = (x1, y1, x2, y2)
                         matched_cache_entry["center"] = (cx, cy)
+                        matched_cache_entry["box_area"] = current_area
                         matched_cache_entry["last_matched_time"] = now
                         in_cooldown = True
                     else:
-                        # 2. Compute full vectorized cosine similarity via matrix dot product
-                        unknown_encoding = face.embedding.astype(np.float32)
-                        u_norm = float(norm(unknown_encoding))
-                        if u_norm < 1e-6:
-                            continue
-                        unknown_unit = unknown_encoding / u_norm
-
+                        # Full vectorized matrix search (0.01ms)
                         sims = np.dot(enc_matrix, unknown_unit)
                         best_idx = int(np.argmax(sims))
                         highest_sim = float(sims[best_idx])
 
                         if highest_sim >= 0.42:
                             best_match_student = enrolled_students[best_idx]
-                            # Register in spatial tracking cache
                             self.spatial_cache.append({
                                 "coords": (x1, y1, x2, y2),
                                 "center": (cx, cy),
+                                "box_area": current_area,
                                 "student": best_match_student,
+                                "encoding": unknown_unit,
                                 "sim": highest_sim,
-                                "last_matched_time": now
+                                "last_matched_time": now,
+                                "last_reverify_time": now,
+                                "reuse_count": 0
                             })
 
                     current_faces.append({
@@ -784,6 +825,9 @@ def get_performance_diagnostics() -> dict:
         "ai_hardware_acceleration": active_engine,
         "detector_size": AI_DET_SIZE,
         "detector_threshold": AI_DET_THRESH,
+        "face_track_cache_seconds": FACE_TRACK_CACHE_SECONDS,
+        "face_track_distance_px": FACE_TRACK_DISTANCE_PX,
+        "face_track_reverify_seconds": FACE_TRACK_REVERIFY_SECONDS,
         "active_session_id": ai_coordinator.active_session_id,
         "attendance_queue_size": attendance_event_queue.qsize(),
         "total_active_cameras": len(cameras_status),
