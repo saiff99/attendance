@@ -5,7 +5,7 @@ import asyncio
 from datetime import datetime, timezone
 import dateutil.parser
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageOps
 from numpy.linalg import norm
 from fastapi import APIRouter, File, UploadFile, Form, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -121,7 +121,8 @@ async def enroll_face_burst(student_id: str, files: List[UploadFile] = File(...)
             for contents in file_contents:
                 if not contents:
                     continue
-                image = Image.open(io.BytesIO(contents)).convert('RGB')
+                raw_img = Image.open(io.BytesIO(contents))
+                image = ImageOps.exif_transpose(raw_img).convert('RGB')
                 image_np = np.array(image)
                 image_bgr = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
                 
@@ -584,7 +585,8 @@ async def selfie_attendance(
     if AI_ENABLED and app_fa:
         def _verify_selfie():
             import cv2
-            image = Image.open(io.BytesIO(contents)).convert('RGB')
+            raw_img = Image.open(io.BytesIO(contents))
+            image = ImageOps.exif_transpose(raw_img).convert('RGB')
             image_np = np.array(image)
             image_bgr = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
             
@@ -595,33 +597,35 @@ async def selfie_attendance(
                     resized = cv2.resize(image_bgr, (640, 640))
                     faces = app_fa.get(resized)
             
-            valid_faces = faces
+            valid_faces = faces or []
             if len(valid_faces) == 0:
                 raise HTTPException(status_code=400, detail="No clear face detected in the selfie. Please look directly into the camera in good lighting.")
             
-            # If multiple faces detected, pick the primary / largest face (the selfie taker in front of camera)
-            def get_face_area(f):
-                b = f.bbox
-                return max(0, (b[2] - b[0]) * (b[3] - b[1]))
-
-            valid_faces.sort(key=get_face_area, reverse=True)
-            primary_face = valid_faces[0]
-            
-            unknown_encoding = primary_face.embedding
-            
             # Handle 128D legacy vs 512D
             current_known = known_encoding
-            if current_known.shape != unknown_encoding.shape:
-                if len(unknown_encoding) == 512:
-                    supabase.table("students").update({"face_encoding": unknown_encoding.tolist()}).eq("id", student["id"]).execute()
-                    current_known = unknown_encoding
+            first_emb = valid_faces[0].embedding
+            if current_known.shape != first_emb.shape:
+                if len(first_emb) == 512:
+                    supabase.table("students").update({"face_encoding": first_emb.tolist()}).eq("id", student["id"]).execute()
+                    current_known = first_emb
                 else:
                     raise HTTPException(status_code=500, detail="Face encoding dimension mismatch.")
-                    
-            sim = float(np.dot(current_known, unknown_encoding) / (norm(current_known) * norm(unknown_encoding)))
             
-            # High precision threshold for single-face selfie verification (ArcFace cosine similarity >= 0.40)
-            if sim < 0.40:
+            # If multiple faces detected in selfie (e.g. child/person in background), check best match
+            best_sim = -1.0
+            for f in valid_faces:
+                emb = f.embedding
+                if emb.shape == current_known.shape:
+                    sim_score = float(np.dot(current_known, emb) / (norm(current_known) * norm(emb)))
+                    if sim_score > best_sim:
+                        best_sim = sim_score
+
+            sim = best_sim
+            threshold = float(os.getenv("SELFIE_SIMILARITY_THRESHOLD", "0.38"))
+            print(f"[Selfie AI] Student '{student['full_name']}' (Roll: {clean_roll}) | Detected Faces: {len(valid_faces)} | Best Similarity: {sim:.4f} | Threshold: {threshold} | Result: {'MATCH' if sim >= threshold else 'MISMATCH'}")
+            
+            # High precision threshold for selfie verification (ArcFace cosine similarity >= 0.38)
+            if sim < threshold:
                 raise HTTPException(status_code=400, detail=f"Face mismatch! The captured selfie does not match the registered face for {student['full_name']} (Roll {clean_roll}).")
                 
             return calculate_confidence_score(sim)
