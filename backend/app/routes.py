@@ -741,7 +741,13 @@ async def selfie_attendance(
 # WhatsApp Cloud API Notifications
 # ==========================================
 
-from app.whatsapp import send_whatsapp_raw, send_session_absentee_alerts
+from app.whatsapp import (
+    send_whatsapp_raw,
+    send_session_absentee_alerts,
+    get_whatsapp_job_status,
+    get_whatsapp_diagnostics,
+    update_whatsapp_credentials
+)
 
 class WhatsAppTestRequest(BaseModel):
     phone: str
@@ -750,6 +756,7 @@ class WhatsAppTestRequest(BaseModel):
 
 class WhatsAppAlertRequest(BaseModel):
     session_id: str
+    async_mode: Optional[bool] = True
 
 class WhatsAppUpdateTokenRequest(BaseModel):
     token: str
@@ -758,7 +765,6 @@ class WhatsAppUpdateTokenRequest(BaseModel):
 @router.post("/api/whatsapp/update-token")
 async def api_whatsapp_update_token(req: WhatsAppUpdateTokenRequest):
     """Updates WhatsApp access token dynamically."""
-    from app.whatsapp import update_whatsapp_credentials
     return update_whatsapp_credentials(req.token, req.phone_id)
 
 @router.post("/api/whatsapp/test")
@@ -771,6 +777,20 @@ async def api_whatsapp_test(req: WhatsAppTestRequest):
 
 @router.post("/api/whatsapp/send-absent-alerts")
 async def api_whatsapp_send_absent_alerts(req: WhatsAppAlertRequest):
-    """Dispatches WhatsApp absent notices to parents of all absent students in a session."""
-    return await asyncio.to_thread(send_session_absentee_alerts, req.session_id)
+    """
+    Step 8 — Non-Blocking WhatsApp Absentee Alert Dispatcher.
+    Dispatches WhatsApp absent notices asynchronously via a dedicated background queue worker.
+    Returns immediately without blocking CCTV streams, AI loops, or FastAPI request threads.
+    """
+    return await asyncio.to_thread(send_session_absentee_alerts, req.session_id, req.async_mode)
+
+@router.get("/api/whatsapp/job-status/{job_id}")
+async def api_whatsapp_job_status(job_id: str):
+    """Fetches real-time status of a background WhatsApp alert dispatch job."""
+    return get_whatsapp_job_status(job_id)
+
+@router.get("/api/whatsapp/status")
+async def api_whatsapp_status():
+    """Returns queue diagnostics for WhatsApp background worker."""
+    return get_whatsapp_diagnostics()
 

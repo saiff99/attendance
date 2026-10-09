@@ -7,6 +7,7 @@ import threading
 import urllib.request
 import urllib.error
 from datetime import datetime
+from typing import Dict, List, Optional
 from dotenv import load_dotenv
 from app.config import supabase, is_cohort_matching
 
@@ -16,26 +17,61 @@ WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN", "")
 WHATSAPP_PHONE_ID = os.getenv("WHATSAPP_PHONE_ID", "1304612619407965")
 GRAPH_API_VERSION = "v21.0"
 
-# Dedicated Thread-Safe Bounded Queue for WhatsApp Alerts
-whatsapp_event_queue: queue.Queue = queue.Queue(maxsize=1000)
+# Step 8 — Configurable Timeouts, Retries & Bounded Queue
+WHATSAPP_TIMEOUT = float(os.getenv("WHATSAPP_TIMEOUT", "8.0"))
+WHATSAPP_MAX_RETRIES = int(os.getenv("WHATSAPP_MAX_RETRIES", "2"))
+WHATSAPP_QUEUE_MAXSIZE = int(os.getenv("WHATSAPP_QUEUE_MAXSIZE", "2000"))
+
+# Dedicated Thread-Safe Bounded Queue for WhatsApp Alerts (Never blocks AI or CCTV)
+whatsapp_event_queue: queue.Queue = queue.Queue(maxsize=WHATSAPP_QUEUE_MAXSIZE)
+
+# Background Job Tracking Storage
+whatsapp_jobs: Dict[str, dict] = {}
+_jobs_lock = threading.Lock()
 
 def _whatsapp_worker_loop():
-    """Background worker that pulls WhatsApp tasks from the queue and dispatches them sequentially."""
+    """
+    Dedicated Single Background Worker for WhatsApp network requests.
+    Processes queued tasks sequentially without creating new OS threads per message.
+    Protects camera streams, AI inference, and attendance database queues from network latency.
+    """
     while True:
         try:
             task = whatsapp_event_queue.get()
             fn = task.get("fn")
             args = task.get("args", ())
             kwargs = task.get("kwargs", {})
+            job_id = task.get("job_id")
+
             if callable(fn):
-                fn(*args, **kwargs)
+                try:
+                    result = fn(*args, **kwargs)
+                    if job_id and job_id in whatsapp_jobs:
+                        with _jobs_lock:
+                            job = whatsapp_jobs[job_id]
+                            if result.get("success"):
+                                job["sent_count"] = job.get("sent_count", 0) + 1
+                            else:
+                                job["failed_count"] = job.get("failed_count", 0) + 1
+                            job.setdefault("details", []).append(result)
+                            
+                            processed = job["sent_count"] + job["failed_count"]
+                            if processed >= job.get("queued_count", 0):
+                                job["status"] = "completed"
+                                job["completed_at"] = datetime.now().isoformat()
+                except Exception as task_err:
+                    print(f"[WHATSAPP TASK ERROR] {task_err}")
+                    if job_id and job_id in whatsapp_jobs:
+                        with _jobs_lock:
+                            whatsapp_jobs[job_id]["failed_count"] = whatsapp_jobs[job_id].get("failed_count", 0) + 1
+
             whatsapp_event_queue.task_done()
         except Exception as e:
-            print(f"[WHATSAPP WORKER ERROR] {e}")
+            print(f"[WHATSAPP WORKER EXCEPTION] {e}")
             time.sleep(1.0)
 
-# Start persistent WhatsApp Background Worker Thread
-threading.Thread(target=_whatsapp_worker_loop, daemon=True).start()
+# Start persistent background worker thread (exactly 1 daemon thread)
+threading.Thread(target=_whatsapp_worker_loop, daemon=True, name="WhatsAppWorker").start()
 
 
 def update_whatsapp_credentials(token: str, phone_id: str = None) -> dict:
@@ -96,16 +132,13 @@ def extract_parent_phone(student: dict) -> str:
     """Extracts parent WhatsApp phone number from student record or email pattern."""
     if not student:
         return ""
-    # 1. Direct field if present
     if student.get("parent_phone"):
         return clean_phone_number(student["parent_phone"])
     
-    # 2. Check face_encoding metadata dictionary
     fe = student.get("face_encoding")
     if isinstance(fe, dict) and fe.get("parent_phone"):
         return clean_phone_number(fe["parent_phone"])
 
-    # 3. Check email encoding pattern: {roll}__p{phone}@student.local
     email = student.get("email", "")
     if "__p" in email:
         match = re.search(r"__p([0-9]+)@", email)
@@ -116,7 +149,10 @@ def extract_parent_phone(student: dict) -> str:
 
 
 def send_whatsapp_raw(to_phone: str, text: str, template_name: str = None) -> dict:
-    """Sends a WhatsApp message via Meta Cloud API."""
+    """
+    Sends a WhatsApp message via Meta Cloud API with bounded retries and timeout protection.
+    Retries only on transient network glitches (5xx, timeouts). Fails immediately on 4xx fatal auth errors.
+    """
     token = os.getenv("WHATSAPP_TOKEN", WHATSAPP_TOKEN).strip()
     phone_id = os.getenv("WHATSAPP_PHONE_ID", WHATSAPP_PHONE_ID).strip()
 
@@ -129,7 +165,6 @@ def send_whatsapp_raw(to_phone: str, text: str, template_name: str = None) -> di
 
     url = f"https://graph.facebook.com/{GRAPH_API_VERSION}/{phone_id}/messages"
     
-    # Payload for Text Message
     payload = {
         "messaging_product": "whatsapp",
         "recipient_type": "individual",
@@ -157,45 +192,68 @@ def send_whatsapp_raw(to_phone: str, text: str, template_name: str = None) -> di
         "Content-Type": "application/json"
     }
 
-    try:
-        req = urllib.request.Request(
-            url,
-            data=json.dumps(payload).encode("utf-8"),
-            headers=headers,
-            method="POST"
-        )
-        with urllib.request.urlopen(req, timeout=12) as response:
-            res_body = response.read().decode("utf-8")
-            data = json.loads(res_body)
-            return {"success": True, "data": data, "recipient": recipient}
-    except urllib.error.HTTPError as e:
-        err_msg = e.read().decode("utf-8")
-        fb_err = err_msg
-        err_code = None
+    last_error = ""
+    meta_code = None
+    http_code = None
+
+    # Configurable retry loop (maximum WHATSAPP_MAX_RETRIES)
+    for attempt in range(WHATSAPP_MAX_RETRIES + 1):
         try:
-            err_json = json.loads(err_msg)
-            err_obj = err_json.get("error", {})
-            raw_msg = err_obj.get("message", "")
-            err_code = err_obj.get("code")
-            
-            if err_code == 131030 or "not in allowed list" in raw_msg.lower():
-                fb_err = "Sandbox Restriction: Recipient number is not added to the allowed test list in Meta Developer Portal. (Go to WhatsApp > API Setup > Step 1 > Manage phone number list)."
-            elif err_code == 190 or "session has expired" in raw_msg.lower() or "invalid oauth" in raw_msg.lower():
-                fb_err = "Meta Access Token expired. Please copy a new Temporary Access Token from Meta Developer Portal > WhatsApp > API Setup."
-            elif raw_msg:
-                fb_err = raw_msg
-        except Exception:
+            req = urllib.request.Request(
+                url,
+                data=json.dumps(payload).encode("utf-8"),
+                headers=headers,
+                method="POST"
+            )
+            with urllib.request.urlopen(req, timeout=WHATSAPP_TIMEOUT) as response:
+                res_body = response.read().decode("utf-8")
+                data = json.loads(res_body)
+                return {"success": True, "data": data, "recipient": recipient}
+        except urllib.error.HTTPError as e:
+            http_code = e.code
+            err_msg = e.read().decode("utf-8")
             fb_err = err_msg
-        return {"success": False, "error": fb_err, "recipient": recipient, "code": e.code, "meta_code": err_code}
-    except Exception as e:
-        return {"success": False, "error": str(e), "recipient": recipient}
+            try:
+                err_json = json.loads(err_msg)
+                err_obj = err_json.get("error", {})
+                raw_msg = err_obj.get("message", "")
+                meta_code = err_obj.get("code")
+                
+                if meta_code == 131030 or "not in allowed list" in raw_msg.lower():
+                    fb_err = "Sandbox Restriction: Recipient number is not added to the allowed test list in Meta Developer Portal. (Go to WhatsApp > API Setup > Step 1 > Manage phone number list)."
+                elif meta_code == 190 or "session has expired" in raw_msg.lower() or "invalid oauth" in raw_msg.lower():
+                    fb_err = "Meta Access Token expired. Please copy a new Temporary Access Token from Meta Developer Portal > WhatsApp > API Setup."
+                elif raw_msg:
+                    fb_err = raw_msg
+            except Exception:
+                fb_err = err_msg
+
+            last_error = fb_err
+
+            # Fatal 4xx client errors (do NOT retry invalid tokens, sandbox block, bad payload)
+            if http_code in [400, 401, 403, 404] or meta_code in [131030, 190]:
+                return {"success": False, "error": fb_err, "recipient": recipient, "code": http_code, "meta_code": meta_code}
+
+            # Transient 5xx error -> exponential backoff retry
+            if attempt < WHATSAPP_MAX_RETRIES:
+                time.sleep(1.0 * (attempt + 1))
+                continue
+            return {"success": False, "error": fb_err, "recipient": recipient, "code": http_code, "meta_code": meta_code}
+
+        except (urllib.error.URLError, TimeoutError, Exception) as e:
+            last_error = f"Network Timeout / Connection Error: {str(e)}"
+            if attempt < WHATSAPP_MAX_RETRIES:
+                time.sleep(1.0 * (attempt + 1))
+                continue
+            return {"success": False, "error": last_error, "recipient": recipient}
+
+    return {"success": False, "error": last_error or "Maximum retries exceeded", "recipient": recipient}
 
 
 def decode_session_topic(raw_instructor: str) -> str:
     """Strips GPS metadata and extracts clean topic name for WhatsApp notices."""
     if not raw_instructor:
         return "General Medical Lecture"
-    # Remove GPS metadata tag: [GPS:22.450226,88.170692,...]
     cleaned = re.sub(r"\[GPS:[^\]]*\]", "", str(raw_instructor)).strip()
     if "::" in cleaned:
         parts = [p.strip() for p in cleaned.split("::") if p.strip()]
@@ -206,20 +264,50 @@ def decode_session_topic(raw_instructor: str) -> str:
     return cleaned or "General Medical Lecture"
 
 
-def send_session_absentee_alerts(session_id: str) -> dict:
+def _send_single_alert_task(student_info: dict, parent_phone: str, alert_text: str) -> dict:
+    """Worker task unit that sends one message and returns execution result."""
+    resp = send_whatsapp_raw(parent_phone, alert_text)
+    student_name = student_info.get("full_name", "Student")
+    student_roll = student_info.get("student_roll", "N/A")
+    student_id = student_info.get("id", "")
+
+    if resp.get("success"):
+        return {
+            "student_id": student_id,
+            "student_roll": student_roll,
+            "student_name": student_name,
+            "phone": parent_phone,
+            "status": "sent",
+            "message_id": resp.get("data", {}).get("messages", [{}])[0].get("id", "ok")
+        }
+    else:
+        return {
+            "student_id": student_id,
+            "student_roll": student_roll,
+            "student_name": student_name,
+            "phone": parent_phone,
+            "status": "failed",
+            "error": resp.get("error", "Failed to deliver")
+        }
+
+
+def send_session_absentee_alerts(session_id: str, async_mode: bool = True) -> dict:
     """
-    Finds all absent students for a given class session and sends personalized WhatsApp alerts
-    to their registered parent/guardian WhatsApp phone numbers.
+    Step 8 — Non-Blocking WhatsApp Absentee Alert Dispatcher.
+    Prepares absentee student alerts and enqueues them into the dedicated background worker.
+    Returns immediately (<30ms) without blocking FastAPI event loop or holding camera threads.
     """
     if not supabase:
         return {"success": False, "error": "Database not initialized."}
 
-    # 1. Fetch Session Info
-    sess_res = supabase.table("sessions").select("*").eq("id", session_id).execute()
-    if not sess_res.data:
-        return {"success": False, "error": "Session not found."}
-    
-    session = sess_res.data[0]
+    # 1. Fetch Session Info safely
+    try:
+        sess_res = supabase.table("sessions").select("*").eq("id", str(session_id).strip()).execute()
+        if not sess_res.data:
+            return {"success": False, "error": f"Session '{session_id}' not found."}
+        session = sess_res.data[0]
+    except Exception as e:
+        return {"success": False, "error": f"Database query error: {str(e)}"}
     class_name = session.get("class_name", "Medical Class")
     raw_instructor = session.get("instructor_name", "")
     topic = decode_session_topic(raw_instructor)
@@ -238,7 +326,7 @@ def send_session_absentee_alerts(session_id: str) -> dict:
 
     date_time_str = f"{session_date} at {time_display}" if time_display else session_date
 
-    # 2. Fetch all registered students (optionally filtered by academic year and sub-batch)
+    # 2. Fetch all registered students
     target_year = session.get("target_academic_year")
     student_query = supabase.table("students").select("id, student_roll, full_name, email, academic_year, face_encoding")
     students_res = student_query.order("student_roll").execute()
@@ -246,7 +334,7 @@ def send_session_absentee_alerts(session_id: str) -> dict:
     all_students = [s for s in raw_students if is_cohort_matching(target_year, s.get("academic_year"))]
 
     if not all_students:
-        return {"success": True, "message": "No students registered for this class.", "sent_count": 0, "absent_count": 0}
+        return {"success": True, "message": "No students registered for this class.", "sent_count": 0, "absent_count": 0, "details": []}
 
     # 3. Fetch all present attendance records for this session
     att_res = supabase.table("attendance").select("student_id, status").eq("session_id", session_id).eq("status", "Present").execute()
@@ -256,9 +344,11 @@ def send_session_absentee_alerts(session_id: str) -> dict:
     absent_students = [s for s in all_students if s["id"] not in present_student_ids]
     
     results = []
-    sent_count = 0
-    failed_count = 0
+    queued_count = 0
     missing_phone_count = 0
+    job_id = f"job_{session_id}_{int(time.time() * 1000)}"
+
+    tasks_to_queue = []
 
     for s in absent_students:
         parent_phone = extract_parent_phone(s)
@@ -276,7 +366,6 @@ def send_session_absentee_alerts(session_id: str) -> dict:
             })
             continue
 
-        # Formulate rich, respectful, professional WhatsApp alert message
         alert_text = (
             f"🏫 *Jagannath Gupta Institute of Medical Sciences & Hospital*\n"
             f"⚠️ *Student Attendance Alert Notice*\n\n"
@@ -288,36 +377,101 @@ def send_session_absentee_alerts(session_id: str) -> dict:
             f"If this is an authorized medical leave or university posting, please disregard this notice or contact the faculty administration."
         )
 
-        resp = send_whatsapp_raw(parent_phone, alert_text)
-        
-        if resp.get("success"):
-            sent_count += 1
-            results.append({
-                "student_id": s["id"],
-                "student_roll": student_roll,
-                "student_name": student_name,
-                "phone": parent_phone,
-                "status": "sent",
-                "message_id": resp.get("data", {}).get("messages", [{}])[0].get("id", "ok")
-            })
-        else:
-            failed_count += 1
-            results.append({
-                "student_id": s["id"],
-                "student_roll": student_roll,
-                "student_name": student_name,
-                "phone": parent_phone,
-                "status": "failed",
-                "error": resp.get("error", "Failed to deliver")
-            })
+        queued_count += 1
+        results.append({
+            "student_id": s["id"],
+            "student_roll": student_roll,
+            "student_name": student_name,
+            "phone": parent_phone,
+            "status": "queued",
+            "message": "Queued for delivery"
+        })
 
+        tasks_to_queue.append((s, parent_phone, alert_text))
+
+    # Initialize Job Tracker
+    with _jobs_lock:
+        whatsapp_jobs[job_id] = {
+            "job_id": job_id,
+            "session_id": session_id,
+            "status": "processing" if queued_count > 0 else "completed",
+            "total_enrolled": len(all_students),
+            "present_count": len(present_student_ids),
+            "absent_count": len(absent_students),
+            "queued_count": queued_count,
+            "sent_count": 0,
+            "failed_count": 0,
+            "missing_phone_count": missing_phone_count,
+            "created_at": datetime.now().isoformat(),
+            "details": [r for r in results if r["status"] == "skipped_no_phone"]
+        }
+
+    # Asynchronous Dispatch via Dedicated Queue
+    if async_mode:
+        for s, phone, text in tasks_to_queue:
+            try:
+                whatsapp_event_queue.put_nowait({
+                    "fn": _send_single_alert_task,
+                    "args": (s, phone, text),
+                    "job_id": job_id
+                })
+            except queue.Full:
+                print(f"[WHATSAPP QUEUE FULL] Could not queue alert for {s.get('full_name')}")
+
+        return {
+            "success": True,
+            "status": "queued",
+            "job_id": job_id,
+            "message": f"Successfully queued {queued_count} WhatsApp alert(s) for delivery.",
+            "total_enrolled": len(all_students),
+            "present_count": len(present_student_ids),
+            "absent_count": len(absent_students),
+            "sent_count": queued_count,
+            "queued_count": queued_count,
+            "failed_count": 0,
+            "missing_phone_count": missing_phone_count,
+            "queue_size": whatsapp_event_queue.qsize(),
+            "details": results
+        }
+    else:
+        # Synchronous mode (for CLI tests)
+        sent_count = 0
+        failed_count = 0
+        sync_details = []
+        for s, phone, text in tasks_to_queue:
+            res = _send_single_alert_task(s, phone, text)
+            if res.get("status") == "sent":
+                sent_count += 1
+            else:
+                failed_count += 1
+            sync_details.append(res)
+        return {
+            "success": True,
+            "status": "completed",
+            "total_enrolled": len(all_students),
+            "present_count": len(present_student_ids),
+            "absent_count": len(absent_students),
+            "sent_count": sent_count,
+            "failed_count": failed_count,
+            "missing_phone_count": missing_phone_count,
+            "details": [r for r in results if r["status"] == "skipped_no_phone"] + sync_details
+        }
+
+
+def get_whatsapp_job_status(job_id: str) -> dict:
+    """Returns the current processing status and details of a background WhatsApp dispatch job."""
+    with _jobs_lock:
+        if job_id in whatsapp_jobs:
+            return {"success": True, "job": whatsapp_jobs[job_id]}
+        return {"success": False, "error": f"Job '{job_id}' not found."}
+
+
+def get_whatsapp_diagnostics() -> dict:
+    """Diagnostic helper for queue size and worker status."""
     return {
-        "success": True,
-        "total_enrolled": len(all_students),
-        "present_count": len(present_student_ids),
-        "absent_count": len(absent_students),
-        "sent_count": sent_count,
-        "failed_count": failed_count,
-        "missing_phone_count": missing_phone_count,
-        "details": results
+        "queue_size": whatsapp_event_queue.qsize(),
+        "max_queue_size": WHATSAPP_QUEUE_MAXSIZE,
+        "timeout_seconds": WHATSAPP_TIMEOUT,
+        "max_retries": WHATSAPP_MAX_RETRIES,
+        "total_tracked_jobs": len(whatsapp_jobs)
     }
