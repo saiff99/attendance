@@ -6,6 +6,68 @@ const NGROK_TUNNEL = "";
 let cachedTunnelUrl: string | null = null;
 let lastCacheTime = 0;
 
+const INTERNAL_API_KEY = process.env.INTERNAL_API_KEY || process.env.NEXT_PUBLIC_INTERNAL_API_KEY || 'medattend-internal-secret-token-key-2026';
+
+// Allowed trusted tunnel domains
+const ALLOWED_TUNNEL_DOMAINS = [
+  'trycloudflare.com',
+  'ngrok-free.app',
+  'ngrok.io',
+  'loca.lt',
+  'localhost',
+  '127.0.0.1',
+];
+
+async function computeHmacSha256Hex(key: string, data: string): Promise<string> {
+  const enc = new TextEncoder();
+  const cryptoKey = await crypto.subtle.importKey(
+    'raw',
+    enc.encode(key) as unknown as BufferSource,
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const signature = await crypto.subtle.sign('HMAC', cryptoKey, enc.encode(data) as unknown as BufferSource);
+  return Array.from(new Uint8Array(signature))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+export async function verifyAndSanitizeTunnelUrl(rawUrl: string): Promise<string | null> {
+  if (!rawUrl || !rawUrl.startsWith('http')) return null;
+
+  try {
+    const [baseUrl, sigPart] = rawUrl.split('#sig=');
+    const cleanUrl = baseUrl.trim();
+    const urlObj = new URL(cleanUrl);
+
+    // 1. Strict Domain Whitelist Check
+    const hostname = urlObj.hostname.toLowerCase();
+    const isDomainAllowed = ALLOWED_TUNNEL_DOMAINS.some(
+      (domain) => hostname === domain || hostname.endsWith(`.${domain}`)
+    );
+
+    if (!isDomainAllowed) {
+      console.warn(`[Security Alert] Rejected untrusted tunnel host: ${hostname}`);
+      return null;
+    }
+
+    // 2. Cryptographic HMAC Signature Verification (if signature is attached)
+    if (sigPart) {
+      const expectedSig = await computeHmacSha256Hex(INTERNAL_API_KEY, cleanUrl);
+      if (sigPart.trim() !== expectedSig) {
+        console.warn(`[Security Alert] HMAC signature mismatch for tunnel URL: ${cleanUrl}`);
+        return null;
+      }
+    }
+
+    return cleanUrl;
+  } catch (err) {
+    console.warn('[serverBackend] Failed to parse tunnel URL:', err);
+    return null;
+  }
+}
+
 export async function getLiveTunnelUrl(): Promise<string | null> {
   const now = Date.now();
   // Cache for 10 seconds to minimize Supabase query overhead
@@ -20,9 +82,12 @@ export async function getLiveTunnelUrl(): Promise<string | null> {
       .single();
 
     if (!error && data?.instructor_name && data.instructor_name.startsWith('http')) {
-      cachedTunnelUrl = data.instructor_name.trim();
-      lastCacheTime = now;
-      return cachedTunnelUrl;
+      const verified = await verifyAndSanitizeTunnelUrl(data.instructor_name.trim());
+      if (verified) {
+        cachedTunnelUrl = verified;
+        lastCacheTime = now;
+        return cachedTunnelUrl;
+      }
     }
   } catch (err) {
     console.warn('[serverBackend] Failed to fetch live tunnel URL from Supabase:', err);

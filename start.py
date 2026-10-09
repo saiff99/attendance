@@ -109,9 +109,23 @@ signal.signal(signal.SIGINT, cleanup)
 signal.signal(signal.SIGTERM, cleanup)
 
 
+import hmac
+import hashlib
+
+INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY", "medattend-internal-secret-token-key-2026")
+
+
+def sign_tunnel_url(tunnel_url: str) -> str:
+    """Digitally signs the live tunnel URL using HMAC-SHA256 to prevent MitM and tunnel hijacking."""
+    clean_url = tunnel_url.strip()
+    sig = hmac.new(INTERNAL_API_KEY.encode("utf-8"), clean_url.encode("utf-8"), hashlib.sha256).hexdigest()
+    return f"{clean_url}#sig={sig}"
+
+
 def update_supabase_tunnel_url(tunnel_url: str):
-    """Updates the live tunnel URL in Supabase so Vercel instantly connects."""
+    """Updates the live tunnel URL with cryptographic signature in Supabase so Vercel securely connects."""
     try:
+        signed_payload_url = sign_tunnel_url(tunnel_url)
         url = f"{SUPABASE_URL}/rest/v1/sessions?id=eq.00000000-0000-0000-0000-000000000000"
         headers = {
             "apikey": SUPABASE_KEY,
@@ -120,7 +134,7 @@ def update_supabase_tunnel_url(tunnel_url: str):
             "Prefer": "return=representation"
         }
         payload = {
-            "instructor_name": tunnel_url
+            "instructor_name": signed_payload_url
         }
         req = Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers, method="PATCH")
         with urlopen(req, timeout=8) as res:
@@ -138,7 +152,7 @@ def update_supabase_tunnel_url(tunnel_url: str):
         full_payload = {
             "id": "00000000-0000-0000-0000-000000000000",
             "class_name": "__SYSTEM_CONFIG__",
-            "instructor_name": tunnel_url,
+            "instructor_name": signed_payload_url,
             "date": "2000-01-01",
             "start_time": "2000-01-01T00:00:00Z",
             "end_time": "2000-01-01T00:00:00Z",

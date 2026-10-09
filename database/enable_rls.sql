@@ -93,13 +93,13 @@ FOR INSERT
 TO authenticated, anon
 WITH CHECK (true);
 
--- 2.4 Allow application users to UPDATE ongoing sessions & sync Cloudflare tunnel URLs
+-- 2.4 Allow application users to UPDATE ongoing class sessions (Protected system config row 0000...0000 is restricted to service_role)
 CREATE POLICY "allow_update_sessions"
 ON sessions
 FOR UPDATE
 TO authenticated, anon
-USING (true)
-WITH CHECK (true);
+USING (id != '00000000-0000-0000-0000-000000000000')
+WITH CHECK (id != '00000000-0000-0000-0000-000000000000');
 
 -- 2.5 Allow DELETE sessions for authenticated staff and service_role
 CREATE POLICY "allow_delete_sessions"
