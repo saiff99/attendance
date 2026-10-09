@@ -209,10 +209,15 @@ export default function Sidebar() {
 
         <div className="flex items-center justify-between pt-1">
           <div className="flex items-center min-w-0">
-            <div className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-indigo-100 dark:bg-indigo-900/50 border border-indigo-500/20">
-              <span className="text-xs font-bold leading-none text-indigo-700 dark:text-indigo-300 tracking-wider">
+            <div className={classNames(
+              "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border",
+              user?.role === "Faculty"
+                ? "bg-emerald-100 dark:bg-emerald-950/50 border-emerald-500/30 text-emerald-700 dark:text-emerald-300"
+                : "bg-indigo-100 dark:bg-indigo-900/50 border-indigo-500/20 text-indigo-700 dark:text-indigo-300"
+            )}>
+              <span className="text-xs font-bold leading-none tracking-wider">
                 {(() => {
-                  const displayName = user?.name || "SK SAIFUDDIN";
+                  const displayName = user?.name || "Admin";
                   const parts = displayName.trim().split(/\s+/);
                   return parts.length >= 2 
                     ? `${parts[0][0]}${parts[1][0]}`.toUpperCase() 
@@ -221,8 +226,15 @@ export default function Sidebar() {
               </span>
             </div>
             <div className="ml-3 min-w-0">
-              <p className="text-sm font-bold text-gray-800 dark:text-gray-100 truncate">{user?.name || "SK SAIFUDDIN"}</p>
-              <p className="text-xs font-medium text-indigo-500 dark:text-indigo-400">{user?.role || "Super Admin"}</p>
+              <p className="text-sm font-bold text-gray-800 dark:text-gray-100 truncate">{user?.name || "User"}</p>
+              <span className={classNames(
+                "inline-block text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded-md mt-0.5",
+                user?.role === "Faculty"
+                  ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
+                  : "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20"
+              )}>
+                {user?.role || "User"}
+              </span>
             </div>
           </div>
 
