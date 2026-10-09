@@ -47,6 +47,8 @@ export async function fetchBackend(path: string, options: RequestInit = {}): Pro
   
   const headers = new Headers(options.headers || {});
   headers.set('ngrok-skip-browser-warning', '69420');
+  const internalApiKey = process.env.INTERNAL_API_KEY || process.env.NEXT_PUBLIC_INTERNAL_API_KEY || 'medattend-internal-secret-token-key-2026';
+  headers.set('X-Internal-API-Key', internalApiKey);
 
   // Fast-Path: When running locally on Mac/PC, ALWAYS check localhost directly (1ms instant response!)
   if (!isCloudEnvironment) {
