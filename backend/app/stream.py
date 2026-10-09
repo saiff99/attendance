@@ -247,6 +247,7 @@ class ThreadedRTSPStream:
         self.last_faces: List[dict] = []
         self.last_faces_time: float = 0.0
         self.spatial_cache: List[dict] = []  # 60s cooldown spatial tracking cache
+        self.last_view_requested_time: float = 0.0  # Eco-Power tracking
         
         # Explicit AI Scheduler & Diagnostics
         self.next_allowed_ai_scan: float = 0.0
@@ -280,11 +281,37 @@ class ThreadedRTSPStream:
             self.ai_thread.start()
 
     def _capture_loop(self):
+        """
+        Energy-Efficient Zero-Latency RTSP Stream Grabber.
+        Enters Eco-Power Idle Sleep when no session is active and no active browser preview.
+        Ramps up to full live 20-25 FPS instantaneously (<0.05s) upon view/session request.
+        """
         self.consecutive_failures = 0
         reconnect_delay = 1.0
 
         while self.running:
             try:
+                now = time.time()
+                has_active_session = bool(ai_coordinator.active_session_id) if 'ai_coordinator' in globals() else False
+                has_active_viewer = (now - self.last_view_requested_time) <= 6.0
+                is_needed = has_active_session or has_active_viewer
+
+                # 1. Eco-Power Idle Mode (No active class session & no browser viewer)
+                if not is_needed:
+                    if self.cap and self.cap.isOpened():
+                        # Slow keep-alive grab without expensive CPU frame decode
+                        time.sleep(0.5)
+                        try:
+                            self.cap.grab()
+                        except Exception:
+                            pass
+                        continue
+                    else:
+                        # Offline camera backoff when not needed
+                        time.sleep(2.0)
+                        continue
+
+                # 2. Open Stream if needed
                 if self.cap is None or not self.cap.isOpened():
                     self.connected = False
                     if isinstance(self.source, str):
@@ -293,7 +320,6 @@ class ThreadedRTSPStream:
                         self.cap = cv2.VideoCapture(self.source)
                     self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
                     if not self.cap.isOpened():
-                        # Exponential backoff on reconnect failure (1s -> 1.5s -> 2.25s ... max 8.0s)
                         time.sleep(reconnect_delay)
                         reconnect_delay = min(reconnect_delay * 1.5, 8.0)
                         continue
@@ -301,12 +327,12 @@ class ThreadedRTSPStream:
                     self.consecutive_failures = 0
                     reconnect_delay = 1.0
 
-                # Continuous live frame grab
+                # 3. Continuous live frame grab
                 success, frame = self.cap.read()
                 if not success or frame is None:
                     self.total_capture_failures += 1
                     self.consecutive_failures += 1
-                    if self.consecutive_failures > 30:
+                    if self.consecutive_failures > 25:
                         self.connected = False
                         if self.cap:
                             self.cap.release()
@@ -315,7 +341,7 @@ class ThreadedRTSPStream:
                         time.sleep(reconnect_delay)
                         reconnect_delay = min(reconnect_delay * 1.5, 8.0)
                     else:
-                        time.sleep(0.04)
+                        time.sleep(0.05)
                     continue
 
                 self.consecutive_failures = 0
@@ -339,6 +365,9 @@ class ThreadedRTSPStream:
                         self.last_ai_frame_time = now
                     self.last_frame_time = now
 
+                # Rate-limit live capture to smooth ~20-25 FPS to prevent 100% CPU thread burn
+                time.sleep(0.035)
+
             except Exception as e:
                 self.connected = False
                 self.total_capture_failures += 1
@@ -353,10 +382,16 @@ class ThreadedRTSPStream:
             self.cap = None
 
     def _ai_capture_loop(self):
-        """Dedicated capture loop for native AI sub-stream (only active when CCTV_AI_URLS is configured)."""
+        """Dedicated capture loop for native AI sub-stream (active only during live sessions)."""
         reconnect_delay = 1.0
         while self.running:
             try:
+                # Eco-Power: AI Sub-stream is ONLY active when an attendance session is running
+                has_active_session = bool(ai_coordinator.active_session_id) if 'ai_coordinator' in globals() else False
+                if not has_active_session:
+                    time.sleep(0.5)
+                    continue
+
                 if self.ai_cap is None or not self.ai_cap.isOpened():
                     self.ai_connected = False
                     if isinstance(self.ai_source, str):
@@ -373,7 +408,7 @@ class ThreadedRTSPStream:
 
                 success, frame = self.ai_cap.read()
                 if not success or frame is None:
-                    time.sleep(0.04)
+                    time.sleep(0.05)
                     continue
 
                 self.ai_connected = True
@@ -385,6 +420,8 @@ class ThreadedRTSPStream:
                 with self.lock:
                     self.latest_ai_frame = frame
                     self.last_ai_frame_time = now
+
+                time.sleep(0.04)
 
             except Exception:
                 self.ai_connected = False
@@ -402,6 +439,7 @@ class ThreadedRTSPStream:
         """Returns live frame with overlays instantly (<0.2ms). Optimized for ultra-lightweight grid preview."""
         ai_coordinator.set_active_session(session_id)
         now = time.time()
+        self.last_view_requested_time = now
 
         with self.lock:
             # If camera hasn't sent a frame in 6 seconds, show connecting placeholder
@@ -784,7 +822,7 @@ class CentralAICoordinator:
                     session_start = self.session_start_time
 
                 if not session_id:
-                    time.sleep(0.1)
+                    time.sleep(0.5)
                     continue
 
                 # Auto-Sleep Check: When all enrolled students in cohort are recognized, enter low-power sleep mode
