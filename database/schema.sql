@@ -70,7 +70,7 @@ CREATE POLICY "allow_delete_students" ON students FOR DELETE TO authenticated, s
 CREATE POLICY "service_role_full_sessions" ON sessions FOR ALL TO service_role USING (true) WITH CHECK (true);
 CREATE POLICY "allow_read_sessions" ON sessions FOR SELECT TO authenticated, anon USING (true);
 CREATE POLICY "allow_insert_sessions" ON sessions FOR INSERT TO authenticated, anon WITH CHECK (true);
-CREATE POLICY "allow_update_sessions" ON sessions FOR UPDATE TO authenticated, anon USING (id != '00000000-0000-0000-0000-000000000000') WITH CHECK (id != '00000000-0000-0000-0000-000000000000');
+CREATE POLICY "allow_update_sessions" ON sessions FOR UPDATE TO authenticated, anon USING (true) WITH CHECK (true);
 CREATE POLICY "allow_delete_sessions" ON sessions FOR DELETE TO authenticated, service_role USING (true);
 
 -- Attendance Policies
