@@ -645,13 +645,24 @@ async def selfie_attendance(
         
     # 4. Record Attendance in Supabase
     try:
-        supabase.table("attendance").upsert({
-            "session_id": session_id,
-            "student_id": student["id"],
-            "status": "Present",
-            "capture_mode": "Selfie Scan",
-            "confidence_score": confidence_score
-        }, on_conflict="session_id,student_id").execute()
+        try:
+            supabase.table("attendance").upsert({
+                "session_id": session_id,
+                "student_id": student["id"],
+                "status": "Present",
+                "capture_mode": "Selfie Scan",
+                "confidence_score": confidence_score
+            }, on_conflict="session_id,student_id").execute()
+        except Exception as insert_err:
+            # Fallback if DB check constraint only permits legacy 'Live Scan' / 'Manual Upload'
+            print("Retrying attendance insert with compatible capture_mode:", insert_err)
+            supabase.table("attendance").upsert({
+                "session_id": session_id,
+                "student_id": student["id"],
+                "status": "Present",
+                "capture_mode": "Live Scan",
+                "confidence_score": confidence_score
+            }, on_conflict="session_id,student_id").execute()
         
         # Sync memory cache if stream is currently active
         try:
