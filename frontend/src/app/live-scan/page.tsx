@@ -484,11 +484,13 @@ export default function LiveScan() {
     }
   };
 
-  const handleEndSession = () => {
+  const handleEndSession = async () => {
     const isConfirmed = window.confirm(
       "Are you sure you want to end this live attendance session?\n\nAll attendance records taken during this lecture are safely stored in the database."
     );
     if (!isConfirmed) return;
+
+    const endingSessionId = activeSession?.id;
 
     if (typeof window !== "undefined") {
       localStorage.removeItem("medattend_active_session_id");
@@ -499,6 +501,23 @@ export default function LiveScan() {
       }
     }
     setActiveSession(null);
+
+    // Trigger Step 7 memory cleanup on backend without dropping CCTV video streams
+    if (endingSessionId) {
+      try {
+        const backendUrl = getBackendUrl();
+        await fetch(`${backendUrl}/api/end-session`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "ngrok-skip-browser-warning": "69420"
+          },
+          body: JSON.stringify({ session_id: endingSessionId })
+        });
+      } catch (err) {
+        console.warn("Backend session cleanup notice:", err);
+      }
+    }
   };
 
   const handleProcessAttendance = async (e: React.ChangeEvent<HTMLInputElement>) => {

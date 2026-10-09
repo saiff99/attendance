@@ -198,6 +198,21 @@ export default function OngoingSessionsPage() {
       }
       // Remove from local UI immediately
       setSessions((prev) => prev.filter((s) => s.id !== sessionId));
+
+      // Trigger Step 7 session memory cleanup on backend
+      try {
+        const backendUrl = getBackendUrl();
+        await fetch(`${backendUrl}/api/end-session`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "ngrok-skip-browser-warning": "69420"
+          },
+          body: JSON.stringify({ session_id: sessionId })
+        });
+      } catch (backendErr) {
+        console.warn("Backend session cleanup notice:", backendErr);
+      }
     } catch (err) {
       console.error("Failed to end session:", err);
     }

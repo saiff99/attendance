@@ -97,8 +97,8 @@ async def enroll_face(student_id: str, file: UploadFile = File(...)):
 
     try:
         supabase.table("students").update({"face_encoding": encoding}).eq("id", student_id).execute()
-        from app.stream import session_enrolled_cache
-        session_enrolled_cache.clear()
+        from app.stream import cleanup_session_state
+        cleanup_session_state(None)
     except Exception as e:
         print("Database error:", str(e))
         raise HTTPException(status_code=500, detail="Failed to save face encoding to database.")
@@ -162,8 +162,8 @@ async def enroll_face_burst(student_id: str, files: List[UploadFile] = File(...)
 
     try:
         supabase.table("students").update({"face_encoding": encoding_list}).eq("id", student_id).execute()
-        from app.stream import session_enrolled_cache
-        session_enrolled_cache.clear()
+        from app.stream import cleanup_session_state
+        cleanup_session_state(None)
     except Exception as e:
         print("Database error:", str(e))
         raise HTTPException(status_code=500, detail="Failed to save face encoding to database.")
@@ -285,12 +285,49 @@ async def process_attendance(file: UploadFile = File(...), session_id: str = For
         "ai_used": AI_ENABLED
     }
 
+class EndSessionRequest(BaseModel):
+    session_id: Optional[str] = None
+
 @router.post("/api/start-live-scan")
 def start_live_scan(request: ScanRequest):
+    from app.stream import ai_coordinator
+    ai_coordinator.set_active_session(request.session_id)
     return {
         "success": True,
         "message": f"Live scan started successfully for session {request.session_id}",
+        "session_id": request.session_id,
         "timestamp": time.time()
+    }
+
+@router.post("/api/end-session")
+@router.post("/api/stop-session")
+@router.post("/api/cleanup-session")
+async def api_end_session(request: Optional[EndSessionRequest] = None):
+    """
+    Step 7 — Session Lifecycle Memory Cleanup.
+    Releases all session-specific memory, cached embedding matrices, student records,
+    and camera spatial caches without disconnecting persistent CCTV RTSP stream connections.
+    """
+    s_id = request.session_id if request else None
+    from app.stream import ai_coordinator, cleanup_session_state
+    ai_coordinator.end_active_session(s_id)
+    result = cleanup_session_state(s_id)
+    return {
+        "success": True,
+        "message": "Session memory cleaned up successfully. RTSP streams remain connected.",
+        "details": result
+    }
+
+@router.post("/api/sessions/{session_id}/end")
+async def api_end_session_by_id(session_id: str):
+    """Ends a specific session and purges its cached state."""
+    from app.stream import ai_coordinator, cleanup_session_state
+    ai_coordinator.end_active_session(session_id)
+    result = cleanup_session_state(session_id)
+    return {
+        "success": True,
+        "message": f"Session {session_id} ended and memory cleaned up successfully.",
+        "details": result
     }
 
 @router.post("/api/upload-photo")

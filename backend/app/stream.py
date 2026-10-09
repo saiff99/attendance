@@ -67,9 +67,74 @@ def get_enrolled_data(session_id: str):
         print(f"Error fetching students for session {session_id}: {e}")
         return session_enrolled_cache.get(session_id, []), session_matrix_cache.get(session_id)
 
+import gc
+
 def get_enrolled_students(session_id: str) -> List[dict]:
     enrolled, _ = get_enrolled_data(session_id)
     return enrolled
+
+
+def cleanup_session_state(session_id: Optional[str] = None) -> dict:
+    """
+    Step 7 — Session Lifecycle Memory Cleanup.
+    Releases all session-specific memory, cached embedding matrices, student records,
+    and camera spatial caches without disconnecting persistent CCTV RTSP stream connections.
+
+    Args:
+        session_id (Optional[str]): Target session ID to clean.
+            If provided, cleans caches for that specific session.
+            If None, sweeps and cleans all non-active session caches (or all caches if no session is active).
+    """
+    cleaned_sessions: List[str] = []
+    
+    try:
+        if session_id:
+            targets = [str(session_id).strip()]
+        else:
+            # Discover all sessions currently occupying memory
+            all_cached = set(session_recognized_students.keys()) | \
+                         set(session_enrolled_cache.keys()) | \
+                         set(session_matrix_cache.keys()) | \
+                         set(session_last_fetch.keys())
+            active_id = ai_coordinator.active_session_id if 'ai_coordinator' in globals() else None
+            # Do not touch currently active session during general sweep
+            targets = [s for s in all_cached if s != active_id] if active_id else list(all_cached)
+
+        for s_id in targets:
+            # 1. Remove recognized student deduplication set
+            session_recognized_students.pop(s_id, None)
+            
+            # 2. Remove enrolled student cache
+            session_enrolled_cache.pop(s_id, None)
+            
+            # 3. Remove embedding matrix and release memory
+            mat = session_matrix_cache.pop(s_id, None)
+            if mat is not None:
+                del mat
+                
+            # 4. Reset last-fetch timestamp
+            session_last_fetch.pop(s_id, None)
+            
+            cleaned_sessions.append(s_id)
+
+        # 5. Clear spatial tracking caches and last face overlays across all cameras
+        # (Purges old student bounding boxes & tracking states while keeping RTSP stream threads running)
+        if 'camera_manager' in globals():
+            camera_manager.clear_all_detections()
+        
+        # 6. Explicit Garbage Collection to immediately reclaim freed matrix RAM
+        gc.collect()
+
+        print(f"[MEMORY CLEANUP] Released session memory for {len(cleaned_sessions)} session(s): {cleaned_sessions}. RTSP streams remain connected.")
+        return {
+            "success": True,
+            "cleaned_sessions": cleaned_sessions,
+            "active_session": ai_coordinator.active_session_id if 'ai_coordinator' in globals() else None,
+            "remaining_cached_sessions": len(session_matrix_cache)
+        }
+    except Exception as e:
+        print(f"[MEMORY CLEANUP ERROR] Failed to clean session state: {e}")
+        return {"success": False, "error": str(e)}
 
 
 AI_FRAME_WIDTH = int(os.getenv("AI_FRAME_WIDTH", "960"))
@@ -610,10 +675,23 @@ class CentralAICoordinator:
 
     def set_active_session(self, session_id: str):
         with self.lock:
-            if self.active_session_id != session_id:
+            old_session = self.active_session_id
+            if old_session != session_id:
                 self.active_session_id = session_id
                 self.session_start_time = time.time()
                 camera_manager.clear_all_detections()
+                # If switching from an older session, clean up previous session state
+                if old_session and old_session != session_id:
+                    cleanup_session_state(old_session)
+
+    def end_active_session(self, session_id: Optional[str] = None):
+        """Ends the active attendance session and purges its cached memory state."""
+        with self.lock:
+            target = session_id or self.active_session_id
+            if target and (session_id is None or self.active_session_id == session_id):
+                self.active_session_id = None
+            if target:
+                cleanup_session_state(target)
 
     def _ai_worker_loop(self):
         """
@@ -839,6 +917,8 @@ def get_performance_diagnostics() -> dict:
         "face_track_distance_px": FACE_TRACK_DISTANCE_PX,
         "face_track_reverify_seconds": FACE_TRACK_REVERIFY_SECONDS,
         "active_session_id": ai_coordinator.active_session_id,
+        "cached_sessions_count": len(session_matrix_cache),
+        "cached_recognized_sessions": len(session_recognized_students),
         "attendance_queue_size": attendance_event_queue.qsize(),
         "total_active_cameras": len(cameras_status),
         "cameras": cameras_status
