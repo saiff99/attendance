@@ -1,14 +1,32 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { fetchBackend } from '@/lib/serverBackend';
 
 export const dynamic = 'force-dynamic';
 
+// Rate Limiter for active sessions list: {clientIp: [timestamp, ...]}
+const activeSessionsRateLimits: Record<string, number[]> = {};
+
 export async function GET(request: Request) {
   try {
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000';
-    // 1. Try local FastAPI backend first
+    // 1. IP Rate Limiting (Max 30 requests per minute per IP)
+    const forwarded = request.headers.get('x-forwarded-for') || request.headers.get('cf-connecting-ip') || 'unknown';
+    const clientIp = forwarded.split(',')[0].trim();
+    const nowMs = Date.now();
+    const timestamps = (activeSessionsRateLimits[clientIp] || []).filter(t => nowMs - t < 60000);
+    if (timestamps.length >= 30) {
+      activeSessionsRateLimits[clientIp] = timestamps;
+      return NextResponse.json(
+        { success: false, detail: 'Too many requests. Please wait a moment.' },
+        { status: 429 }
+      );
+    }
+    timestamps.push(nowMs);
+    activeSessionsRateLimits[clientIp] = timestamps;
+
+    // 2. Try secure backend fast-path
     try {
-      const res = await fetch(`${backendUrl}/api/active-sessions`, {
+      const res = await fetchBackend('/api/active-sessions', {
         headers: { 'ngrok-skip-browser-warning': '69420' },
         cache: 'no-store',
         next: { revalidate: 0 },

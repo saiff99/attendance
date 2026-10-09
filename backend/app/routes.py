@@ -32,6 +32,12 @@ session_device_locks: dict = {}
 # Anti-Brute-force Rate Limiter: {rate_key: [timestamp, ...]}
 selfie_rate_limits: dict = {}
 
+# Anti-Scraping Rate Limiter for Roll Lookup: {client_ip: [timestamp, ...]}
+lookup_rate_limits: dict = {}
+
+# Failed Face Verification Attempt Tracker: {f"{session_id}:{roll}": {"fails": int, "locked_until": float}}
+selfie_roll_failures: dict = {}
+
 def parse_iso_datetime(time_str: str) -> datetime:
     """Robust ISO 8601 parser compatible with Supabase timestamps and Python 3.9."""
     if not time_str:
@@ -479,19 +485,64 @@ async def get_active_sessions():
 
 
 @router.get("/api/student-lookup/{student_roll}")
-async def student_lookup(student_roll: str, session_id: Optional[str] = None):
+async def student_lookup(request: Request, student_roll: str, session_id: Optional[str] = None):
     """
-    Looks up student details by roll number and verifies if attendance has already been recorded (e.g. by CCTV AI) for the active session.
+    Looks up student details by roll number for an active session.
+    Protected against scraping / roster enumeration via IP rate limits and active session requirements.
     """
+    client_ip = request.client.host if request.client else "unknown"
+    now_ts = time.time()
+
+    # 1. Anti-Scraping Rate Limiter (Max 10 roll lookups per IP per 60s)
+    attempts = lookup_rate_limits.get(client_ip, [])
+    attempts = [ts for ts in attempts if now_ts - ts < 60.0]
+    if len(attempts) >= 10:
+        lookup_rate_limits[client_ip] = attempts
+        raise HTTPException(
+            status_code=429,
+            detail="Too many student lookup requests. Please wait 60 seconds."
+        )
+    attempts.append(now_ts)
+    lookup_rate_limits[client_ip] = attempts
+
+    # 2. Require an active session_id to prevent general roster scraping
+    if not session_id or not session_id.strip():
+        raise HTTPException(
+            status_code=403,
+            detail="Active session ID required. Student lookup is only allowed during an active class session."
+        )
+
+    clean_sess_id = session_id.strip()
+    sess_res = supabase.table("sessions").select("id, class_name, start_time, created_at, target_academic_year").eq("id", clean_sess_id).execute()
+    if not sess_res.data:
+        raise HTTPException(status_code=404, detail="Lecture session not found.")
+        
+    sess_obj = sess_res.data[0]
+    time_str = sess_obj.get("start_time") or sess_obj.get("created_at")
+    if time_str:
+        try:
+            start_dt = parse_iso_datetime(time_str)
+            elapsed = (datetime.now(timezone.utc) - start_dt).total_seconds()
+            if elapsed > 330:
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"Attendance window closed! The 5-minute check-in time for '{sess_obj.get('class_name')}' has expired."
+                )
+        except HTTPException:
+            raise
+        except Exception:
+            pass
+
     try:
         clean_roll = student_roll.strip()
+        # Query only necessary non-sensitive fields (omitting email)
         res = supabase.table("students").select(
-            "id, student_roll, full_name, email, academic_year, face_encoding"
+            "id, student_roll, full_name, academic_year, face_encoding"
         ).ilike("student_roll", clean_roll).execute()
         
         if not res.data:
             res = supabase.table("students").select(
-                "id, student_roll, full_name, email, academic_year, face_encoding"
+                "id, student_roll, full_name, academic_year, face_encoding"
             ).eq("student_roll", clean_roll).execute()
             
         if not res.data:
@@ -500,37 +551,29 @@ async def student_lookup(student_roll: str, session_id: Optional[str] = None):
         student = res.data[0]
         has_face = student.get("face_encoding") is not None and len(student.get("face_encoding") or []) > 0
         
-        # Check if already marked present in this session & check target cohort
+        # Check target cohort
+        target_academic_year = sess_obj.get("target_academic_year")
+        student_year = student.get("academic_year") or ""
+        cohort_mismatch = not is_cohort_matching(target_academic_year, student_year)
+
+        # Check if already marked present in this session
         is_already_present = False
         attendance_info = None
-        target_academic_year = None
-        cohort_mismatch = False
-        
-        if session_id:
-            try:
-                sess_res = supabase.table("sessions").select("id, class_name, target_academic_year").eq("id", session_id).execute()
-                if sess_res.data:
-                    target_academic_year = sess_res.data[0].get("target_academic_year")
-                    student_year = student.get("academic_year") or ""
-                    if not is_cohort_matching(target_academic_year, student_year):
-                        cohort_mismatch = True
-            except Exception as e:
-                print("Session lookup error in student-lookup:", e)
 
-            att_res = supabase.table("attendance").select(
-                "id, status, capture_mode, confidence_score, recorded_at"
-            ).eq("session_id", session_id).eq("student_id", student["id"]).execute()
-            
-            if att_res.data:
-                is_already_present = True
-                att_record = att_res.data[0]
-                attendance_info = {
-                    "id": att_record["id"],
-                    "status": att_record.get("status", "Present"),
-                    "capture_mode": att_record.get("capture_mode", "Live Scan"),
-                    "confidence_score": att_record.get("confidence_score", 0.95),
-                    "recorded_at": att_record.get("recorded_at", "Earlier Today")
-                }
+        att_res = supabase.table("attendance").select(
+            "id, status, capture_mode, confidence_score, recorded_at"
+        ).eq("session_id", clean_sess_id).eq("student_id", student["id"]).execute()
+        
+        if att_res.data:
+            is_already_present = True
+            att_record = att_res.data[0]
+            attendance_info = {
+                "id": att_record["id"],
+                "status": att_record.get("status", "Present"),
+                "capture_mode": att_record.get("capture_mode", "Live Scan"),
+                "confidence_score": att_record.get("confidence_score", 0.95),
+                "recorded_at": att_record.get("recorded_at", "Earlier Today")
+            }
         
         return {
             "success": True,
@@ -570,10 +613,20 @@ async def selfie_attendance(
     """
     clean_roll = student_roll.strip()
     client_ip = request.client.host if request.client else "unknown"
-
-    # 1. Anti-Bruteforce Rate Limiter (Max 5 attempts per IP + Student Roll in 60s)
-    rate_key = f"{client_ip}:{clean_roll.upper()}"
     now_ts = time.time()
+
+    # 1. Lockout Cooldown Check for Roll Number
+    lockout_key = f"{session_id}:{clean_roll.upper()}"
+    lock_info = selfie_roll_failures.setdefault(lockout_key, {"fails": 0, "locked_until": 0.0})
+    if now_ts < lock_info.get("locked_until", 0.0):
+        wait_seconds = int(lock_info["locked_until"] - now_ts)
+        raise HTTPException(
+            status_code=429,
+            detail=f"Cooldown active: 3 failed face attempts recorded for Roll '{clean_roll}'. Please wait {wait_seconds}s."
+        )
+
+    # 2. Anti-Bruteforce Rate Limiter (Max 5 attempts per IP + Student Roll in 60s)
+    rate_key = f"{client_ip}:{clean_roll.upper()}"
     attempts = selfie_rate_limits.get(rate_key, [])
     attempts = [ts for ts in attempts if now_ts - ts < 60.0]
     if len(attempts) >= 5:
@@ -768,13 +821,29 @@ async def selfie_attendance(
                     best_sim = sim_score
 
         sim = best_sim
-        threshold = float(os.getenv("SELFIE_SIMILARITY_THRESHOLD", "0.38"))
+        threshold = float(os.getenv("SELFIE_SIMILARITY_THRESHOLD", "0.40"))
         print(f"[Selfie AI] Student '{student['full_name']}' (Roll: {clean_roll}) | Blur Var: {lap_var:.1f} | Area: {face_area_ratio:.3f} | Best Similarity: {sim:.4f} | Threshold: {threshold} | Result: {'MATCH' if sim >= threshold else 'MISMATCH'}")
         
-        # High precision threshold for selfie verification (ArcFace cosine similarity >= 0.38)
+        # High precision threshold for selfie verification (ArcFace cosine similarity >= 0.40)
         if sim < threshold:
-            raise HTTPException(status_code=400, detail=f"Face mismatch! The captured selfie does not match the registered face for {student['full_name']} (Roll {clean_roll}).")
+            lock_info["fails"] = lock_info.get("fails", 0) + 1
+            if lock_info["fails"] >= 3:
+                lock_info["locked_until"] = time.time() + 120.0  # 2-minute lockout
+                selfie_roll_failures[lockout_key] = lock_info
+                raise HTTPException(
+                    status_code=429,
+                    detail=f"Face mismatch! 3 consecutive failed attempts recorded for Roll '{clean_roll}'. Temporary cooldown active for 2 minutes."
+                )
+            selfie_roll_failures[lockout_key] = lock_info
+            raise HTTPException(
+                status_code=400,
+                detail=f"Face mismatch! The captured selfie does not match the registered face for {student['full_name']} (Roll {clean_roll}). (Attempt {lock_info['fails']}/3)"
+            )
             
+        # Reset fail counter on successful match
+        if lockout_key in selfie_roll_failures:
+            del selfie_roll_failures[lockout_key]
+
         return calculate_confidence_score(sim)
 
     try:
