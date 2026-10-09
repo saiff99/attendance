@@ -139,7 +139,75 @@ def cleanup_session_state(session_id: Optional[str] = None) -> dict:
 
 AI_FRAME_WIDTH = int(os.getenv("AI_FRAME_WIDTH", "960"))
 AI_FRAME_HEIGHT = int(os.getenv("AI_FRAME_HEIGHT", "540"))
-AI_SCAN_INTERVAL = float(os.getenv("AI_SCAN_INTERVAL", "1.0"))
+AI_SCAN_INTERVAL_NORMAL = float(os.getenv("AI_SCAN_INTERVAL", "1.0"))
+AI_SCAN_INTERVAL_MIN = float(os.getenv("AI_SCAN_INTERVAL_MIN", "0.8"))
+AI_SCAN_INTERVAL_MAX = float(os.getenv("AI_SCAN_INTERVAL_MAX", "2.0"))
+AI_ADAPTIVE_LOAD_CONTROL = os.getenv("AI_ADAPTIVE_LOAD_CONTROL", "true").lower() in ("1", "true", "yes")
+AI_SCAN_INTERVAL = AI_SCAN_INTERVAL_NORMAL
+
+class AdaptiveLoadController:
+    """
+    Step 11 — Thermal & Automatic Load Controller.
+    Dynamically adjusts AI scan interval between bounded limits (0.8s to 2.0s) based on rolling
+    AI inference duration and system load, keeping host hardware cool during long 300+ student classes.
+    Never lowers face-recognition accuracy thresholds or halts CCTV streams.
+    """
+    def __init__(self):
+        self.enabled = AI_ADAPTIVE_LOAD_CONTROL
+        self.current_interval = AI_SCAN_INTERVAL_NORMAL
+        self.min_interval = AI_SCAN_INTERVAL_MIN
+        self.max_interval = AI_SCAN_INTERVAL_MAX
+        self.rolling_avg_ms: float = 40.0
+        self.sample_count: int = 0
+        self.last_log_time: float = 0.0
+        self.last_logged_interval: float = AI_SCAN_INTERVAL_NORMAL
+        self.lock = threading.Lock()
+
+    def get_current_interval(self) -> float:
+        if not self.enabled:
+            return AI_SCAN_INTERVAL_NORMAL
+        with self.lock:
+            return self.current_interval
+
+    def record_inference(self, duration_ms: float) -> float:
+        """Records an AI scan duration and adapts the scan interval accordingly."""
+        if not self.enabled:
+            return self.current_interval
+
+        with self.lock:
+            # Exponential Moving Average (alpha = 0.15)
+            alpha = 0.15
+            self.rolling_avg_ms = (alpha * duration_ms) + ((1.0 - alpha) * self.rolling_avg_ms)
+            self.sample_count += 1
+
+            # Thresholds: High load if rolling inference > 110ms; Low load if < 60ms
+            if self.rolling_avg_ms > 110.0:
+                step = 0.08 if self.rolling_avg_ms > 160.0 else 0.04
+                self.current_interval = min(self.max_interval, self.current_interval + step)
+            elif self.rolling_avg_ms < 60.0:
+                self.current_interval = max(self.min_interval, self.current_interval - 0.03)
+            else:
+                if self.current_interval > AI_SCAN_INTERVAL_NORMAL:
+                    self.current_interval = max(AI_SCAN_INTERVAL_NORMAL, self.current_interval - 0.02)
+                elif self.current_interval < AI_SCAN_INTERVAL_NORMAL:
+                    self.current_interval = min(AI_SCAN_INTERVAL_NORMAL, self.current_interval + 0.02)
+
+            self.current_interval = round(self.current_interval, 2)
+            cur = self.current_interval
+            avg = self.rolling_avg_ms
+
+        # Throttled logging on significant adaptation changes
+        now = time.time()
+        if (now - self.last_log_time >= 15.0) and abs(cur - self.last_logged_interval) >= 0.15:
+            self.last_log_time = now
+            self.last_logged_interval = cur
+            direction = "Throttling Up (Cooling)" if cur > AI_SCAN_INTERVAL_NORMAL else "Normalizing"
+            print(f"[LOAD CONTROL] {direction} | Scan Interval: {cur}s | Rolling AI Avg: {avg:.1f}ms")
+
+        return cur
+
+# Global Adaptive Load Controller Singleton
+load_controller = AdaptiveLoadController()
 
 # Robust Spatial Tracking & Cooldown Tuning
 FACE_TRACK_CACHE_SECONDS = float(os.getenv("FACE_TRACK_CACHE_SECONDS", "60.0"))
@@ -536,6 +604,9 @@ class ThreadedRTSPStream:
             t_end = time.perf_counter()
             total_ai_ms = (t_end - t0) * 1000.0
 
+            # Step 11: Adapt scan interval based on rolling inference duration
+            load_controller.record_inference(total_ai_ms)
+
             with self.lock:
                 self.last_faces = current_faces
                 self.last_faces_time = time.time()
@@ -760,8 +831,9 @@ class CentralAICoordinator:
                         ai_frame = stream.latest_ai_frame.copy()
                         stream.last_ai_processed_time = stream.last_frame_time
                         
-                        # Advance camera's scheduled next scan timestamp
-                        stream.next_allowed_ai_scan = now + AI_SCAN_INTERVAL
+                        # Step 11: Advance camera's scheduled scan timestamp using adaptive interval
+                        effective_interval = load_controller.get_current_interval()
+                        stream.next_allowed_ai_scan = now + effective_interval
                         if stream.last_ai_scan_timestamp:
                             stream.actual_scan_interval_sec = round(now - stream.last_ai_scan_timestamp, 2)
                         if not stream.first_ai_scan_timestamp:
@@ -920,6 +992,14 @@ def get_performance_diagnostics() -> dict:
         "cached_sessions_count": len(session_matrix_cache),
         "cached_recognized_sessions": len(session_recognized_students),
         "attendance_queue_size": attendance_event_queue.qsize(),
+        "adaptive_load_control": {
+            "enabled": load_controller.enabled,
+            "current_scan_interval_sec": load_controller.current_interval,
+            "normal_scan_interval_sec": AI_SCAN_INTERVAL_NORMAL,
+            "min_scan_interval_sec": AI_SCAN_INTERVAL_MIN,
+            "max_scan_interval_sec": AI_SCAN_INTERVAL_MAX,
+            "rolling_avg_inference_ms": round(load_controller.rolling_avg_ms, 2)
+        },
         "total_active_cameras": len(cameras_status),
         "cameras": cameras_status
     }
