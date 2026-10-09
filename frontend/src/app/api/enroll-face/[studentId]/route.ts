@@ -11,6 +11,15 @@ export async function POST(
   try {
     const { studentId } = await params;
     const formData = await request.formData();
+    const file = formData.get('file') as Blob | null;
+    if (file) {
+      if (file.size > 6 * 1024 * 1024) {
+        return NextResponse.json({ detail: 'Enrollment photo too large (Max 6MB).' }, { status: 413 });
+      }
+      if (file.type && !file.type.startsWith('image/')) {
+        return NextResponse.json({ detail: 'Only image files are permitted.' }, { status: 415 });
+      }
+    }
 
     const res = await fetchBackend(`/api/enroll-face/${studentId}`, {
       method: 'POST',

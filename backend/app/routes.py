@@ -80,9 +80,92 @@ async def health_performance():
     from app.stream import get_performance_diagnostics
     return get_performance_diagnostics()
 
+# =========================================================================
+# Secure Image Upload Validation & Anti-DoS File Processing
+# =========================================================================
+MAX_SELFIE_IMAGE_SIZE = 6 * 1024 * 1024       # 6 MB max for selfie / face enrollment
+MAX_CLASSROOM_IMAGE_SIZE = 15 * 1024 * 1024   # 15 MB max for classroom scan
+
+# Decompression bomb prevention for PIL (prevents billion-pixel OOM attacks)
+Image.MAX_IMAGE_PIXELS = 25_000_000
+
+ALLOWED_IMAGE_MIME_TYPES = {
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "image/heic",
+    "image/heif",
+    "image/jpg",
+}
+
+async def safe_read_image_file(file: UploadFile, max_size: int = MAX_SELFIE_IMAGE_SIZE) -> bytes:
+    """
+    Safely reads an uploaded image with strict size limits, MIME type verification,
+    magic byte checking, and decompression bomb protection to prevent DoS attacks.
+    """
+    if not file or not file.filename:
+        raise HTTPException(status_code=400, detail="No file provided in upload request.")
+
+    # 1. Content-Type Header Verification
+    content_type = (file.content_type or "").lower().strip()
+    if content_type and content_type not in ALLOWED_IMAGE_MIME_TYPES and content_type != "application/octet-stream":
+        raise HTTPException(
+            status_code=415,
+            detail=f"Unsupported file format '{content_type}'. Only JPEG, PNG, and WebP images are allowed."
+        )
+
+    # 2. Chunked streaming read with strict hard limit
+    chunks = []
+    total_size = 0
+    chunk_size = 64 * 1024  # 64 KB
+
+    while True:
+        chunk = await file.read(chunk_size)
+        if not chunk:
+            break
+        total_size += len(chunk)
+        if total_size > max_size:
+            max_mb = max_size // (1024 * 1024)
+            raise HTTPException(
+                status_code=413,
+                detail=f"File too large! Maximum allowed image size is {max_mb}MB."
+            )
+        chunks.append(chunk)
+
+    if total_size == 0:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty (0 bytes).")
+
+    contents = b"".join(chunks)
+
+    # 3. Magic Byte Validation
+    is_valid_magic = (
+        contents.startswith(b"\xff\xd8\xff")  # JPEG
+        or contents.startswith(b"\x89PNG\r\n\x1a\n")  # PNG
+        or (contents.startswith(b"RIFF") and b"WEBP" in contents[:16])  # WebP
+        or (b"ftypheic" in contents[:16] or b"ftypmif1" in contents[:16])  # HEIC
+    )
+    if not is_valid_magic:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid image file. File content header does not match valid JPEG, PNG, or WebP format."
+        )
+
+    # 4. Decompression verification
+    try:
+        with Image.open(io.BytesIO(contents)) as test_img:
+            test_img.verify()
+    except Exception as img_err:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Corrupt or invalid image file: {str(img_err)}"
+        )
+
+    return contents
+
+
 @router.post("/api/enroll-face/{student_id}")
 async def enroll_face(student_id: str, file: UploadFile = File(...)):
-    contents = await file.read()
+    contents = await safe_read_image_file(file, MAX_SELFIE_IMAGE_SIZE)
     
     if not (AI_ENABLED and app_fa):
         raise HTTPException(
@@ -133,16 +216,21 @@ async def enroll_face_burst(student_id: str, files: List[UploadFile] = File(...)
     if not files:
         raise HTTPException(status_code=400, detail="No files uploaded.")
         
-    valid_encodings = []
-    
+    if len(files) > 10:
+        raise HTTPException(status_code=400, detail="Maximum 10 burst angle photos allowed.")
+
     if not (AI_ENABLED and app_fa):
         raise HTTPException(
             status_code=503,
             detail="Biometric AI face recognition engine is not initialized. Burst face enrollment cannot proceed without AI."
         )
 
-    # Read all files asynchronously first
-    file_contents = [await f.read() for f in files if f]
+    # Read all files asynchronously with strict safe verification
+    file_contents = []
+    for f in files:
+        if f:
+            c = await safe_read_image_file(f, MAX_SELFIE_IMAGE_SIZE)
+            file_contents.append(c)
 
     def _extract_burst_encodings():
         import cv2
@@ -193,7 +281,7 @@ async def enroll_face_burst(student_id: str, files: List[UploadFile] = File(...)
 
     return {
         "success": True, 
-        "message": f"Face data enrolled successfully using {len(valid_encodings)} angles!", 
+        "message": f"Face data enrolled successfully using {valid_count} angles!", 
         "ai_used": AI_ENABLED
     }
 
@@ -204,7 +292,7 @@ async def process_attendance(file: UploadFile = File(...), session_id: str = For
     Receives an image (e.g., a classroom photo), detects all faces, matches them against
     enrolled students, and logs attendance.
     """
-    contents = await file.read()
+    contents = await safe_read_image_file(file, MAX_CLASSROOM_IMAGE_SIZE)
     
     if not session_id:
         raise HTTPException(status_code=400, detail="session_id is required.")
@@ -356,10 +444,12 @@ async def api_end_session_by_id(session_id: str):
 
 @router.post("/api/upload-photo")
 async def upload_photo(file: UploadFile = File(...)):
+    contents = await safe_read_image_file(file, MAX_SELFIE_IMAGE_SIZE)
     return {
         "success": True,
         "filename": file.filename if file.filename else "unknown",
-        "message": "Photo uploaded and processed successfully",
+        "size_bytes": len(contents),
+        "message": "Photo uploaded and verified successfully",
         "mock_result": {
             "student_id": "mock-uuid-1234",
             "student_name": "John Doe",
@@ -676,7 +766,7 @@ async def selfie_attendance(
         except Exception as geo_err:
             print("Server geofence calculation error:", geo_err)
 
-    contents = await file.read()
+    contents = await safe_read_image_file(file, MAX_SELFIE_IMAGE_SIZE)
     
     # 4. Check 5-minute session expiration window & Target Cohort
     session_res = supabase.table("sessions").select("id, start_time, created_at, class_name, target_academic_year").eq("id", session_id).execute()

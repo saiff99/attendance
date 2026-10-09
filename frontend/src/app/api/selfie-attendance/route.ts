@@ -20,6 +20,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ detail: "Missing required attendance parameters." }, { status: 400 });
     }
 
+    // Security: Validate file size (Max 6MB) and MIME type
+    if (file.size > 6 * 1024 * 1024) {
+      return NextResponse.json({ detail: "Selfie image too large (Max 6MB)." }, { status: 413 });
+    }
+    if (file.type && !file.type.startsWith('image/')) {
+      return NextResponse.json({ detail: "Invalid file format. Only images are permitted." }, { status: 415 });
+    }
+
     const fileBuffer = await file.arrayBuffer();
 
     const createFormData = () => {
