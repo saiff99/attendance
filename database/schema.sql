@@ -1,4 +1,6 @@
--- Supabase Production Schema for Smart Attendance System (MedAttend)
+-- ==============================================================================
+-- 🎓 Supabase Production Schema for Smart Attendance System (MedAttend AI)
+-- ==============================================================================
 
 -- 1. Enable uuid-ossp extension for UUID generation
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -11,7 +13,7 @@ CREATE TABLE IF NOT EXISTS students (
     email VARCHAR(255) UNIQUE NOT NULL,
     academic_year VARCHAR(50) DEFAULT '1st Year',
     parent_phone VARCHAR(50),
-    face_encoding JSONB, -- Stores 512D vector embeddings for MobileFaceNet recognition
+    face_encoding JSONB, -- Stores 512D vector embeddings for InsightFace ArcFace recognition
     manual_marked_count INTEGER DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -48,3 +50,32 @@ CREATE INDEX IF NOT EXISTS idx_sessions_year ON sessions(target_academic_year);
 CREATE INDEX IF NOT EXISTS idx_attendance_session ON attendance(session_id);
 CREATE INDEX IF NOT EXISTS idx_attendance_student ON attendance(student_id);
 CREATE INDEX IF NOT EXISTS idx_attendance_recorded_at ON attendance(recorded_at);
+
+-- ==============================================================================
+-- 6. Row Level Security (RLS) & Protection Policies
+-- ==============================================================================
+
+ALTER TABLE students ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE attendance ENABLE ROW LEVEL SECURITY;
+
+-- Students Policies
+CREATE POLICY "service_role_full_students" ON students FOR ALL TO service_role USING (true) WITH CHECK (true);
+CREATE POLICY "allow_read_students" ON students FOR SELECT TO authenticated, anon USING (true);
+CREATE POLICY "allow_insert_students" ON students FOR INSERT TO authenticated, anon WITH CHECK (true);
+CREATE POLICY "allow_update_students" ON students FOR UPDATE TO authenticated, anon USING (true) WITH CHECK (true);
+CREATE POLICY "allow_delete_students" ON students FOR DELETE TO authenticated, service_role USING (true);
+
+-- Sessions Policies
+CREATE POLICY "service_role_full_sessions" ON sessions FOR ALL TO service_role USING (true) WITH CHECK (true);
+CREATE POLICY "allow_read_sessions" ON sessions FOR SELECT TO authenticated, anon USING (true);
+CREATE POLICY "allow_insert_sessions" ON sessions FOR INSERT TO authenticated, anon WITH CHECK (true);
+CREATE POLICY "allow_update_sessions" ON sessions FOR UPDATE TO authenticated, anon USING (true) WITH CHECK (true);
+CREATE POLICY "allow_delete_sessions" ON sessions FOR DELETE TO authenticated, service_role USING (true);
+
+-- Attendance Policies
+CREATE POLICY "service_role_full_attendance" ON attendance FOR ALL TO service_role USING (true) WITH CHECK (true);
+CREATE POLICY "allow_read_attendance" ON attendance FOR SELECT TO authenticated, anon USING (true);
+CREATE POLICY "allow_insert_attendance" ON attendance FOR INSERT TO authenticated, anon WITH CHECK (true);
+CREATE POLICY "allow_update_attendance" ON attendance FOR UPDATE TO authenticated, anon USING (true) WITH CHECK (true);
+CREATE POLICY "allow_delete_attendance" ON attendance FOR DELETE TO authenticated, service_role USING (true);
