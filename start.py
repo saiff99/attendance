@@ -12,7 +12,8 @@ import re
 import signal
 import subprocess
 import threading
-from urllib.request import urlopen, Request
+import urllib.request
+from urllib.request import urlopen, Request, urlretrieve
 import json
 import shutil
 import platform
