@@ -23,6 +23,7 @@ from app.config import (
     calculate_haversine_distance,
 )
 from app.ai import app_fa, AI_ENABLED, calculate_confidence_score
+from app.antispoof import verify_face_liveness
 from app.stream import generate_video_feed
 
 # Session Device Lock Registry: {session_id: {device_id: student_roll}}
@@ -740,6 +741,12 @@ async def selfie_attendance(
                 status_code=400,
                 detail="Face is too far from camera. Please hold your phone closer to frame your face clearly."
             )
+
+        # Anti-Spoofing: Screen Moiré Pattern & Pixel-Grid Reflection Check
+        is_live, spoof_reason, diag = verify_face_liveness(image_bgr, bbox)
+        if not is_live:
+            print(f"[AntiSpoof REJECT] Student '{student['full_name']}' (Roll: {clean_roll}) | Reason: {spoof_reason} | Diag: {diag}")
+            raise HTTPException(status_code=400, detail=spoof_reason)
 
         # Handle 128D legacy vs 512D
         current_known = known_encoding
