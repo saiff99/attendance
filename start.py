@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-MedAttend 1-Click Intelligent Launcher with Production Backend Watchdog & Auto-Recovery.
-Automatically starts Uvicorn AI Backend + Cloudflare Unlimited Tunnel + Supabase Live Sync.
-Monitors FastAPI backend health and automatically recovers from crashes without killing unrelated processes.
+MedAttend 1-Click Intelligent Launcher with Production Backend & Frontend + Watchdog.
+Automatically starts Uvicorn AI Backend + Production Next.js Dashboard + Cloudflare Unlimited Tunnel + Supabase Live Sync.
+Monitors system health and automatically recovers from crashes without killing unrelated processes.
 """
 
 import os
@@ -112,7 +112,6 @@ signal.signal(signal.SIGTERM, cleanup)
 def update_supabase_tunnel_url(tunnel_url: str):
     """Updates the live tunnel URL in Supabase so Vercel instantly connects."""
     try:
-        # First try PATCH to update the existing system record
         url = f"{SUPABASE_URL}/rest/v1/sessions?id=eq.00000000-0000-0000-0000-000000000000"
         headers = {
             "apikey": SUPABASE_KEY,
@@ -129,7 +128,6 @@ def update_supabase_tunnel_url(tunnel_url: str):
             if res.status in (200, 204) and resp_body != "[]":
                 return True
 
-        # Fallback: POST upsert if record did not exist yet
         upsert_url = f"{SUPABASE_URL}/rest/v1/sessions?on_conflict=id"
         upsert_headers = {
             "apikey": SUPABASE_KEY,
@@ -172,13 +170,58 @@ def get_cloudflared_binary():
     url = f"https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-{system}-{arch}"
     
     try:
-        urllib.request.urlretrieve(url, CLOUDFLARED_BIN)
+        urlretrieve(url, CLOUDFLARED_BIN)
         os.chmod(CLOUDFLARED_BIN, 0o755)
         print(f"{GREEN}✓ Cloudflared downloaded successfully.{RESET}")
         return CLOUDFLARED_BIN
     except Exception as e:
         print(f"{RED}Failed to auto-download cloudflared: {e}{RESET}")
         return None
+
+
+def ensure_frontend_build():
+    """Checks if Next.js production build exists; if missing, compiles an optimized bundle."""
+    dot_next = os.path.join(FRONTEND_DIR, ".next")
+    if not os.path.exists(dot_next) or not os.path.isdir(dot_next):
+        print(f"  {YELLOW}Compiling optimized production build for Next.js frontend...{RESET}")
+        build_proc = subprocess.run(["npm", "run", "build"], cwd=FRONTEND_DIR, capture_output=True, text=True)
+        if build_proc.returncode != 0:
+            print(f"  {RED}Frontend build failed! Falling back to dev mode.{RESET}")
+            return False
+        print(f"  {GREEN}✓ Production build complete.{RESET}")
+    return True
+
+
+def start_frontend_process():
+    """Starts production Next.js frontend without dev watcher for minimal CPU usage and maximum stability."""
+    free_port_safely(3000)
+    has_build = ensure_frontend_build()
+    cmd = ["npm", "start"] if has_build else ["npm", "run", "dev"]
+    
+    proc = subprocess.Popen(
+        cmd,
+        cwd=FRONTEND_DIR,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1
+    )
+
+    def log_frontend_output(p):
+        try:
+            for line in iter(p.stdout.readline, ""):
+                if not line:
+                    break
+                stripped = line.strip()
+                if "Ready in" in stripped or "Listening on" in stripped or "Local:" in stripped or "started server" in stripped:
+                    print(f"  {GREEN}✓{RESET} Frontend: {stripped}")
+                elif "ERROR" in stripped or "Exception" in stripped:
+                    print(f"  {RED}! Frontend: {stripped}{RESET}")
+        except Exception:
+            pass
+
+    threading.Thread(target=log_frontend_output, args=(proc,), daemon=True).start()
+    return proc
 
 
 def start_backend_process():
@@ -224,21 +267,16 @@ def wait_for_backend_health(timeout_sec=15.0) -> bool:
     return False
 
 
-def backend_watchdog_loop():
+def watchdog_loop():
     """
-    Step 9 — Production Backend Watchdog & Auto-Recovery System.
-    Periodically checks FastAPI health (every 5 seconds).
-    If backend process dies or fails health check:
-      - Detects failure
-      - Applies backoff to prevent crash loops
-      - Automatically restarts Uvicorn backend on port 8000
-      - Preserves frontend and Cloudflare tunnel
-      - Logs crash, restart attempts, and recovery success
+    Step 9 & Step 10 — Production System Watchdog & Auto-Recovery.
+    Monitors FastAPI Backend and Next.js Frontend health.
+    Automatically recovers from unexpected process terminations without affecting other running components.
     Consumes < 0.001% CPU.
     """
-    consecutive_failures = 0
-    restart_backoff = 1.0
-    last_restart_time = time.time()
+    backend_failures = 0
+    backend_backoff = 1.0
+    last_backend_restart = time.time()
 
     time.sleep(6.0)  # Initial grace period on launcher startup
 
@@ -248,66 +286,69 @@ def backend_watchdog_loop():
             if not watchdog_running:
                 break
 
+            # --- 1. Monitor Backend ---
             with watchdog_lock:
-                current_proc = managed_procs.get("backend")
+                backend_proc = managed_procs.get("backend")
 
-            # Check 1: Process exit status
-            is_dead = False
-            exit_code = None
-            if current_proc is None or current_proc.poll() is not None:
-                is_dead = True
-                exit_code = current_proc.poll() if current_proc else "None"
-
-            # Check 2: Health HTTP probe if process is running
-            is_healthy = False
-            if not is_dead:
+            backend_dead = (backend_proc is None or backend_proc.poll() is not None)
+            backend_healthy = False
+            if not backend_dead:
                 try:
                     req = Request("http://127.0.0.1:8000/health", headers={"User-Agent": "MedAttend-Watchdog"})
                     with urlopen(req, timeout=1.5) as r:
                         if r.status == 200:
-                            is_healthy = True
+                            backend_healthy = True
                 except Exception:
-                    is_healthy = False
+                    backend_healthy = False
 
-            if is_healthy:
-                consecutive_failures = 0
-                if time.time() - last_restart_time > 30.0:
-                    restart_backoff = 1.0
-                continue
+            if backend_healthy:
+                backend_failures = 0
+                if time.time() - last_backend_restart > 30.0:
+                    backend_backoff = 1.0
+            else:
+                backend_failures += 1
+                if backend_dead or backend_failures >= 3:
+                    now_str = time.strftime("%H:%M:%S")
+                    print(f"\n{RED}⚠️  [WATCHDOG] Backend failure detected at {now_str}!{RESET}")
+                    print(f"{YELLOW}🔄 [WATCHDOG] Initiating automatic backend recovery (Backoff: {backend_backoff:.1f}s)...{RESET}")
 
-            consecutive_failures += 1
-
-            # If dead or 3 consecutive failed health probes
-            if is_dead or consecutive_failures >= 3:
-                now_str = time.strftime("%H:%M:%S")
-                print(f"\n{RED}⚠️  [WATCHDOG] Backend failure detected at {now_str}! (ExitCode: {exit_code}, Failures: {consecutive_failures}){RESET}")
-                print(f"{YELLOW}🔄 [WATCHDOG] Initiating automatic backend recovery (Backoff: {restart_backoff:.1f}s)...{RESET}")
-
-                # Safely terminate old proc if stuck
-                with watchdog_lock:
-                    if managed_procs.get("backend"):
-                        terminate_process(managed_procs["backend"], "backend")
-                        managed_procs["backend"] = None
-
-                time.sleep(restart_backoff)
-
-                # Restart backend
-                try:
-                    new_proc = start_backend_process()
                     with watchdog_lock:
-                        managed_procs["backend"] = new_proc
+                        if managed_procs.get("backend"):
+                            terminate_process(managed_procs["backend"], "backend")
+                            managed_procs["backend"] = None
 
-                    # Verify health
-                    if wait_for_backend_health(timeout_sec=12.0):
-                        last_restart_time = time.time()
-                        consecutive_failures = 0
-                        print(f"{GREEN}✅ [WATCHDOG] Backend successfully recovered and online on Port 8000!{RESET}\n")
-                    else:
-                        print(f"{RED}❌ [WATCHDOG] Backend restart attempt did not respond to health check. Will retry...{RESET}\n")
-                        restart_backoff = min(restart_backoff * 1.5, 10.0)
-                except Exception as restart_err:
-                    print(f"{RED}❌ [WATCHDOG] Failed to restart backend: {restart_err}{RESET}\n")
-                    restart_backoff = min(restart_backoff * 1.5, 10.0)
+                    time.sleep(backend_backoff)
+
+                    try:
+                        new_proc = start_backend_process()
+                        with watchdog_lock:
+                            managed_procs["backend"] = new_proc
+
+                        if wait_for_backend_health(timeout_sec=12.0):
+                            last_backend_restart = time.time()
+                            backend_failures = 0
+                            print(f"{GREEN}✅ [WATCHDOG] Backend successfully recovered and online on Port 8000!{RESET}\n")
+                        else:
+                            print(f"{RED}❌ [WATCHDOG] Backend restart attempt did not respond to health check. Will retry...{RESET}\n")
+                            backend_backoff = min(backend_backoff * 1.5, 10.0)
+                    except Exception as restart_err:
+                        print(f"{RED}❌ [WATCHDOG] Failed to restart backend: {restart_err}{RESET}\n")
+                        backend_backoff = min(backend_backoff * 1.5, 10.0)
+
+            # --- 2. Monitor Frontend ---
+            with watchdog_lock:
+                frontend_proc = managed_procs.get("frontend")
+
+            if frontend_proc and frontend_proc.poll() is not None:
+                now_str = time.strftime("%H:%M:%S")
+                print(f"\n{RED}⚠️  [WATCHDOG] Frontend process exited unexpectedly at {now_str}! Restarting on Port 3000...{RESET}")
+                try:
+                    new_frontend = start_frontend_process()
+                    with watchdog_lock:
+                        managed_procs["frontend"] = new_frontend
+                    print(f"{GREEN}✅ [WATCHDOG] Frontend recovered and listening on http://localhost:3000{RESET}\n")
+                except Exception as fe_err:
+                    print(f"{RED}❌ [WATCHDOG] Failed to recover frontend: {fe_err}{RESET}\n")
 
         except Exception:
             time.sleep(3.0)
@@ -332,30 +373,11 @@ def main():
         print(f"{RED}Cloudflared binary could not be found or downloaded!{RESET}")
         sys.exit(1)
 
-    # 2. Start Next.js Frontend
-    print(f"{BLUE}[1/4]{RESET} Starting Next.js Web Frontend (http://localhost:3000)...")
-    frontend_proc = subprocess.Popen(
-        ["npm", "run", "dev"],
-        cwd=FRONTEND_DIR,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        bufsize=1
-    )
+    # 2. Start Production Next.js Frontend (Step 10: npm start)
+    print(f"{BLUE}[1/4]{RESET} Starting Production Next.js Frontend (http://localhost:3000)...")
+    frontend_proc = start_frontend_process()
     with watchdog_lock:
         managed_procs["frontend"] = frontend_proc
-
-    def log_frontend():
-        try:
-            for line in iter(frontend_proc.stdout.readline, ""):
-                if not line:
-                    break
-                if "Ready in" in line or "compiled client and server" in line or "Local:" in line:
-                    print(f"  {GREEN}✓{RESET} Frontend: {line.strip()}")
-        except Exception:
-            pass
-
-    threading.Thread(target=log_frontend, daemon=True).start()
 
     # 3. Start Uvicorn AI Backend (Production mode without --reload)
     print(f"{BLUE}[2/4]{RESET} Starting FastAPI Backend + InsightFace AI (Port 8000, Production Mode)...")
@@ -369,8 +391,8 @@ def main():
     else:
         print(f"  {YELLOW}! Backend is taking a bit longer to initialize models...{RESET}")
 
-    # Start Backend Watchdog Thread
-    threading.Thread(target=backend_watchdog_loop, daemon=True, name="BackendWatchdog").start()
+    # Start Unified System Watchdog Thread (Step 9 & 10)
+    threading.Thread(target=watchdog_loop, daemon=True, name="SystemWatchdog").start()
 
     # 4. Start Cloudflare Unlimited Tunnel
     print(f"{BLUE}[3/4]{RESET} Initializing Cloudflare Unlimited Bandwidth Tunnel...")
@@ -421,11 +443,11 @@ def main():
     # 5. Display Dashboard
     display_tunnel = tunnel_url or "Connecting in background..."
     print("\n" + BOLD + GREEN + "╔" + "═"*68 + "╗" + RESET)
-    print(f"{BOLD}{GREEN}║  🎉 MedAttend System is 100% ONLINE & READY FOR ATTENDANCE        ║{RESET}")
+    print(f"{BOLD}{GREEN}║  🎉 MedAttend System is 100% ONLINE (Full Production Mode)         ║{RESET}")
     print(BOLD + GREEN + "╠" + "═"*68 + "╣" + RESET)
-    print(f"║  {CYAN}Local Web Dashboard:{RESET}  http://localhost:3000                            ║")
-    print(f"║  {CYAN}Local AI Backend:{RESET}     http://127.0.0.1:8000                            ║")
-    print(f"║  {CYAN}Watchdog Recovery:{RESET}    {GREEN}Active (Auto-restarts backend if crashed){RESET}      ║")
+    print(f"║  {CYAN}Local Web Dashboard:{RESET}  http://localhost:3000 (Production)               ║")
+    print(f"║  {CYAN}Local AI Backend:{RESET}     http://127.0.0.1:8000 (Production)               ║")
+    print(f"║  {CYAN}Watchdog Recovery:{RESET}    {GREEN}Active (Auto-restarts Backend & Frontend){RESET} ║")
     print(f"║  {CYAN}Cloudflare Tunnel:{RESET}    {display_tunnel:<49} ║")
     print(f"║  {CYAN}Vercel Live Portal:{RESET}   https://newshuge.com/selfieattend                ║")
     print(f"║  {CYAN}Bandwidth Quota:{RESET}      {GREEN}UNLIMITED FOREVER (No Limits){RESET}                    ║")
