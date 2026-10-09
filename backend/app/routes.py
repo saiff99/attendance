@@ -63,37 +63,39 @@ async def health_performance():
 async def enroll_face(student_id: str, file: UploadFile = File(...)):
     contents = await file.read()
     
-    if AI_ENABLED and app_fa:
-        def _extract_single_face():
-            import cv2
-            image = Image.open(io.BytesIO(contents)).convert('RGB')
-            image_np = np.array(image)
-            image_bgr = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
-            
-            faces = app_fa.get(image_bgr)
-            if not faces:
-                h, w = image_bgr.shape[:2]
-                if w != 640 or h != 640:
-                    resized = cv2.resize(image_bgr, (640, 640))
-                    faces = app_fa.get(resized)
-            
-            if len(faces) == 0:
-                raise HTTPException(status_code=400, detail="No faces found in the image. Please ensure your face is well-lit.")
-            
-            # Sort by bounding box area to get the primary face
-            faces.sort(key=lambda f: (f.bbox[2]-f.bbox[0])*(f.bbox[3]-f.bbox[1]), reverse=True)
-            return faces[0].embedding.tolist()
+    if not (AI_ENABLED and app_fa):
+        raise HTTPException(
+            status_code=503,
+            detail="Biometric AI face recognition engine is not initialized. Face enrollment cannot proceed without AI."
+        )
 
-        try:
-            encoding = await asyncio.to_thread(_extract_single_face)
-        except HTTPException:
-            raise
-        except Exception as e:
-            print("Error processing image with AI:", str(e))
-            raise HTTPException(status_code=500, detail="Failed to process image.")
-    else:
-        encoding = [random.uniform(-1.0, 1.0) for _ in range(128)]
-        await asyncio.sleep(0.5)
+    def _extract_single_face():
+        import cv2
+        image = Image.open(io.BytesIO(contents)).convert('RGB')
+        image_np = np.array(image)
+        image_bgr = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
+        
+        faces = app_fa.get(image_bgr)
+        if not faces:
+            h, w = image_bgr.shape[:2]
+            if w != 640 or h != 640:
+                resized = cv2.resize(image_bgr, (640, 640))
+                faces = app_fa.get(resized)
+        
+        if len(faces) == 0:
+            raise HTTPException(status_code=400, detail="No faces found in the image. Please ensure your face is well-lit.")
+        
+        # Sort by bounding box area to get the primary face
+        faces.sort(key=lambda f: (f.bbox[2]-f.bbox[0])*(f.bbox[3]-f.bbox[1]), reverse=True)
+        return faces[0].embedding.tolist()
+
+    try:
+        encoding = await asyncio.to_thread(_extract_single_face)
+    except HTTPException:
+        raise
+    except Exception as e:
+        print("Error processing image with AI:", str(e))
+        raise HTTPException(status_code=500, detail="Failed to process image.")
 
     try:
         supabase.table("students").update({"face_encoding": encoding}).eq("id", student_id).execute()
@@ -112,53 +114,53 @@ async def enroll_face_burst(student_id: str, files: List[UploadFile] = File(...)
         
     valid_encodings = []
     
-    if AI_ENABLED and app_fa:
-        # Read all files asynchronously first
-        file_contents = [await f.read() for f in files if f]
+    if not (AI_ENABLED and app_fa):
+        raise HTTPException(
+            status_code=503,
+            detail="Biometric AI face recognition engine is not initialized. Burst face enrollment cannot proceed without AI."
+        )
 
-        def _extract_burst_encodings():
-            import cv2
-            encs = []
-            for contents in file_contents:
-                if not contents:
-                    continue
-                raw_img = Image.open(io.BytesIO(contents))
-                image = ImageOps.exif_transpose(raw_img).convert('RGB')
-                image_np = np.array(image)
-                image_bgr = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
-                
-                faces = app_fa.get(image_bgr)
-                if not faces:
-                    h, w = image_bgr.shape[:2]
-                    if w != 640 or h != 640:
-                        resized = cv2.resize(image_bgr, (640, 640))
-                        faces = app_fa.get(resized)
-                
-                if faces:
-                    # Pick largest face in the frame
-                    faces.sort(key=lambda f: (f.bbox[2]-f.bbox[0])*(f.bbox[3]-f.bbox[1]), reverse=True)
-                    encs.append(faces[0].embedding)
+    # Read all files asynchronously first
+    file_contents = [await f.read() for f in files if f]
+
+    def _extract_burst_encodings():
+        import cv2
+        encs = []
+        for contents in file_contents:
+            if not contents:
+                continue
+            raw_img = Image.open(io.BytesIO(contents))
+            image = ImageOps.exif_transpose(raw_img).convert('RGB')
+            image_np = np.array(image)
+            image_bgr = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
             
-            if not encs:
-                raise HTTPException(status_code=400, detail="Could not detect a clear face in any of the captured frames. Please ensure your face is well-lit and directly facing the camera.")
-                
-            # Average the encodings for a highly robust 3D representation
-            avg_encoding = np.mean(encs, axis=0)
-            avg_encoding = avg_encoding / norm(avg_encoding)
-            return avg_encoding.tolist(), len(encs)
+            faces = app_fa.get(image_bgr)
+            if not faces:
+                h, w = image_bgr.shape[:2]
+                if w != 640 or h != 640:
+                    resized = cv2.resize(image_bgr, (640, 640))
+                    faces = app_fa.get(resized)
+            
+            if faces:
+                # Pick largest face in the frame
+                faces.sort(key=lambda f: (f.bbox[2]-f.bbox[0])*(f.bbox[3]-f.bbox[1]), reverse=True)
+                encs.append(faces[0].embedding)
+        
+        if not encs:
+            raise HTTPException(status_code=400, detail="Could not detect a clear face in any of the captured frames. Please ensure your face is well-lit and directly facing the camera.")
+            
+        # Average the encodings for a highly robust 3D representation
+        avg_encoding = np.mean(encs, axis=0)
+        avg_encoding = avg_encoding / norm(avg_encoding)
+        return avg_encoding.tolist(), len(encs)
 
-        try:
-            encoding_list, valid_count = await asyncio.to_thread(_extract_burst_encodings)
-        except HTTPException:
-            raise
-        except Exception as e:
-            print("Error processing images with AI:", str(e))
-            raise HTTPException(status_code=500, detail="Failed to process images.")
-    else:
-        # Fallback Mock
-        encoding_list = [random.uniform(-1.0, 1.0) for _ in range(128)]
-        valid_count = len(files)
-        await asyncio.sleep(0.5)
+    try:
+        encoding_list, valid_count = await asyncio.to_thread(_extract_burst_encodings)
+    except HTTPException:
+        raise
+    except Exception as e:
+        print("Error processing images with AI:", str(e))
+        raise HTTPException(status_code=500, detail="Failed to process images.")
 
     try:
         supabase.table("students").update({"face_encoding": encoding_list}).eq("id", student_id).execute()
@@ -204,62 +206,63 @@ async def process_attendance(file: UploadFile = File(...), session_id: str = For
 
     recognized_students = []
 
-    if AI_ENABLED and app_fa:
-        def _match_photo_faces():
-            import cv2
-            image = Image.open(io.BytesIO(contents)).convert('RGB')
-            image_np = np.array(image)
-            image_bgr = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
-            
-            # Detect faces
-            faces = app_fa.get(image_bgr)
-            recognized = []
-            
-            for face in faces:
-                if hasattr(face, 'det_score') and face.det_score < 0.20:
-                    continue
-                    
-                unknown_encoding = face.embedding
-                best_match_student = None
-                highest_sim = 0.42 # High-precision calibrated similarity threshold (cosine similarity >= 0.42)
-                
-                for student in enrolled_students:
-                    known_encoding = np.array(student['face_encoding'])
-                    
-                    # Auto-update: If the DB has old 128D data, replace it with the newly detected 512D face!
-                    if known_encoding.shape != unknown_encoding.shape:
-                        if len(unknown_encoding) == 512:
-                            print(f"Auto-upgrading face data for {student['full_name']}...")
-                            supabase.table("students").update({"face_encoding": unknown_encoding.tolist()}).eq("id", student['id']).execute()
-                            known_encoding = unknown_encoding # Match instantly
-                            student['face_encoding'] = unknown_encoding.tolist()
-                        else:
-                            continue
-                        
-                    sim = np.dot(known_encoding, unknown_encoding) / (norm(known_encoding) * norm(unknown_encoding))
-                    
-                    if sim > highest_sim:
-                        highest_sim = sim
-                        best_match_student = student
-                
-                if best_match_student:
-                    # Avoid duplicates in the same scan
-                    if not any(s['id'] == best_match_student['id'] for s in recognized):
-                        recognized.append({
-                            **best_match_student,
-                            "confidence": calculate_confidence_score(float(highest_sim))
-                        })
-            return recognized
+    if not (AI_ENABLED and app_fa):
+        raise HTTPException(
+            status_code=503,
+            detail="Biometric AI face recognition engine is not initialized. Batch photo attendance processing cannot proceed without AI."
+        )
 
-        try:
-            recognized_students = await asyncio.to_thread(_match_photo_faces)
-        except Exception as e:
-            print("Error matching faces:", str(e))
-            raise HTTPException(status_code=500, detail="Failed to run AI face matching.")
-    else:
-        # Fallback Mock: The C++ AI engine is missing on this machine.
-        await asyncio.sleep(0.5)
-        recognized_students = []
+    def _match_photo_faces():
+        import cv2
+        image = Image.open(io.BytesIO(contents)).convert('RGB')
+        image_np = np.array(image)
+        image_bgr = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
+        
+        # Detect faces
+        faces = app_fa.get(image_bgr)
+        recognized = []
+        
+        for face in faces:
+            if hasattr(face, 'det_score') and face.det_score < 0.20:
+                continue
+                
+            unknown_encoding = face.embedding
+            best_match_student = None
+            highest_sim = 0.42 # High-precision calibrated similarity threshold (cosine similarity >= 0.42)
+            
+            for student in enrolled_students:
+                known_encoding = np.array(student['face_encoding'])
+                
+                # Auto-update: If the DB has old 128D data, replace it with the newly detected 512D face!
+                if known_encoding.shape != unknown_encoding.shape:
+                    if len(unknown_encoding) == 512:
+                        print(f"Auto-upgrading face data for {student['full_name']}...")
+                        supabase.table("students").update({"face_encoding": unknown_encoding.tolist()}).eq("id", student['id']).execute()
+                        known_encoding = unknown_encoding # Match instantly
+                        student['face_encoding'] = unknown_encoding.tolist()
+                    else:
+                        continue
+                    
+                sim = np.dot(known_encoding, unknown_encoding) / (norm(known_encoding) * norm(unknown_encoding))
+                
+                if sim > highest_sim:
+                    highest_sim = sim
+                    best_match_student = student
+            
+            if best_match_student:
+                # Avoid duplicates in the same scan
+                if not any(s['id'] == best_match_student['id'] for s in recognized):
+                    recognized.append({
+                        **best_match_student,
+                        "confidence": calculate_confidence_score(float(highest_sim))
+                    })
+        return recognized
+
+    try:
+        recognized_students = await asyncio.to_thread(_match_photo_faces)
+    except Exception as e:
+        print("Error matching faces:", str(e))
+        raise HTTPException(status_code=500, detail="Failed to run AI face matching.")
 
     # 3. Record Attendance
     results = []
@@ -620,65 +623,66 @@ async def selfie_attendance(
         }
         
     # 3. AI Face Recognition Verification
-    if AI_ENABLED and app_fa:
-        def _verify_selfie():
-            import cv2
-            raw_img = Image.open(io.BytesIO(contents))
-            image = ImageOps.exif_transpose(raw_img).convert('RGB')
-            image_np = np.array(image)
-            image_bgr = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
-            
-            faces = app_fa.get(image_bgr)
-            if not faces:
-                h, w = image_bgr.shape[:2]
-                if w != 640 or h != 640:
-                    resized = cv2.resize(image_bgr, (640, 640))
-                    faces = app_fa.get(resized)
-            
-            valid_faces = faces or []
-            if len(valid_faces) == 0:
-                raise HTTPException(status_code=400, detail="No clear face detected in the selfie. Please look directly into the camera in good lighting.")
-            
-            # Handle 128D legacy vs 512D
-            current_known = known_encoding
-            first_emb = valid_faces[0].embedding
-            if current_known.shape != first_emb.shape:
-                if len(first_emb) == 512:
-                    supabase.table("students").update({"face_encoding": first_emb.tolist()}).eq("id", student["id"]).execute()
-                    current_known = first_emb
-                else:
-                    raise HTTPException(status_code=500, detail="Face encoding dimension mismatch.")
-            
-            # If multiple faces detected in selfie (e.g. child/person in background), check best match
-            best_sim = -1.0
-            for f in valid_faces:
-                emb = f.embedding
-                if emb.shape == current_known.shape:
-                    sim_score = float(np.dot(current_known, emb) / (norm(current_known) * norm(emb)))
-                    if sim_score > best_sim:
-                        best_sim = sim_score
+    if not (AI_ENABLED and app_fa):
+        raise HTTPException(
+            status_code=503,
+            detail="Biometric AI face recognition engine is not initialized. Selfie attendance cannot be verified."
+        )
 
-            sim = best_sim
-            threshold = float(os.getenv("SELFIE_SIMILARITY_THRESHOLD", "0.38"))
-            print(f"[Selfie AI] Student '{student['full_name']}' (Roll: {clean_roll}) | Detected Faces: {len(valid_faces)} | Best Similarity: {sim:.4f} | Threshold: {threshold} | Result: {'MATCH' if sim >= threshold else 'MISMATCH'}")
-            
-            # High precision threshold for selfie verification (ArcFace cosine similarity >= 0.38)
-            if sim < threshold:
-                raise HTTPException(status_code=400, detail=f"Face mismatch! The captured selfie does not match the registered face for {student['full_name']} (Roll {clean_roll}).")
-                
-            return calculate_confidence_score(sim)
+    def _verify_selfie():
+        import cv2
+        raw_img = Image.open(io.BytesIO(contents))
+        image = ImageOps.exif_transpose(raw_img).convert('RGB')
+        image_np = np.array(image)
+        image_bgr = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
+        
+        faces = app_fa.get(image_bgr)
+        if not faces:
+            h, w = image_bgr.shape[:2]
+            if w != 640 or h != 640:
+                resized = cv2.resize(image_bgr, (640, 640))
+                faces = app_fa.get(resized)
+        
+        valid_faces = faces or []
+        if len(valid_faces) == 0:
+            raise HTTPException(status_code=400, detail="No clear face detected in the selfie. Please look directly into the camera in good lighting.")
+        
+        # Handle 128D legacy vs 512D
+        current_known = known_encoding
+        first_emb = valid_faces[0].embedding
+        if current_known.shape != first_emb.shape:
+            if len(first_emb) == 512:
+                supabase.table("students").update({"face_encoding": first_emb.tolist()}).eq("id", student["id"]).execute()
+                current_known = first_emb
+            else:
+                raise HTTPException(status_code=500, detail="Face encoding dimension mismatch.")
+        
+        # If multiple faces detected in selfie (e.g. child/person in background), check best match
+        best_sim = -1.0
+        for f in valid_faces:
+            emb = f.embedding
+            if emb.shape == current_known.shape:
+                sim_score = float(np.dot(current_known, emb) / (norm(current_known) * norm(emb)))
+                if sim_score > best_sim:
+                    best_sim = sim_score
 
-        try:
-            confidence_score = await asyncio.to_thread(_verify_selfie)
-        except HTTPException:
-            raise
-        except Exception as e:
-            print("Error in selfie face matching:", e)
-            raise HTTPException(status_code=500, detail="AI face analysis failed. Please try again.")
-    else:
-        # Fallback Mock
-        confidence_score = 0.95
-        await asyncio.sleep(0.5)
+        sim = best_sim
+        threshold = float(os.getenv("SELFIE_SIMILARITY_THRESHOLD", "0.38"))
+        print(f"[Selfie AI] Student '{student['full_name']}' (Roll: {clean_roll}) | Detected Faces: {len(valid_faces)} | Best Similarity: {sim:.4f} | Threshold: {threshold} | Result: {'MATCH' if sim >= threshold else 'MISMATCH'}")
+        
+        # High precision threshold for selfie verification (ArcFace cosine similarity >= 0.38)
+        if sim < threshold:
+            raise HTTPException(status_code=400, detail=f"Face mismatch! The captured selfie does not match the registered face for {student['full_name']} (Roll {clean_roll}).")
+            
+        return calculate_confidence_score(sim)
+
+    try:
+        confidence_score = await asyncio.to_thread(_verify_selfie)
+    except HTTPException:
+        raise
+    except Exception as e:
+        print("Error in selfie face matching:", e)
+        raise HTTPException(status_code=500, detail="AI face analysis failed. Please try again.")
         
     # 4. Record Attendance in Supabase
     try:
