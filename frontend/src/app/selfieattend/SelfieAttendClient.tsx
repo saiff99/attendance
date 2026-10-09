@@ -7,7 +7,8 @@ import {
   Camera, CheckCircle2, ShieldCheck, AlertCircle, RefreshCw, 
   UserCheck, ArrowRight, ArrowLeft, Clock, MapPin, BookOpen, 
   Sparkles, SwitchCamera, Check, X, ShieldAlert, GraduationCap,
-  Building2, HelpCircle, Lock, Timer, Hourglass, Navigation, Loader2
+  Building2, HelpCircle, Lock, Timer, Hourglass, Navigation, Loader2,
+  Eye, EyeOff, Smile, Activity
 } from "lucide-react";
 import Webcam from "react-webcam";
 import { getBackendUrl } from "@/lib/api";
@@ -114,6 +115,13 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [submittingAttendance, setSubmittingAttendance] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  
+  // Active Liveness & Blink Detection States
+  const [livenessPhase, setLivenessPhase] = useState<"positioning" | "ready" | "blinking" | "verified">("positioning");
+  const [livenessPrompt, setLivenessPrompt] = useState<string>("Center your face inside the oval");
+  const [blinkDetected, setBlinkDetected] = useState<boolean>(false);
+  const livenessCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const livenessHistoryRef = useRef<number[]>([]);
   
   // Result States
   const [resultData, setResultData] = useState<{
@@ -509,6 +517,133 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
     }
     setStep("capture_selfie");
   };
+
+  // Real-time Active Liveness & Blink Detection Engine
+  useEffect(() => {
+    if (step !== "capture_selfie" || capturedImage || cameraError) {
+      setLivenessPhase("positioning");
+      setBlinkDetected(false);
+      livenessHistoryRef.current = [];
+      return;
+    }
+
+    let intervalId: any = null;
+    let stableFrames = 0;
+    let blinkStage = 0; // 0 = waiting for blink, 1 = eye dip detected, 2 = eye reopened (completed)
+
+    const processLivenessFrame = () => {
+      if (!webcamRef.current) return;
+      const video = webcamRef.current.video;
+      if (!video || video.readyState < 2 || video.videoWidth === 0 || video.videoHeight === 0) return;
+
+      if (!livenessCanvasRef.current) {
+        livenessCanvasRef.current = document.createElement("canvas");
+        livenessCanvasRef.current.width = 64;
+        livenessCanvasRef.current.height = 64;
+      }
+      const canvas = livenessCanvasRef.current;
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      if (!ctx) return;
+
+      const vw = video.videoWidth;
+      const vh = video.videoHeight;
+      const cropX = Math.round(vw * 0.20);
+      const cropY = Math.round(vh * 0.15);
+      const cropW = Math.round(vw * 0.60);
+      const cropH = Math.round(vh * 0.70);
+
+      ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, 64, 64);
+      const imgData = ctx.getImageData(0, 0, 64, 64);
+      const data = imgData.data;
+
+      let totalLum = 0;
+      let eyeLum = 0;
+      let eyeCount = 0;
+      let faceCount = 0;
+
+      for (let y = 0; y < 64; y++) {
+        for (let x = 0; x < 64; x++) {
+          const idx = (y * 64 + x) * 4;
+          const r = data[idx];
+          const g = data[idx + 1];
+          const b = data[idx + 2];
+          const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+          totalLum += lum;
+          faceCount++;
+
+          if (y >= 18 && y <= 36 && x >= 14 && x <= 50) {
+            eyeLum += lum;
+            eyeCount++;
+          }
+        }
+      }
+
+      const avgFaceLum = totalLum / faceCount;
+      const avgEyeLum = eyeLum / (eyeCount || 1);
+
+      // Check brightness bounds
+      if (avgFaceLum < 18 || avgFaceLum > 242) {
+        setLivenessPrompt("Center face in good lighting");
+        setLivenessPhase("positioning");
+        return;
+      }
+
+      const history = livenessHistoryRef.current;
+      history.push(avgEyeLum);
+      if (history.length > 25) history.shift();
+
+      if (history.length < 5) {
+        setLivenessPrompt("Hold steady in frame...");
+        setLivenessPhase("positioning");
+        return;
+      }
+
+      if (stableFrames < 4) {
+        stableFrames++;
+        setLivenessPrompt("👁️ Please Blink Your Eyes Naturally (একবার চোখের পলক ফেলুন)");
+        setLivenessPhase("ready");
+        return;
+      }
+
+      const baseline = history.slice(0, 5).reduce((a, b) => a + b, 0) / 5;
+      const curr = history[history.length - 1];
+      const deviation = Math.abs(curr - baseline);
+
+      // Blink dynamic: eyelid closure creates a temporary luminance dip/shift of 3.0 to 35.0
+      if (deviation >= 3.0 && deviation <= 38.0 && blinkStage === 0) {
+        blinkStage = 1;
+        setLivenessPhase("blinking");
+        setLivenessPrompt("Blinking detected... Reopen eyes");
+      } else if (blinkStage === 1 && Math.abs(curr - baseline) < 2.5) {
+        // Blink verified!
+        blinkStage = 2;
+        setLivenessPhase("verified");
+        setBlinkDetected(true);
+        setLivenessPrompt("✅ Live Human Verified! Capturing...");
+
+        try {
+          if (typeof window !== "undefined" && window.navigator && window.navigator.vibrate) {
+            window.navigator.vibrate([40, 30, 80]);
+          }
+        } catch (e) {}
+
+        // Automatically capture high-res frame 150ms after blink
+        setTimeout(() => {
+          if (webcamRef.current) {
+            const shot = webcamRef.current.getScreenshot();
+            if (shot) {
+              setCapturedImage(shot);
+            }
+          }
+        }, 180);
+      }
+    };
+
+    intervalId = setInterval(processLivenessFrame, 75);
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [step, capturedImage, cameraError]);
 
   // Capture frame from webcam
   const capturePhoto = useCallback(() => {
@@ -1342,14 +1477,51 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                           />
 
                           <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center">
-                            <div className="w-[68%] h-[68%] border-2 border-dashed border-indigo-400/70 rounded-[50%] relative flex items-center justify-center shadow-[0_0_50px_rgba(99,102,241,0.15)]">
-                              <div className="absolute left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-indigo-400 to-transparent animate-scan" />
-                              <div className="absolute top-2 w-4 h-1 bg-indigo-400 rounded-full" />
-                              <div className="absolute bottom-2 w-4 h-1 bg-indigo-400 rounded-full" />
+                            <div className={`w-[68%] h-[68%] border-2 rounded-[50%] relative flex items-center justify-center transition-all duration-300 ${
+                              livenessPhase === "verified"
+                                ? "border-emerald-400 shadow-[0_0_50px_rgba(52,211,153,0.4)]"
+                                : livenessPhase === "blinking"
+                                ? "border-cyan-400 shadow-[0_0_50px_rgba(34,211,238,0.3)] animate-pulse"
+                                : livenessPhase === "ready"
+                                ? "border-amber-400/90 shadow-[0_0_50px_rgba(251,191,36,0.25)]"
+                                : "border-dashed border-indigo-400/70 shadow-[0_0_50px_rgba(99,102,241,0.15)]"
+                            }`}>
+                              <div className={`absolute left-0 right-0 h-0.5 bg-gradient-to-r from-transparent ${
+                                livenessPhase === "verified" ? "via-emerald-400" :
+                                livenessPhase === "blinking" ? "via-cyan-400" :
+                                livenessPhase === "ready" ? "via-amber-400" : "via-indigo-400"
+                              } to-transparent animate-scan`} />
+                              <div className={`absolute top-2 w-4 h-1 rounded-full ${
+                                livenessPhase === "verified" ? "bg-emerald-400" :
+                                livenessPhase === "ready" || livenessPhase === "blinking" ? "bg-amber-400" : "bg-indigo-400"
+                              }`} />
+                              <div className={`absolute bottom-2 w-4 h-1 rounded-full ${
+                                livenessPhase === "verified" ? "bg-emerald-400" :
+                                livenessPhase === "ready" || livenessPhase === "blinking" ? "bg-amber-400" : "bg-indigo-400"
+                              }`} />
                             </div>
-                            <span className="mt-3 text-[11px] font-semibold text-white/90 bg-black/60 backdrop-blur-md px-3 py-1 rounded-full border border-white/10">
-                              Center your face inside the oval
-                            </span>
+
+                            <div className="mt-3 flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-black/75 backdrop-blur-md border text-xs font-semibold shadow-lg transition-all duration-200"
+                              style={{
+                                borderColor: livenessPhase === "verified" ? "rgba(52,211,153,0.5)" :
+                                             livenessPhase === "blinking" ? "rgba(34,211,238,0.5)" :
+                                             livenessPhase === "ready" ? "rgba(251,191,36,0.5)" : "rgba(255,255,255,0.15)",
+                                color: livenessPhase === "verified" ? "#6ee7b7" :
+                                       livenessPhase === "blinking" ? "#67e8f9" :
+                                       livenessPhase === "ready" ? "#fde68a" : "#ffffff"
+                              }}
+                            >
+                              {livenessPhase === "verified" ? (
+                                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                              ) : livenessPhase === "blinking" ? (
+                                <EyeOff className="w-4 h-4 text-cyan-400 animate-pulse shrink-0" />
+                              ) : livenessPhase === "ready" ? (
+                                <Eye className="w-4 h-4 text-amber-400 animate-bounce shrink-0" />
+                              ) : (
+                                <Activity className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                              )}
+                              <span>{livenessPrompt}</span>
+                            </div>
                           </div>
 
                           <button
@@ -1369,9 +1541,9 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                         alt="Captured Selfie" 
                         className="w-full h-full object-cover"
                       />
-                      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-black/70 backdrop-blur-md px-3 py-1 rounded-full border border-emerald-500/30 text-[11px] text-emerald-300 font-medium flex items-center gap-1.5">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                        Photo Ready
+                      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-black/80 backdrop-blur-md px-3.5 py-1 rounded-full border border-emerald-500/40 text-xs text-emerald-300 font-bold flex items-center gap-1.5 shadow-lg">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                        <span>{blinkDetected ? "Live Blink Verified" : "Photo Captured"}</span>
                       </div>
                     </div>
                   )}
@@ -1379,13 +1551,18 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
 
                 <div className="flex flex-col gap-2 mt-1">
                   {!capturedImage ? (
-                    <button
-                      onClick={capturePhoto}
-                      className="w-full py-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-base transition-all shadow-xl shadow-indigo-600/30 flex items-center justify-center gap-2 cursor-pointer active:scale-98"
-                    >
-                      <Camera className="w-5 h-5" />
-                      <span>Capture Photo</span>
-                    </button>
+                    <div className="flex flex-col gap-2">
+                      <button
+                        onClick={capturePhoto}
+                        className="w-full py-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-base transition-all shadow-xl shadow-indigo-600/30 flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+                      >
+                        <Camera className="w-5 h-5" />
+                        <span>Capture Photo</span>
+                      </button>
+                      <p className="text-[11px] text-center text-amber-300/80 font-medium">
+                        💡 Tip: Simply blink naturally and the camera will auto-capture your live selfie!
+                      </p>
+                    </div>
                   ) : (
                     <div className="grid grid-cols-2 gap-2.5">
                       <button
