@@ -1,12 +1,12 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { useRouter, usePathname } from "next/navigation";
 
 export interface AuthUser {
   username: string;
   name: string;
-  role: string;
+  role: "Super Admin" | "Faculty";
 }
 
 interface AuthContextType {
@@ -14,7 +14,8 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (username: string, pass: string) => Promise<{ success: boolean; error?: string }>;
-  logout: () => void;
+  logout: () => Promise<void>;
+  refreshSession: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -22,7 +23,8 @@ const AuthContext = createContext<AuthContextType>({
   isAuthenticated: false,
   isLoading: true,
   login: async () => ({ success: false }),
-  logout: () => {},
+  logout: async () => {},
+  refreshSession: async () => {},
 });
 
 const AUTH_STORAGE_KEY = "medattend_admin_session";
@@ -33,66 +35,84 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
 
-  useEffect(() => {
-    // Restore persistent session from localStorage on mount
+  const refreshSession = useCallback(async () => {
     try {
+      const res = await fetch("/api/auth/me", { cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.authenticated && data.user) {
+          setUser(data.user);
+          localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(data.user));
+          return;
+        }
+      }
+      
+      // Fallback check from localStorage only if server cookie failed
       const stored = localStorage.getItem(AUTH_STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
         if (parsed && parsed.username) {
-          // Ensure display name is SK SAIFUDDIN
-          if (parsed.name === "Administrator" || !parsed.name) {
-            parsed.name = "SK SAIFUDDIN";
-            localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(parsed));
-          }
           setUser(parsed);
-          document.cookie = "medattend_auth=true; path=/; max-age=2592000; SameSite=Lax";
         }
       }
     } catch (e) {
-      console.error("Failed to restore auth state", e);
+      console.warn("Failed to check auth status:", e);
     } finally {
       setIsLoading(false);
     }
   }, []);
 
+  useEffect(() => {
+    refreshSession();
+  }, [refreshSession]);
+
   const login = async (usernameInput: string, passwordInput: string): Promise<{ success: boolean; error?: string }> => {
     const cleanUser = usernameInput.trim().toLowerCase();
     const cleanPass = passwordInput.trim();
 
-    // Valid credentials:
-    // 1. admin / admin123
-    // 2. admin / admin
-    // 3. saif / saif123
-    const isValid = 
-      (cleanUser === "admin" && (cleanPass === "admin123" || cleanPass === "admin")) ||
-      (cleanUser === "saif" && (cleanPass === "saif123" || cleanPass === "admin" || cleanPass === "admin123")) ||
-      (cleanUser === "faculty" && cleanPass === "faculty123");
+    try {
+      // Secure server-side credential verification (no passwords in client bundle)
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          username: cleanUser,
+          password: cleanPass,
+        }),
+      });
 
-    if (!isValid) {
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        return {
+          success: false,
+          error: data.error || "Invalid username or password. Please check your credentials.",
+        };
+      }
+
+      const authUser: AuthUser = data.user;
+      setUser(authUser);
+      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(authUser));
+
+      return { success: true };
+    } catch (err: any) {
       return {
         success: false,
-        error: "Invalid username or password. Please check your credentials.",
+        error: "Server connection failed. Please try again.",
       };
     }
-
-    const authUser: AuthUser = {
-      username: cleanUser,
-      name: "SK SAIFUDDIN",
-      role: "Super Admin",
-    };
-
-    setUser(authUser);
-    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(authUser));
-    document.cookie = "medattend_auth=true; path=/; max-age=2592000; SameSite=Lax";
-
-    return { success: true };
   };
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch {
+      // Ignore network errors during logout
+    }
     setUser(null);
     localStorage.removeItem(AUTH_STORAGE_KEY);
-    document.cookie = "medattend_auth=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
     router.push("/login");
   };
 
@@ -104,6 +124,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isLoading,
         login,
         logout,
+        refreshSession,
       }}
     >
       {children}
