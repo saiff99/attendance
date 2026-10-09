@@ -14,6 +14,7 @@ export async function POST(request: Request) {
     const latitude = rawFormData.get('latitude') as string | null;
     const longitude = rawFormData.get('longitude') as string | null;
     const distanceMeters = rawFormData.get('distance_meters') as string | null;
+    const deviceId = (rawFormData.get('device_id') as string) || '';
 
     if (!file || !sessionId || !studentRoll) {
       return NextResponse.json({ detail: "Missing required attendance parameters." }, { status: 400 });
@@ -30,6 +31,7 @@ export async function POST(request: Request) {
       if (latitude) fd.append('latitude', latitude);
       if (longitude) fd.append('longitude', longitude);
       if (distanceMeters) fd.append('distance_meters', distanceMeters);
+      if (deviceId) fd.append('device_id', deviceId);
       return fd;
     };
 

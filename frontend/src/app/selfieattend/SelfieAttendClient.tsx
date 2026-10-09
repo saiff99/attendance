@@ -608,10 +608,25 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
       // Compress the image so mobile 4G upload takes <100ms and never exceeds Vercel limits
       const blob = await compressImage(capturedImage);
 
+      // Retrieve or generate unique persistent device fingerprint
+      let deviceId = "";
+      try {
+        deviceId = localStorage.getItem("medattend_device_id") || "";
+        if (!deviceId) {
+          deviceId = "dev_" + Math.random().toString(36).substring(2, 12) + "_" + Date.now().toString(36);
+          localStorage.setItem("medattend_device_id", deviceId);
+        }
+      } catch (e) {
+        deviceId = "dev_" + Math.random().toString(36).substring(2, 12);
+      }
+
       const formData = new FormData();
       formData.append("file", blob, "selfie.jpg");
       formData.append("session_id", selectedSession.id);
       formData.append("student_roll", student.student_roll);
+      if (deviceId) {
+        formData.append("device_id", deviceId);
+      }
       if (userCoords) {
         formData.append("latitude", userCoords.latitude.toString());
         formData.append("longitude", userCoords.longitude.toString());

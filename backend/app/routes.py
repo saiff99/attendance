@@ -13,9 +13,23 @@ from fastapi.responses import StreamingResponse
 from typing import List, Optional
 from pydantic import BaseModel
 
-from app.config import supabase, get_camera_urls, get_camera_details, get_ptz_urls, is_cohort_matching
+from app.config import (
+    supabase,
+    get_camera_urls,
+    get_camera_details,
+    get_ptz_urls,
+    is_cohort_matching,
+    get_server_geofence_config,
+    calculate_haversine_distance,
+)
 from app.ai import app_fa, AI_ENABLED, calculate_confidence_score
 from app.stream import generate_video_feed
+
+# Session Device Lock Registry: {session_id: {device_id: student_roll}}
+session_device_locks: dict = {}
+
+# Anti-Brute-force Rate Limiter: {rate_key: [timestamp, ...]}
+selfie_rate_limits: dict = {}
 
 def parse_iso_datetime(time_str: str) -> datetime:
     """Robust ISO 8601 parser compatible with Supabase timestamps and Python 3.9."""
@@ -540,21 +554,77 @@ async def student_lookup(student_roll: str, session_id: Optional[str] = None):
 
 @router.post("/api/selfie-attendance")
 async def selfie_attendance(
+    request: Request,
     file: UploadFile = File(...),
     session_id: str = Form(...),
     student_roll: str = Form(...),
     latitude: Optional[float] = Form(None),
     longitude: Optional[float] = Form(None),
-    distance_meters: Optional[float] = Form(None)
+    distance_meters: Optional[float] = Form(None),
+    device_id: Optional[str] = Form(None)
 ):
     """
     Processes a student's mobile selfie, verifies face against student's enrolled embedding using InsightFace AI,
-    and logs attendance if matched (valid within 5-minute window, cohort check, and optional GPS geofence).
+    and logs attendance if matched (valid within 5-minute window, cohort check, anti-spoofing, device lock, and server GPS geofence).
     """
     clean_roll = student_roll.strip()
+    client_ip = request.client.host if request.client else "unknown"
+
+    # 1. Anti-Bruteforce Rate Limiter (Max 5 attempts per IP + Student Roll in 60s)
+    rate_key = f"{client_ip}:{clean_roll.upper()}"
+    now_ts = time.time()
+    attempts = selfie_rate_limits.get(rate_key, [])
+    attempts = [ts for ts in attempts if now_ts - ts < 60.0]
+    if len(attempts) >= 5:
+        selfie_rate_limits[rate_key] = attempts
+        raise HTTPException(
+            status_code=429,
+            detail="Too many verification attempts. Please wait 60 seconds before trying again."
+        )
+    attempts.append(now_ts)
+    selfie_rate_limits[rate_key] = attempts
+
+    # 2. Device Lock Check (1 mobile device per student per session)
+    if device_id and device_id.strip():
+        clean_dev_id = device_id.strip()
+        sess_locks = session_device_locks.setdefault(session_id, {})
+        if clean_dev_id in sess_locks and sess_locks[clean_dev_id] != clean_roll.upper():
+            other_roll = sess_locks[clean_dev_id]
+            raise HTTPException(
+                status_code=403,
+                detail=f"Device Lock: This phone/device has already submitted attendance for Roll '{other_roll}' in this session. One device cannot be used for multiple students."
+            )
+
+    # 3. Server-Side GPS Geofence Check
+    geofence = get_server_geofence_config()
+    if geofence.get("enabled"):
+        if latitude is None or longitude is None:
+            raise HTTPException(
+                status_code=403,
+                detail="GPS location is required for attendance. Please enable device GPS/Location and grant permission."
+            )
+        try:
+            actual_dist = calculate_haversine_distance(
+                float(latitude),
+                float(longitude),
+                float(geofence["latitude"]),
+                float(geofence["longitude"])
+            )
+            max_radius = float(geofence.get("radiusMeters", 200.0))
+            if actual_dist > max_radius:
+                campus_name = geofence.get("campusName", "College Campus")
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"Geofence Restriction: You are {int(actual_dist)}m away from {campus_name}. Attendance is only permitted within {int(max_radius)}m of the campus."
+                )
+        except HTTPException:
+            raise
+        except Exception as geo_err:
+            print("Server geofence calculation error:", geo_err)
+
     contents = await file.read()
     
-    # 1. Check 5-minute session expiration window & Target Cohort
+    # 4. Check 5-minute session expiration window & Target Cohort
     session_res = supabase.table("sessions").select("id, start_time, created_at, class_name, target_academic_year").eq("id", session_id).execute()
     if not session_res.data:
         raise HTTPException(status_code=404, detail="Lecture session not found.")
@@ -578,7 +648,7 @@ async def selfie_attendance(
         except Exception as err:
             print("Timestamp check error:", err)
 
-    # 2. Fetch Student from DB
+    # 5. Fetch Student from DB
     res = supabase.table("students").select(
         "id, student_roll, full_name, academic_year, face_encoding"
     ).ilike("student_roll", clean_roll).execute()
@@ -593,7 +663,7 @@ async def selfie_attendance(
         
     student = res.data[0]
 
-    # 3. Check Academic Year / Cohort / Sub-Batch Match
+    # 6. Check Academic Year / Cohort / Sub-Batch Match
     target_year = sess_obj.get("target_academic_year")
     student_year = student.get("academic_year") or ""
     if not is_cohort_matching(target_year, student_year):
@@ -607,10 +677,13 @@ async def selfie_attendance(
         
     known_encoding = np.array(student["face_encoding"])
     
-    # 2. Check if already marked present in this session
+    # 7. Check if already marked present in this session
     existing_att = supabase.table("attendance").select("id, recorded_at, confidence_score").eq("session_id", session_id).eq("student_id", student["id"]).execute()
     if existing_att.data:
         rec_time = existing_att.data[0].get("recorded_at", "Earlier Today")
+        # Ensure device lock is registered even if already present
+        if device_id and device_id.strip():
+            session_device_locks.setdefault(session_id, {})[device_id.strip()] = clean_roll.upper()
         return {
             "success": True,
             "already_marked": True,
@@ -622,7 +695,7 @@ async def selfie_attendance(
             "confidence": existing_att.data[0].get("confidence_score", 0.95)
         }
         
-    # 3. AI Face Recognition Verification
+    # 8. AI Face Recognition & Anti-Spoofing Verification
     if not (AI_ENABLED and app_fa):
         raise HTTPException(
             status_code=503,
@@ -636,6 +709,15 @@ async def selfie_attendance(
         image_np = np.array(image)
         image_bgr = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
         
+        # Anti-Spoofing / Blur check (Laplacian variance)
+        gray = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
+        lap_var = float(cv2.Laplacian(gray, cv2.CV_64F).var())
+        if lap_var < 20.0:
+            raise HTTPException(
+                status_code=400,
+                detail="Selfie image is too blurry or out of focus. Please hold your phone steady in a well-lit area."
+            )
+
         faces = app_fa.get(image_bgr)
         if not faces:
             h, w = image_bgr.shape[:2]
@@ -647,6 +729,18 @@ async def selfie_attendance(
         if len(valid_faces) == 0:
             raise HTTPException(status_code=400, detail="No clear face detected in the selfie. Please look directly into the camera in good lighting.")
         
+        # Face Proximity / Coverage Check
+        first_face = valid_faces[0]
+        bbox = first_face.bbox
+        face_w = bbox[2] - bbox[0]
+        face_h = bbox[3] - bbox[1]
+        face_area_ratio = (face_w * face_h) / float(image_bgr.shape[0] * image_bgr.shape[1])
+        if face_area_ratio < 0.025:
+            raise HTTPException(
+                status_code=400,
+                detail="Face is too far from camera. Please hold your phone closer to frame your face clearly."
+            )
+
         # Handle 128D legacy vs 512D
         current_known = known_encoding
         first_emb = valid_faces[0].embedding
@@ -657,7 +751,7 @@ async def selfie_attendance(
             else:
                 raise HTTPException(status_code=500, detail="Face encoding dimension mismatch.")
         
-        # If multiple faces detected in selfie (e.g. child/person in background), check best match
+        # If multiple faces detected in selfie, match against best
         best_sim = -1.0
         for f in valid_faces:
             emb = f.embedding
@@ -668,7 +762,7 @@ async def selfie_attendance(
 
         sim = best_sim
         threshold = float(os.getenv("SELFIE_SIMILARITY_THRESHOLD", "0.38"))
-        print(f"[Selfie AI] Student '{student['full_name']}' (Roll: {clean_roll}) | Detected Faces: {len(valid_faces)} | Best Similarity: {sim:.4f} | Threshold: {threshold} | Result: {'MATCH' if sim >= threshold else 'MISMATCH'}")
+        print(f"[Selfie AI] Student '{student['full_name']}' (Roll: {clean_roll}) | Blur Var: {lap_var:.1f} | Area: {face_area_ratio:.3f} | Best Similarity: {sim:.4f} | Threshold: {threshold} | Result: {'MATCH' if sim >= threshold else 'MISMATCH'}")
         
         # High precision threshold for selfie verification (ArcFace cosine similarity >= 0.38)
         if sim < threshold:
@@ -684,7 +778,7 @@ async def selfie_attendance(
         print("Error in selfie face matching:", e)
         raise HTTPException(status_code=500, detail="AI face analysis failed. Please try again.")
         
-    # 4. Record Attendance in Supabase
+    # 9. Record Attendance in Supabase
     try:
         try:
             supabase.table("attendance").upsert({
@@ -705,6 +799,10 @@ async def selfie_attendance(
                 "confidence_score": confidence_score
             }, on_conflict="session_id,student_id").execute()
         
+        # 10. Lock Device for this Student & Session
+        if device_id and device_id.strip():
+            session_device_locks.setdefault(session_id, {})[device_id.strip()] = clean_roll.upper()
+
         # Sync memory cache if stream is currently active
         try:
             from app.stream import session_recognized_students
@@ -728,6 +826,8 @@ async def selfie_attendance(
         # Check if inserted concurrently
         existing = supabase.table("attendance").select("id, recorded_at, confidence_score").eq("session_id", session_id).eq("student_id", student["id"]).execute()
         if existing.data:
+            if device_id and device_id.strip():
+                session_device_locks.setdefault(session_id, {})[device_id.strip()] = clean_roll.upper()
             return {
                 "success": True,
                 "already_marked": True,

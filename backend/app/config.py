@@ -133,3 +133,46 @@ def is_cohort_matching(target_cohort: Optional[str], student_year: Optional[str]
     return True
 
 
+import math
+
+DEFAULT_GEOFENCE_CONFIG = {
+    "enabled": False,
+    "latitude": 22.4285,
+    "longitude": 88.2435,
+    "radiusMeters": 200.0,
+    "campusName": "Jagannath Gupta Institute of Medical Sciences (JIMSH)",
+}
+
+
+def get_server_geofence_config() -> dict:
+    """Fetches the latest geofence settings from Supabase or returns defaults."""
+    try:
+        if supabase:
+            res = supabase.table("settings").select("value").eq("key", "campus_geofence").execute()
+            if res.data and res.data[0].get("value"):
+                val = res.data[0]["value"]
+                return {
+                    "enabled": bool(val.get("enabled", False)),
+                    "latitude": float(val.get("latitude", DEFAULT_GEOFENCE_CONFIG["latitude"])),
+                    "longitude": float(val.get("longitude", DEFAULT_GEOFENCE_CONFIG["longitude"])),
+                    "radiusMeters": float(val.get("radiusMeters", DEFAULT_GEOFENCE_CONFIG["radiusMeters"])),
+                    "campusName": str(val.get("campusName", DEFAULT_GEOFENCE_CONFIG["campusName"])),
+                }
+    except Exception:
+        pass
+    return DEFAULT_GEOFENCE_CONFIG
+
+
+def calculate_haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Calculates great-circle distance between two GPS coordinates in meters using the Haversine formula."""
+    R = 6371000.0  # Earth radius in meters
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    delta_phi = math.radians(lat2 - lat1)
+    delta_lambda = math.radians(lon2 - lon1)
+    a = (math.sin(delta_phi / 2.0) ** 2) + math.cos(phi1) * math.cos(phi2) * (math.sin(delta_lambda / 2.0) ** 2)
+    c = 2.0 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
+    return R * c
+
+
+
