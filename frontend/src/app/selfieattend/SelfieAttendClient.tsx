@@ -634,8 +634,8 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
         }).catch(() => null);
       }
 
-      // 2. Next.js Proxy Path: For Vercel Cloud or fallback
-      if (!response || !response.ok) {
+      // 2. Next.js Proxy Path: For Vercel Cloud or fallback if direct connection failed
+      if (!response) {
         const proxyRes = await fetch("/api/selfie-attendance", {
           method: "POST",
           headers: {
