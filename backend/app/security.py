@@ -1,7 +1,8 @@
 import os
 from typing import Set
-from fastapi import Request, Response
+from fastapi import Request, Response, HTTPException
 from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 
 # Shared internal API key between Frontend and Backend
@@ -102,7 +103,7 @@ class APISecurityMiddleware(BaseHTTPMiddleware):
 
         try:
             return await call_next(request)
-        except HTTPException as exc:
+        except (HTTPException, StarletteHTTPException) as exc:
             return JSONResponse(
                 status_code=exc.status_code,
                 content={"detail": exc.detail},
