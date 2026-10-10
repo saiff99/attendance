@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifySessionToken, SESSION_COOKIE_NAME } from "@/lib/serverAuth";
-import { supabase } from "@/lib/supabase";
+import { supabaseServer } from "@/lib/supabaseServer";
 
 export async function GET(request: NextRequest) {
   try {
@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
     const action = searchParams.get("action");
     const targetType = searchParams.get("target_type");
 
-    let query = supabase
+    let query = supabaseServer
       .from("audit_logs")
       .select("*")
       .order("created_at", { ascending: false })

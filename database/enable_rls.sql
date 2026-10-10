@@ -1,158 +1,53 @@
 -- ==============================================================================
--- 🛡️ MedAttend AI — Enterprise Supabase Row Level Security (RLS) Policies
--- Run this script in your Supabase Dashboard > SQL Editor to fully secure your database.
+-- 🛡️ MedAttend AI — Enterprise Zero-Trust Row Level Security (RLS) Policies
+-- Run this script in your Supabase Dashboard > SQL Editor to secure your database.
 -- ==============================================================================
 
 -- 1. Enable Row Level Security on all core tables
 ALTER TABLE IF EXISTS students ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS attendance ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS audit_logs ENABLE ROW LEVEL SECURITY;
 
--- Clean up any legacy conflicting policies if they exist
+-- 2. Drop all legacy/insecure policies
 DROP POLICY IF EXISTS "Allow public read access to students" ON students;
 DROP POLICY IF EXISTS "Allow service_role full access to students" ON students;
 DROP POLICY IF EXISTS "Allow authenticated full access to students" ON students;
 DROP POLICY IF EXISTS "Allow anon read access to students" ON students;
+DROP POLICY IF EXISTS "service_role_full_students" ON students;
+DROP POLICY IF EXISTS "allow_read_students" ON students;
+DROP POLICY IF EXISTS "allow_insert_students" ON students;
+DROP POLICY IF EXISTS "allow_update_students" ON students;
+DROP POLICY IF EXISTS "allow_delete_students" ON students;
 
 DROP POLICY IF EXISTS "Allow public read access to sessions" ON sessions;
 DROP POLICY IF EXISTS "Allow service_role full access to sessions" ON sessions;
 DROP POLICY IF EXISTS "Allow authenticated full access to sessions" ON sessions;
 DROP POLICY IF EXISTS "Allow anon read access to sessions" ON sessions;
 DROP POLICY IF EXISTS "Allow tunnel config updates on sessions" ON sessions;
+DROP POLICY IF EXISTS "service_role_full_sessions" ON sessions;
+DROP POLICY IF EXISTS "allow_read_sessions" ON sessions;
+DROP POLICY IF EXISTS "allow_insert_sessions" ON sessions;
+DROP POLICY IF EXISTS "allow_update_sessions" ON sessions;
+DROP POLICY IF EXISTS "allow_delete_sessions" ON sessions;
 
 DROP POLICY IF EXISTS "Allow public read access to attendance" ON attendance;
 DROP POLICY IF EXISTS "Allow service_role full access to attendance" ON attendance;
 DROP POLICY IF EXISTS "Allow authenticated full access to attendance" ON attendance;
 DROP POLICY IF EXISTS "Allow insert attendance logs" ON attendance;
+DROP POLICY IF EXISTS "service_role_full_attendance" ON attendance;
+DROP POLICY IF EXISTS "allow_read_attendance" ON attendance;
+DROP POLICY IF EXISTS "allow_insert_attendance" ON attendance;
+DROP POLICY IF EXISTS "allow_update_attendance" ON attendance;
+DROP POLICY IF EXISTS "allow_delete_attendance" ON attendance;
+
+DROP POLICY IF EXISTS "service_role_full_audit_logs" ON audit_logs;
+DROP POLICY IF EXISTS "allow_read_audit_logs" ON audit_logs;
+DROP POLICY IF EXISTS "allow_insert_audit_logs" ON audit_logs;
 
 -- ==============================================================================
--- 🎓 STUDENTS TABLE POLICIES
--- ==============================================================================
-
--- 1.1 Allow backend service_role full unrestricted access (FastAPI Backend)
-CREATE POLICY "service_role_full_students"
-ON students
-FOR ALL
-TO service_role
-USING (true)
-WITH CHECK (true);
-
--- 1.2 Allow application users (authenticated & anon client) to READ student records
-CREATE POLICY "allow_read_students"
-ON students
-FOR SELECT
-TO authenticated, anon
-USING (true);
-
--- 1.3 Allow application users (authenticated & anon client) to INSERT new student profiles
-CREATE POLICY "allow_insert_students"
-ON students
-FOR INSERT
-TO authenticated, anon
-WITH CHECK (true);
-
--- 1.4 Allow application users (authenticated & anon client) to UPDATE student records & face encodings
-CREATE POLICY "allow_update_students"
-ON students
-FOR UPDATE
-TO authenticated, anon
-USING (true)
-WITH CHECK (true);
-
--- 1.5 Allow DELETE only for authenticated staff or service_role
-CREATE POLICY "allow_delete_students"
-ON students
-FOR DELETE
-TO authenticated, service_role
-USING (true);
-
-
--- ==============================================================================
--- 📅 SESSIONS TABLE POLICIES
--- ==============================================================================
-
--- 2.1 Allow backend service_role full unrestricted access
-CREATE POLICY "service_role_full_sessions"
-ON sessions
-FOR ALL
-TO service_role
-USING (true)
-WITH CHECK (true);
-
--- 2.2 Allow application users to READ class sessions
-CREATE POLICY "allow_read_sessions"
-ON sessions
-FOR SELECT
-TO authenticated, anon
-USING (true);
-
--- 2.3 Allow application users to CREATE new class sessions
-CREATE POLICY "allow_insert_sessions"
-ON sessions
-FOR INSERT
-TO authenticated, anon
-WITH CHECK (true);
-
--- 2.4 Allow application users & start.py to UPDATE ongoing class sessions & sync signed tunnel URLs
-CREATE POLICY "allow_update_sessions"
-ON sessions
-FOR UPDATE
-TO authenticated, anon
-USING (true)
-WITH CHECK (true);
-
--- 2.5 Allow DELETE sessions for authenticated staff and service_role
-CREATE POLICY "allow_delete_sessions"
-ON sessions
-FOR DELETE
-TO authenticated, service_role
-USING (true);
-
-
--- ==============================================================================
--- 📝 ATTENDANCE TABLE POLICIES
--- ==============================================================================
-
--- 3.1 Allow backend service_role full unrestricted access
-CREATE POLICY "service_role_full_attendance"
-ON attendance
-FOR ALL
-TO service_role
-USING (true)
-WITH CHECK (true);
-
--- 3.2 Allow application to READ attendance records (reports, analytics, live scan)
-CREATE POLICY "allow_read_attendance"
-ON attendance
-FOR SELECT
-TO authenticated, anon
-USING (true);
-
--- 3.3 Allow logging attendance records (Live Scan, Selfie Check-in, Batch Upload)
-CREATE POLICY "allow_insert_attendance"
-ON attendance
-FOR INSERT
-TO authenticated, anon
-WITH CHECK (true);
-
--- 3.4 Allow attendance status updates (manual overrides)
-CREATE POLICY "allow_update_attendance"
-ON attendance
-FOR UPDATE
-TO authenticated, anon
-USING (true)
-WITH CHECK (true);
-
--- 3.5 Allow DELETE only for authenticated staff or service_role
-CREATE POLICY "allow_delete_attendance"
-ON attendance
-FOR DELETE
-TO authenticated, service_role
-USING (true);
-
-
--- ==============================================================================
--- 🔒 AUDIT LOGS TABLE POLICIES (DPDP Act 2023 Compliance)
+-- 🔒 1. AUDIT LOGS TABLE POLICIES (Strict Zero-Trust — Service Role Only)
+-- Anon clients CANNOT read, write, update, or tamper with audit trail logs.
 -- ==============================================================================
 
 CREATE TABLE IF NOT EXISTS audit_logs (
@@ -166,32 +61,106 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-ALTER TABLE IF EXISTS audit_logs ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "service_role_full_audit_logs"
+CREATE POLICY "service_role_unrestricted_audit_logs"
 ON audit_logs
 FOR ALL
 TO service_role
 USING (true)
 WITH CHECK (true);
 
-CREATE POLICY "allow_read_audit_logs"
-ON audit_logs
-FOR SELECT
-TO authenticated, anon
-USING (true);
 
-CREATE POLICY "allow_insert_audit_logs"
-ON audit_logs
-FOR INSERT
-TO authenticated, anon
+-- ==============================================================================
+-- 🎓 2. STUDENTS TABLE POLICIES
+-- Anon clients CANNOT INSERT, UPDATE, or DELETE student records or biometric data.
+-- ==============================================================================
+
+-- 2.1 Backend / Server-side Full Control
+CREATE POLICY "service_role_unrestricted_students"
+ON students
+FOR ALL
+TO service_role
+USING (true)
 WITH CHECK (true);
 
--- ==============================================================================
--- 🚀 Confirmation
--- ==============================================================================
-COMMENT ON TABLE students IS 'MedAttend Biometric Student Registry (RLS Protected, DPDP Act 2023 Compliant)';
-COMMENT ON TABLE sessions IS 'MedAttend Academic Class Sessions (RLS Protected)';
-COMMENT ON TABLE attendance IS 'MedAttend Biometric Attendance Ledger (RLS Protected)';
-COMMENT ON TABLE audit_logs IS 'MedAttend Security & Biometric Action Audit Trail (RLS Protected)';
+-- 2.2 Authenticated Staff Full Management
+CREATE POLICY "authenticated_staff_manage_students"
+ON students
+FOR ALL
+TO authenticated
+USING (true)
+WITH CHECK (true);
 
+-- 2.3 Read-only access for student lookup during verification
+CREATE POLICY "anon_read_students"
+ON students
+FOR SELECT
+TO anon
+USING (true);
+
+
+-- ==============================================================================
+-- 📅 3. SESSIONS TABLE POLICIES
+-- Anon clients CANNOT modify sessions or view internal system configs.
+-- ==============================================================================
+
+-- 3.1 Backend / Server-side Full Control
+CREATE POLICY "service_role_unrestricted_sessions"
+ON sessions
+FOR ALL
+TO service_role
+USING (true)
+WITH CHECK (true);
+
+-- 3.2 Authenticated Staff Full Management
+CREATE POLICY "authenticated_staff_manage_sessions"
+ON sessions
+FOR ALL
+TO authenticated
+USING (true)
+WITH CHECK (true);
+
+-- 3.3 Anon clients can only read ACTIVE CLASS sessions (Hides __SYSTEM_CONFIG__)
+CREATE POLICY "anon_read_active_sessions_only"
+ON sessions
+FOR SELECT
+TO anon
+USING (class_name != '__SYSTEM_CONFIG__');
+
+
+-- ==============================================================================
+-- 📝 4. ATTENDANCE TABLE POLICIES
+-- Anon clients CANNOT directly UPDATE or DELETE attendance ledger.
+-- All writes are handled via AI Engine & Verified Server Routes.
+-- ==============================================================================
+
+-- 4.1 Backend / Server-side Full Control
+CREATE POLICY "service_role_unrestricted_attendance"
+ON attendance
+FOR ALL
+TO service_role
+USING (true)
+WITH CHECK (true);
+
+-- 4.2 Authenticated Staff Full Management
+CREATE POLICY "authenticated_staff_manage_attendance"
+ON attendance
+FOR ALL
+TO authenticated
+USING (true)
+WITH CHECK (true);
+
+-- 4.3 Read-only access for classroom dashboard & verification stats
+CREATE POLICY "anon_read_attendance"
+ON attendance
+FOR SELECT
+TO anon
+USING (true);
+
+
+-- ==============================================================================
+-- 🚀 Confirmation & Schema Documentation
+-- ==============================================================================
+COMMENT ON TABLE students IS 'MedAttend Biometric Student Registry (RLS Zero-Trust Enforced, DPDP Act 2023 Compliant)';
+COMMENT ON TABLE sessions IS 'MedAttend Academic Class Sessions (RLS Zero-Trust Protected)';
+COMMENT ON TABLE attendance IS 'MedAttend Biometric Attendance Ledger (RLS Zero-Trust Protected)';
+COMMENT ON TABLE audit_logs IS 'MedAttend Security Audit Trail (Strict Service-Role Isolation)';

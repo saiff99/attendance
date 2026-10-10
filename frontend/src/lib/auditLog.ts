@@ -1,4 +1,4 @@
-import { supabase } from "@/lib/supabase";
+import { supabaseServer } from "@/lib/supabaseServer";
 
 export interface AuditEventParams {
   action: string;
@@ -29,7 +29,7 @@ export async function logAuditEvent({
       created_at: new Date().toISOString(),
     };
 
-    const { error } = await supabase.from("audit_logs").insert([payload]);
+    const { error } = await supabaseServer.from("audit_logs").insert([payload]);
     if (error) {
       console.warn("[AUDIT LOG WARNING] Failed to record audit log:", error.message);
     }
