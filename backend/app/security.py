@@ -100,4 +100,19 @@ class APISecurityMiddleware(BaseHTTPMiddleware):
                 }
             )
 
-        return await call_next(request)
+        try:
+            return await call_next(request)
+        except HTTPException as exc:
+            return JSONResponse(
+                status_code=exc.status_code,
+                content={"detail": exc.detail},
+                headers=getattr(exc, "headers", None)
+            )
+        except Exception as exc:
+            import traceback
+            traceback.print_exc()
+            return JSONResponse(
+                status_code=500,
+                content={"detail": f"Backend Error: {str(exc)}"}
+            )
+

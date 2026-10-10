@@ -127,7 +127,7 @@ export async function fetchBackend(path: string, options: RequestInit = {}): Pro
         signal: options.signal || ctrl.signal,
       });
       clearTimeout(tId);
-      if (localRes.ok || (localRes.status >= 400 && localRes.status < 500)) {
+      if (localRes.ok || localRes.status >= 400) {
         return localRes;
       }
     } catch {
@@ -175,8 +175,8 @@ export async function fetchBackend(path: string, options: RequestInit = {}): Pro
       });
       clearTimeout(timeout);
 
-      // If response is good or valid application error (400, 401, 403, 404, 422), return it
-      if (res.ok || (res.status >= 400 && res.status < 500)) {
+      // If response is good or valid application error (400, 401, 403, 404, 422, 500), return it
+      if (res.ok || res.status >= 400) {
         return res;
       }
 
