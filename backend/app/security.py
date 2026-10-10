@@ -14,9 +14,6 @@ PUBLIC_EXACT_PATHS: Set[str] = {
     "/health/performance",
     "/api/health/performance",
     "/api/selfie-attendance",
-    "/docs",
-    "/openapi.json",
-    "/redoc",
 }
 
 PUBLIC_PREFIXES = (
