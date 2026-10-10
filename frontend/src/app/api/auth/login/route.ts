@@ -30,9 +30,9 @@ const USER_DIRECTORY: Record<string, UserConfig> = {
 
 // Fallback hashes strictly for initial local dev bootstrap (if env not yet populated)
 const DEV_FALLBACK_HASHES: Record<string, string> = {
-  admin: '$2b$10$hfRcqPNDh5Pkjo1kYzgV3OIwHUPGNOL85wr5jomNiIMI9TI1EL.fu',
-  saif: '$2b$10$X1OpzBgdjmELWZbiKBI/HuNxvuE33.VsFcaaL.h6TShGOReJlJKbO',
-  faculty: '$2b$10$ym8Cw5EFA.UVdANPW9mMw.LOJua/2YzHKpshlG2WpSrSEz27epJEu',
+  admin: '$2b$10$ndT3bKNmLRaSxnbrHr/OD.Z3e9MaqMv20Ywa4ZDfNxOV2.Wj6F7RC',
+  saif: '$2b$10$Ij7ikhnwMkponzuv8QcfNeRkQV7LsBy./fkDgx0lxIlAAAS.4.ARG',
+  faculty: '$2b$10$zre7r25egIL9M5o9H5nL4eQZuyzr8kIfK9AjD5jH/7eVtqtbNS25O',
 };
 
 export async function POST(request: Request) {
