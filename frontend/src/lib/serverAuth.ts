@@ -59,7 +59,7 @@ async function getCryptoKey(secret: string): Promise<CryptoKey> {
 
 export async function createSessionToken(
   payload: Omit<SessionPayload, 'exp'>,
-  maxAgeSeconds = 2592000 // 30 days
+  maxAgeSeconds = 36000 // 10 hours
 ): Promise<string> {
   const exp = Math.floor(Date.now() / 1000) + maxAgeSeconds;
   const fullPayload: SessionPayload = { ...payload, exp };

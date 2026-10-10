@@ -53,11 +53,11 @@ def detect_moire_patterns(face_bgr: np.ndarray) -> tuple[bool, float, float]:
         high_freq_energy = float(np.sum(ring_values))
         high_freq_ratio = (high_freq_energy / (total_energy + 1e-6)) if total_energy > 0 else 0.0
         
-        # Configurable threshold (default: 2.15 for peak-to-median spike)
-        moire_thresh = float(os.getenv("ANTISPOOF_MOIRE_THRESH", "2.20"))
+        # Configurable threshold (tuned for realistic mobile front phone cameras)
+        moire_thresh = float(os.getenv("ANTISPOOF_MOIRE_THRESH", "2.40"))
         
-        # Screen Moiré patterns show sharp periodic spikes (peak_to_med > moire_thresh)
-        is_screen = bool(p99_to_med > moire_thresh or (peak_to_med > 2.45 and high_freq_ratio > 0.40))
+        # Screen Moiré patterns show sharp periodic spikes along with concentrated high-frequency harmonics
+        is_screen = bool((p99_to_med > moire_thresh and high_freq_ratio > 0.30) or (peak_to_med > 2.80 and high_freq_ratio > 0.40))
         return is_screen, float(p99_to_med), float(high_freq_ratio)
     except Exception as e:
         print("[AntiSpoof] Moiré detection error:", e)

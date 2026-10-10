@@ -12,6 +12,7 @@ const PUBLIC_PATHS = [
   '/api/active-sessions',
   '/api/health',
   '/api/student-lookup',
+  '/api/geofence',
 ];
 
 // Strict static asset file extension regex (prevents path bypass like /api/video-feed/a.b)

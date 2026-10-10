@@ -39,11 +39,41 @@ const BUILTIN_USER_HASHES: Record<string, string> = {
   faculty: '$2b$10$zre7r25egIL9M5o9H5nL4eQZuyzr8kIfK9AjD5jH/7eVtqtbNS25O',
 };
 
+// In-memory sliding window rate limiter: max 5 failed attempts per 15 minutes
+const loginAttempts: Record<string, { count: number; firstAttempt: number }> = {};
+const MAX_ATTEMPTS = 5;
+const WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+
 export async function POST(request: Request) {
   try {
+    const forwarded = request.headers.get('x-forwarded-for') || request.headers.get('cf-connecting-ip') || '127.0.0.1';
+    const clientIp = forwarded.split(',')[0].trim();
+
     const body = await request.json();
     const username = (body.username || '').trim().toLowerCase();
     const password = (body.password || '').trim();
+
+    const rateKey = `${clientIp}:${username || 'unknown'}`;
+    const now = Date.now();
+    const record = loginAttempts[rateKey];
+
+    if (record) {
+      if (now - record.firstAttempt > WINDOW_MS) {
+        delete loginAttempts[rateKey];
+      } else if (record.count >= MAX_ATTEMPTS) {
+        const remainingSeconds = Math.ceil((record.firstAttempt + WINDOW_MS - now) / 1000);
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Too many failed login attempts. Account locked for security. Please try again in ${remainingSeconds}s.`,
+          },
+          {
+            status: 429,
+            headers: { 'Retry-After': remainingSeconds.toString() },
+          }
+        );
+      }
+    }
 
     if (!username || !password) {
       return NextResponse.json(
@@ -54,6 +84,11 @@ export async function POST(request: Request) {
 
     const targetUser = USER_DIRECTORY[username];
     if (!targetUser) {
+      // Record failed attempt
+      const curr = loginAttempts[rateKey] || { count: 0, firstAttempt: now };
+      curr.count += 1;
+      loginAttempts[rateKey] = curr;
+
       return NextResponse.json(
         { success: false, error: 'Invalid username or password.' },
         { status: 401 }
@@ -79,11 +114,15 @@ export async function POST(request: Request) {
     }
 
     if (!isPasswordValid) {
+      const curr = loginAttempts[rateKey] || { count: 0, firstAttempt: now };
+      curr.count += 1;
+      loginAttempts[rateKey] = curr;
+
       logAuditEvent({
         action: 'FAILED_LOGIN_ATTEMPT',
         targetType: 'system',
         actorId: username,
-        details: { reason: 'Incorrect password' },
+        details: { reason: 'Incorrect password', ip: clientIp, attemptCount: curr.count },
       });
 
       return NextResponse.json(
@@ -92,20 +131,23 @@ export async function POST(request: Request) {
       );
     }
 
+    // Reset rate limiter on successful authentication
+    delete loginAttempts[rateKey];
+
     // Log successful login audit entry
     logAuditEvent({
       action: 'ADMIN_LOGIN',
       targetType: 'system',
       actorId: username,
-      details: { name: targetUser.name, role: targetUser.role },
+      details: { name: targetUser.name, role: targetUser.role, ip: clientIp },
     });
 
-    // Create signed cryptographic HMAC-SHA256 session token
+    // Create signed cryptographic HMAC-SHA256 session token (10 hours expiry)
     const token = await createSessionToken({
       username,
       name: targetUser.name,
       role: targetUser.role,
-    });
+    }, 36000);
 
     const response = NextResponse.json({
       success: true,
@@ -116,7 +158,7 @@ export async function POST(request: Request) {
       },
     });
 
-    // Set secure HttpOnly cookie
+    // Set secure HttpOnly cookie (10 hours = 36000s)
     response.cookies.set({
       name: SESSION_COOKIE_NAME,
       value: token,
@@ -124,7 +166,7 @@ export async function POST(request: Request) {
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       path: '/',
-      maxAge: 2592000, // 30 days
+      maxAge: 36000,
     });
 
     // Also set client readable indicator cookie
@@ -135,7 +177,7 @@ export async function POST(request: Request) {
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       path: '/',
-      maxAge: 2592000,
+      maxAge: 36000,
     });
 
     return response;

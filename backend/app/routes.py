@@ -35,8 +35,20 @@ selfie_rate_limits: dict = {}
 # Anti-Scraping Rate Limiter for Roll Lookup: {client_ip: [timestamp, ...]}
 lookup_rate_limits: dict = {}
 
-# Failed Face Verification Attempt Tracker: {f"{session_id}:{roll}": {"fails": int, "locked_until": float}}
+# Failed Face Verification Attempt Tracker: {f"{session_id}:{roll}:{ip}": {"fails": int, "locked_until": float}}
 selfie_roll_failures: dict = {}
+
+def get_real_client_ip(request: Request) -> str:
+    """Extracts genuine client IP behind Cloudflare Tunnel, reverse proxies, or direct connection."""
+    cf_ip = request.headers.get("cf-connecting-ip")
+    if cf_ip and cf_ip.strip():
+        return cf_ip.strip()
+    xff = request.headers.get("x-forwarded-for")
+    if xff and xff.strip():
+        return xff.split(",")[0].strip()
+    if request.client and request.client.host:
+        return request.client.host
+    return "127.0.0.1"
 
 def parse_iso_datetime(time_str: str) -> datetime:
     """Robust ISO 8601 parser compatible with Supabase timestamps and Python 3.9."""
@@ -702,17 +714,17 @@ async def selfie_attendance(
     and logs attendance if matched (valid within 5-minute window, cohort check, anti-spoofing, device lock, and server GPS geofence).
     """
     clean_roll = student_roll.strip()
-    client_ip = request.client.host if request.client else "unknown"
+    client_ip = get_real_client_ip(request)
     now_ts = time.time()
 
-    # 1. Lockout Cooldown Check for Roll Number
-    lockout_key = f"{session_id}:{clean_roll.upper()}"
+    # 1. Lockout Cooldown Check (Scoped to Session + Roll + Client IP to prevent DoS attacks against fellow classmates)
+    lockout_key = f"{session_id}:{clean_roll.upper()}:{client_ip}"
     lock_info = selfie_roll_failures.setdefault(lockout_key, {"fails": 0, "locked_until": 0.0})
     if now_ts < lock_info.get("locked_until", 0.0):
         wait_seconds = int(lock_info["locked_until"] - now_ts)
         raise HTTPException(
             status_code=429,
-            detail=f"Cooldown active: 3 failed face attempts recorded for Roll '{clean_roll}'. Please wait {wait_seconds}s."
+            detail=f"Cooldown active: 3 failed face attempts recorded for Roll '{clean_roll}' on this device. Please wait {wait_seconds}s."
         )
 
     # 2. Anti-Bruteforce Rate Limiter (Max 5 attempts per IP + Student Roll in 60s)
