@@ -25,8 +25,26 @@ VENV_PYTHON = os.path.join(BACKEND_DIR, ".venv", "bin", "python")
 VENV_UVICORN = os.path.join(BACKEND_DIR, ".venv", "bin", "uvicorn")
 CLOUDFLARED_BIN = os.path.join(BACKEND_DIR, "bin", "cloudflared")
 
-SUPABASE_URL = "https://bsphlgmxzmlbgzanpujh.supabase.co"
-SUPABASE_KEY = "sb_publishable_u8O4lCQg9KtcxeLj7nxqFg_xu3v2WLz"
+def load_env_file(filepath):
+    if os.path.exists(filepath):
+        try:
+            with open(filepath, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        k, v = line.split("=", 1)
+                        k = k.strip()
+                        v = v.strip().strip("'\"")
+                        if k and k not in os.environ:
+                            os.environ[k] = v
+        except Exception:
+            pass
+
+load_env_file(os.path.join(BACKEND_DIR, ".env"))
+load_env_file(os.path.join(FRONTEND_DIR, ".env.local"))
+
+SUPABASE_URL = os.getenv("SUPABASE_URL", "https://bsphlgmxzmlbgzanpujh.supabase.co")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY", "sb_publishable_u8O4lCQg9KtcxeLj7nxqFg_xu3v2WLz")
 
 GREEN = "\033[92m"
 BLUE = "\033[94m"
@@ -112,14 +130,16 @@ signal.signal(signal.SIGTERM, cleanup)
 import hmac
 import hashlib
 
-INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY", "medattend-internal-secret-token-key-2026")
+INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY", "").strip()
 
 
 def sign_tunnel_url(tunnel_url: str) -> str:
-    """Digitally signs the live tunnel URL using HMAC-SHA256 to prevent MitM and tunnel hijacking."""
+    """Digitally signs the live tunnel URL using HMAC-SHA256 if INTERNAL_API_KEY is configured."""
     clean_url = tunnel_url.strip()
-    sig = hmac.new(INTERNAL_API_KEY.encode("utf-8"), clean_url.encode("utf-8"), hashlib.sha256).hexdigest()
-    return f"{clean_url}#sig={sig}"
+    if INTERNAL_API_KEY:
+        sig = hmac.new(INTERNAL_API_KEY.encode("utf-8"), clean_url.encode("utf-8"), hashlib.sha256).hexdigest()
+        return f"{clean_url}#sig={sig}"
+    return clean_url
 
 
 def update_supabase_tunnel_url(tunnel_url: str):

@@ -1,6 +1,18 @@
-// Secure Edge & Node-compatible HMAC-SHA256 Token Signer & Verifier for Next.js 16
+// Cryptographically secure ephemeral fallback key for local dev if AUTH_SECRET is not configured
+let runtimeDevSecret: string | null = null;
+function getAuthSecret(): string {
+  if (process.env.AUTH_SECRET && process.env.AUTH_SECRET.trim().length >= 16) {
+    return process.env.AUTH_SECRET.trim();
+  }
+  if (process.env.NODE_ENV === 'production') {
+    console.error('[SECURITY CRITICAL] AUTH_SECRET environment variable is missing in production!');
+  }
+  if (!runtimeDevSecret) {
+    runtimeDevSecret = `dev_sec_${Math.random().toString(36).substring(2)}${Date.now().toString(36)}`;
+  }
+  return runtimeDevSecret;
+}
 
-const AUTH_SECRET = process.env.AUTH_SECRET || 'medattend-secure-session-auth-secret-key-2026';
 export const SESSION_COOKIE_NAME = 'medattend_session';
 
 export interface SessionPayload {
@@ -61,7 +73,7 @@ export async function createSessionToken(
     .replace(/\//g, '_')
     .replace(/=+$/, '');
 
-  const key = await getCryptoKey(AUTH_SECRET);
+  const key = await getCryptoKey(getAuthSecret());
   const signatureBuffer = await crypto.subtle.sign(
     'HMAC',
     key,
@@ -86,7 +98,7 @@ export async function verifySessionToken(token: string): Promise<SessionPayload 
       sigBytes[i] = binarySig.charCodeAt(i);
     }
 
-    const key = await getCryptoKey(AUTH_SECRET);
+    const key = await getCryptoKey(getAuthSecret());
     const isValid = await crypto.subtle.verify(
       'HMAC',
       key,

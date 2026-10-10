@@ -3,36 +3,36 @@ import bcrypt from 'bcryptjs';
 import { createSessionToken, SESSION_COOKIE_NAME } from '@/lib/serverAuth';
 import { logAuditEvent } from '@/lib/auditLog';
 
-// Secure Server-side Credential Store with Bcrypt Hashing (Zero plaintext passwords)
-interface UserRecord {
-  hashes: string[];
+// Secure Server-side User Directory with Bcrypt Hashes (loaded from environment)
+interface UserConfig {
+  hashEnvVar: string;
   name: string;
   role: 'Super Admin' | 'Faculty';
 }
 
-const VALID_USERS: Record<string, UserRecord> = {
+const USER_DIRECTORY: Record<string, UserConfig> = {
   admin: {
-    hashes: [
-      process.env.ADMIN_PASSWORD_HASH || '$2b$10$hfRcqPNDh5Pkjo1kYzgV3OIwHUPGNOL85wr5jomNiIMI9TI1EL.fu', // admin123
-    ],
+    hashEnvVar: 'ADMIN_PASSWORD_HASH',
     name: 'Administrator',
     role: 'Super Admin',
   },
   saif: {
-    hashes: [
-      process.env.SAIF_PASSWORD_HASH || '$2b$10$X1OpzBgdjmELWZbiKBI/HuNxvuE33.VsFcaaL.h6TShGOReJlJKbO', // saif123
-      '$2b$10$hfRcqPNDh5Pkjo1kYzgV3OIwHUPGNOL85wr5jomNiIMI9TI1EL.fu', // admin123
-    ],
+    hashEnvVar: 'SAIF_PASSWORD_HASH',
     name: 'SK SAIFUDDIN',
     role: 'Super Admin',
   },
   faculty: {
-    hashes: [
-      process.env.FACULTY_PASSWORD_HASH || '$2b$10$ym8Cw5EFA.UVdANPW9mMw.LOJua/2YzHKpshlG2WpSrSEz27epJEu', // faculty123
-    ],
+    hashEnvVar: 'FACULTY_PASSWORD_HASH',
     name: 'Faculty Member',
     role: 'Faculty',
   },
+};
+
+// Fallback hashes strictly for initial local dev bootstrap (if env not yet populated)
+const DEV_FALLBACK_HASHES: Record<string, string> = {
+  admin: '$2b$10$hfRcqPNDh5Pkjo1kYzgV3OIwHUPGNOL85wr5jomNiIMI9TI1EL.fu',
+  saif: '$2b$10$X1OpzBgdjmELWZbiKBI/HuNxvuE33.VsFcaaL.h6TShGOReJlJKbO',
+  faculty: '$2b$10$ym8Cw5EFA.UVdANPW9mMw.LOJua/2YzHKpshlG2WpSrSEz27epJEu',
 };
 
 export async function POST(request: Request) {
@@ -48,7 +48,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const targetUser = VALID_USERS[username];
+    const targetUser = USER_DIRECTORY[username];
     if (!targetUser) {
       return NextResponse.json(
         { success: false, error: 'Invalid username or password.' },
@@ -56,20 +56,23 @@ export async function POST(request: Request) {
       );
     }
 
-    // Secure asynchronous Bcrypt password verification against one-way salted hashes
-    let isPasswordValid = false;
-    for (const hash of targetUser.hashes) {
-      const match = await bcrypt.compare(password, hash);
-      if (match) {
-        isPasswordValid = true;
-        break;
-      }
+    // Retrieve hash from environment variable or development fallback
+    const configuredHash = process.env[targetUser.hashEnvVar]?.trim();
+    const isProduction = process.env.NODE_ENV === 'production';
+    
+    // In production, reject authentication if password hash has not been configured in environment
+    const targetHash = configuredHash || (!isProduction ? DEV_FALLBACK_HASHES[username] : null);
+
+    if (!targetHash) {
+      console.error(`[SECURITY ERROR] ${targetUser.hashEnvVar} is not configured in production environment!`);
+      return NextResponse.json(
+        { success: false, error: 'Authentication configuration error. Please contact administrator.' },
+        { status: 500 }
+      );
     }
 
-    // Support emergency plaintext fallback if an admin set a custom unhashed string in env
-    if (!isPasswordValid && process.env.ADMIN_PASSWORD && username === 'admin' && password === process.env.ADMIN_PASSWORD) {
-      isPasswordValid = true;
-    }
+    // Secure asynchronous Bcrypt password verification against one-way salted hash
+    const isPasswordValid = await bcrypt.compare(password, targetHash);
 
     if (!isPasswordValid) {
       logAuditEvent({

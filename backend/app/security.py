@@ -5,8 +5,8 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 
-# Shared internal API key between Frontend and Backend
-INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY", "medattend-internal-secret-token-key-2026")
+# Shared internal API key between Frontend and Backend (loaded from environment)
+INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY", "").strip()
 
 # Public endpoints accessible from the internet (e.g. mobile student selfie attendance)
 PUBLIC_EXACT_PATHS: Set[str] = {
@@ -50,19 +50,19 @@ def is_authorized_request(request: Request) -> bool:
 
     # 2. Check X-Internal-API-Key header
     api_key_header = request.headers.get("x-internal-api-key") or request.headers.get("X-Internal-API-Key")
-    if api_key_header and api_key_header.strip() == INTERNAL_API_KEY:
+    if INTERNAL_API_KEY and api_key_header and api_key_header.strip() == INTERNAL_API_KEY:
         return True
 
     # 3. Check Authorization header (Bearer <key>)
     auth_header = request.headers.get("authorization") or request.headers.get("Authorization")
-    if auth_header and auth_header.startswith("Bearer "):
+    if INTERNAL_API_KEY and auth_header and auth_header.startswith("Bearer "):
         token = auth_header.split(" ", 1)[1].strip()
         if token == INTERNAL_API_KEY:
             return True
 
     # 4. Check query parameter token (?key=... or ?token=...)
     query_key = request.query_params.get("key") or request.query_params.get("token") or request.query_params.get("api_key")
-    if query_key and query_key.strip() == INTERNAL_API_KEY:
+    if INTERNAL_API_KEY and query_key and query_key.strip() == INTERNAL_API_KEY:
         return True
 
     # 5. Check if request is directly from local loopback AND NOT forwarded from Cloudflare/external proxy

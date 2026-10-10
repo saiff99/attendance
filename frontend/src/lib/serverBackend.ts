@@ -6,7 +6,9 @@ const NGROK_TUNNEL = "";
 let cachedTunnelUrl: string | null = null;
 let lastCacheTime = 0;
 
-const INTERNAL_API_KEY = process.env.INTERNAL_API_KEY || process.env.NEXT_PUBLIC_INTERNAL_API_KEY || 'medattend-internal-secret-token-key-2026';
+function getInternalApiKey(): string {
+  return (process.env.INTERNAL_API_KEY || '').trim();
+}
 
 // Allowed trusted tunnel domains
 const ALLOWED_TUNNEL_DOMAINS = [
@@ -54,10 +56,13 @@ export async function verifyAndSanitizeTunnelUrl(rawUrl: string): Promise<string
 
     // 2. Cryptographic HMAC Signature Verification (if signature is attached)
     if (sigPart) {
-      const expectedSig = await computeHmacSha256Hex(INTERNAL_API_KEY, cleanUrl);
-      if (sigPart.trim() !== expectedSig) {
-        console.warn(`[Security Alert] HMAC signature mismatch for tunnel URL: ${cleanUrl}`);
-        return null;
+      const internalKey = getInternalApiKey();
+      if (internalKey) {
+        const expectedSig = await computeHmacSha256Hex(internalKey, cleanUrl);
+        if (sigPart.trim() !== expectedSig) {
+          console.warn(`[Security Alert] HMAC signature mismatch for tunnel URL: ${cleanUrl}`);
+          return null;
+        }
       }
     }
 
@@ -112,8 +117,10 @@ export async function fetchBackend(path: string, options: RequestInit = {}): Pro
   
   const headers = new Headers(options.headers || {});
   headers.set('ngrok-skip-browser-warning', '69420');
-  const internalApiKey = process.env.INTERNAL_API_KEY || process.env.NEXT_PUBLIC_INTERNAL_API_KEY || 'medattend-internal-secret-token-key-2026';
-  headers.set('X-Internal-API-Key', internalApiKey);
+  const internalApiKey = getInternalApiKey();
+  if (internalApiKey) {
+    headers.set('X-Internal-API-Key', internalApiKey);
+  }
 
   // Fast-Path: When running on local machine (MacBook / Codespaces / Self-hosted), ALWAYS check localhost directly (1ms instant response!)
   if (!isVercelCloud) {
