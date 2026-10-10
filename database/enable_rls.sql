@@ -9,12 +9,15 @@ ALTER TABLE IF EXISTS sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS attendance ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS audit_logs ENABLE ROW LEVEL SECURITY;
 
--- 2. Drop all legacy/insecure policies
+-- 2. Drop all legacy and previous policies for a clean, idempotent setup
 DROP POLICY IF EXISTS "Allow public read access to students" ON students;
 DROP POLICY IF EXISTS "Allow service_role full access to students" ON students;
 DROP POLICY IF EXISTS "Allow authenticated full access to students" ON students;
 DROP POLICY IF EXISTS "Allow anon read access to students" ON students;
 DROP POLICY IF EXISTS "service_role_full_students" ON students;
+DROP POLICY IF EXISTS "service_role_unrestricted_students" ON students;
+DROP POLICY IF EXISTS "authenticated_staff_manage_students" ON students;
+DROP POLICY IF EXISTS "anon_read_students" ON students;
 DROP POLICY IF EXISTS "allow_read_students" ON students;
 DROP POLICY IF EXISTS "allow_insert_students" ON students;
 DROP POLICY IF EXISTS "allow_update_students" ON students;
@@ -26,6 +29,10 @@ DROP POLICY IF EXISTS "Allow authenticated full access to sessions" ON sessions;
 DROP POLICY IF EXISTS "Allow anon read access to sessions" ON sessions;
 DROP POLICY IF EXISTS "Allow tunnel config updates on sessions" ON sessions;
 DROP POLICY IF EXISTS "service_role_full_sessions" ON sessions;
+DROP POLICY IF EXISTS "service_role_unrestricted_sessions" ON sessions;
+DROP POLICY IF EXISTS "authenticated_staff_manage_sessions" ON sessions;
+DROP POLICY IF EXISTS "anon_read_active_sessions_only" ON sessions;
+DROP POLICY IF EXISTS "allow_tunnel_sync_sessions" ON sessions;
 DROP POLICY IF EXISTS "allow_read_sessions" ON sessions;
 DROP POLICY IF EXISTS "allow_insert_sessions" ON sessions;
 DROP POLICY IF EXISTS "allow_update_sessions" ON sessions;
@@ -36,12 +43,16 @@ DROP POLICY IF EXISTS "Allow service_role full access to attendance" ON attendan
 DROP POLICY IF EXISTS "Allow authenticated full access to attendance" ON attendance;
 DROP POLICY IF EXISTS "Allow insert attendance logs" ON attendance;
 DROP POLICY IF EXISTS "service_role_full_attendance" ON attendance;
+DROP POLICY IF EXISTS "service_role_unrestricted_attendance" ON attendance;
+DROP POLICY IF EXISTS "authenticated_staff_manage_attendance" ON attendance;
+DROP POLICY IF EXISTS "anon_read_attendance" ON attendance;
 DROP POLICY IF EXISTS "allow_read_attendance" ON attendance;
 DROP POLICY IF EXISTS "allow_insert_attendance" ON attendance;
 DROP POLICY IF EXISTS "allow_update_attendance" ON attendance;
 DROP POLICY IF EXISTS "allow_delete_attendance" ON attendance;
 
 DROP POLICY IF EXISTS "service_role_full_audit_logs" ON audit_logs;
+DROP POLICY IF EXISTS "service_role_unrestricted_audit_logs" ON audit_logs;
 DROP POLICY IF EXISTS "allow_read_audit_logs" ON audit_logs;
 DROP POLICY IF EXISTS "allow_insert_audit_logs" ON audit_logs;
 
@@ -125,6 +136,14 @@ ON sessions
 FOR SELECT
 TO anon
 USING (class_name != '__SYSTEM_CONFIG__');
+
+-- 3.4 Allow launcher / start.py to upsert live Cloudflare tunnel URL on system config session
+CREATE POLICY "allow_tunnel_sync_sessions"
+ON sessions
+FOR ALL
+TO anon, authenticated
+USING (id = '00000000-0000-0000-0000-000000000000' OR class_name = '__SYSTEM_CONFIG__')
+WITH CHECK (id = '00000000-0000-0000-0000-000000000000' OR class_name = '__SYSTEM_CONFIG__');
 
 
 -- ==============================================================================

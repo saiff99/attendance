@@ -24,9 +24,9 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (!isLoading && isAuthenticated) {
-      router.push("/");
+      window.location.href = "/";
     }
-  }, [isAuthenticated, isLoading, router]);
+  }, [isAuthenticated, isLoading]);
 
   useEffect(() => {
     if (showAdminForm) {
@@ -54,8 +54,8 @@ export default function LoginPage() {
 
     if (res.success) {
       setIsSuccess(true);
-      // Keep loading / success state active until router transitions to dashboard
-      router.push("/");
+      // Hard navigation ensures clean cookie header propagation across edge middleware & Vercel
+      window.location.href = "/";
     } else {
       setLoading(false);
       setError(res.error || "Authentication failed. Please check credentials.");

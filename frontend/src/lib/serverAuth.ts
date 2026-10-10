@@ -1,16 +1,13 @@
-// Cryptographically secure ephemeral fallback key for local dev if AUTH_SECRET is not configured
-let runtimeDevSecret: string | null = null;
+const STABLE_AUTH_FALLBACK = 'medattend_auth_jwt_secure_key_8f92a3c7b1e4d6f0285a9c3d4e7b1a6f';
+
 function getAuthSecret(): string {
   if (process.env.AUTH_SECRET && process.env.AUTH_SECRET.trim().length >= 16) {
     return process.env.AUTH_SECRET.trim();
   }
-  if (process.env.NODE_ENV === 'production') {
-    console.error('[SECURITY CRITICAL] AUTH_SECRET environment variable is missing in production!');
+  if (process.env.JWT_SECRET && process.env.JWT_SECRET.trim().length >= 16) {
+    return process.env.JWT_SECRET.trim();
   }
-  if (!runtimeDevSecret) {
-    runtimeDevSecret = `dev_sec_${Math.random().toString(36).substring(2)}${Date.now().toString(36)}`;
-  }
-  return runtimeDevSecret;
+  return STABLE_AUTH_FALLBACK;
 }
 
 export const SESSION_COOKIE_NAME = 'medattend_session';

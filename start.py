@@ -44,7 +44,7 @@ load_env_file(os.path.join(BACKEND_DIR, ".env"))
 load_env_file(os.path.join(FRONTEND_DIR, ".env.local"))
 
 SUPABASE_URL = os.getenv("SUPABASE_URL", "https://bsphlgmxzmlbgzanpujh.supabase.co")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY", "sb_publishable_u8O4lCQg9KtcxeLj7nxqFg_xu3v2WLz")
+SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_KEY", "sb_publishable_u8O4lCQg9KtcxeLj7nxqFg_xu3v2WLz")
 
 GREEN = "\033[92m"
 BLUE = "\033[94m"
