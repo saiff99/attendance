@@ -2,7 +2,7 @@
 
 import { useState, useRef } from "react";
 import { X, UploadCloud, FileSpreadsheet, Download, CheckCircle2, AlertCircle, Loader2, ArrowRight } from "lucide-react";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import { supabase } from "@/lib/supabase";
 import { encodeStudentEmail, cleanPhoneNumber } from "@/lib/studentContact";
 
@@ -70,10 +70,57 @@ export function BulkImportModal({
 
     try {
       const buffer = await uploadedFile.arrayBuffer();
-      const workbook = XLSX.read(buffer, { type: "array" });
-      const firstSheetName = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[firstSheetName];
-      const rawRows: any[] = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+      const rawRows: Record<string, any>[] = [];
+
+      if (uploadedFile.name.toLowerCase().endsWith(".csv")) {
+        const text = new TextDecoder().decode(buffer);
+        const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        if (lines.length > 0) {
+          const headerCols = lines[0].split(",").map(c => c.replace(/^["']|["']$/g, "").trim());
+          for (let i = 1; i < lines.length; i++) {
+            const cols = lines[i].split(",").map(c => c.replace(/^["']|["']$/g, "").trim());
+            const rowObj: Record<string, any> = {};
+            headerCols.forEach((h, idx) => {
+              if (h) rowObj[h] = cols[idx] || "";
+            });
+            if (Object.keys(rowObj).length > 0) rawRows.push(rowObj);
+          }
+        }
+      } else {
+        const workbook = new ExcelJS.Workbook();
+        await workbook.xlsx.load(buffer);
+        const worksheet = workbook.worksheets[0];
+
+        if (worksheet) {
+          const headers: Record<number, string> = {};
+          worksheet.eachRow((row, rowNumber) => {
+            if (rowNumber === 1) {
+              row.eachCell((cell, colNumber) => {
+                headers[colNumber] = String(cell.value ?? "").trim();
+              });
+            } else {
+              const rowObj: Record<string, any> = {};
+              row.eachCell((cell, colNumber) => {
+                const header = headers[colNumber];
+                if (header) {
+                  let val = cell.value;
+                  if (val && typeof val === "object") {
+                    if ("result" in val) val = (val as any).result;
+                    else if ("text" in val) val = (val as any).text;
+                    else if ("richText" in val && Array.isArray((val as any).richText)) {
+                      val = (val as any).richText.map((t: any) => t.text).join("");
+                    }
+                  }
+                  rowObj[header] = val !== null && val !== undefined ? String(val).trim() : "";
+                }
+              });
+              if (Object.keys(rowObj).length > 0) {
+                rawRows.push(rowObj);
+              }
+            }
+          });
+        }
+      }
 
       if (rawRows.length === 0) {
         setImportStatus("error");
@@ -151,35 +198,53 @@ export function BulkImportModal({
     }
   };
 
-  const downloadSampleTemplate = () => {
+  const downloadSampleTemplate = async () => {
     const sampleData = [
       {
-        "Roll Number": "26001",
-        "Full Name": "MORSALIM MONDAL",
-        "Academic Year": selectedYear || "1st Year",
-        "Group": "Group A",
-        "Parent WhatsApp": "+919876543210",
+        roll: "26001",
+        name: "MORSALIM MONDAL",
+        year: selectedYear || "1st Year",
+        group: "Group A",
+        phone: "+919876543210",
       },
       {
-        "Roll Number": "26101",
-        "Full Name": "SK SAIFUDDIN",
-        "Academic Year": selectedYear || "1st Year",
-        "Group": "Group B",
-        "Parent WhatsApp": "+919876543211",
+        roll: "26101",
+        name: "SK SAIFUDDIN",
+        year: selectedYear || "1st Year",
+        group: "Group B",
+        phone: "+919876543211",
       },
       {
-        "Roll Number": "26201",
-        "Full Name": "RAHUL ROY",
-        "Academic Year": selectedYear || "1st Year",
-        "Group": "Group C",
-        "Parent WhatsApp": "+919876543212",
+        roll: "26201",
+        name: "RAHUL ROY",
+        year: selectedYear || "1st Year",
+        group: "Group C",
+        phone: "+919876543212",
       },
     ];
 
-    const worksheet = XLSX.utils.json_to_sheet(sampleData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Students");
-    XLSX.writeFile(workbook, "student_import_template.xlsx");
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Students");
+    worksheet.columns = [
+      { header: "Roll Number", key: "roll", width: 15 },
+      { header: "Full Name", key: "name", width: 25 },
+      { header: "Academic Year", key: "year", width: 18 },
+      { header: "Group", key: "group", width: 15 },
+      { header: "Parent WhatsApp", key: "phone", width: 20 },
+    ];
+
+    sampleData.forEach((row) => worksheet.addRow(row));
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "student_import_template.xlsx";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   const handleImportSubmit = async () => {
@@ -224,6 +289,7 @@ export function BulkImportModal({
             full_name: student.full_name,
             email: generatedEmail,
             academic_year: academicYear,
+            parent_phone: student.parent_phone || null,
           });
         } else {
           toInsert.push({
@@ -231,6 +297,7 @@ export function BulkImportModal({
             full_name: student.full_name,
             email: generatedEmail,
             academic_year: academicYear,
+            parent_phone: student.parent_phone || null,
             face_encoding: null,
           });
         }
@@ -259,6 +326,7 @@ export function BulkImportModal({
               full_name: updateItem.full_name,
               email: updateItem.email,
               academic_year: updateItem.academic_year,
+              parent_phone: updateItem.parent_phone,
             })
             .eq("id", updateItem.id);
         }

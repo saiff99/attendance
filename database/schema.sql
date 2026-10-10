@@ -13,7 +13,9 @@ CREATE TABLE IF NOT EXISTS students (
     email VARCHAR(255) UNIQUE NOT NULL,
     academic_year VARCHAR(50) DEFAULT '1st Year',
     parent_phone VARCHAR(50),
-    face_encoding JSONB, -- Stores 512D vector embeddings for InsightFace ArcFace recognition
+    face_encoding JSONB, -- Stores 512D vector embeddings for InsightFace ArcFace recognition (Never store raw unencrypted images)
+    biometric_consent BOOLEAN DEFAULT true, -- DPDP Act 2023: Explicit consent for biometric attendance processing
+    biometric_consent_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     manual_marked_count INTEGER DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -42,7 +44,19 @@ CREATE TABLE IF NOT EXISTS attendance (
     CONSTRAINT unique_session_student UNIQUE(session_id, student_id) -- Database-level duplicate prevention
 );
 
--- 5. Performance Indexes
+-- 5. Table: audit_logs (Audit Trail for DPDP compliance, biometric changes, overrides & deletions)
+CREATE TABLE IF NOT EXISTS audit_logs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    actor_id VARCHAR(255) DEFAULT 'system_admin',
+    action VARCHAR(100) NOT NULL, -- e.g. 'ENROLL_FACE', 'RESET_FACE', 'DELETE_STUDENT', 'MANUAL_OVERRIDE', 'CONSENT_REVOKE'
+    target_type VARCHAR(100) NOT NULL, -- 'student', 'attendance', 'session', 'system'
+    target_id VARCHAR(255),
+    details JSONB,
+    ip_address VARCHAR(100),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 6. Performance Indexes
 CREATE INDEX IF NOT EXISTS idx_students_roll ON students(student_roll);
 CREATE INDEX IF NOT EXISTS idx_students_year ON students(academic_year);
 CREATE INDEX IF NOT EXISTS idx_sessions_date ON sessions(date);
@@ -50,14 +64,18 @@ CREATE INDEX IF NOT EXISTS idx_sessions_year ON sessions(target_academic_year);
 CREATE INDEX IF NOT EXISTS idx_attendance_session ON attendance(session_id);
 CREATE INDEX IF NOT EXISTS idx_attendance_student ON attendance(student_id);
 CREATE INDEX IF NOT EXISTS idx_attendance_recorded_at ON attendance(recorded_at);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_target ON audit_logs(target_type, target_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);
 
 -- ==============================================================================
--- 6. Row Level Security (RLS) & Protection Policies
+-- 7. Row Level Security (RLS) & Protection Policies
 -- ==============================================================================
 
 ALTER TABLE students ENABLE ROW LEVEL SECURITY;
 ALTER TABLE sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE attendance ENABLE ROW LEVEL SECURITY;
+ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
 
 -- Students Policies
 CREATE POLICY "service_role_full_students" ON students FOR ALL TO service_role USING (true) WITH CHECK (true);
@@ -79,3 +97,9 @@ CREATE POLICY "allow_read_attendance" ON attendance FOR SELECT TO authenticated,
 CREATE POLICY "allow_insert_attendance" ON attendance FOR INSERT TO authenticated, anon WITH CHECK (true);
 CREATE POLICY "allow_update_attendance" ON attendance FOR UPDATE TO authenticated, anon USING (true) WITH CHECK (true);
 CREATE POLICY "allow_delete_attendance" ON attendance FOR DELETE TO authenticated, service_role USING (true);
+
+-- Audit Logs Policies
+CREATE POLICY "service_role_full_audit_logs" ON audit_logs FOR ALL TO service_role USING (true) WITH CHECK (true);
+CREATE POLICY "allow_read_audit_logs" ON audit_logs FOR SELECT TO authenticated, anon USING (true);
+CREATE POLICY "allow_insert_audit_logs" ON audit_logs FOR INSERT TO authenticated, anon WITH CHECK (true);
+

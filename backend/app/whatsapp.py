@@ -14,7 +14,7 @@ from app.config import supabase, is_cohort_matching
 load_dotenv()
 
 WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN", "")
-WHATSAPP_PHONE_ID = os.getenv("WHATSAPP_PHONE_ID", "1304612619407965")
+WHATSAPP_PHONE_ID = os.getenv("WHATSAPP_PHONE_ID", "")
 GRAPH_API_VERSION = "v21.0"
 
 # Step 8 — Configurable Timeouts, Retries & Bounded Queue

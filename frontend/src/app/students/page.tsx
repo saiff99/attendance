@@ -7,7 +7,8 @@ import type { Student } from "@/types/database";
 import { StudentProfileModal } from "@/components/StudentProfileModal";
 import { FaceRegistrationModal } from "@/components/FaceRegistrationModal";
 import { BulkImportModal } from "@/components/BulkImportModal";
-import { getParentPhone, formatPhoneDisplay, encodeStudentEmail } from "@/lib/studentContact";
+import { getParentPhone, formatPhoneDisplay, encodeStudentEmail, cleanPhoneNumber } from "@/lib/studentContact";
+import { logAuditEvent } from "@/lib/auditLog";
 
 export default function StudentDirectory() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -84,8 +85,9 @@ export default function StudentDirectory() {
     e.preventDefault();
     setIsSubmitting(true);
 
-    // Encode parent WhatsApp phone into database email format safely
-    const generatedEmail = encodeStudentEmail(newStudent.student_roll, newStudent.parent_phone);
+    const cleanRoll = newStudent.student_roll.trim();
+    const cleanPhone = newStudent.parent_phone ? cleanPhoneNumber(newStudent.parent_phone) : null;
+    const cleanEmail = newStudent.email ? newStudent.email.trim().toLowerCase() : encodeStudentEmail(cleanRoll);
     
     // Strip any existing parenthesized groups/batches to prevent duplicate stacking like "(Group A) (Group B)"
     const cleanBaseYear = (newStudent.academic_year || '1st Year')
@@ -102,26 +104,44 @@ export default function StudentDirectory() {
         const { error } = await supabase
           .from('students')
           .update({
-            student_roll: newStudent.student_roll,
-            full_name: newStudent.full_name,
-            email: generatedEmail,
+            student_roll: cleanRoll,
+            full_name: newStudent.full_name.trim(),
+            email: cleanEmail,
             academic_year: combinedYear,
+            parent_phone: cleanPhone,
           })
           .eq('id', editingId);
 
         if (error) throw error;
+
+        logAuditEvent({
+          action: "UPDATE_STUDENT",
+          targetType: "student",
+          targetId: editingId,
+          details: { student_roll: cleanRoll, full_name: newStudent.full_name, academic_year: combinedYear },
+        });
       } else {
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('students')
           .insert([{
-            student_roll: newStudent.student_roll,
-            full_name: newStudent.full_name,
-            email: generatedEmail,
+            student_roll: cleanRoll,
+            full_name: newStudent.full_name.trim(),
+            email: cleanEmail,
             academic_year: combinedYear,
-            face_encoding: null
-          }]);
+            parent_phone: cleanPhone,
+            face_encoding: null,
+            biometric_consent: true,
+          }])
+          .select();
 
         if (error) throw error;
+
+        logAuditEvent({
+          action: "CREATE_STUDENT",
+          targetType: "student",
+          targetId: data?.[0]?.id || cleanRoll,
+          details: { student_roll: cleanRoll, full_name: newStudent.full_name, academic_year: combinedYear },
+        });
       }
 
       closeModal();
@@ -139,9 +159,16 @@ export default function StudentDirectory() {
 
     try {
       // Delete any dependent attendance records first
-      await supabase.from('attendances').delete().eq('student_id', id);
+      await supabase.from('attendance').delete().eq('student_id', id);
       const { error } = await supabase.from('students').delete().eq('id', id);
       if (error) throw error;
+
+      logAuditEvent({
+        action: "DELETE_STUDENT",
+        targetType: "student",
+        targetId: id,
+      });
+
       setSelectedIds(prev => prev.filter(item => item !== id));
       fetchStudents();
     } catch (error) {
@@ -159,9 +186,15 @@ export default function StudentDirectory() {
     setIsBulkDeleting(true);
     try {
       // First delete dependent attendance records for all selected students
-      await supabase.from('attendances').delete().in('student_id', selectedIds);
+      await supabase.from('attendance').delete().in('student_id', selectedIds);
       const { error } = await supabase.from('students').delete().in('id', selectedIds);
       if (error) throw error;
+
+      logAuditEvent({
+        action: "BULK_DELETE_STUDENTS",
+        targetType: "student",
+        details: { count, student_ids: selectedIds },
+      });
 
       setSelectedIds([]);
       await fetchStudents();

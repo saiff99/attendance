@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import Webcam from 'react-webcam';
 import { X, CheckCircle2, AlertCircle, Camera, Loader2 } from 'lucide-react';
 import { getBackendUrl } from '@/lib/api';
+import { logAuditEvent } from '@/lib/auditLog';
 
 interface FaceRegistrationModalProps {
   isOpen: boolean;
@@ -203,6 +204,12 @@ export function FaceRegistrationModal({ isOpen, onClose, studentId, studentName,
       }
 
       setStatus('success');
+      logAuditEvent({
+        action: "ENROLL_FACE",
+        targetType: "student",
+        targetId: studentId,
+        details: { student_name: studentName, frames_count: framesRef.current.length },
+      });
       setTimeout(() => {
         onSuccess();
         onClose();

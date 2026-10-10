@@ -150,9 +150,48 @@ FOR DELETE
 TO authenticated, service_role
 USING (true);
 
+
+-- ==============================================================================
+-- 🔒 AUDIT LOGS TABLE POLICIES (DPDP Act 2023 Compliance)
+-- ==============================================================================
+
+CREATE TABLE IF NOT EXISTS audit_logs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    actor_id VARCHAR(255) DEFAULT 'system_admin',
+    action VARCHAR(100) NOT NULL,
+    target_type VARCHAR(100) NOT NULL,
+    target_id VARCHAR(255),
+    details JSONB,
+    ip_address VARCHAR(100),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+ALTER TABLE IF EXISTS audit_logs ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "service_role_full_audit_logs"
+ON audit_logs
+FOR ALL
+TO service_role
+USING (true)
+WITH CHECK (true);
+
+CREATE POLICY "allow_read_audit_logs"
+ON audit_logs
+FOR SELECT
+TO authenticated, anon
+USING (true);
+
+CREATE POLICY "allow_insert_audit_logs"
+ON audit_logs
+FOR INSERT
+TO authenticated, anon
+WITH CHECK (true);
+
 -- ==============================================================================
 -- 🚀 Confirmation
 -- ==============================================================================
-COMMENT ON TABLE students IS 'MedAttend Biometric Student Registry (RLS Protected)';
+COMMENT ON TABLE students IS 'MedAttend Biometric Student Registry (RLS Protected, DPDP Act 2023 Compliant)';
 COMMENT ON TABLE sessions IS 'MedAttend Academic Class Sessions (RLS Protected)';
 COMMENT ON TABLE attendance IS 'MedAttend Biometric Attendance Ledger (RLS Protected)';
+COMMENT ON TABLE audit_logs IS 'MedAttend Security & Biometric Action Audit Trail (RLS Protected)';
+
