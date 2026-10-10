@@ -9,7 +9,13 @@ const PUBLIC_PATHS = [
   '/selfieattend',
   '/api/auth/login',
   '/api/selfie-attendance',
+  '/api/active-sessions',
+  '/api/health',
+  '/api/student-lookup',
 ];
+
+// Strict static asset file extension regex (prevents path bypass like /api/video-feed/a.b)
+const STATIC_ASSET_REGEX = /\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|woff|woff2|ttf|eot)$/i;
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -18,7 +24,7 @@ export async function middleware(request: NextRequest) {
   if (
     pathname.startsWith('/_next') ||
     pathname.startsWith('/static') ||
-    pathname.includes('.') // images, icons, files (.png, .ico, .svg, etc.)
+    STATIC_ASSET_REGEX.test(pathname)
   ) {
     return NextResponse.next();
   }
@@ -31,8 +37,15 @@ export async function middleware(request: NextRequest) {
   const user = sessionToken ? await verifySessionToken(sessionToken) : null;
   const isAuthenticated = Boolean(user);
 
-  // 4. Redirect unauthenticated users away from protected pages to /login
+  // 4. Block or redirect unauthenticated requests
   if (!isAuthenticated && !isPublic) {
+    // For API requests, return 401 Unauthorized JSON instead of HTML redirect
+    if (pathname.startsWith('/api/')) {
+      return NextResponse.json(
+        { error: 'Unauthorized: Authentication session required.' },
+        { status: 401 }
+      );
+    }
     const loginUrl = new URL('/login', request.url);
     loginUrl.searchParams.set('from', pathname);
     return NextResponse.redirect(loginUrl);
