@@ -108,17 +108,17 @@ export function getServerBackendUrl(): string {
 export async function fetchBackend(path: string, options: RequestInit = {}): Promise<Response> {
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
   const isHealthCheck = normalizedPath === '/health';
-  const isCloudEnvironment = Boolean(process.env.VERCEL || (process.env.NODE_ENV === 'production' && !process.env.NEXT_PUBLIC_LOCAL_DEV));
+  const isVercelCloud = Boolean(process.env.VERCEL);
   
   const headers = new Headers(options.headers || {});
   headers.set('ngrok-skip-browser-warning', '69420');
   const internalApiKey = process.env.INTERNAL_API_KEY || process.env.NEXT_PUBLIC_INTERNAL_API_KEY || 'medattend-internal-secret-token-key-2026';
   headers.set('X-Internal-API-Key', internalApiKey);
 
-  // Fast-Path: When running locally on Mac/PC, ALWAYS check localhost directly (1ms instant response!)
-  if (!isCloudEnvironment) {
+  // Fast-Path: When running on local machine (MacBook / Codespaces / Self-hosted), ALWAYS check localhost directly (1ms instant response!)
+  if (!isVercelCloud) {
     try {
-      const localTimeout = isHealthCheck ? 3000 : 45000;
+      const localTimeout = isHealthCheck ? 2000 : 45000;
       const ctrl = new AbortController();
       const tId = setTimeout(() => ctrl.abort(), localTimeout);
       const localRes = await fetch(`http://127.0.0.1:8000${normalizedPath}`, {
@@ -137,6 +137,10 @@ export async function fetchBackend(path: string, options: RequestInit = {}): Pro
 
   // Candidate URLs to try in priority order:
   const targets: string[] = [];
+
+  if (!isVercelCloud) {
+    targets.push("http://127.0.0.1:8000");
+  }
 
   // Live dynamic tunnel URL synced from Mac via Supabase (for Vercel / Remote access)
   const liveDynamicTunnel = await getLiveTunnelUrl();
