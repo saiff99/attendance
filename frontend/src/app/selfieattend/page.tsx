@@ -1,6 +1,7 @@
 import { Suspense } from 'react';
 import { supabase } from '@/lib/supabase';
 import { SelfieAttendContent, ActiveSession } from './SelfieAttendClient';
+import { getTodayDateStr, getStartOfTodayISO } from '@/lib/dateUtils';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -25,9 +26,8 @@ async function getInitialSessions(): Promise<ActiveSession[]> {
     }
 
     // 2. Direct Supabase query from server
-    const now = new Date();
-    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    const startOfTodayIso = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+    const todayStr = getTodayDateStr();
+    const startOfTodayIso = getStartOfTodayISO();
 
     const { data: sessionData, error } = await supabase
       .from('sessions')

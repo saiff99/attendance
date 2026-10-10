@@ -5,6 +5,7 @@ import { WhatsAppDashboardButton } from "@/components/WhatsAppDashboardButton";
 import { AttendanceChart } from "@/components/AttendanceChart";
 import { decodeSessionMetadata } from "@/lib/geofence";
 import { FormattedDate } from "@/components/FormattedDate";
+import { getStartOfTodayISO, getTodayDateStr } from "@/lib/dateUtils";
 
 export const revalidate = 0; // Dynamic rendering
 
@@ -14,9 +15,8 @@ export default async function Dashboard() {
     .from('students')
     .select('*', { count: 'exact', head: true });
 
-  // Get start of today in local date
-  const now = new Date();
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+  // Get start of today in IST local date
+  const startOfToday = getStartOfTodayISO();
 
   // Fetch Today's Total Attendances (Cumulative sum of all present attendances marked today)
   const { count: todayTotalPresent } = await supabase
@@ -63,8 +63,14 @@ export default async function Dashboard() {
   for (let i = 6; i >= 0; i--) {
     const d = new Date();
     d.setDate(d.getDate() - i);
-    const dateStr = d.toISOString().split('T')[0];
-    last7DaysMap.set(dateStr, { date: d.toLocaleDateString('en-US', { weekday: 'short' }), present: 0, absent: 0 });
+    const dateStr = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(d);
+    const weekdayStr = d.toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata', weekday: 'short' });
+    last7DaysMap.set(dateStr, { date: weekdayStr, present: 0, absent: 0 });
   }
 
   let totalPresentCount = 0;

@@ -23,6 +23,7 @@ import {
   getLocalGeofence
 } from "@/lib/geofence";
 import { isCohortMatching } from "@/lib/cohort";
+import { getTodayDateStr, getStartOfTodayISO } from "@/lib/dateUtils";
 
 export interface ActiveSession {
   id: string;
@@ -336,9 +337,8 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
         .limit(50);
 
       if (!error && sessionData && sessionData.length > 0) {
-        const now = new Date();
-        const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-        const startOfTodayIso = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+        const todayStr = getTodayDateStr();
+        const startOfTodayIso = getStartOfTodayISO();
 
         const todaySessions = sessionData.filter((s: any) => {
           const dateVal = s.date || '';

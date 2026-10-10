@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { fetchBackend } from '@/lib/serverBackend';
+import { getTodayDateStr, getStartOfTodayISO } from '@/lib/dateUtils';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,9 +43,8 @@ export async function GET(request: Request) {
     }
 
     // 2. Query Supabase directly
-    const now = new Date();
-    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    const startOfTodayIso = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+    const todayStr = getTodayDateStr();
+    const startOfTodayIso = getStartOfTodayISO();
 
     const { data: sessionData, error } = await supabase
       .from('sessions')

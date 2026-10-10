@@ -13,6 +13,7 @@ import { supabase } from "@/lib/supabase";
 import { getBackendUrl } from "@/lib/api";
 import { decodeSessionMetadata } from "@/lib/geofence";
 import { QRCodeSVG } from "qrcode.react";
+import { getTodayDateStr, getStartOfTodayISO } from "@/lib/dateUtils";
 
 interface ActiveSessionItem {
   id: string;
@@ -58,9 +59,8 @@ export default function OngoingSessionsPage() {
       }
 
       // 2. Fallback: Query Supabase directly
-      const now = new Date();
-      const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-      const startOfTodayIso = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+      const todayStr = getTodayDateStr();
+      const startOfTodayIso = getStartOfTodayISO();
       const nowUtc = Date.now();
 
       const { data: sessionData, error } = await supabase
