@@ -43,6 +43,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/', request.url));
   }
 
+  // 6. Restrict /audit-logs strictly to Super Admin role
+  if (pathname.startsWith('/audit-logs') && user?.role !== 'Super Admin') {
+    return NextResponse.redirect(new URL('/', request.url));
+  }
+
   return NextResponse.next();
 }
 

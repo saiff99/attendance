@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, ScanLine, Radio, Users, FileBarChart, Activity, Menu, X, Smartphone, LogOut, Sun, Moon } from "lucide-react";
+import { LayoutDashboard, ScanLine, Radio, Users, FileBarChart, Activity, Menu, X, Smartphone, LogOut, Sun, Moon, ShieldCheck } from "lucide-react";
 import { SystemHealth } from "@/components/SystemHealth";
 import { useAuth } from "@/lib/auth";
 import { useTheme } from "next-themes";
@@ -15,6 +15,7 @@ const navigation = [
   { name: "Student Directory", href: "/students", icon: Users },
   { name: "Selfie Portal", href: "/selfieattend", icon: Smartphone },
   { name: "Reports", href: "/reports", icon: FileBarChart },
+  { name: "Audit Trail", href: "/audit-logs", icon: ShieldCheck, superAdminOnly: true },
 ];
 
 function classNames(...classes: string[]) {
@@ -129,8 +130,10 @@ export default function Sidebar() {
       </div>
       <div className="flex flex-1 flex-col overflow-y-auto pt-5 pb-4">
         <nav className="mt-2 flex-1 space-y-1 px-3">
-          {navigation.map((item) => {
-            const isActive = pathname === item.href;
+          {navigation
+            .filter((item: any) => !item.superAdminOnly || user?.role === "Super Admin")
+            .map((item) => {
+              const isActive = pathname === item.href;
             const isLiveScan = item.href === "/live-scan";
             const isOngoing = item.href === "/ongoing";
             return (
