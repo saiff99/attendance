@@ -256,10 +256,14 @@ def start_backend_process():
                 if not line:
                     break
                 stripped = line.strip()
+                if not stripped:
+                    continue
                 if "Application startup complete" in stripped or "AI Engine" in stripped or "[AI ENGINE]" in stripped:
                     print(f"  {GREEN}✓{RESET} {stripped}")
-                elif "ERROR" in stripped or "Exception" in stripped:
+                elif any(kw in stripped for kw in ["ERROR", "Exception", "Traceback", "File \"", "HTTPException", "Error:"]):
                     print(f"  {RED}! {stripped}{RESET}")
+                elif "[Selfie AI]" in stripped or "[AntiSpoof" in stripped or "[AuditLog]" in stripped or "Selfie" in stripped:
+                    print(f"  {CYAN}ℹ{RESET} {stripped}")
         except Exception:
             pass
 
