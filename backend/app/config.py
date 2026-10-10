@@ -15,9 +15,18 @@ except Exception as e:
     print(f"Failed to initialize Supabase client: {e}")
     supabase = None
 
+DEFAULT_CCTV_URLS = (
+    "rtsp://admin:Tech_1234@172.16.7.5:554/live,"
+    "rtsp://admin:Tech_1234@172.16.7.3:554/live,"
+    "rtsp://admin:Tech_1234@172.16.7.17:554/live,"
+    "rtsp://admin:Tech_1234@172.16.7.16:554/live,"
+    "rtsp://admin:Tech_1234@172.16.7.18:554/live,"
+    "rtsp://admin:Tech_1234@172.16.7.9:554/live"
+)
+
 def get_camera_urls():
     """Returns a list of primary/main camera URLs parsed from the CCTV_URLS env variable."""
-    urls_str = os.getenv("CCTV_URLS", "0")
+    urls_str = os.getenv("CCTV_URLS", DEFAULT_CCTV_URLS)
     return [url.strip() for url in urls_str.split(",") if url.strip()]
 
 def get_cctv_ai_urls():
