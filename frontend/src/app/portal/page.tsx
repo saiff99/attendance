@@ -600,8 +600,14 @@ export default function StudentPortalPage() {
                         <span className="flex items-center gap-1">
                           <Calendar className="w-3 h-3 text-slate-500" /> {session.date}
                         </span>
-                        <span>•</span>
-                        <span>{session.instructor}</span>
+                        {session.startTime && (
+                          <>
+                            <span>•</span>
+                            <span className="flex items-center gap-1">
+                              <Clock className="w-3 h-3 text-slate-500" /> {session.startTime}
+                            </span>
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>

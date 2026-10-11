@@ -4,6 +4,7 @@ import { supabaseServer } from '@/lib/supabaseServer';
 import { isCohortMatching } from '@/lib/cohort';
 import { DEFAULT_MBBS_SUBJECTS, getSubjectsForCohort } from '@/lib/academicSubjects';
 import { getParentPhone } from '@/lib/studentContact';
+import { decodeSessionMetadata } from '@/lib/geofence';
 
 export const dynamic = 'force-dynamic';
 
@@ -284,7 +285,7 @@ export async function GET(request: NextRequest) {
         venue: extractVenueName(sess.class_name),
         date: sess.date,
         startTime: sess.start_time,
-        instructor: sess.instructor_name?.split('|')[0] || 'Faculty',
+        instructor: decodeSessionMetadata(sess.instructor_name || '').topic || 'Faculty',
         status: isPresent ? 'Present' : 'Absent',
         captureMode: attInfo?.capture_mode || (isPresent ? 'Live Scan' : 'N/A'),
         recordedAt: attInfo?.recorded_at || null,
