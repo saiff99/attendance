@@ -25,18 +25,22 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (!isLoading && isAuthenticated && user) {
-      window.location.href = user.role === "Student" ? "/portal" : "/";
+      const destination = user.role === "Student" ? "/portal" : "/";
+      router.replace(destination);
     }
-  }, [isAuthenticated, isLoading, user]);
+  }, [isAuthenticated, isLoading, user, router]);
 
   useEffect(() => {
     setError(null);
     setUsername("");
     setPassword("");
-    const timer = setTimeout(() => {
-      inputRef.current?.focus();
-    }, 150);
-    return () => clearTimeout(timer);
+    // Only auto-focus on desktop with physical keyboard to prevent mobile soft-keyboard popups & layout jumping
+    if (typeof window !== "undefined" && window.innerWidth >= 768) {
+      const timer = setTimeout(() => {
+        inputRef.current?.focus();
+      }, 150);
+      return () => clearTimeout(timer);
+    }
   }, [loginMode]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -54,14 +58,14 @@ export default function LoginPage() {
     setError(null);
 
     // Micro-delay for smooth perceptible feedback
-    await new Promise((r) => setTimeout(r, 250));
+    await new Promise((r) => setTimeout(r, 200));
 
     const res = await login(username, password);
 
     if (res.success) {
       setIsSuccess(true);
       const destination = res.user?.role === "Student" ? "/portal" : "/";
-      window.location.href = destination;
+      router.replace(destination);
     } else {
       setLoading(false);
       setError(res.error || "Authentication failed. Please check your credentials.");
@@ -69,7 +73,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#070B12] text-slate-100 flex flex-col items-center justify-center p-4 relative overflow-hidden select-none">
+    <div className="min-h-[100dvh] bg-[#070B12] text-slate-100 flex flex-col items-center justify-center p-4 relative overflow-hidden">
       {/* Background Ambient Glow */}
       <div className="fixed top-1/4 left-1/2 -translate-x-1/2 w-96 h-96 bg-indigo-600/15 blur-[120px] rounded-full pointer-events-none" />
       <div className="fixed bottom-10 right-10 w-72 h-72 bg-violet-600/10 blur-[100px] rounded-full pointer-events-none" />
@@ -162,7 +166,7 @@ export default function LoginPage() {
                   setError(null);
                 }}
                 placeholder={loginMode === "student" ? "e.g. 25003" : "e.g. admin or faculty"}
-                className="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-950/80 border border-slate-800 text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-sm font-medium transition-all duration-200 disabled:opacity-60"
+                className="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-950/80 border border-slate-800 text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-base sm:text-sm font-medium transition-all duration-200 disabled:opacity-60"
               />
             </div>
           </div>
@@ -188,7 +192,7 @@ export default function LoginPage() {
                   setError(null);
                 }}
                 placeholder={loginMode === "student" ? "e.g. 950426" : "Enter password"}
-                className="w-full pl-10 pr-10 py-3 rounded-xl bg-slate-950/80 border border-slate-800 text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-sm font-medium transition-all duration-200 disabled:opacity-60"
+                className="w-full pl-10 pr-10 py-3 rounded-xl bg-slate-950/80 border border-slate-800 text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-base sm:text-sm font-medium transition-all duration-200 disabled:opacity-60"
               />
               <button
                 type="button"

@@ -51,16 +51,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
       
-      // Fallback check from localStorage only if server cookie failed
-      const stored = localStorage.getItem(AUTH_STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (parsed && parsed.username) {
-          setUser(parsed);
-        }
-      }
+      // If server cookie is absent or expired, explicitly clear client auth state and storage
+      setUser(null);
+      localStorage.removeItem(AUTH_STORAGE_KEY);
     } catch (e) {
       console.warn("Failed to check auth status:", e);
+      setUser(null);
+      localStorage.removeItem(AUTH_STORAGE_KEY);
     } finally {
       setIsLoading(false);
     }

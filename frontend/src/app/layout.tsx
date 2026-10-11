@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter, Playfair_Display } from "next/font/google";
 import { AppShell } from "@/components/layout/AppShell";
 import { ThemeProvider } from "@/components/ThemeProvider";
@@ -18,6 +18,13 @@ const playfair = Playfair_Display({
 export const metadata: Metadata = {
   title: "MedAttend - Smart Attendance System",
   description: "Medical College Smart Attendance System",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  interactiveWidget: "resizes-content",
 };
 
 export default function RootLayout({
