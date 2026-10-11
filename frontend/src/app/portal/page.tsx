@@ -415,8 +415,8 @@ export default function StudentPortalPage() {
         {/* ========================================================================= */}
         {/* Core Feature: Subject-wise Attendance Breakdown Table                     */}
         {/* ========================================================================= */}
-        <section className="bg-slate-900/90 border border-slate-800 rounded-3xl p-5 sm:p-7 shadow-2xl relative overflow-hidden backdrop-blur-xl">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-5">
+        <section className="bg-slate-900/90 border border-slate-800 rounded-3xl p-3 sm:p-7 shadow-2xl relative overflow-hidden backdrop-blur-xl">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 sm:mb-5">
             <div>
               <div className="flex items-center gap-2">
                 <BookOpen className="w-5 h-5 text-indigo-400" />
@@ -437,15 +437,29 @@ export default function StudentPortalPage() {
 
           {/* The Table Matching User's Screenshot Specification */}
           <div className="rounded-2xl border border-slate-800/90 bg-slate-950/60 shadow-inner overflow-hidden">
-            <table className="w-full text-left border-collapse text-xs sm:text-sm">
+            <table className="w-full table-fixed text-left border-collapse text-xs sm:text-sm">
+              <colgroup>
+                <col className="w-[30%] sm:w-[28%]" />
+                <col className="w-[13%] sm:w-[14%]" />
+                <col className="w-[13%] sm:w-[14%]" />
+                <col className="w-[13%] sm:w-[14%]" />
+                <col className="w-[13%] sm:w-[14%]" />
+                <col className="w-[18%] sm:w-[16%]" />
+              </colgroup>
               <thead>
                 <tr className="border-b border-slate-800/80 bg-slate-900/80 text-slate-400 text-[10px] sm:text-[11px] font-bold uppercase tracking-wider">
-                  <th className="py-2.5 sm:py-3 px-2 sm:px-4">Subject</th>
-                  <th className="py-2.5 sm:py-3 px-1 sm:px-2 text-center">Total</th>
-                  <th className="py-2.5 sm:py-3 px-1 sm:px-2 text-center">Present</th>
-                  <th className="py-2.5 sm:py-3 px-1 sm:px-2 text-center">Absent</th>
-                  <th className="py-2.5 sm:py-3 px-1 sm:px-2 text-center">Rate</th>
-                  <th className="py-2.5 sm:py-3 px-1 sm:px-2 text-center">Status</th>
+                  <th className="py-2.5 sm:py-3 px-1.5 sm:px-4">Subject</th>
+                  <th className="py-2.5 sm:py-3 px-0.5 sm:px-2 text-center">
+                    <span className="sm:inline hidden">Total</span><span className="sm:hidden">Tot</span>
+                  </th>
+                  <th className="py-2.5 sm:py-3 px-0.5 sm:px-2 text-center">
+                    <span className="sm:inline hidden">Present</span><span className="sm:hidden">Pres</span>
+                  </th>
+                  <th className="py-2.5 sm:py-3 px-0.5 sm:px-2 text-center">
+                    <span className="sm:inline hidden">Absent</span><span className="sm:hidden">Abs</span>
+                  </th>
+                  <th className="py-2.5 sm:py-3 px-0.5 sm:px-2 text-center">%</th>
+                  <th className="py-2.5 sm:py-3 px-0.5 sm:px-2 text-center">Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60">
@@ -455,50 +469,50 @@ export default function StudentPortalPage() {
                     className="hover:bg-slate-900/50 transition-colors"
                   >
                     {/* Subject Name - Clean, without subtitles */}
-                    <td className="py-2.5 sm:py-3.5 px-2 sm:px-4">
-                      <div className="font-bold text-white text-[11px] sm:text-sm leading-tight">
+                    <td className="py-2 sm:py-3.5 px-1.5 sm:px-4">
+                      <div className="font-bold text-white text-[11px] sm:text-sm leading-tight break-words">
                         {sub.subject}
                       </div>
                     </td>
 
                     {/* Total Classes */}
-                    <td className="py-2.5 sm:py-3.5 px-1 sm:px-2 text-center font-bold text-slate-300 text-xs sm:text-sm">
+                    <td className="py-2 sm:py-3.5 px-0.5 sm:px-2 text-center font-bold text-slate-300 text-[11px] sm:text-sm">
                       {sub.totalClasses}
                     </td>
 
                     {/* Attended / Present */}
-                    <td className="py-2.5 sm:py-3.5 px-1 sm:px-2 text-center font-bold text-emerald-400 text-xs sm:text-sm">
+                    <td className="py-2 sm:py-3.5 px-0.5 sm:px-2 text-center font-bold text-emerald-400 text-[11px] sm:text-sm">
                       {sub.present}
                     </td>
 
                     {/* Absent */}
-                    <td className="py-2.5 sm:py-3.5 px-1 sm:px-2 text-center font-bold text-rose-400 text-xs sm:text-sm">
+                    <td className="py-2 sm:py-3.5 px-0.5 sm:px-2 text-center font-bold text-rose-400 text-[11px] sm:text-sm">
                       {sub.absent}
                     </td>
 
                     {/* Attendance Percentage */}
-                    <td className="py-2.5 sm:py-3.5 px-1 sm:px-2 text-center">
-                      <span className="font-black text-white text-xs sm:text-sm whitespace-nowrap">
+                    <td className="py-2 sm:py-3.5 px-0.5 sm:px-2 text-center">
+                      <span className="font-black text-white text-[11px] sm:text-sm whitespace-nowrap">
                         {sub.percentage}%
                       </span>
                     </td>
 
                     {/* Status Badge */}
-                    <td className="py-2.5 sm:py-3.5 px-1 sm:px-2 text-center">
+                    <td className="py-2 sm:py-3.5 px-0.5 sm:px-2 text-center">
                       {sub.status === "Good" ? (
-                        <span className="inline-flex items-center gap-1 px-1.5 sm:px-2.5 py-0.5 rounded-full text-[10px] sm:text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 whitespace-nowrap">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                          Good
+                        <span className="inline-flex items-center justify-center gap-1 px-1.5 sm:px-2.5 py-0.5 rounded-full text-[9px] sm:text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 whitespace-nowrap">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                          <span>Good</span>
                         </span>
                       ) : sub.status === "Borderline" ? (
-                        <span className="inline-flex items-center gap-1 px-1.5 sm:px-2.5 py-0.5 rounded-full text-[10px] sm:text-xs font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 whitespace-nowrap">
-                          <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-                          Border
+                        <span className="inline-flex items-center justify-center gap-1 px-1.5 sm:px-2.5 py-0.5 rounded-full text-[9px] sm:text-xs font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 whitespace-nowrap">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
+                          <span>Border</span>
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 px-1.5 sm:px-2.5 py-0.5 rounded-full text-[10px] sm:text-xs font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20 whitespace-nowrap">
-                          <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
-                          Low
+                        <span className="inline-flex items-center justify-center gap-1 px-1.5 sm:px-2.5 py-0.5 rounded-full text-[9px] sm:text-xs font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20 whitespace-nowrap">
+                          <span className="w-1.5 h-1.5 rounded-full bg-rose-400 shrink-0" />
+                          <span>Low</span>
                         </span>
                       )}
                     </td>
@@ -507,30 +521,32 @@ export default function StudentPortalPage() {
 
                 {/* Overall Summary Footer Row */}
                 <tr className="bg-slate-900/90 font-black border-t-2 border-indigo-500/40 text-xs sm:text-sm">
-                  <td className="py-3 sm:py-4 px-2 sm:px-4 text-white">
+                  <td className="py-2.5 sm:py-4 px-1.5 sm:px-4 text-white">
                     <div className="flex items-center gap-1 sm:gap-2">
                       <Sparkles className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                      <span className="font-black text-[11px] sm:text-sm leading-tight">Overall Total</span>
+                      <span className="font-black text-[11px] sm:text-sm leading-tight whitespace-nowrap">
+                        <span className="sm:inline hidden">Overall </span>Total
+                      </span>
                     </div>
                   </td>
-                  <td className="py-3 sm:py-4 px-1 sm:px-2 text-center text-white">{summary.totalClasses}</td>
-                  <td className="py-3 sm:py-4 px-1 sm:px-2 text-center text-emerald-400">{summary.present}</td>
-                  <td className="py-3 sm:py-4 px-1 sm:px-2 text-center text-rose-400">{summary.absent}</td>
-                  <td className="py-3 sm:py-4 px-1 sm:px-2 text-center text-indigo-300 font-extrabold text-xs sm:text-base whitespace-nowrap">
+                  <td className="py-2.5 sm:py-4 px-0.5 sm:px-2 text-center text-white text-[11px] sm:text-sm font-bold">{summary.totalClasses}</td>
+                  <td className="py-2.5 sm:py-4 px-0.5 sm:px-2 text-center text-emerald-400 text-[11px] sm:text-sm font-bold">{summary.present}</td>
+                  <td className="py-2.5 sm:py-4 px-0.5 sm:px-2 text-center text-rose-400 text-[11px] sm:text-sm font-bold">{summary.absent}</td>
+                  <td className="py-2.5 sm:py-4 px-0.5 sm:px-2 text-center text-indigo-300 font-extrabold text-[11px] sm:text-base whitespace-nowrap">
                     {summary.percentage}%
                   </td>
-                  <td className="py-3 sm:py-4 px-1 sm:px-2 text-center">
-                    <span className={`inline-flex items-center gap-1 px-1.5 sm:px-2.5 py-0.5 rounded-full text-[10px] sm:text-xs font-black whitespace-nowrap ${
+                  <td className="py-2.5 sm:py-4 px-0.5 sm:px-2 text-center">
+                    <span className={`inline-flex items-center justify-center gap-1 px-1.5 sm:px-2.5 py-0.5 rounded-full text-[9px] sm:text-xs font-black whitespace-nowrap ${
                       summary.status === "Eligible"
                         ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
                         : summary.status === "Borderline"
                         ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
                         : "bg-rose-500/20 text-rose-300 border border-rose-500/40"
                     }`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${
+                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
                         summary.status === "Eligible" ? "bg-emerald-400" : summary.status === "Borderline" ? "bg-amber-400" : "bg-rose-400"
                       }`} />
-                      {summary.status === "Eligible" ? "Eligible" : summary.status}
+                      <span>{summary.status === "Eligible" ? "Eligible" : summary.status === "Borderline" ? "Border" : "Low"}</span>
                     </span>
                   </td>
                 </tr>
