@@ -436,16 +436,16 @@ export default function StudentPortalPage() {
           </div>
 
           {/* The Table Matching User's Screenshot Specification */}
-          <div className="overflow-x-auto rounded-2xl border border-slate-800/90 bg-slate-950/60 shadow-inner">
+          <div className="rounded-2xl border border-slate-800/90 bg-slate-950/60 shadow-inner overflow-hidden">
             <table className="w-full text-left border-collapse text-xs sm:text-sm">
               <thead>
-                <tr className="border-b border-slate-800/80 bg-slate-900/80 text-slate-400 text-[11px] font-bold uppercase tracking-wider">
-                  <th className="py-3 px-4 sm:px-5">Subject</th>
-                  <th className="py-3 px-3 text-center">Total Classes</th>
-                  <th className="py-3 px-3 text-center">Present</th>
-                  <th className="py-3 px-3 text-center">Absent</th>
-                  <th className="py-3 px-4 text-center">Attendance Rate</th>
-                  <th className="py-3 px-4 text-center">Status</th>
+                <tr className="border-b border-slate-800/80 bg-slate-900/80 text-slate-400 text-[10px] sm:text-[11px] font-bold uppercase tracking-wider">
+                  <th className="py-2.5 sm:py-3 px-2 sm:px-4">Subject</th>
+                  <th className="py-2.5 sm:py-3 px-1 sm:px-2 text-center">Total</th>
+                  <th className="py-2.5 sm:py-3 px-1 sm:px-2 text-center">Present</th>
+                  <th className="py-2.5 sm:py-3 px-1 sm:px-2 text-center">Absent</th>
+                  <th className="py-2.5 sm:py-3 px-1 sm:px-2 text-center">Rate</th>
+                  <th className="py-2.5 sm:py-3 px-1 sm:px-2 text-center">Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60">
@@ -454,65 +454,50 @@ export default function StudentPortalPage() {
                     key={sub.code || sub.subject || idx}
                     className="hover:bg-slate-900/50 transition-colors"
                   >
-                    {/* Subject Name */}
-                    <td className="py-3.5 px-4 sm:px-5">
-                      <div className="font-bold text-white">{sub.subject}</div>
-                      {sub.code && (
-                        <span className="text-[10px] text-slate-500 font-mono font-medium">
-                          {sub.code} {sub.department ? `• ${sub.department}` : ""}
-                        </span>
-                      )}
+                    {/* Subject Name - Clean, without subtitles */}
+                    <td className="py-2.5 sm:py-3.5 px-2 sm:px-4">
+                      <div className="font-bold text-white text-[11px] sm:text-sm leading-tight">
+                        {sub.subject}
+                      </div>
                     </td>
 
                     {/* Total Classes */}
-                    <td className="py-3.5 px-3 text-center font-bold text-slate-300">
+                    <td className="py-2.5 sm:py-3.5 px-1 sm:px-2 text-center font-bold text-slate-300 text-xs sm:text-sm">
                       {sub.totalClasses}
                     </td>
 
-                    {/* Attended */}
-                    <td className="py-3.5 px-3 text-center font-bold text-emerald-400">
+                    {/* Attended / Present */}
+                    <td className="py-2.5 sm:py-3.5 px-1 sm:px-2 text-center font-bold text-emerald-400 text-xs sm:text-sm">
                       {sub.present}
                     </td>
 
                     {/* Absent */}
-                    <td className="py-3.5 px-3 text-center font-bold text-rose-400">
+                    <td className="py-2.5 sm:py-3.5 px-1 sm:px-2 text-center font-bold text-rose-400 text-xs sm:text-sm">
                       {sub.absent}
                     </td>
 
-                    {/* Attendance Percentage with Progress Bar */}
-                    <td className="py-3.5 px-4 text-center">
-                      <div className="inline-flex flex-col items-center">
-                        <span className="font-black text-white text-sm">{sub.percentage}%</span>
-                        <div className="w-20 bg-slate-800 h-1.5 rounded-full overflow-hidden mt-1">
-                          <div
-                            className={`h-full rounded-full ${
-                              sub.percentage >= 75
-                                ? "bg-emerald-500"
-                                : sub.percentage >= 65
-                                ? "bg-amber-500"
-                                : "bg-rose-500"
-                            }`}
-                            style={{ width: `${Math.min(100, Math.max(0, sub.percentage))}%` }}
-                          />
-                        </div>
-                      </div>
+                    {/* Attendance Percentage */}
+                    <td className="py-2.5 sm:py-3.5 px-1 sm:px-2 text-center">
+                      <span className="font-black text-white text-xs sm:text-sm whitespace-nowrap">
+                        {sub.percentage}%
+                      </span>
                     </td>
 
                     {/* Status Badge */}
-                    <td className="py-3.5 px-4 text-center">
+                    <td className="py-2.5 sm:py-3.5 px-1 sm:px-2 text-center">
                       {sub.status === "Good" ? (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                        <span className="inline-flex items-center gap-1 px-1.5 sm:px-2.5 py-0.5 rounded-full text-[10px] sm:text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 whitespace-nowrap">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                           Good
                         </span>
                       ) : sub.status === "Borderline" ? (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                          <span className="w-2 h-2 rounded-full bg-amber-400" />
-                          Borderline
+                        <span className="inline-flex items-center gap-1 px-1.5 sm:px-2.5 py-0.5 rounded-full text-[10px] sm:text-xs font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 whitespace-nowrap">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                          Border
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20">
-                          <span className="w-2 h-2 rounded-full bg-rose-400" />
+                        <span className="inline-flex items-center gap-1 px-1.5 sm:px-2.5 py-0.5 rounded-full text-[10px] sm:text-xs font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20 whitespace-nowrap">
+                          <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
                           Low
                         </span>
                       )}
@@ -521,26 +506,28 @@ export default function StudentPortalPage() {
                 ))}
 
                 {/* Overall Summary Footer Row */}
-                <tr className="bg-slate-900/90 font-black border-t-2 border-indigo-500/40 text-sm">
-                  <td className="py-4 px-4 sm:px-5 text-white flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-indigo-400" />
-                    <span>Overall Total</span>
+                <tr className="bg-slate-900/90 font-black border-t-2 border-indigo-500/40 text-xs sm:text-sm">
+                  <td className="py-3 sm:py-4 px-2 sm:px-4 text-white">
+                    <div className="flex items-center gap-1 sm:gap-2">
+                      <Sparkles className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                      <span className="font-black text-[11px] sm:text-sm leading-tight">Overall Total</span>
+                    </div>
                   </td>
-                  <td className="py-4 px-3 text-center text-white">{summary.totalClasses}</td>
-                  <td className="py-4 px-3 text-center text-emerald-400">{summary.present}</td>
-                  <td className="py-4 px-3 text-center text-rose-400">{summary.absent}</td>
-                  <td className="py-4 px-4 text-center text-indigo-300 font-extrabold text-base">
+                  <td className="py-3 sm:py-4 px-1 sm:px-2 text-center text-white">{summary.totalClasses}</td>
+                  <td className="py-3 sm:py-4 px-1 sm:px-2 text-center text-emerald-400">{summary.present}</td>
+                  <td className="py-3 sm:py-4 px-1 sm:px-2 text-center text-rose-400">{summary.absent}</td>
+                  <td className="py-3 sm:py-4 px-1 sm:px-2 text-center text-indigo-300 font-extrabold text-xs sm:text-base whitespace-nowrap">
                     {summary.percentage}%
                   </td>
-                  <td className="py-4 px-4 text-center">
-                    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black ${
+                  <td className="py-3 sm:py-4 px-1 sm:px-2 text-center">
+                    <span className={`inline-flex items-center gap-1 px-1.5 sm:px-2.5 py-0.5 rounded-full text-[10px] sm:text-xs font-black whitespace-nowrap ${
                       summary.status === "Eligible"
                         ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
                         : summary.status === "Borderline"
                         ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
                         : "bg-rose-500/20 text-rose-300 border border-rose-500/40"
                     }`}>
-                      <span className={`w-2 h-2 rounded-full ${
+                      <span className={`w-1.5 h-1.5 rounded-full ${
                         summary.status === "Eligible" ? "bg-emerald-400" : summary.status === "Borderline" ? "bg-amber-400" : "bg-rose-400"
                       }`} />
                       {summary.status === "Eligible" ? "Eligible" : summary.status}
