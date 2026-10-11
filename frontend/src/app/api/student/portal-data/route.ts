@@ -3,6 +3,7 @@ import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/serverAuth';
 import { supabaseServer } from '@/lib/supabaseServer';
 import { isCohortMatching } from '@/lib/cohort';
 import { DEFAULT_MBBS_SUBJECTS, getSubjectsForCohort } from '@/lib/academicSubjects';
+import { getParentPhone } from '@/lib/studentContact';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,34 +23,84 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const requestedRoll = searchParams.get('roll');
 
-    let targetRoll = session.studentRoll;
+    let student: any = null;
+    let stuErr: any = null;
+
+    // 1. If Super Admin or Faculty explicitly requested a specific student roll
     if ((session.role === 'Super Admin' || session.role === 'Faculty') && requestedRoll) {
-      targetRoll = requestedRoll.trim();
-    }
-
-    if (!targetRoll && session.studentId) {
-      // Find roll by studentId
-      const { data: sById } = await supabaseServer
+      const cleanReqRoll = requestedRoll.trim();
+      const res = await supabaseServer
         .from('students')
-        .select('student_roll')
-        .eq('id', session.studentId)
+        .select('id, student_roll, full_name, email, academic_year, face_encoding, portal_pin, created_at')
+        .ilike('student_roll', cleanReqRoll)
         .maybeSingle();
-      if (sById) targetRoll = sById.student_roll;
+      student = res.data;
+      stuErr = res.error;
     }
 
-    if (!targetRoll) {
-      return NextResponse.json({ success: false, error: 'Student Roll Number is required.' }, { status: 400 });
+    // 2. If student is logged in, lookup by primary key studentId first
+    if (!student && session.role === 'Student') {
+      if (session.studentId) {
+        const res = await supabaseServer
+          .from('students')
+          .select('id, student_roll, full_name, email, academic_year, face_encoding, portal_pin, created_at')
+          .eq('id', session.studentId)
+          .maybeSingle();
+        student = res.data;
+        stuErr = res.error;
+      }
+      if (!student && session.studentRoll) {
+        const res = await supabaseServer
+          .from('students')
+          .select('id, student_roll, full_name, email, academic_year, face_encoding, portal_pin, created_at')
+          .ilike('student_roll', session.studentRoll.trim())
+          .maybeSingle();
+        student = res.data;
+        stuErr = res.error;
+      }
     }
 
-    // 1. Fetch Student Record
-    const { data: student, error: stuErr } = await supabaseServer
-      .from('students')
-      .select('id, student_roll, full_name, email, academic_year, parent_phone, face_encoding, portal_pin, created_at')
-      .ilike('student_roll', targetRoll)
-      .maybeSingle();
+    // 3. Fallback for Super Admin or Faculty browsing /portal without query param: pick first enrolled student
+    if (!student && (session.role === 'Super Admin' || session.role === 'Faculty')) {
+      const res = await supabaseServer
+        .from('students')
+        .select('id, student_roll, full_name, email, academic_year, face_encoding, portal_pin, created_at')
+        .order('student_roll', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      student = res.data;
+      stuErr = res.error;
+    }
+
+    // 4. General fallback if session has studentRoll
+    if (!student && session.studentRoll) {
+      const res = await supabaseServer
+        .from('students')
+        .select('id, student_roll, full_name, email, academic_year, face_encoding, portal_pin, created_at')
+        .ilike('student_roll', session.studentRoll.trim())
+        .maybeSingle();
+      student = res.data;
+      stuErr = res.error;
+    }
 
     if (stuErr || !student) {
       return NextResponse.json({ success: false, error: 'Student not found in registry.' }, { status: 404 });
+    }
+
+    // Fetch list of students if viewer is Super Admin or Faculty for interactive switcher
+    let adminStudentList: { roll: string; name: string; year: string }[] = [];
+    if (session.role === 'Super Admin' || session.role === 'Faculty') {
+      const { data: stList } = await supabaseServer
+        .from('students')
+        .select('student_roll, full_name, academic_year')
+        .order('student_roll', { ascending: true });
+      if (stList) {
+        adminStudentList = stList.map(s => ({
+          roll: s.student_roll,
+          name: s.full_name,
+          year: s.academic_year || '1st Year',
+        }));
+      }
     }
 
     const studentYear = student.academic_year || '1st Year';
@@ -242,13 +293,15 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
+      viewerRole: session.role,
+      adminStudentList,
       student: {
         id: student.id,
         fullName: student.full_name,
         studentRoll: student.student_roll,
         academicYear: student.academic_year || '1st Year',
         email: student.email,
-        parentPhone: student.parent_phone || '',
+        parentPhone: getParentPhone(student),
         hasFaceEnrolled: Boolean(student.face_encoding),
         hasCustomPin: Boolean(student.portal_pin),
       },

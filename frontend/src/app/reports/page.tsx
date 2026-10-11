@@ -608,12 +608,12 @@ export default function ReportsPage() {
                                   <table className="w-full text-left border-collapse text-xs">
                                     <thead>
                                       <tr className="bg-gray-50 dark:bg-slate-900 text-gray-600 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px] border-b border-gray-200 dark:border-slate-800">
-                                        <th className="py-2.5 px-3">Subject (বিষয়)</th>
-                                        <th className="py-2.5 px-2 text-center">মোট ক্লাস</th>
-                                        <th className="py-2.5 px-2 text-center">উপস্থিত</th>
-                                        <th className="py-2.5 px-2 text-center">অনুপস্থিত</th>
-                                        <th className="py-2.5 px-3 text-center">উপস্থিতির হার</th>
-                                        <th className="py-2.5 px-3 text-center">স্ট্যাটাস</th>
+                                        <th className="py-2.5 px-3">Subject</th>
+                                        <th className="py-2.5 px-2 text-center">Total Classes</th>
+                                        <th className="py-2.5 px-2 text-center">Present</th>
+                                        <th className="py-2.5 px-2 text-center">Absent</th>
+                                        <th className="py-2.5 px-3 text-center">Attendance Rate</th>
+                                        <th className="py-2.5 px-3 text-center">Status</th>
                                       </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-100 dark:divide-slate-800/60">
@@ -673,7 +673,7 @@ export default function ReportsPage() {
                                       <tr className="bg-gray-50/80 dark:bg-slate-900/90 font-black border-t border-gray-200 dark:border-slate-800">
                                         <td className="py-2.5 px-3 text-gray-900 dark:text-white flex items-center gap-1.5">
                                           <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
-                                          <span>Overall (মোট)</span>
+                                          <span>Overall Total</span>
                                         </td>
                                         <td className="py-2.5 px-2 text-center text-gray-900 dark:text-white">{student.total_sessions}</td>
                                         <td className="py-2.5 px-2 text-center text-emerald-600 dark:text-emerald-400">{student.total_present}</td>

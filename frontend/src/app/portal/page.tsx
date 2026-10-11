@@ -35,6 +35,8 @@ interface RecentSession {
 }
 
 interface PortalData {
+  viewerRole?: "Super Admin" | "Faculty" | "Student";
+  adminStudentList?: { roll: string; name: string; year: string }[];
   student: {
     id: string;
     fullName: string;
@@ -62,6 +64,7 @@ export default function StudentPortalPage() {
   const router = useRouter();
 
   const [data, setData] = useState<PortalData | null>(null);
+  const [selectedRoll, setSelectedRoll] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -72,16 +75,20 @@ export default function StudentPortalPage() {
   const [pinLoading, setPinLoading] = useState(false);
   const [pinMessage, setPinMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  const fetchPortalData = useCallback(async () => {
+  const fetchPortalData = useCallback(async (rollQuery?: string) => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/student/portal-data", { cache: "no-store" });
+      const url = rollQuery ? `/api/student/portal-data?roll=${encodeURIComponent(rollQuery)}` : "/api/student/portal-data";
+      const res = await fetch(url, { cache: "no-store" });
       const json = await res.json();
       if (!res.ok || !json.success) {
         throw new Error(json.error || "Failed to load portal data");
       }
       setData(json);
+      if (json.student?.studentRoll) {
+        setSelectedRoll(json.student.studentRoll);
+      }
     } catch (err: any) {
       setError(err.message || "Failed to load attendance portal.");
     } finally {
@@ -156,16 +163,24 @@ export default function StudentPortalPage() {
           </div>
           <h2 className="text-lg font-bold text-white mb-2">Portal Access Error</h2>
           <p className="text-xs text-slate-400 mb-6">{error || "Unable to retrieve student records."}</p>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-col sm:flex-row items-center gap-2.5">
             <button
-              onClick={fetchPortalData}
-              className="flex-1 py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition-all cursor-pointer"
+              onClick={() => fetchPortalData(selectedRoll)}
+              className="w-full sm:flex-1 py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition-all cursor-pointer"
             >
               Retry
             </button>
+            {user?.role !== "Student" && (
+              <Link
+                href="/"
+                className="w-full sm:flex-1 py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-all text-center"
+              >
+                Dashboard
+              </Link>
+            )}
             <button
               onClick={() => logout()}
-              className="py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-all cursor-pointer"
+              className="w-full sm:flex-1 py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-all cursor-pointer"
             >
               Sign Out
             </button>
@@ -176,6 +191,7 @@ export default function StudentPortalPage() {
   }
 
   const { student, summary, subjects, recentSessions } = data;
+  const isElevatedViewer = data.viewerRole === "Super Admin" || data.viewerRole === "Faculty" || user?.role === "Super Admin" || user?.role === "Faculty";
 
   return (
     <div className="min-h-screen bg-[#070B12] text-slate-100 pb-16 selection:bg-indigo-500 selection:text-white">
@@ -225,6 +241,52 @@ export default function StudentPortalPage() {
           </button>
         </div>
       </header>
+
+      {/* Admin Preview Mode Toolbar */}
+      {isElevatedViewer && (
+        <div className="bg-gradient-to-r from-indigo-950/80 via-slate-900/90 to-indigo-950/80 border-b border-indigo-500/30 px-4 sm:px-8 py-2.5 flex flex-wrap items-center justify-between gap-3 shadow-lg">
+          <div className="flex items-center gap-2.5 text-xs">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse ring-4 ring-emerald-500/20" />
+            <span className="font-bold text-white tracking-wide">Faculty &amp; Admin Preview</span>
+            <span className="text-slate-400 hidden sm:inline">•</span>
+            <span className="text-slate-400 hidden sm:inline">Viewing Student Portal as</span>
+            <span className="px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-semibold text-[11px]">
+              {user?.role || data.viewerRole}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2.5">
+            {data.adminStudentList && data.adminStudentList.length > 0 && (
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] text-slate-400 hidden md:inline">Inspect Student:</span>
+                <select
+                  value={selectedRoll || student.studentRoll}
+                  onChange={(e) => {
+                    const newRoll = e.target.value;
+                    setSelectedRoll(newRoll);
+                    fetchPortalData(newRoll);
+                  }}
+                  className="bg-slate-950 border border-slate-700 hover:border-indigo-500 text-white text-xs rounded-xl px-3 py-1.5 focus:outline-none focus:border-indigo-500 cursor-pointer transition-colors shadow-inner"
+                >
+                  {data.adminStudentList.map((st) => (
+                    <option key={st.roll} value={st.roll}>
+                      Roll {st.roll} - {st.name} ({st.year})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <Link
+              href="/"
+              className="py-1.5 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition-all shadow-md shadow-indigo-600/20 flex items-center gap-1"
+            >
+              <span>Admin Console</span>
+              <ArrowUpRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+        </div>
+      )}
 
       {/* Main Content Area */}
       <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8 space-y-6 sm:space-y-8">
@@ -365,7 +427,7 @@ export default function StudentPortalPage() {
               </p>
             </div>
             <button
-              onClick={fetchPortalData}
+              onClick={() => fetchPortalData(selectedRoll)}
               className="self-start sm:self-auto flex items-center gap-1.5 py-1.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-all cursor-pointer"
             >
               <RefreshCw className="w-3.5 h-3.5" />
@@ -378,12 +440,12 @@ export default function StudentPortalPage() {
             <table className="w-full text-left border-collapse text-xs sm:text-sm">
               <thead>
                 <tr className="border-b border-slate-800/80 bg-slate-900/80 text-slate-400 text-[11px] font-bold uppercase tracking-wider">
-                  <th className="py-3 px-4 sm:px-5">Subject (বিষয়)</th>
-                  <th className="py-3 px-3 text-center">মোট ক্লাস</th>
-                  <th className="py-3 px-3 text-center">উপস্থিত</th>
-                  <th className="py-3 px-3 text-center">অনুপস্থিত</th>
-                  <th className="py-3 px-4 text-center">উপস্থিতির হার</th>
-                  <th className="py-3 px-4 text-center">স্ট্যাটাস</th>
+                  <th className="py-3 px-4 sm:px-5">Subject</th>
+                  <th className="py-3 px-3 text-center">Total Classes</th>
+                  <th className="py-3 px-3 text-center">Present</th>
+                  <th className="py-3 px-3 text-center">Absent</th>
+                  <th className="py-3 px-4 text-center">Attendance Rate</th>
+                  <th className="py-3 px-4 text-center">Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60">
@@ -462,7 +524,7 @@ export default function StudentPortalPage() {
                 <tr className="bg-slate-900/90 font-black border-t-2 border-indigo-500/40 text-sm">
                   <td className="py-4 px-4 sm:px-5 text-white flex items-center gap-2">
                     <Sparkles className="w-4 h-4 text-indigo-400" />
-                    <span>Overall (মোট)</span>
+                    <span>Overall Total</span>
                   </td>
                   <td className="py-4 px-3 text-center text-white">{summary.totalClasses}</td>
                   <td className="py-4 px-3 text-center text-emerald-400">{summary.present}</td>
