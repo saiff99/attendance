@@ -31,6 +31,7 @@ import {
   formatDistance
 } from "@/lib/geofence";
 import { isCohortMatching } from "@/lib/cohort";
+import { AcademicSubject, DEFAULT_MBBS_SUBJECTS, getSubjectsForCohort } from "@/lib/academicSubjects";
 
 interface CameraMeta {
   index: number;
@@ -80,14 +81,51 @@ export default function LiveScan() {
   const [activeSession, setActiveSession] = useState<any>(null);
   const [isLoadingSession, setIsLoadingSession] = useState(true);
   const [setupData, setSetupData] = useState({
-    subject: "",
+    subject: "Anatomy",
     hall: "Lecture Hall 1",
     topic: "",
-    academic_year: "All",
+    academic_year: "1st Year",
     sub_batch: "All"
   });
   const [customHallName, setCustomHallName] = useState("");
+  const [customSubjectName, setCustomSubjectName] = useState("");
+  const [academicSubjects, setAcademicSubjects] = useState<AcademicSubject[]>(DEFAULT_MBBS_SUBJECTS);
   const [isStartingSession, setIsStartingSession] = useState(false);
+
+  // Fetch dynamic curriculum subjects on mount
+  useEffect(() => {
+    const loadSubjects = async () => {
+      try {
+        const res = await fetch("/api/subjects");
+        const data = await res.json();
+        if (res.ok && data.subjects && data.subjects.length > 0) {
+          setAcademicSubjects(data.subjects);
+        }
+      } catch (e) {
+        // Fallback to DEFAULT_MBBS_SUBJECTS already initialized
+      }
+    };
+    loadSubjects();
+  }, []);
+
+  const availableCohortSubjects = useMemo(() => {
+    return getSubjectsForCohort(academicSubjects, setupData.academic_year);
+  }, [academicSubjects, setupData.academic_year]);
+
+  const handleCohortChange = (newCohort: string) => {
+    const cohortSubs = getSubjectsForCohort(academicSubjects, newCohort);
+    const isCurrentValid = cohortSubs.some(s => s.name === setupData.subject);
+    const nextSubject = isCurrentValid
+      ? setupData.subject
+      : (cohortSubs.length > 0 ? cohortSubs[0].name : "custom");
+
+    setSetupData(prev => ({
+      ...prev,
+      academic_year: newCohort,
+      subject: nextSubject,
+      sub_batch: newCohort === "All" ? "All" : prev.sub_batch
+    }));
+  };
 
   // Auto-restore Active Session ONLY when session_id query param is present in URL (e.g. from Ongoing page or new session launch)
   useEffect(() => {
@@ -433,7 +471,8 @@ export default function LiveScan() {
       const today = `${localYear}-${localMonth}-${localDay}`;
 
       const finalHall = setupData.hall === "custom" ? (customHallName.trim() || "Custom Hall") : setupData.hall;
-      const className = `${setupData.subject} - ${finalHall}`;
+      const finalSubject = setupData.subject === "custom" ? (customSubjectName.trim() || "General Lecture") : setupData.subject;
+      const className = `${finalSubject} - ${finalHall}`;
 
       const targetCohort = setupData.academic_year === "All"
         ? "All"
@@ -717,17 +756,88 @@ export default function LiveScan() {
           </div>
 
           <form onSubmit={handleStartSession} className="space-y-3.5 sm:space-y-4 relative z-10">
+            {/* 1. Target Student Cohort & Sub-Group (Hierarchy Parent) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label htmlFor="academic_year" className="block text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-slate-400 mb-1.5 flex items-center justify-between">
+                  <span>Target Student Cohort</span>
+                  <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-medium">Step 1</span>
+                </label>
+                <select
+                  id="academic_year"
+                  className="w-full rounded-xl border border-gray-300 dark:border-slate-800 py-2.5 sm:py-3 px-3.5 sm:px-4 text-gray-900 dark:text-white bg-white dark:bg-slate-950/70 focus:outline-none focus:border-indigo-600 dark:focus:border-indigo-500 focus:ring-1 focus:ring-indigo-600 dark:focus:ring-indigo-500 transition-all text-xs sm:text-sm cursor-pointer shadow-sm"
+                  value={setupData.academic_year}
+                  onChange={e => handleCohortChange(e.target.value)}
+                >
+                  <option value="1st Year" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">1st Year MBBS</option>
+                  <option value="2nd Year" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">2nd Year MBBS</option>
+                  <option value="3rd Year" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">3rd Year MBBS</option>
+                  <option value="4th Year" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">4th Year MBBS</option>
+                  <option value="All" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">All MBBS Batches (Full Cohort)</option>
+                </select>
+              </div>
+
+              <div>
+                <label htmlFor="sub_batch" className="block text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-slate-400 mb-1.5">Sub-Group / Section</label>
+                <select
+                  id="sub_batch"
+                  disabled={setupData.academic_year === "All"}
+                  className="w-full rounded-xl border border-gray-300 dark:border-slate-800 py-2.5 sm:py-3 px-3.5 sm:px-4 text-gray-900 dark:text-white bg-white dark:bg-slate-950/70 focus:outline-none focus:border-indigo-600 dark:focus:border-indigo-500 focus:ring-1 focus:ring-indigo-600 dark:focus:ring-indigo-500 transition-all text-xs sm:text-sm cursor-pointer shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  value={setupData.sub_batch}
+                  onChange={e => setSetupData({ ...setupData, sub_batch: e.target.value })}
+                >
+                  <option value="All" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">All Group (Full Class)</option>
+                  <option value="Group A" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">Group A (e.g. Roll 1-100)</option>
+                  <option value="Group B" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">Group B (e.g. Roll 101-200)</option>
+                  <option value="Group C" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">Group C (e.g. Roll 201-300)</option>
+                </select>
+              </div>
+            </div>
+
+            {/* 2. Subject / Department (Filtered dynamically based on Cohort) */}
             <div>
-              <label htmlFor="subject" className="block text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-slate-400 mb-1.5">Subject / Department</label>
-              <input
+              <div className="flex items-center justify-between mb-1.5">
+                <label htmlFor="subject" className="block text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-slate-400">
+                  Subject / Department
+                </label>
+                <span className="text-[11px] text-indigo-600 dark:text-indigo-400 font-medium">
+                  {setupData.academic_year === "All" ? "All Subjects" : `${setupData.academic_year} Curriculum`} ({availableCohortSubjects.length} subjects)
+                </span>
+              </div>
+              <select
                 id="subject"
                 required
-                type="text"
-                className="w-full rounded-xl border border-gray-300 dark:border-slate-800 py-2.5 sm:py-3 px-3.5 sm:px-4 text-gray-900 dark:text-white bg-white dark:bg-slate-950/70 placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-indigo-600 dark:focus:border-indigo-500 focus:ring-1 focus:ring-indigo-600 dark:focus:ring-indigo-500 transition-all text-xs sm:text-sm shadow-sm"
+                className="w-full rounded-xl border border-gray-300 dark:border-slate-800 py-2.5 sm:py-3 px-3.5 sm:px-4 text-gray-900 dark:text-white bg-white dark:bg-slate-950/70 focus:outline-none focus:border-indigo-600 dark:focus:border-indigo-500 focus:ring-1 focus:ring-indigo-600 dark:focus:ring-indigo-500 transition-all text-xs sm:text-sm cursor-pointer shadow-sm"
                 value={setupData.subject}
                 onChange={e => setSetupData({ ...setupData, subject: e.target.value })}
-                placeholder="e.g. Department of Anatomy & Physiology"
-              />
+              >
+                {availableCohortSubjects.map(sub => (
+                  <option key={sub.id || `${sub.academic_year}-${sub.name}`} value={sub.name} className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">
+                    {sub.code ? `${sub.name} (${sub.code})` : sub.name} {setupData.academic_year === "All" ? `— [${sub.academic_year}]` : ''}
+                  </option>
+                ))}
+                <option value="custom" className="bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 font-medium">
+                  + Other / Custom Subject...
+                </option>
+              </select>
+
+              {setupData.subject === "custom" && (
+                <div className="mt-2.5 animate-in fade-in slide-in-from-top-1 duration-200">
+                  <label htmlFor="custom-subject" className="block text-[11px] font-medium text-indigo-600 dark:text-indigo-400 mb-1">
+                    Enter Custom Subject / Special Session Name:
+                  </label>
+                  <input
+                    id="custom-subject"
+                    required
+                    type="text"
+                    className="w-full rounded-xl border border-indigo-300 dark:border-indigo-500/50 py-2 sm:py-2.5 px-3.5 text-gray-900 dark:text-white bg-white dark:bg-slate-950/90 placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-xs sm:text-sm shadow-inner"
+                    value={customSubjectName}
+                    onChange={e => setCustomSubjectName(e.target.value)}
+                    placeholder="e.g. Clinical Seminar, Medical Ethics, Grand Rounds..."
+                    autoFocus
+                  />
+                </div>
+              )}
             </div>
 
             <div>
@@ -776,41 +886,6 @@ export default function LiveScan() {
                 placeholder="e.g. Prof. Dr. A. K. Rahman - Cardiovascular Pathology"
               />
             </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label htmlFor="academic_year" className="block text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-slate-400 mb-1.5">Target Student Cohort</label>
-                <select
-                  id="academic_year"
-                  className="w-full rounded-xl border border-gray-300 dark:border-slate-800 py-2.5 sm:py-3 px-3.5 sm:px-4 text-gray-900 dark:text-white bg-white dark:bg-slate-950/70 focus:outline-none focus:border-indigo-600 dark:focus:border-indigo-500 focus:ring-1 focus:ring-indigo-600 dark:focus:border-indigo-500 transition-all text-xs sm:text-sm cursor-pointer shadow-sm"
-                  value={setupData.academic_year}
-                  onChange={e => setSetupData({ ...setupData, academic_year: e.target.value })}
-                >
-                  <option value="All" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">All MBBS Batches (Full Cohort)</option>
-                  <option value="1st Year" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">1st Year MBBS</option>
-                  <option value="2nd Year" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">2nd Year MBBS</option>
-                  <option value="3rd Year" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">3rd Year MBBS</option>
-                  <option value="4th Year" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">4th Year MBBS</option>
-                </select>
-              </div>
-
-              <div>
-                <label htmlFor="sub_batch" className="block text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-slate-400 mb-1.5">Sub-Group / Section</label>
-                <select
-                  id="sub_batch"
-                  disabled={setupData.academic_year === "All"}
-                  className="w-full rounded-xl border border-gray-300 dark:border-slate-800 py-2.5 sm:py-3 px-3.5 sm:px-4 text-gray-900 dark:text-white bg-white dark:bg-slate-950/70 focus:outline-none focus:border-indigo-600 dark:focus:border-indigo-500 focus:ring-1 focus:ring-indigo-600 dark:focus:border-indigo-500 transition-all text-xs sm:text-sm cursor-pointer shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                  value={setupData.sub_batch}
-                  onChange={e => setSetupData({ ...setupData, sub_batch: e.target.value })}
-                >
-                  <option value="All" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">All Group (Full Class)</option>
-                  <option value="Group A" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">Group A (e.g. Roll 1-100)</option>
-                  <option value="Group B" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">Group B (e.g. Roll 101-200)</option>
-                  <option value="Group C" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">Group C (e.g. Roll 201-300)</option>
-                </select>
-              </div>
-            </div>
-
             {/* GPS Geofence Security Card */}
             <div className="p-3.5 rounded-xl bg-gray-50 dark:bg-slate-950/70 border border-gray-200 dark:border-slate-800 space-y-2.5">
               <div className="flex items-center justify-between">
