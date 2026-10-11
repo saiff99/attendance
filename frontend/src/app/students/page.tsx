@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { Search, UserPlus, FileDown, MoreHorizontal, X, UploadCloud, Loader2, Edit2, Trash2, Folder, ArrowLeft, Users, FileSpreadsheet, ArrowUpDown, ArrowUp, ArrowDown, MessageSquare, Phone } from "lucide-react";
+import { useState, useEffect, useRef, useMemo } from "react";
+import { Search, UserPlus, FileDown, MoreHorizontal, X, UploadCloud, Loader2, Edit2, Trash2, Folder, ArrowLeft, Users, FileSpreadsheet, ArrowUpDown, ArrowUp, ArrowDown, MessageSquare, Phone, AlertTriangle } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import type { Student } from "@/types/database";
 import { StudentProfileModal } from "@/components/StudentProfileModal";
@@ -48,6 +48,17 @@ export default function StudentDirectory() {
   const [newStudent, setNewStudent] = useState({ student_roll: '', full_name: '', email: '', academic_year: '1st Year', sub_batch: 'All', parent_phone: '' });
   const [activeSubBatch, setActiveSubBatch] = useState<string>('All');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  // Real-time Duplicate Roll Number Detection
+  const duplicateStudent = useMemo(() => {
+    const clean = newStudent.student_roll.trim().toLowerCase();
+    if (!clean) return null;
+    return students.find(s => 
+      s.student_roll.trim().toLowerCase() === clean && 
+      (!editingId || s.id !== editingId)
+    ) || null;
+  }, [newStudent.student_roll, students, editingId]);
 
   // Face Registration Modal State
   const [isFaceModalOpen, setIsFaceModalOpen] = useState(false);
@@ -83,9 +94,22 @@ export default function StudentDirectory() {
 
   const handleSaveStudent = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSubmitting(true);
+    setFormError(null);
 
     const cleanRoll = newStudent.student_roll.trim();
+    if (!cleanRoll) {
+      setFormError("Roll Number is required.");
+      return;
+    }
+
+    // Immediate local duplicate check
+    if (duplicateStudent) {
+      setFormError(`ডুপ্লিকেট রোল নাম্বার! '${duplicateStudent.student_roll}' রোলটি ইতিমধ্যে "${duplicateStudent.full_name}" (${duplicateStudent.academic_year || 'N/A'})-এর নামে রেজিস্টার করা আছে।`);
+      return;
+    }
+
+    setIsSubmitting(true);
+
     const cleanPhone = newStudent.parent_phone ? cleanPhoneNumber(newStudent.parent_phone) : null;
     const cleanEmail = newStudent.email ? newStudent.email.trim().toLowerCase() : encodeStudentEmail(cleanRoll);
     
@@ -100,6 +124,19 @@ export default function StudentDirectory() {
       : cleanBaseYear;
 
     try {
+      // Direct database duplicate verification (case-insensitive)
+      const { data: existingCheck } = await supabase
+        .from('students')
+        .select('id, student_roll, full_name, academic_year')
+        .ilike('student_roll', cleanRoll)
+        .maybeSingle();
+
+      if (existingCheck && (!editingId || existingCheck.id !== editingId)) {
+        setFormError(`ডুপ্লিকেট রোল নাম্বার! '${existingCheck.student_roll}' রোলটি ইতিমধ্যে "${existingCheck.full_name}" (${existingCheck.academic_year || 'N/A'})-এর নামে রেজিস্টার করা রয়েছে।`);
+        setIsSubmitting(false);
+        return;
+      }
+
       const basePayload: any = {
         student_roll: cleanRoll,
         full_name: newStudent.full_name.trim(),
@@ -174,7 +211,11 @@ export default function StudentDirectory() {
       fetchStudents(); // Refresh the list
     } catch (error: any) {
       console.error('Error saving student:', error);
-      alert(error.message || 'Failed to save student.');
+      if (error?.code === '23505' || error?.message?.includes('duplicate key') || error?.message?.includes('students_student_roll_key')) {
+        setFormError(`ডুপ্লিকেট রোল নাম্বার! '${cleanRoll}' রোলটি ডেটাবেসে আগে থেকেই সংরক্ষিত রয়েছে।`);
+      } else {
+        setFormError(error.message || 'Failed to save student.');
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -234,6 +275,7 @@ export default function StudentDirectory() {
 
   const openEnrollModal = () => {
     setEditingId(null);
+    setFormError(null);
     setNewStudent({ student_roll: '', full_name: '', email: '', academic_year: activeView || '1st Year', sub_batch: 'All', parent_phone: '' });
     setIsModalOpen(true);
   };
@@ -241,6 +283,7 @@ export default function StudentDirectory() {
   const closeModal = () => {
     setIsModalOpen(false);
     setEditingId(null);
+    setFormError(null);
     setNewStudent({ student_roll: '', full_name: '', email: '', academic_year: activeView || '1st Year', sub_batch: 'All', parent_phone: '' });
   };
 
@@ -739,6 +782,7 @@ export default function StudentDirectory() {
                                               parent_phone: getParentPhone(student)
                                             });
                                             setEditingId(student.id);
+                                            setFormError(null);
                                             setIsModalOpen(true);
                                             setOpenDropdownId(null);
                                           }}
@@ -842,18 +886,63 @@ export default function StudentDirectory() {
                 </button>
               </div>
 
+              {formError && (
+                <div className="mb-4 p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 flex items-start gap-2.5 text-xs text-rose-700 dark:text-rose-300">
+                  <AlertTriangle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="font-semibold text-rose-800 dark:text-rose-200">সতর্কতা / Error:</p>
+                    <p className="mt-0.5 text-rose-700 dark:text-rose-300">{formError}</p>
+                  </div>
+                  <button type="button" onClick={() => setFormError(null)} className="text-rose-400 hover:text-rose-600 dark:hover:text-rose-200">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+
               <form onSubmit={handleSaveStudent} className="space-y-4">
                 <div>
-                  <label htmlFor="roll" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Roll Number / ID</label>
-                  <input
-                    id="roll"
-                    required
-                    type="text"
-                    className="mt-1 block w-full rounded-md border-0 bg-white dark:bg-gray-800 py-2 text-gray-900 dark:text-white ring-1 ring-inset ring-gray-300 dark:ring-gray-700 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6 px-3"
-                    value={newStudent.student_roll}
-                    onChange={e => setNewStudent({ ...newStudent, student_roll: e.target.value })}
-                    placeholder="e.g. STU-001"
-                  />
+                  <div className="flex items-center justify-between">
+                    <label htmlFor="roll" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Roll Number / ID
+                    </label>
+                    {duplicateStudent && (
+                      <span className="text-[11px] font-semibold text-rose-600 dark:text-rose-400 flex items-center gap-1">
+                        <AlertTriangle className="w-3 h-3" /> ইতিমধ্যে রেজিস্টার করা আছে
+                      </span>
+                    )}
+                  </div>
+                  <div className="relative mt-1">
+                    <input
+                      id="roll"
+                      required
+                      type="text"
+                      className={`block w-full rounded-md border-0 py-2 sm:text-sm sm:leading-6 px-3 transition-colors ${
+                        duplicateStudent
+                          ? 'bg-rose-50/50 dark:bg-rose-950/20 text-rose-900 dark:text-rose-200 ring-2 ring-rose-500 focus:ring-rose-500 placeholder:text-rose-400'
+                          : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white ring-1 ring-inset ring-gray-300 dark:ring-gray-700 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600'
+                      }`}
+                      value={newStudent.student_roll}
+                      onChange={e => {
+                        setNewStudent({ ...newStudent, student_roll: e.target.value });
+                        if (formError) setFormError(null);
+                      }}
+                      placeholder="e.g. STU-001"
+                    />
+                  </div>
+
+                  {duplicateStudent && (
+                    <div className="mt-2 p-2.5 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 flex items-start gap-2 text-xs text-rose-700 dark:text-rose-300">
+                      <AlertTriangle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
+                      <div className="leading-tight">
+                        <p className="font-semibold text-rose-800 dark:text-rose-200">
+                          ⚠️ এই রোল নাম্বারটি আগে থেকেই রেজিস্টার করা আছে!
+                        </p>
+                        <p className="text-[11px] text-rose-600 dark:text-rose-400 mt-1">
+                          শিক্ষার্থী: <strong className="font-semibold text-rose-900 dark:text-rose-100">{duplicateStudent.full_name}</strong> • ব্যাচ: <span>{duplicateStudent.academic_year || 'N/A'}</span>
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label htmlFor="name" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Full Name</label>
@@ -928,10 +1017,10 @@ export default function StudentDirectory() {
                   </button>
                   <button
                     type="submit"
-                    disabled={isSubmitting}
-                    className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 disabled:opacity-50 transition-colors"
+                    disabled={isSubmitting || !!duplicateStudent}
+                    className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
-                    {isSubmitting ? 'Saving...' : (editingId ? 'Save Changes' : 'Save Student')}
+                    {isSubmitting ? 'Saving...' : duplicateStudent ? 'ডুপ্লিকেট রোল' : (editingId ? 'Save Changes' : 'Save Student')}
                   </button>
                 </div>
               </form>
