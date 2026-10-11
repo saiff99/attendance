@@ -310,10 +310,8 @@ export default function StudentPortalPage() {
                     Roll: {student.studentRoll}
                   </span>
                 </div>
-                <p className="text-xs text-slate-400 flex items-center gap-2 flex-wrap">
-                  <span className="text-slate-300 font-semibold">{student.academicYear} MBBS Cohort</span>
-                  <span>•</span>
-                  <span>{student.email}</span>
+                <p className="text-xs text-slate-400">
+                  <span className="text-slate-300 font-semibold">{student.academicYear} MBBS</span>
                 </p>
                 <div className="flex items-center gap-2 mt-2">
                   <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${
