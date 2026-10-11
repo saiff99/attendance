@@ -54,8 +54,8 @@ export default function StudentDirectory() {
   const duplicateStudent = useMemo(() => {
     const clean = newStudent.student_roll.trim().toLowerCase();
     if (!clean) return null;
-    return students.find(s => 
-      s.student_roll.trim().toLowerCase() === clean && 
+    return students.find(s =>
+      s.student_roll.trim().toLowerCase() === clean &&
       (!editingId || s.id !== editingId)
     ) || null;
   }, [newStudent.student_roll, students, editingId]);
@@ -112,7 +112,7 @@ export default function StudentDirectory() {
 
     const cleanPhone = newStudent.parent_phone ? cleanPhoneNumber(newStudent.parent_phone) : null;
     const cleanEmail = newStudent.email ? newStudent.email.trim().toLowerCase() : encodeStudentEmail(cleanRoll);
-    
+
     // Strip any existing parenthesized groups/batches to prevent duplicate stacking like "(Group A) (Group B)"
     const cleanBaseYear = (newStudent.academic_year || '1st Year')
       .replace(/\s*\(((?:Group|Batch)\s*[^)]+)\)/gi, '')
@@ -294,8 +294,8 @@ export default function StudentDirectory() {
       const matchesYear = activeView ? (student.academic_year?.startsWith(activeView) ?? false) : true;
       const matchesSubBatch = activeSubBatch === 'All'
         ? true
-        : ((student.academic_year?.includes(`(${activeSubBatch})`) || 
-            (activeSubBatch.startsWith('Group') && student.academic_year?.includes(`(${activeSubBatch.replace('Group', 'Batch')})`))) ?? false);
+        : ((student.academic_year?.includes(`(${activeSubBatch})`) ||
+          (activeSubBatch.startsWith('Group') && student.academic_year?.includes(`(${activeSubBatch.replace('Group', 'Batch')})`))) ?? false);
       return matchesSearch && matchesYear && matchesSubBatch;
     })
     .sort((a, b) => {
@@ -525,11 +525,10 @@ export default function StudentDirectory() {
                       key={b}
                       type="button"
                       onClick={() => setActiveSubBatch(b)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all flex items-center gap-1.5 ${
-                        isSelected
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all flex items-center gap-1.5 ${isSelected
                           ? 'bg-indigo-600 text-white shadow-sm'
                           : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
-                      }`}
+                        }`}
                     >
                       <span>{b === 'All' ? 'All Group' : b}</span>
                       <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${isSelected ? 'bg-indigo-700 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400'}`}>
@@ -673,8 +672,8 @@ export default function StudentDirectory() {
                           <tr
                             key={student.id}
                             className={`transition-colors cursor-pointer ${isSelected
-                                ? 'bg-indigo-50/70 dark:bg-indigo-950/40 hover:bg-indigo-100/70 dark:hover:bg-indigo-950/60'
-                                : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'
+                              ? 'bg-indigo-50/70 dark:bg-indigo-950/40 hover:bg-indigo-100/70 dark:hover:bg-indigo-950/60'
+                              : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'
                               }`}
                             onClick={(e) => {
                               const target = e.target as HTMLElement;
@@ -755,11 +754,10 @@ export default function StudentDirectory() {
                                   {openDropdownId === student.id && (
                                     <>
                                       <div className="fixed inset-0 z-40" onClick={() => setOpenDropdownId(null)}></div>
-                                      <div className={`absolute right-0 z-50 w-36 rounded-xl bg-white dark:bg-gray-800 shadow-2xl border border-gray-200 dark:border-gray-700 py-1.5 ring-1 ring-black/10 focus:outline-none ${
-                                        idx >= Math.max(1, filteredStudents.length - 2) || idx === filteredStudents.length - 1
+                                      <div className={`absolute right-0 z-50 w-36 rounded-xl bg-white dark:bg-gray-800 shadow-2xl border border-gray-200 dark:border-gray-700 py-1.5 ring-1 ring-black/10 focus:outline-none ${idx >= Math.max(1, filteredStudents.length - 2) || idx === filteredStudents.length - 1
                                           ? 'bottom-full mb-2 origin-bottom-right'
                                           : 'top-full mt-1.5 origin-top-right'
-                                      }`}>
+                                        }`}>
                                         <button
                                           onClick={() => {
                                             const rawYear = student.academic_year || '1st Year';
@@ -916,11 +914,10 @@ export default function StudentDirectory() {
                       id="roll"
                       required
                       type="text"
-                      className={`block w-full rounded-md border-0 py-2 sm:text-sm sm:leading-6 px-3 transition-colors ${
-                        duplicateStudent
+                      className={`block w-full rounded-md border-0 py-2 sm:text-sm sm:leading-6 px-3 transition-colors ${duplicateStudent
                           ? 'bg-rose-50/50 dark:bg-rose-950/20 text-rose-900 dark:text-rose-200 ring-2 ring-rose-500 focus:ring-rose-500 placeholder:text-rose-400'
                           : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white ring-1 ring-inset ring-gray-300 dark:ring-gray-700 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600'
-                      }`}
+                        }`}
                       value={newStudent.student_roll}
                       onChange={e => {
                         setNewStudent({ ...newStudent, student_roll: e.target.value });
