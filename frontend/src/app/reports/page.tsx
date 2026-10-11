@@ -3,9 +3,10 @@
 import { useState, useEffect, useMemo, Fragment } from "react";
 import {
   Search, Download, Users, AlertTriangle, CheckCircle, XCircle, BarChart3,
-  ChevronDown, ChevronUp, Shield, UserCheck, UserX, Filter, RefreshCw, FileBarChart
+  ChevronDown, ChevronUp, Shield, UserCheck, UserX, Filter, RefreshCw, FileBarChart, GraduationCap
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { isCohortMatching } from "@/lib/cohort";
 
 interface StudentReport {
   id: string;
@@ -25,10 +26,17 @@ type SortField = "full_name" | "student_roll" | "attendance_rate" | "total_prese
 type SortOrder = "asc" | "desc";
 type RiskFilter = "all" | "critical" | "warning" | "good";
 
-function RiskBadge({ rate }: { rate: number }) {
+function RiskBadge({ rate, totalSessions }: { rate: number; totalSessions: number }) {
+  if (totalSessions === 0) {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700">
+        No Sessions
+      </span>
+    );
+  }
   if (rate >= 75) return (
     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
-      <CheckCircle className="w-2.5 h-2.5" /> Good
+      <CheckCircle className="w-2.5 h-2.5" /> Good Standing
     </span>
   );
   if (rate >= 50) return (
@@ -49,6 +57,7 @@ export default function ReportsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [sortField, setSortField] = useState<SortField>("attendance_rate");
   const [sortOrder, setSortOrder] = useState<SortOrder>("asc");
+  const [cohortFilter, setCohortFilter] = useState<string>("all");
   const [riskFilter, setRiskFilter] = useState<RiskFilter>("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [sessionHistory, setSessionHistory] = useState<Record<string, any[]>>({});
@@ -60,7 +69,7 @@ export default function ReportsPage() {
     try {
       const { data: allSessions } = await supabase
         .from("sessions")
-        .select("id")
+        .select("id, class_name, target_academic_year")
         .neq("class_name", "__SYSTEM_CONFIG__");
       const sessionCount = allSessions?.length || 0;
       setTotalSessions(sessionCount);
@@ -73,35 +82,52 @@ export default function ReportsPage() {
 
       const { data: attendance, error: attErr } = await supabase
         .from("attendance")
-        .select("student_id, status, capture_mode, recorded_at");
+        .select("session_id, student_id, status, capture_mode, recorded_at");
       if (attErr) throw attErr;
 
-      const attMap: Record<string, { present: number; absent: number; manual: number; last?: string }> = {};
+      // Group attendance by student
+      const attMap: Record<string, { present: number; manual: number; last?: string; attendedSessionIds: Set<string> }> = {};
       (attendance || []).forEach((a: any) => {
-        if (!attMap[a.student_id]) attMap[a.student_id] = { present: 0, absent: 0, manual: 0 };
+        if (!attMap[a.student_id]) {
+          attMap[a.student_id] = { present: 0, manual: 0, attendedSessionIds: new Set() };
+        }
         if (a.status === "Present") {
           attMap[a.student_id].present++;
-          if (a.capture_mode === "Manual Upload") attMap[a.student_id].manual++;
+          if (a.session_id) attMap[a.student_id].attendedSessionIds.add(a.session_id);
+          if (a.capture_mode === "Manual Upload" || a.capture_mode === "Manual Entry") {
+            attMap[a.student_id].manual++;
+          }
           const d = a.recorded_at;
-          if (!attMap[a.student_id].last || d > attMap[a.student_id].last!) attMap[a.student_id].last = d;
-        } else {
-          attMap[a.student_id].absent++;
+          if (!attMap[a.student_id].last || d > attMap[a.student_id].last!) {
+            attMap[a.student_id].last = d;
+          }
         }
       });
 
       const built: StudentReport[] = (students || []).map((s: any) => {
-        const stats = attMap[s.id] || { present: 0, absent: 0, manual: 0 };
-        const rate = sessionCount > 0 ? Math.round((stats.present / sessionCount) * 100) : 0;
+        const stats = attMap[s.id] || { present: 0, manual: 0, attendedSessionIds: new Set() };
+
+        // Identify sessions targeted to or applicable to this student's specific cohort / year
+        const applicableSessions = (allSessions || []).filter(sess =>
+          isCohortMatching(sess.target_academic_year, s.academic_year)
+        );
+
+        // Effective total sessions for this student
+        const studentSessionCount = Math.max(applicableSessions.length, stats.attendedSessionIds.size);
+        const present = stats.present;
+        const absent = Math.max(0, studentSessionCount - present);
+        const rate = studentSessionCount > 0 ? Math.min(100, Math.round((present / studentSessionCount) * 100)) : 0;
+
         return {
           id: s.id,
           student_roll: s.student_roll,
           full_name: s.full_name,
           email: s.email,
           academic_year: s.academic_year,
-          total_sessions: sessionCount,
-          total_present: stats.present,
-          total_absent: Math.max(0, sessionCount - stats.present),
-          attendance_rate: Math.min(rate, 100),
+          total_sessions: studentSessionCount,
+          total_present: present,
+          total_absent: absent,
+          attendance_rate: rate,
           manual_override_count: stats.manual,
           last_seen: stats.last,
         };
@@ -134,22 +160,44 @@ export default function ReportsPage() {
 
   useEffect(() => { fetchReports(); }, []);
 
-  const summaryStats = useMemo(() => {
-    if (!reports.length) return { total: 0, good: 0, warning: 0, critical: 0, avgRate: 0 };
-    const good = reports.filter(r => r.attendance_rate >= 75).length;
-    const warning = reports.filter(r => r.attendance_rate >= 50 && r.attendance_rate < 75).length;
-    const critical = reports.filter(r => r.attendance_rate < 50).length;
-    const avgRate = Math.round(reports.reduce((s, r) => s + r.attendance_rate, 0) / reports.length);
-    return { total: reports.length, good, warning, critical, avgRate };
+  const availableCohorts = useMemo(() => {
+    const set = new Set<string>();
+    reports.forEach(r => {
+      if (r.academic_year) {
+        const base = r.academic_year.replace(/\s*\([^)]*\)/g, "").replace(/\s*MBBS/i, "").trim();
+        if (base) set.add(base);
+      }
+    });
+    const sorted = Array.from(set).sort();
+    return sorted.length > 0 ? sorted : ["1st Year", "2nd Year", "3rd Year", "4th Year"];
   }, [reports]);
+
+  const summaryStats = useMemo(() => {
+    const list = cohortFilter === "all"
+      ? reports
+      : reports.filter(r => r.academic_year?.startsWith(cohortFilter) || r.academic_year?.includes(cohortFilter));
+
+    if (!list.length) return { total: 0, good: 0, warning: 0, critical: 0, avgRate: 0 };
+    const withSessions = list.filter(r => r.total_sessions > 0);
+    const good = withSessions.filter(r => r.attendance_rate >= 75).length;
+    const warning = withSessions.filter(r => r.attendance_rate >= 50 && r.attendance_rate < 75).length;
+    const critical = withSessions.filter(r => r.attendance_rate < 50).length;
+    const avgRate = withSessions.length > 0
+      ? Math.round(withSessions.reduce((s, r) => s + r.attendance_rate, 0) / withSessions.length)
+      : 0;
+    return { total: list.length, good, warning, critical, avgRate };
+  }, [reports, cohortFilter]);
 
   const filtered = useMemo(() => {
     let list = [...reports];
+    if (cohortFilter !== "all") {
+      list = list.filter(r => r.academic_year?.startsWith(cohortFilter) || r.academic_year?.includes(cohortFilter));
+    }
     const q = searchTerm.toLowerCase();
     if (q) list = list.filter(r => r.full_name.toLowerCase().includes(q) || r.student_roll.toLowerCase().includes(q));
-    if (riskFilter === "critical") list = list.filter(r => r.attendance_rate < 50);
-    else if (riskFilter === "warning") list = list.filter(r => r.attendance_rate >= 50 && r.attendance_rate < 75);
-    else if (riskFilter === "good") list = list.filter(r => r.attendance_rate >= 75);
+    if (riskFilter === "critical") list = list.filter(r => r.total_sessions > 0 && r.attendance_rate < 50);
+    else if (riskFilter === "warning") list = list.filter(r => r.total_sessions > 0 && r.attendance_rate >= 50 && r.attendance_rate < 75);
+    else if (riskFilter === "good") list = list.filter(r => r.total_sessions > 0 && r.attendance_rate >= 75);
     list.sort((a, b) => {
       const aVal = a[sortField] as number | string;
       const bVal = b[sortField] as number | string;
@@ -157,7 +205,7 @@ export default function ReportsPage() {
       return sortOrder === "asc" ? String(aVal).localeCompare(String(bVal)) : String(bVal).localeCompare(String(aVal));
     });
     return list;
-  }, [reports, searchTerm, riskFilter, sortField, sortOrder]);
+  }, [reports, cohortFilter, searchTerm, riskFilter, sortField, sortOrder]);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) setSortOrder(o => o === "asc" ? "desc" : "asc");
@@ -201,7 +249,7 @@ export default function ReportsPage() {
               <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-gray-900 dark:text-white">Student Reports</h1>
             </div>
             <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 ml-11">
-              Per-student attendance breakdown across all {totalSessions} sessions.
+              Cohort-specific attendance breakdown across {totalSessions} total institutional sessions.
             </p>
           </div>
           <div className="flex gap-2 ml-11 sm:ml-0">
@@ -249,7 +297,9 @@ export default function ReportsPage() {
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
                 <BarChart3 className="w-4 h-4 text-indigo-500" />
-                <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">Overall Class Attendance Rate</span>
+                <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">
+                  {cohortFilter === "all" ? "Overall Institutional Attendance Rate" : `${cohortFilter} Average Attendance Rate`}
+                </span>
               </div>
               <span className={`text-lg font-bold ${summaryStats.avgRate >= 75 ? "text-emerald-600 dark:text-emerald-400" : summaryStats.avgRate >= 50 ? "text-amber-600 dark:text-amber-400" : "text-rose-600 dark:text-rose-400"}`}>
                 {summaryStats.avgRate}%
@@ -281,24 +331,39 @@ export default function ReportsPage() {
               className="w-full pl-9 pr-4 py-2.5 rounded-xl text-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-400 transition-all"
             />
           </div>
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <Filter className="w-4 h-4 text-gray-400 shrink-0" />
-            {(["all", "critical", "warning", "good"] as RiskFilter[]).map(f => (
-              <button
-                key={f}
-                onClick={() => setRiskFilter(f)}
-                className={`px-3 py-2 rounded-xl text-xs font-semibold capitalize transition-all whitespace-nowrap ${
-                  riskFilter === f
-                    ? f === "critical" ? "bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400 border border-rose-300 dark:border-rose-800"
-                      : f === "warning" ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border border-amber-300 dark:border-amber-800"
-                      : f === "good" ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-800"
-                      : "bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 border border-indigo-300 dark:border-indigo-800"
-                    : "bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700 hover:border-gray-300"
-                }`}
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-sm">
+              <GraduationCap className="w-4 h-4 text-indigo-500 shrink-0" />
+              <select
+                value={cohortFilter}
+                onChange={e => setCohortFilter(e.target.value)}
+                className="text-xs font-semibold bg-transparent text-gray-700 dark:text-gray-200 focus:outline-none cursor-pointer"
               >
-                {f === "all" ? "All" : f === "critical" ? "🔴 Critical" : f === "warning" ? "🟡 Warning" : "🟢 Good"}
-              </button>
-            ))}
+                <option value="all" className="bg-white dark:bg-gray-900">All Batches</option>
+                {availableCohorts.map(c => (
+                  <option key={c} value={c} className="bg-white dark:bg-gray-900">{c}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <Filter className="w-4 h-4 text-gray-400 shrink-0" />
+              {(["all", "critical", "warning", "good"] as RiskFilter[]).map(f => (
+                <button
+                  key={f}
+                  onClick={() => setRiskFilter(f)}
+                  className={`px-3 py-2 rounded-xl text-xs font-semibold capitalize transition-all whitespace-nowrap ${
+                    riskFilter === f
+                      ? f === "critical" ? "bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400 border border-rose-300 dark:border-rose-800"
+                        : f === "warning" ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border border-amber-300 dark:border-amber-800"
+                        : f === "good" ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-800"
+                        : "bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 border border-indigo-300 dark:border-indigo-800"
+                      : "bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700 hover:border-gray-300"
+                  }`}
+                >
+                  {f === "all" ? "All" : f === "critical" ? "🔴 Critical" : f === "warning" ? "🟡 Warning" : "🟢 Good"}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -352,14 +417,25 @@ export default function ReportsPage() {
                   </tr>
                 ) : filtered.map(student => {
                   const isExpanded = expandedId === student.id;
-                  const rateColor = student.attendance_rate >= 75
+                  const hasSessions = student.total_sessions > 0;
+                  const rateColor = !hasSessions
+                    ? "text-gray-400 dark:text-gray-500"
+                    : student.attendance_rate >= 75
                     ? "text-emerald-600 dark:text-emerald-400"
                     : student.attendance_rate >= 50
                     ? "text-amber-600 dark:text-amber-400"
                     : "text-rose-600 dark:text-rose-400";
-                  const barColor = student.attendance_rate >= 75 ? "bg-emerald-500" : student.attendance_rate >= 50 ? "bg-amber-500" : "bg-rose-500";
+                  const barColor = !hasSessions
+                    ? "bg-gray-300 dark:bg-gray-700"
+                    : student.attendance_rate >= 75
+                    ? "bg-emerald-500"
+                    : student.attendance_rate >= 50
+                    ? "bg-amber-500"
+                    : "bg-rose-500";
                   const initials = student.full_name.trim().split(/\s+/).slice(0, 2).map(w => w[0]).join("").toUpperCase();
-                  const avatarGrad = student.attendance_rate >= 75
+                  const avatarGrad = !hasSessions
+                    ? "from-gray-400 to-slate-500"
+                    : student.attendance_rate >= 75
                     ? "from-emerald-500 to-teal-600"
                     : student.attendance_rate >= 50
                     ? "from-amber-500 to-orange-600"
@@ -397,14 +473,14 @@ export default function ReportsPage() {
                         </td>
                         <td className="px-4 py-3.5">
                           <div className="flex flex-col gap-1 min-w-[70px]">
-                            <span className={`text-sm font-bold ${rateColor}`}>{student.attendance_rate}%</span>
+                            <span className={`text-sm font-bold ${rateColor}`}>{hasSessions ? `${student.attendance_rate}%` : "—"}</span>
                             <div className="w-full h-1.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
-                              <div className={`h-full rounded-full ${barColor}`} style={{ width: `${student.attendance_rate}%` }} />
+                              <div className={`h-full rounded-full ${barColor}`} style={{ width: `${hasSessions ? student.attendance_rate : 0}%` }} />
                             </div>
                           </div>
                         </td>
                         <td className="px-4 py-3.5">
-                          <RiskBadge rate={student.attendance_rate} />
+                          <RiskBadge rate={student.attendance_rate} totalSessions={student.total_sessions} />
                         </td>
                         <td className="px-4 py-3.5 text-center">
                           {student.manual_override_count > 0 ? (
