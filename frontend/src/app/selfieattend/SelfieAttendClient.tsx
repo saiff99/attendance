@@ -600,7 +600,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
 
       if (stableFrames < 4) {
         stableFrames++;
-        setLivenessPrompt("👁️ Please Blink Your Eyes Naturally (একবার চোখের পলক ফেলুন)");
+        setLivenessPrompt("👁️ Please Blink Your Eyes Naturally");
         setLivenessPhase("ready");
         return;
       }

@@ -104,7 +104,7 @@ export default function StudentDirectory() {
 
     // Immediate local duplicate check
     if (duplicateStudent) {
-      setFormError(`ডুপ্লিকেট রোল নাম্বার! '${duplicateStudent.student_roll}' রোলটি ইতিমধ্যে "${duplicateStudent.full_name}" (${duplicateStudent.academic_year || 'N/A'})-এর নামে রেজিস্টার করা আছে।`);
+      setFormError(`Duplicate Roll Number! Roll "${duplicateStudent.student_roll}" is already registered to "${duplicateStudent.full_name}" (${duplicateStudent.academic_year || 'N/A'}).`);
       return;
     }
 
@@ -132,7 +132,7 @@ export default function StudentDirectory() {
         .maybeSingle();
 
       if (existingCheck && (!editingId || existingCheck.id !== editingId)) {
-        setFormError(`ডুপ্লিকেট রোল নাম্বার! '${existingCheck.student_roll}' রোলটি ইতিমধ্যে "${existingCheck.full_name}" (${existingCheck.academic_year || 'N/A'})-এর নামে রেজিস্টার করা রয়েছে।`);
+        setFormError(`Duplicate Roll Number! Roll "${existingCheck.student_roll}" is already registered to "${existingCheck.full_name}" (${existingCheck.academic_year || 'N/A'}).`);
         setIsSubmitting(false);
         return;
       }
@@ -212,7 +212,7 @@ export default function StudentDirectory() {
     } catch (error: any) {
       console.error('Error saving student:', error);
       if (error?.code === '23505' || error?.message?.includes('duplicate key') || error?.message?.includes('students_student_roll_key')) {
-        setFormError(`ডুপ্লিকেট রোল নাম্বার! '${cleanRoll}' রোলটি ডেটাবেসে আগে থেকেই সংরক্ষিত রয়েছে।`);
+        setFormError(`Duplicate Roll Number! Roll "${cleanRoll}" already exists in the database.`);
       } else {
         setFormError(error.message || 'Failed to save student.');
       }
@@ -890,7 +890,7 @@ export default function StudentDirectory() {
                 <div className="mb-4 p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 flex items-start gap-2.5 text-xs text-rose-700 dark:text-rose-300">
                   <AlertTriangle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
                   <div className="flex-1">
-                    <p className="font-semibold text-rose-800 dark:text-rose-200">সতর্কতা / Error:</p>
+                    <p className="font-semibold text-rose-800 dark:text-rose-200">Error:</p>
                     <p className="mt-0.5 text-rose-700 dark:text-rose-300">{formError}</p>
                   </div>
                   <button type="button" onClick={() => setFormError(null)} className="text-rose-400 hover:text-rose-600 dark:hover:text-rose-200">
@@ -907,7 +907,7 @@ export default function StudentDirectory() {
                     </label>
                     {duplicateStudent && (
                       <span className="text-[11px] font-semibold text-rose-600 dark:text-rose-400 flex items-center gap-1">
-                        <AlertTriangle className="w-3 h-3" /> ইতিমধ্যে রেজিস্টার করা আছে
+                        <AlertTriangle className="w-3 h-3" /> Already Registered
                       </span>
                     )}
                   </div>
@@ -935,10 +935,10 @@ export default function StudentDirectory() {
                       <AlertTriangle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
                       <div className="leading-tight">
                         <p className="font-semibold text-rose-800 dark:text-rose-200">
-                          ⚠️ এই রোল নাম্বারটি আগে থেকেই রেজিস্টার করা আছে!
+                          This Roll Number is already registered!
                         </p>
                         <p className="text-[11px] text-rose-600 dark:text-rose-400 mt-1">
-                          শিক্ষার্থী: <strong className="font-semibold text-rose-900 dark:text-rose-100">{duplicateStudent.full_name}</strong> • ব্যাচ: <span>{duplicateStudent.academic_year || 'N/A'}</span>
+                          Student: <strong className="font-semibold text-rose-900 dark:text-rose-100">{duplicateStudent.full_name}</strong> • Batch: <span>{duplicateStudent.academic_year || 'N/A'}</span>
                         </p>
                       </div>
                     </div>
@@ -1020,7 +1020,7 @@ export default function StudentDirectory() {
                     disabled={isSubmitting || !!duplicateStudent}
                     className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
-                    {isSubmitting ? 'Saving...' : duplicateStudent ? 'ডুপ্লিকেট রোল' : (editingId ? 'Save Changes' : 'Save Student')}
+                    {isSubmitting ? 'Saving...' : duplicateStudent ? 'Duplicate Roll Number' : (editingId ? 'Save Changes' : 'Save Student')}
                   </button>
                 </div>
               </form>
