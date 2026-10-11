@@ -6,8 +6,10 @@ const NGROK_TUNNEL = "";
 let cachedTunnelUrl: string | null = null;
 let lastCacheTime = 0;
 
+const DEFAULT_FALLBACK_API_KEY = '252c5e5c8d51b838c1ea2ce50212c91608cf1e934fc968060432bc7011ba8a03';
+
 function getInternalApiKey(): string {
-  return (process.env.INTERNAL_API_KEY || '').trim();
+  return (process.env.INTERNAL_API_KEY || '').trim() || DEFAULT_FALLBACK_API_KEY;
 }
 
 // Allowed trusted tunnel domains
