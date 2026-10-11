@@ -16,6 +16,7 @@ export interface SessionPayload {
   username: string;
   name: string;
   role: 'Super Admin' | 'Faculty';
+  department?: string;
   exp: number; // Expiration timestamp in seconds
 }
 

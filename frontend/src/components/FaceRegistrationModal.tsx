@@ -2,9 +2,10 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import Webcam from 'react-webcam';
-import { X, CheckCircle2, AlertCircle, Camera, Loader2 } from 'lucide-react';
+import { X, CheckCircle2, AlertCircle, Camera, Loader2, ShieldAlert } from 'lucide-react';
 import { getBackendUrl } from '@/lib/api';
 import { logAuditEvent } from '@/lib/auditLog';
+import { useAuth } from '@/lib/auth';
 
 interface FaceRegistrationModalProps {
   isOpen: boolean;
@@ -25,6 +26,9 @@ const INSTRUCTIONS = [
 ];
 
 export function FaceRegistrationModal({ isOpen, onClose, studentId, studentName, onSuccess }: FaceRegistrationModalProps) {
+  const { user } = useAuth();
+  const isSuperAdmin = user?.role === 'Super Admin';
+
   const [status, setStatus] = useState<ScanStatus>('idle');
   const [instructionIndex, setInstructionIndex] = useState(0);
   const [progress, setProgress] = useState(0);
@@ -47,6 +51,11 @@ export function FaceRegistrationModal({ isOpen, onClose, studentId, studentName,
   }, [isOpen]);
 
   const startScanning = () => {
+    if (!isSuperAdmin) {
+      setStatus('error');
+      setErrorMessage("Access Denied: Only Super Admin can register or update student Face ID biometrics.");
+      return;
+    }
     setStatus('scanning');
     setInstructionIndex(0);
     setProgress(0);
@@ -360,16 +369,28 @@ export function FaceRegistrationModal({ isOpen, onClose, studentId, studentName,
           {/* Instructions / Actions */}
           <div className="h-20 flex items-center justify-center text-center w-full">
             {status === 'idle' && (
-              <div className="flex flex-col items-center space-y-4 w-full">
-                <p className="text-gray-600 dark:text-gray-300 font-medium text-sm">Position student face within the circle frame.</p>
-                <button 
-                  onClick={startScanning}
-                  className="w-full max-w-[200px] py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold transition-colors flex items-center justify-center cursor-pointer shadow-md shadow-indigo-600/20"
-                >
-                  <Camera className="w-5 h-5 mr-2" />
-                  Get Started
-                </button>
-              </div>
+              isSuperAdmin ? (
+                <div className="flex flex-col items-center space-y-4 w-full">
+                  <p className="text-gray-600 dark:text-gray-300 font-medium text-sm">Position student face within the circle frame.</p>
+                  <button 
+                    onClick={startScanning}
+                    className="w-full max-w-[200px] py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold transition-colors flex items-center justify-center cursor-pointer shadow-md shadow-indigo-600/20"
+                  >
+                    <Camera className="w-5 h-5 mr-2" />
+                    Get Started
+                  </button>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center space-y-2 w-full text-center p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800">
+                  <div className="flex items-center gap-1.5 text-amber-700 dark:text-amber-300 font-semibold text-xs">
+                    <ShieldAlert className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                    Super Admin Access Required
+                  </div>
+                  <p className="text-xs text-amber-600 dark:text-amber-400">
+                    Facial biometrics can only be registered or updated by a Super Admin.
+                  </p>
+                </div>
+              )
             )}
 
             {status === 'scanning' && (

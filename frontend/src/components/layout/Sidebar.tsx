@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, ScanLine, Radio, Users, FileBarChart, Activity, Menu, X, Smartphone, LogOut, Sun, Moon, ShieldCheck } from "lucide-react";
+import { LayoutDashboard, ScanLine, Radio, Users, FileBarChart, Activity, Menu, X, Smartphone, LogOut, Sun, Moon, ShieldCheck, UserCog } from "lucide-react";
 import { SystemHealth } from "@/components/SystemHealth";
 import { useAuth } from "@/lib/auth";
 import { useTheme } from "next-themes";
@@ -15,6 +15,7 @@ const navigation = [
   { name: "Student Directory", href: "/students", icon: Users },
   { name: "Selfie Portal", href: "/selfieattend", icon: Smartphone },
   { name: "Reports", href: "/reports", icon: FileBarChart },
+  { name: "Faculty & Staff", href: "/users", icon: UserCog, superAdminOnly: true },
   { name: "Audit Trail", href: "/audit-logs", icon: ShieldCheck, superAdminOnly: true },
 ];
 

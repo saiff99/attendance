@@ -2,8 +2,9 @@ import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { createSessionToken, SESSION_COOKIE_NAME } from '@/lib/serverAuth';
 import { logAuditEvent } from '@/lib/auditLog';
+import { supabaseServer } from '@/lib/supabaseServer';
 
-// Secure Server-side User Directory with Salted Bcrypt Hashes
+// Secure Server-side User Directory with Salted Bcrypt Hashes (Built-in Fallbacks)
 interface UserConfig {
   plainEnvVar: string;
   hashEnvVar: string;
@@ -82,38 +83,83 @@ export async function POST(request: Request) {
       );
     }
 
-    const targetUser = USER_DIRECTORY[username];
-    if (!targetUser) {
-      // Record failed attempt
-      const curr = loginAttempts[rateKey] || { count: 0, firstAttempt: now };
-      curr.count += 1;
-      loginAttempts[rateKey] = curr;
+    let authSuccess = false;
+    let authUser = {
+      username,
+      name: '',
+      role: 'Faculty' as 'Super Admin' | 'Faculty',
+      department: '',
+    };
 
-      return NextResponse.json(
-        { success: false, error: 'Invalid username or password.' },
-        { status: 401 }
-      );
+    // 1. First check dynamic Supabase app_users table
+    try {
+      const { data: dbUser, error: dbErr } = await supabaseServer
+        .from('app_users')
+        .select('*')
+        .ilike('username', username)
+        .maybeSingle();
+
+      if (!dbErr && dbUser) {
+        if (!dbUser.is_active) {
+          return NextResponse.json(
+            { success: false, error: 'Your account has been deactivated. Please contact the administrator.' },
+            { status: 403 }
+          );
+        }
+
+        const isMatch = await bcrypt.compare(password, dbUser.password_hash);
+        if (isMatch) {
+          authSuccess = true;
+          authUser = {
+            username: dbUser.username,
+            name: dbUser.full_name,
+            role: dbUser.role as 'Super Admin' | 'Faculty',
+            department: dbUser.department || '',
+          };
+
+          // Update last_login timestamp asynchronously
+          Promise.resolve(
+            supabaseServer
+              .from('app_users')
+              .update({ last_login: new Date().toISOString() })
+              .eq('id', dbUser.id)
+          ).catch(() => {});
+        }
+      }
+    } catch (dbEx) {
+      console.warn('[LOGIN DB CHECK FAILED, FALLING BACK TO BUILT-IN]', dbEx);
     }
 
-    let isPasswordValid = false;
+    // 2. Fallback to built-in user directory if not matched in DB
+    if (!authSuccess) {
+      const targetUser = USER_DIRECTORY[username];
+      if (targetUser) {
+        const customPlain = process.env[targetUser.plainEnvVar]?.trim();
+        const customHash = process.env[targetUser.hashEnvVar]?.trim();
 
-    // 1. Check custom password or hash configured in environment
-    const customPlain = process.env[targetUser.plainEnvVar]?.trim();
-    const customHash = process.env[targetUser.hashEnvVar]?.trim();
+        if (customPlain && password === customPlain) {
+          authSuccess = true;
+        } else if (customHash && customHash.startsWith('$2') && (await bcrypt.compare(password, customHash))) {
+          authSuccess = true;
+        } else {
+          const defaultHash = BUILTIN_USER_HASHES[username];
+          if (defaultHash && (await bcrypt.compare(password, defaultHash))) {
+            authSuccess = true;
+          }
+        }
 
-    if (customPlain && password === customPlain) {
-      isPasswordValid = true;
-    } else if (customHash && customHash.startsWith('$2') && (await bcrypt.compare(password, customHash))) {
-      isPasswordValid = true;
-    } else {
-      // 2. Default secure salted bcrypt verification
-      const defaultHash = BUILTIN_USER_HASHES[username];
-      if (defaultHash && (await bcrypt.compare(password, defaultHash))) {
-        isPasswordValid = true;
+        if (authSuccess) {
+          authUser = {
+            username,
+            name: targetUser.name,
+            role: targetUser.role,
+            department: 'Administration',
+          };
+        }
       }
     }
 
-    if (!isPasswordValid) {
+    if (!authSuccess) {
       const curr = loginAttempts[rateKey] || { count: 0, firstAttempt: now };
       curr.count += 1;
       loginAttempts[rateKey] = curr;
@@ -122,7 +168,7 @@ export async function POST(request: Request) {
         action: 'FAILED_LOGIN_ATTEMPT',
         targetType: 'system',
         actorId: username,
-        details: { reason: 'Incorrect password', ip: clientIp, attemptCount: curr.count },
+        details: { reason: 'Incorrect credentials', ip: clientIp, attemptCount: curr.count },
       });
 
       return NextResponse.json(
@@ -136,27 +182,26 @@ export async function POST(request: Request) {
 
     // Log successful login audit entry
     logAuditEvent({
-      action: 'ADMIN_LOGIN',
+      action: 'USER_LOGIN',
       targetType: 'system',
-      actorId: username,
-      details: { name: targetUser.name, role: targetUser.role, ip: clientIp },
+      actorId: authUser.username,
+      details: { name: authUser.name, role: authUser.role, ip: clientIp },
     });
 
     // Create signed cryptographic HMAC-SHA256 session token (10 hours expiry)
     const token = await createSessionToken({
-      username,
-      name: targetUser.name,
-      role: targetUser.role,
+      username: authUser.username,
+      name: authUser.name,
+      role: authUser.role,
+      department: authUser.department,
     }, 36000);
 
     const response = NextResponse.json({
       success: true,
-      user: {
-        username,
-        name: targetUser.name,
-        role: targetUser.role,
-      },
+      user: authUser,
     });
+
+
 
     // Set secure HttpOnly cookie (10 hours = 36000s)
     response.cookies.set({

@@ -1,14 +1,31 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, NextRequest } from 'next/server';
 import { fetchBackend } from '@/lib/serverBackend';
+import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/serverAuth';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 export async function POST(
-  request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ studentId: string }> }
 ) {
   try {
+    const sessionCookie = request.cookies.get(SESSION_COOKIE_NAME)?.value;
+    if (!sessionCookie) {
+      return NextResponse.json(
+        { detail: 'Unauthorized. Super Admin login is required to register facial biometrics.' },
+        { status: 401 }
+      );
+    }
+
+    const session = await verifySessionToken(sessionCookie);
+    if (!session || session.role !== 'Super Admin') {
+      return NextResponse.json(
+        { detail: 'Access denied: Only Super Admin is authorized to register or modify student Face ID biometrics.' },
+        { status: 403 }
+      );
+    }
+
     const { studentId } = await params;
     const formData = await request.formData();
     const file = formData.get('file') as Blob | null;

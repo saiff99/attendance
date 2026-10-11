@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useMemo } from "react";
-import { Search, UserPlus, FileDown, MoreHorizontal, X, UploadCloud, Loader2, Edit2, Trash2, Folder, ArrowLeft, Users, FileSpreadsheet, ArrowUpDown, ArrowUp, ArrowDown, MessageSquare, Phone, AlertTriangle } from "lucide-react";
+import { Search, UserPlus, FileDown, MoreHorizontal, X, UploadCloud, Loader2, Edit2, Trash2, Folder, ArrowLeft, Users, FileSpreadsheet, ArrowUpDown, ArrowUp, ArrowDown, MessageSquare, Phone, AlertTriangle, Lock } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import type { Student } from "@/types/database";
 import { StudentProfileModal } from "@/components/StudentProfileModal";
@@ -9,8 +9,12 @@ import { FaceRegistrationModal } from "@/components/FaceRegistrationModal";
 import { BulkImportModal } from "@/components/BulkImportModal";
 import { getParentPhone, formatPhoneDisplay, encodeStudentEmail, cleanPhoneNumber } from "@/lib/studentContact";
 import { logAuditEvent } from "@/lib/auditLog";
+import { useAuth } from "@/lib/auth";
 
 export default function StudentDirectory() {
+  const { user } = useAuth();
+  const isSuperAdmin = user?.role === "Super Admin";
+
   const [searchTerm, setSearchTerm] = useState("");
   const [activeView, setActiveView] = useState<string | null>(null);
   const [students, setStudents] = useState<Student[]>([]);
@@ -66,6 +70,10 @@ export default function StudentDirectory() {
   const [faceModalStudentName, setFaceModalStudentName] = useState<string>("");
 
   const triggerFaceRegistration = (studentId: string, studentName: string) => {
+    if (!isSuperAdmin) {
+      alert("Access Denied: Only Super Admin can register or modify student Face ID biometrics.");
+      return;
+    }
     setFaceModalStudentId(studentId);
     setFaceModalStudentName(studentName);
     setIsFaceModalOpen(true);
@@ -222,6 +230,10 @@ export default function StudentDirectory() {
   };
 
   const handleDelete = async (id: string) => {
+    if (!isSuperAdmin) {
+      alert("Access Denied: Only Super Admin can delete student records.");
+      return;
+    }
     if (!window.confirm("Are you sure you want to delete this student? This will also remove their attendance records.")) return;
 
     try {
@@ -245,6 +257,10 @@ export default function StudentDirectory() {
   };
 
   const handleBulkDelete = async () => {
+    if (!isSuperAdmin) {
+      alert("Access Denied: Only Super Admin can delete student records.");
+      return;
+    }
     if (selectedIds.length === 0) return;
     const count = selectedIds.length;
     const confirmMsg = `Are you sure you want to delete ${count} selected student${count > 1 ? 's' : ''}? This will permanently remove their face biometrics and attendance records.`;
@@ -544,19 +560,21 @@ export default function StudentDirectory() {
                   <span className="text-xs sm:text-sm font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50 px-3 py-1.5 rounded-lg border border-indigo-200 dark:border-indigo-800">
                     {selectedIds.length} student{selectedIds.length > 1 ? 's' : ''} selected
                   </span>
-                  <button
-                    type="button"
-                    onClick={handleBulkDelete}
-                    disabled={isBulkDeleting}
-                    className="inline-flex items-center justify-center rounded-xl bg-red-600 hover:bg-red-500 active:bg-red-700 px-3 py-1.5 text-xs sm:text-sm font-semibold text-white shadow-sm transition-colors disabled:opacity-50"
-                  >
-                    {isBulkDeleting ? (
-                      <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-                    ) : (
-                      <Trash2 className="w-3.5 h-3.5 mr-1.5" />
-                    )}
-                    Delete Selected
-                  </button>
+                  {isSuperAdmin && (
+                    <button
+                      type="button"
+                      onClick={handleBulkDelete}
+                      disabled={isBulkDeleting}
+                      className="inline-flex items-center justify-center rounded-xl bg-red-600 hover:bg-red-500 active:bg-red-700 px-3 py-1.5 text-xs sm:text-sm font-semibold text-white shadow-sm transition-colors disabled:opacity-50"
+                    >
+                      {isBulkDeleting ? (
+                        <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                      ) : (
+                        <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+                      )}
+                      Delete Selected
+                    </button>
+                  )}
                 </div>
               )}
 
@@ -734,12 +752,23 @@ export default function StudentDirectory() {
                             </td>
                             <td className="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6 actions-cell">
                               <div className="flex justify-end items-center gap-2">
-                                <button
-                                  onClick={() => triggerFaceRegistration(student.id, student.full_name)}
-                                  className="inline-flex items-center text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300 mr-2 transition-colors"
-                                >
-                                  <UploadCloud className="w-4 h-4 mr-1" /> {student.face_encoding ? 'Update Face ID' : 'Setup Face ID'}
-                                </button>
+                                {isSuperAdmin ? (
+                                  <button
+                                    onClick={() => triggerFaceRegistration(student.id, student.full_name)}
+                                    className="inline-flex items-center text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300 mr-2 transition-colors"
+                                    title="Enroll or update student face biometrics"
+                                  >
+                                    <UploadCloud className="w-4 h-4 mr-1" /> {student.face_encoding ? 'Update Face ID' : 'Setup Face ID'}
+                                  </button>
+                                ) : (
+                                  <span
+                                    className="inline-flex items-center text-xs text-gray-400 dark:text-gray-500 mr-2 gap-1 select-none"
+                                    title="Biometrics registration is restricted to Super Admin"
+                                  >
+                                    <Lock className="w-3.5 h-3.5 text-gray-400" />
+                                    <span className="hidden sm:inline">Admin Managed</span>
+                                  </span>
+                                )}
 
                                 {/* Actions Dropdown */}
                                 <div className="relative inline-block text-left">
@@ -789,16 +818,18 @@ export default function StudentDirectory() {
                                           <Edit2 className="w-4 h-4 mr-2.5 text-gray-400 dark:text-gray-500" />
                                           Edit
                                         </button>
-                                        <button
-                                          onClick={() => {
-                                            handleDelete(student.id);
-                                            setOpenDropdownId(null);
-                                          }}
-                                          className="text-red-600 dark:text-red-400 w-full text-left px-3.5 py-2 text-xs sm:text-sm hover:bg-red-50 dark:hover:bg-red-900/30 flex items-center transition-colors font-medium"
-                                        >
-                                          <Trash2 className="w-4 h-4 mr-2.5 text-red-500" />
-                                          Delete
-                                        </button>
+                                        {isSuperAdmin && (
+                                          <button
+                                            onClick={() => {
+                                              handleDelete(student.id);
+                                              setOpenDropdownId(null);
+                                            }}
+                                            className="text-red-600 dark:text-red-400 w-full text-left px-3.5 py-2 text-xs sm:text-sm hover:bg-red-50 dark:hover:bg-red-900/30 flex items-center transition-colors font-medium"
+                                          >
+                                            <Trash2 className="w-4 h-4 mr-2.5 text-red-500" />
+                                            Delete
+                                          </button>
+                                        )}
                                       </div>
                                     </>
                                   )}
@@ -848,24 +879,26 @@ export default function StudentDirectory() {
                       Clear
                     </button>
 
-                    <button
-                      type="button"
-                      onClick={handleBulkDelete}
-                      disabled={isBulkDeleting}
-                      className="inline-flex items-center justify-center px-4 py-1.5 text-xs sm:text-sm font-semibold text-white bg-red-600 hover:bg-red-500 active:bg-red-700 rounded-xl shadow-md transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed gap-1.5"
-                    >
-                      {isBulkDeleting ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          <span>Deleting...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Trash2 className="w-4 h-4" />
-                          <span>Delete Selected ({selectedIds.length})</span>
-                        </>
-                      )}
-                    </button>
+                    {isSuperAdmin && (
+                      <button
+                        type="button"
+                        onClick={handleBulkDelete}
+                        disabled={isBulkDeleting}
+                        className="inline-flex items-center justify-center px-4 py-1.5 text-xs sm:text-sm font-semibold text-white bg-red-600 hover:bg-red-500 active:bg-red-700 rounded-xl shadow-md transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed gap-1.5"
+                      >
+                        {isBulkDeleting ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <span>Deleting...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Trash2 className="w-4 h-4" />
+                            <span>Delete Selected ({selectedIds.length})</span>
+                          </>
+                        )}
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>

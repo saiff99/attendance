@@ -7,6 +7,7 @@ export interface AuthUser {
   username: string;
   name: string;
   role: "Super Admin" | "Faculty";
+  department?: string;
 }
 
 interface AuthContextType {
