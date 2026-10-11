@@ -523,7 +523,7 @@ export default function StudentDirectory() {
 
             {/* Data Table */}
             <div className="bg-white dark:bg-gray-900 rounded-b-xl border border-gray-200 dark:border-gray-800 shadow-sm transition-colors">
-              <div className="overflow-x-auto min-h-[280px]">
+              <div className="overflow-x-auto min-h-[280px] pb-24">
                 <table className="min-w-[720px] w-full divide-y divide-gray-200 dark:divide-gray-800">
                   <thead className="bg-gray-50 dark:bg-gray-800/50">
                     <tr>
@@ -711,11 +711,12 @@ export default function StudentDirectory() {
 
                                   {openDropdownId === student.id && (
                                     <>
-                                      <div className="fixed inset-0 z-20" onClick={() => setOpenDropdownId(null)}></div>
-                                      <div className={`absolute right-0 z-30 w-36 rounded-xl bg-white dark:bg-gray-800 shadow-xl border border-gray-200 dark:border-gray-700 py-1.5 ring-1 ring-black/5 focus:outline-none ${idx >= filteredStudents.length - 2 && filteredStudents.length > 3
+                                      <div className="fixed inset-0 z-40" onClick={() => setOpenDropdownId(null)}></div>
+                                      <div className={`absolute right-0 z-50 w-36 rounded-xl bg-white dark:bg-gray-800 shadow-2xl border border-gray-200 dark:border-gray-700 py-1.5 ring-1 ring-black/10 focus:outline-none ${
+                                        idx >= Math.max(1, filteredStudents.length - 2) || idx === filteredStudents.length - 1
                                           ? 'bottom-full mb-2 origin-bottom-right'
                                           : 'top-full mt-1.5 origin-top-right'
-                                        }`}>
+                                      }`}>
                                         <button
                                           onClick={() => {
                                             const rawYear = student.academic_year || '1st Year';
