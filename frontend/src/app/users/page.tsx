@@ -47,7 +47,7 @@ export default function UsersManagementPage() {
     password: "",
   });
   const [resetPasswordValue, setResetPasswordValue] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
+  const [showPassword, setShowPassword] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
@@ -84,14 +84,15 @@ export default function UsersManagementPage() {
     }
   }, [currentUser]);
 
-  // Quick Password Generator
+  // Quick 6-digit random numeric password / PIN generator (e.g. 950426)
   const generateRandomPassword = () => {
-    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%";
-    let pass = "";
-    for (let i = 0; i < 10; i++) {
-      pass += chars.charAt(Math.floor(Math.random() * chars.length));
+    if (typeof window !== "undefined" && window.crypto && window.crypto.getRandomValues) {
+      const array = new Uint32Array(1);
+      window.crypto.getRandomValues(array);
+      const pin = 100000 + (array[0] % 900000);
+      return pin.toString();
     }
-    return `Med@${pass}`;
+    return Math.floor(100000 + Math.random() * 900000).toString();
   };
 
   const handleCreateUser = async (e: React.FormEvent) => {
@@ -661,7 +662,8 @@ export default function UsersManagementPage() {
                       minLength={6}
                       value={newUser.password}
                       onChange={e => setNewUser({ ...newUser, password: e.target.value })}
-                      className="w-full pl-3 pr-10 py-2 rounded-xl text-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white font-mono focus:ring-2 focus:ring-indigo-400 focus:outline-none"
+                      placeholder="e.g. 950426"
+                      className="w-full pl-3 pr-10 py-2 rounded-xl text-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white font-mono tracking-wider focus:ring-2 focus:ring-indigo-400 focus:outline-none"
                     />
                     <button
                       type="button"
@@ -671,7 +673,7 @@ export default function UsersManagementPage() {
                       {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
-                  <p className="text-[10px] text-gray-400 mt-1">Share this password with the faculty member for their first login.</p>
+                  <p className="text-[10px] text-gray-400 mt-1">6-digit PIN password for the faculty member's login.</p>
                 </div>
 
                 <div className="pt-3 border-t border-gray-100 dark:border-gray-800 flex justify-end gap-2">
@@ -745,8 +747,10 @@ export default function UsersManagementPage() {
                     minLength={6}
                     value={resetPasswordValue}
                     onChange={e => setResetPasswordValue(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl text-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white font-mono focus:ring-2 focus:ring-indigo-400 focus:outline-none"
+                    placeholder="e.g. 950426"
+                    className="w-full px-3 py-2 rounded-xl text-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white font-mono tracking-wider focus:ring-2 focus:ring-indigo-400 focus:outline-none"
                   />
+                  <p className="text-[10px] text-gray-400 mt-1">Provide this new 6-digit PIN password to the faculty member.</p>
                 </div>
 
                 <div className="pt-3 border-t border-gray-100 dark:border-gray-800 flex justify-end gap-2">
