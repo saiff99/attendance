@@ -15,8 +15,11 @@ export const SESSION_COOKIE_NAME = 'medattend_session';
 export interface SessionPayload {
   username: string;
   name: string;
-  role: 'Super Admin' | 'Faculty';
+  role: 'Super Admin' | 'Faculty' | 'Student';
   department?: string;
+  studentId?: string;
+  studentRoll?: string;
+  academicYear?: string;
   exp: number; // Expiration timestamp in seconds
 }
 

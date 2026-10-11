@@ -6,15 +6,18 @@ import { useRouter, usePathname } from "next/navigation";
 export interface AuthUser {
   username: string;
   name: string;
-  role: "Super Admin" | "Faculty";
+  role: "Super Admin" | "Faculty" | "Student";
   department?: string;
+  studentId?: string;
+  studentRoll?: string;
+  academicYear?: string;
 }
 
 interface AuthContextType {
   user: AuthUser | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (username: string, pass: string) => Promise<{ success: boolean; error?: string }>;
+  login: (username: string, pass: string) => Promise<{ success: boolean; error?: string; user?: AuthUser }>;
   logout: () => Promise<void>;
   refreshSession: () => Promise<void>;
 }
@@ -67,7 +70,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     refreshSession();
   }, [refreshSession]);
 
-  const login = async (usernameInput: string, passwordInput: string): Promise<{ success: boolean; error?: string }> => {
+  const login = async (usernameInput: string, passwordInput: string): Promise<{ success: boolean; error?: string; user?: AuthUser }> => {
     const cleanUser = usernameInput.trim().toLowerCase();
     const cleanPass = passwordInput.trim();
 
@@ -97,7 +100,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(authUser);
       localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(authUser));
 
-      return { success: true };
+      return { success: true, user: authUser };
     } catch (err: any) {
       return {
         success: false,

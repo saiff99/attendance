@@ -20,6 +20,9 @@ export async function GET(request: NextRequest) {
         name: payload.name,
         role: payload.role,
         department: payload.department || '',
+        studentId: payload.studentId,
+        studentRoll: payload.studentRoll,
+        academicYear: payload.academicYear,
       },
     });
   } catch {

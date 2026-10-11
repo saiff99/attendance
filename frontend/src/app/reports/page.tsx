@@ -3,10 +3,23 @@
 import { useState, useEffect, useMemo, Fragment } from "react";
 import {
   Search, Download, Users, AlertTriangle, CheckCircle, XCircle, BarChart3,
-  ChevronDown, ChevronUp, Shield, UserCheck, UserX, Filter, RefreshCw, FileBarChart, GraduationCap
+  ChevronDown, ChevronUp, Shield, UserCheck, UserX, Filter, RefreshCw, FileBarChart,
+  GraduationCap, BookOpen, Sparkles
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { isCohortMatching } from "@/lib/cohort";
+import { DEFAULT_MBBS_SUBJECTS, getSubjectsForCohort } from "@/lib/academicSubjects";
+
+export interface SubjectBreakdown {
+  subject: string;
+  code?: string;
+  department?: string;
+  totalClasses: number;
+  present: number;
+  absent: number;
+  percentage: number;
+  status: "Good" | "Borderline" | "Low";
+}
 
 interface StudentReport {
   id: string;
@@ -20,6 +33,7 @@ interface StudentReport {
   attendance_rate: number;
   manual_override_count: number;
   last_seen?: string;
+  subjectBreakdown?: SubjectBreakdown[];
 }
 
 type SortField = "full_name" | "student_roll" | "attendance_rate" | "total_present" | "total_absent";
@@ -104,6 +118,20 @@ export default function ReportsPage() {
         }
       });
 
+      // Fetch dynamic subjects if available
+      let allCurriculumSubjects = DEFAULT_MBBS_SUBJECTS;
+      try {
+        const { data: dbSubjects } = await supabase
+          .from("academic_subjects")
+          .select("*")
+          .eq("is_active", true);
+        if (dbSubjects && dbSubjects.length > 0) {
+          allCurriculumSubjects = dbSubjects;
+        }
+      } catch {
+        // Fallback to DEFAULT_MBBS_SUBJECTS
+      }
+
       const built: StudentReport[] = (students || []).map((s: any) => {
         const stats = attMap[s.id] || { present: 0, manual: 0, attendedSessionIds: new Set() };
 
@@ -118,6 +146,47 @@ export default function ReportsPage() {
         const absent = Math.max(0, studentSessionCount - present);
         const rate = studentSessionCount > 0 ? Math.min(100, Math.round((present / studentSessionCount) * 100)) : 0;
 
+        // Compute Subject-wise Attendance Breakdown for this student
+        const cohortSubs = getSubjectsForCohort(allCurriculumSubjects, s.academic_year);
+        const subjectStatsMap: Record<string, { totalClasses: number; present: number }> = {};
+        cohortSubs.forEach(sub => {
+          subjectStatsMap[sub.name.toLowerCase()] = { totalClasses: 0, present: 0 };
+        });
+
+        applicableSessions.forEach(sess => {
+          const rawSub = sess.class_name?.includes(" - ") ? sess.class_name.split(" - ")[0].trim() : sess.class_name?.trim() || "General";
+          const key = rawSub.toLowerCase();
+          const matchedKey = Object.keys(subjectStatsMap).find(k => k === key || key.includes(k) || k.includes(key));
+          if (matchedKey) {
+            subjectStatsMap[matchedKey].totalClasses++;
+            if (stats.attendedSessionIds.has(sess.id)) {
+              subjectStatsMap[matchedKey].present++;
+            }
+          }
+        });
+
+        const subjectBreakdown: SubjectBreakdown[] = cohortSubs.map(sub => {
+          const st = subjectStatsMap[sub.name.toLowerCase()] || { totalClasses: 0, present: 0 };
+          const sAbsent = Math.max(0, st.totalClasses - st.present);
+          const sRate = st.totalClasses > 0 ? Math.round((st.present / st.totalClasses) * 1000) / 10 : 100.0;
+          let sStatus: "Good" | "Borderline" | "Low" = "Good";
+          if (st.totalClasses > 0) {
+            if (sRate >= 75) sStatus = "Good";
+            else if (sRate >= 65) sStatus = "Borderline";
+            else sStatus = "Low";
+          }
+          return {
+            subject: sub.name,
+            code: sub.code,
+            department: sub.department,
+            totalClasses: st.totalClasses,
+            present: st.present,
+            absent: sAbsent,
+            percentage: sRate,
+            status: sStatus,
+          };
+        });
+
         return {
           id: s.id,
           student_roll: s.student_roll,
@@ -130,6 +199,7 @@ export default function ReportsPage() {
           attendance_rate: rate,
           manual_override_count: stats.manual,
           last_seen: stats.last,
+          subjectBreakdown,
         };
       });
       setReports(built);
@@ -213,13 +283,21 @@ export default function ReportsPage() {
   };
 
   const exportCSV = () => {
-    const headers = ["Roll No", "Full Name", "Email", "Year", "Total Sessions", "Present", "Absent", "Attendance %", "Manual Override", "Last Seen"];
-    const rows = filtered.map(r => [
-      r.student_roll, r.full_name, r.email, r.academic_year || "N/A",
-      r.total_sessions, r.total_present, r.total_absent,
-      r.attendance_rate + "%", r.manual_override_count,
-      r.last_seen ? new Date(r.last_seen).toLocaleString() : "Never"
-    ].map(c => `"${c}"`).join(","));
+    const headers = [
+      "Roll No", "Full Name", "Email", "Year", "Total Sessions", "Present", "Absent", "Attendance %",
+      "Subject Breakdown", "Manual Override", "Last Seen"
+    ];
+    const rows = filtered.map(r => {
+      const subjectSummary = (r.subjectBreakdown || [])
+        .map(s => `${s.subject}: ${s.percentage}% (${s.present}/${s.totalClasses})`)
+        .join(" | ");
+      return [
+        r.student_roll, r.full_name, r.email, r.academic_year || "N/A",
+        r.total_sessions, r.total_present, r.total_absent,
+        r.attendance_rate + "%", subjectSummary, r.manual_override_count,
+        r.last_seen ? new Date(r.last_seen).toLocaleString() : "Never"
+      ].map(c => `"${c}"`).join(",");
+    });
     const csv = [headers.join(","), ...rows].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
@@ -497,47 +575,154 @@ export default function ReportsPage() {
                               if (isExpanded) { setExpandedId(null); }
                               else { setExpandedId(student.id); await fetchSessionHistory(student.id); }
                             }}
-                            className="inline-flex items-center gap-1 text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-xs font-semibold transition-all cursor-pointer"
                           >
-                            {isExpanded ? <><ChevronUp className="w-3 h-3" /> Hide</> : <><ChevronDown className="w-3 h-3" /> History</>}
+                            {isExpanded ? (
+                              <><ChevronUp className="w-3.5 h-3.5" /> <span>Hide</span></>
+                            ) : (
+                              <><BookOpen className="w-3.5 h-3.5" /> <span>Breakdown</span></>
+                            )}
                           </button>
                         </td>
                       </tr>
 
                       {isExpanded && (
-                        <tr className="bg-indigo-50/40 dark:bg-indigo-950/10">
-                          <td colSpan={9} className="px-4 py-4">
-                            <div className="ml-10">
-                              <p className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wide mb-3">
-                                Last 10 Sessions — {student.full_name}
-                              </p>
-                              {loadingHistory === student.id ? (
-                                <div className="flex items-center gap-2 text-xs text-gray-400">
-                                  <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Loading history...
+                        <tr className="bg-indigo-50/20 dark:bg-slate-900/40 border-b border-indigo-100/60 dark:border-slate-800">
+                          <td colSpan={9} className="px-4 sm:px-6 py-5">
+                            <div className="space-y-4">
+                              {/* Subject-wise Attendance Breakdown Card */}
+                              <div className="bg-white dark:bg-slate-950/90 border border-gray-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 shadow-sm">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3.5">
+                                  <div className="flex items-center gap-2">
+                                    <BookOpen className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                                    <h4 className="text-xs sm:text-sm font-bold text-gray-900 dark:text-white">
+                                      Subject-wise Attendance Breakdown — {student.full_name} ({student.student_roll})
+                                    </h4>
+                                  </div>
+                                  <span className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-2 py-0.5 rounded-full border border-indigo-200 dark:border-indigo-800">
+                                    {student.academic_year || "1st Year"} Curriculum
+                                  </span>
                                 </div>
-                              ) : !sessionHistory[student.id]?.length ? (
-                                <p className="text-xs text-gray-400">No attendance records found.</p>
-                              ) : (
-                                <div className="flex flex-wrap gap-2">
-                                  {sessionHistory[student.id].map((rec: any, idx: number) => (
-                                    <div
-                                      key={idx}
-                                      className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs border ${
-                                        rec.status === "Present"
-                                          ? "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900 text-emerald-700 dark:text-emerald-400"
-                                          : "bg-rose-50 dark:bg-rose-950/30 border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-400"
-                                      }`}
-                                    >
-                                      {rec.status === "Present" ? <CheckCircle className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
-                                      <span className="font-medium">{rec.sessions?.class_name || "Session"}</span>
-                                      <span className="opacity-60">{new Date(rec.recorded_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
-                                      {rec.capture_mode === "Manual Upload" && (
-                                        <span className="text-[9px] bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-400 px-1 rounded font-bold">MANUAL</span>
+
+                                <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-slate-800">
+                                  <table className="w-full text-left border-collapse text-xs">
+                                    <thead>
+                                      <tr className="bg-gray-50 dark:bg-slate-900 text-gray-600 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px] border-b border-gray-200 dark:border-slate-800">
+                                        <th className="py-2.5 px-3">Subject (বিষয়)</th>
+                                        <th className="py-2.5 px-2 text-center">মোট ক্লাস</th>
+                                        <th className="py-2.5 px-2 text-center">উপস্থিত</th>
+                                        <th className="py-2.5 px-2 text-center">অনুপস্থিত</th>
+                                        <th className="py-2.5 px-3 text-center">উপস্থিতির হার</th>
+                                        <th className="py-2.5 px-3 text-center">স্ট্যাটাস</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100 dark:divide-slate-800/60">
+                                      {(student.subjectBreakdown && student.subjectBreakdown.length > 0) ? (
+                                        student.subjectBreakdown.map((sub, sIdx) => (
+                                          <tr key={sIdx} className="hover:bg-gray-50/60 dark:hover:bg-slate-900/40 transition-colors">
+                                            <td className="py-2.5 px-3">
+                                              <span className="font-bold text-gray-900 dark:text-white">{sub.subject}</span>
+                                              {sub.code && <span className="text-[10px] text-gray-400 dark:text-slate-500 font-mono ml-1.5">({sub.code})</span>}
+                                            </td>
+                                            <td className="py-2.5 px-2 text-center font-semibold text-gray-700 dark:text-slate-300">{sub.totalClasses}</td>
+                                            <td className="py-2.5 px-2 text-center font-bold text-emerald-600 dark:text-emerald-400">{sub.present}</td>
+                                            <td className="py-2.5 px-2 text-center font-bold text-rose-600 dark:text-rose-400">{sub.absent}</td>
+                                            <td className="py-2.5 px-3 text-center">
+                                              <div className="inline-flex flex-col items-center">
+                                                <span className="font-extrabold text-gray-900 dark:text-white">{sub.percentage}%</span>
+                                                <div className="w-16 bg-gray-100 dark:bg-slate-800 h-1 rounded-full overflow-hidden mt-0.5">
+                                                  <div
+                                                    className={`h-full rounded-full ${
+                                                      sub.percentage >= 75
+                                                        ? "bg-emerald-500"
+                                                        : sub.percentage >= 65
+                                                        ? "bg-amber-500"
+                                                        : "bg-rose-500"
+                                                    }`}
+                                                    style={{ width: `${Math.min(100, Math.max(0, sub.percentage))}%` }}
+                                                  />
+                                                </div>
+                                              </div>
+                                            </td>
+                                            <td className="py-2.5 px-3 text-center">
+                                              {sub.status === "Good" ? (
+                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
+                                                  Good
+                                                </span>
+                                              ) : sub.status === "Borderline" ? (
+                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800">
+                                                  Borderline
+                                                </span>
+                                              ) : (
+                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-800">
+                                                  Low
+                                                </span>
+                                              )}
+                                            </td>
+                                          </tr>
+                                        ))
+                                      ) : (
+                                        <tr>
+                                          <td colSpan={6} className="py-4 text-center text-gray-400">
+                                            No curriculum subjects available.
+                                          </td>
+                                        </tr>
                                       )}
-                                    </div>
-                                  ))}
+
+                                      {/* Overall Summary Row */}
+                                      <tr className="bg-gray-50/80 dark:bg-slate-900/90 font-black border-t border-gray-200 dark:border-slate-800">
+                                        <td className="py-2.5 px-3 text-gray-900 dark:text-white flex items-center gap-1.5">
+                                          <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
+                                          <span>Overall (মোট)</span>
+                                        </td>
+                                        <td className="py-2.5 px-2 text-center text-gray-900 dark:text-white">{student.total_sessions}</td>
+                                        <td className="py-2.5 px-2 text-center text-emerald-600 dark:text-emerald-400">{student.total_present}</td>
+                                        <td className="py-2.5 px-2 text-center text-rose-600 dark:text-rose-400">{student.total_absent}</td>
+                                        <td className="py-2.5 px-3 text-center text-indigo-600 dark:text-indigo-400 font-extrabold text-sm">
+                                          {student.attendance_rate}%
+                                        </td>
+                                        <td className="py-2.5 px-3 text-center">
+                                          <RiskBadge rate={student.attendance_rate} totalSessions={student.total_sessions} />
+                                        </td>
+                                      </tr>
+                                    </tbody>
+                                  </table>
                                 </div>
-                              )}
+                              </div>
+
+                              {/* Recent Recorded Session Badges */}
+                              <div>
+                                <p className="text-[11px] font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wide mb-2">
+                                  Recent Session Timeline
+                                </p>
+                                {loadingHistory === student.id ? (
+                                  <div className="flex items-center gap-2 text-xs text-gray-400">
+                                    <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Loading history...
+                                  </div>
+                                ) : !sessionHistory[student.id]?.length ? (
+                                  <p className="text-xs text-gray-400">No attendance records found.</p>
+                                ) : (
+                                  <div className="flex flex-wrap gap-2">
+                                    {sessionHistory[student.id].map((rec: any, idx: number) => (
+                                      <div
+                                        key={idx}
+                                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs border ${
+                                          rec.status === "Present"
+                                            ? "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900 text-emerald-700 dark:text-emerald-400"
+                                            : "bg-rose-50 dark:bg-rose-950/30 border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-400"
+                                        }`}
+                                      >
+                                        {rec.status === "Present" ? <CheckCircle className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
+                                        <span className="font-semibold">{rec.sessions?.class_name || "Session"}</span>
+                                        <span className="opacity-60 text-[10px]">({new Date(rec.recorded_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })})</span>
+                                        {rec.capture_mode === "Manual Upload" && (
+                                          <span className="text-[9px] bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-400 px-1 rounded font-bold">MANUAL</span>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           </td>
                         </tr>

@@ -52,12 +52,26 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // 5. Redirect already authenticated users from /login to dashboard /
+  // 5. Redirect already authenticated users from /login
   if (isAuthenticated && pathname === '/login') {
+    if (user?.role === 'Student') {
+      return NextResponse.redirect(new URL('/portal', request.url));
+    }
     return NextResponse.redirect(new URL('/', request.url));
   }
 
-  // 6. Restrict /audit-logs strictly to Super Admin role
+  // 6. Enforce Student Role Isolation: Students can only access /portal, /selfieattend, /self-attendance, and allowed APIs
+  if (isAuthenticated && user?.role === 'Student') {
+    if (pathname === '/') {
+      return NextResponse.redirect(new URL('/portal', request.url));
+    }
+    const adminRestrictedPaths = ['/live-scan', '/ongoing', '/students', '/users', '/audit-logs'];
+    if (adminRestrictedPaths.some(p => pathname === p || pathname.startsWith(`${p}/`))) {
+      return NextResponse.redirect(new URL('/portal', request.url));
+    }
+  }
+
+  // 7. Restrict /audit-logs strictly to Super Admin role
   if (pathname.startsWith('/audit-logs') && user?.role !== 'Super Admin') {
     return NextResponse.redirect(new URL('/', request.url));
   }

@@ -87,8 +87,11 @@ export async function POST(request: Request) {
     let authUser = {
       username,
       name: '',
-      role: 'Faculty' as 'Super Admin' | 'Faculty',
+      role: 'Faculty' as 'Super Admin' | 'Faculty' | 'Student',
       department: '',
+      studentId: undefined as string | undefined,
+      studentRoll: undefined as string | undefined,
+      academicYear: undefined as string | undefined,
     };
 
     // 1. First check dynamic Supabase app_users table
@@ -115,6 +118,9 @@ export async function POST(request: Request) {
             name: dbUser.full_name,
             role: dbUser.role as 'Super Admin' | 'Faculty',
             department: dbUser.department || '',
+            studentId: undefined,
+            studentRoll: undefined,
+            academicYear: undefined,
           };
 
           // Update last_login timestamp asynchronously
@@ -154,8 +160,68 @@ export async function POST(request: Request) {
             name: targetUser.name,
             role: targetUser.role,
             department: 'Administration',
+            studentId: undefined,
+            studentRoll: undefined,
+            academicYear: undefined,
           };
         }
+      }
+    }
+
+    // 3. Fallback to Supabase students table for Student Portal Login
+    if (!authSuccess) {
+      try {
+        const { data: student, error: stuErr } = await supabaseServer
+          .from('students')
+          .select('*')
+          .or(`student_roll.ilike.${username},email.ilike.${username}`)
+          .maybeSingle();
+
+        if (!stuErr && student) {
+          let isStudentMatch = false;
+
+          // Check custom portal password hash if set
+          if (student.portal_password_hash && student.portal_password_hash.startsWith('$2')) {
+            isStudentMatch = await bcrypt.compare(password, student.portal_password_hash);
+          }
+
+          // Check plain portal PIN if set
+          if (!isStudentMatch && student.portal_pin) {
+            isStudentMatch = (password === student.portal_pin.trim());
+          }
+
+          // Default Initial Fallback if neither hash nor PIN is set yet:
+          // Allow student to log in using their roll number or 123456
+          if (!isStudentMatch && !student.portal_password_hash && !student.portal_pin) {
+            const cleanRoll = (student.student_roll || '').trim().toLowerCase();
+            if (password.toLowerCase() === cleanRoll || password === '123456') {
+              isStudentMatch = true;
+            }
+          }
+
+          if (isStudentMatch) {
+            authSuccess = true;
+            authUser = {
+              username: student.student_roll,
+              name: student.full_name,
+              role: 'Student',
+              department: student.academic_year || 'MBBS',
+              studentId: student.id,
+              studentRoll: student.student_roll,
+              academicYear: student.academic_year || '1st Year',
+            };
+
+            // Update last_portal_login timestamp asynchronously if column exists
+            Promise.resolve(
+              supabaseServer
+                .from('students')
+                .update({ last_portal_login: new Date().toISOString() })
+                .eq('id', student.id)
+            ).catch(() => {});
+          }
+        }
+      } catch (stuEx) {
+        console.warn('[STUDENT LOGIN CHECK EXCEPTION]', stuEx);
       }
     }
 
@@ -194,6 +260,9 @@ export async function POST(request: Request) {
       name: authUser.name,
       role: authUser.role,
       department: authUser.department,
+      studentId: authUser.studentId,
+      studentRoll: authUser.studentRoll,
+      academicYear: authUser.academicYear,
     }, 36000);
 
     const response = NextResponse.json({

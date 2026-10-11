@@ -9,18 +9,19 @@ import { Activity, Loader2 } from "lucide-react";
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { isAuthenticated, isLoading } = useAuth();
+  const { user, isAuthenticated, isLoading } = useAuth();
 
-  const isStudentPortal = pathname?.startsWith("/selfieattend") || pathname?.startsWith("/self-attendance");
+  const isSelfiePortal = pathname?.startsWith("/selfieattend") || pathname?.startsWith("/self-attendance");
+  const isPortalPage = pathname?.startsWith("/portal");
   const isLoginPage = pathname === "/login";
-  const isPublicRoute = isStudentPortal || isLoginPage;
+  const isPublicRoute = isSelfiePortal || isLoginPage;
 
-  // Protect Admin Routes: If unauthenticated and accessing a private route, redirect to /login
+  // Protect Private Routes: If unauthenticated and accessing a private route, redirect to /login
   useEffect(() => {
     if (!isLoading && !isAuthenticated && !isPublicRoute) {
-      router.push("/login");
+      router.push(`/login?from=${encodeURIComponent(pathname || '/')}`);
     }
-  }, [isAuthenticated, isLoading, isPublicRoute, router]);
+  }, [isAuthenticated, isLoading, isPublicRoute, pathname, router]);
 
   // Login page layout: Full screen without sidebar
   if (isLoginPage) {
@@ -31,15 +32,32 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // Student Selfie Portal (/selfieattend):
-  // - Publicly accessible for students without requiring login.
-  // - Shows sidebar on desktop ONLY if Admin is logged in.
-  if (isStudentPortal) {
+  // Dedicated Student Portal (/portal):
+  // When a student is logged in, provide an immersive, full-screen portal without admin sidebar
+  if (isPortalPage) {
+    const isStudentUser = user?.role === 'Student';
     return (
       <>
-        {isAuthenticated && <Sidebar />}
+        {!isStudentUser && isAuthenticated && <Sidebar />}
         <main className={`flex-1 min-h-screen flex flex-col w-full min-w-0 ${
-          isAuthenticated ? "lg:pl-64" : "lg:pl-0"
+          !isStudentUser && isAuthenticated ? "lg:pl-64" : "lg:pl-0"
+        } pt-0 bg-[#070B12]`}>
+          {children}
+        </main>
+      </>
+    );
+  }
+
+  // Student Selfie Portal (/selfieattend):
+  // - Publicly accessible for students without requiring login.
+  // - Shows sidebar on desktop ONLY if Admin/Faculty is logged in.
+  if (isSelfiePortal) {
+    const isStudentUser = user?.role === 'Student';
+    return (
+      <>
+        {isAuthenticated && !isStudentUser && <Sidebar />}
+        <main className={`flex-1 min-h-screen flex flex-col w-full min-w-0 ${
+          isAuthenticated && !isStudentUser ? "lg:pl-64" : "lg:pl-0"
         } pt-0 bg-[#070B12]`}>
           {children}
         </main>

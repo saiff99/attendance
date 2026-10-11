@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, ScanLine, Radio, Users, FileBarChart, Activity, Menu, X, Smartphone, LogOut, Sun, Moon, ShieldCheck, UserCog } from "lucide-react";
+import { LayoutDashboard, ScanLine, Radio, Users, FileBarChart, Activity, Menu, X, Smartphone, LogOut, Sun, Moon, ShieldCheck, UserCog, GraduationCap } from "lucide-react";
 import { SystemHealth } from "@/components/SystemHealth";
 import { useAuth } from "@/lib/auth";
 import { useTheme } from "next-themes";
@@ -19,6 +19,11 @@ const navigation = [
   { name: "Audit Trail", href: "/audit-logs", icon: ShieldCheck, superAdminOnly: true },
 ];
 
+const studentNavigation = [
+  { name: "My Attendance Portal", href: "/portal", icon: GraduationCap },
+  { name: "Selfie Attendance", href: "/selfieattend", icon: Smartphone },
+];
+
 function classNames(...classes: string[]) {
   return classes.filter(Boolean).join(" ");
 }
@@ -31,7 +36,7 @@ export default function Sidebar() {
   const [ongoingCount, setOngoingCount] = useState<number>(0);
   const { user, logout } = useAuth();
   const { theme, setTheme } = useTheme();
-  const isStudentPortal = pathname?.startsWith("/selfieattend") || pathname?.startsWith("/self-attendance");
+  const isStudentPortal = pathname?.startsWith("/selfieattend") || pathname?.startsWith("/self-attendance") || pathname?.startsWith("/portal");
 
   useEffect(() => {
     setMounted(true);
@@ -131,9 +136,10 @@ export default function Sidebar() {
       </div>
       <div className="flex flex-1 flex-col overflow-y-auto pt-5 pb-4">
         <nav className="mt-2 flex-1 space-y-1 px-3">
-          {navigation
-            .filter((item: any) => !item.superAdminOnly || user?.role === "Super Admin")
-            .map((item) => {
+          {(user?.role === "Student"
+            ? studentNavigation
+            : navigation.filter((item: any) => !item.superAdminOnly || user?.role === "Super Admin")
+          ).map((item) => {
               const isActive = pathname === item.href;
             const isLiveScan = item.href === "/live-scan";
             const isOngoing = item.href === "/ongoing";
