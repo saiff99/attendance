@@ -9,6 +9,12 @@ ALTER TABLE IF EXISTS sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS attendance ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS audit_logs ENABLE ROW LEVEL SECURITY;
 
+-- 1.1 Ensure all optional columns exist on students table
+ALTER TABLE IF EXISTS students ADD COLUMN IF NOT EXISTS parent_phone VARCHAR(50);
+ALTER TABLE IF EXISTS students ADD COLUMN IF NOT EXISTS biometric_consent BOOLEAN DEFAULT true;
+ALTER TABLE IF EXISTS students ADD COLUMN IF NOT EXISTS biometric_consent_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE IF EXISTS students ADD COLUMN IF NOT EXISTS manual_marked_count INTEGER DEFAULT 0;
+
 -- 2. Drop all legacy and previous policies for a clean, idempotent setup
 DROP POLICY IF EXISTS "Allow public read access to students" ON students;
 DROP POLICY IF EXISTS "Allow service_role full access to students" ON students;

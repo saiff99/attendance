@@ -100,19 +100,32 @@ export default function StudentDirectory() {
       : cleanBaseYear;
 
     try {
+      const basePayload: any = {
+        student_roll: cleanRoll,
+        full_name: newStudent.full_name.trim(),
+        email: cleanEmail,
+        academic_year: combinedYear,
+      };
+
       if (editingId) {
-        const { error } = await supabase
+        let updatePayload: any = { ...basePayload };
+        if (cleanPhone) updatePayload.parent_phone = cleanPhone;
+
+        let { error } = await supabase
           .from('students')
-          .update({
-            student_roll: cleanRoll,
-            full_name: newStudent.full_name.trim(),
-            email: cleanEmail,
-            academic_year: combinedYear,
-            parent_phone: cleanPhone,
-          })
+          .update(updatePayload)
           .eq('id', editingId);
 
-        if (error) throw error;
+        // If schema cache says parent_phone or biometric_consent does not exist
+        if (error && (error.code === 'PGRST204' || error.message?.includes('parent_phone') || error.message?.includes('biometric_consent'))) {
+          const { error: retryErr } = await supabase
+            .from('students')
+            .update(basePayload)
+            .eq('id', editingId);
+          if (retryErr) throw retryErr;
+        } else if (error) {
+          throw error;
+        }
 
         logAuditEvent({
           action: "UPDATE_STUDENT",
@@ -121,20 +134,33 @@ export default function StudentDirectory() {
           details: { student_roll: cleanRoll, full_name: newStudent.full_name, academic_year: combinedYear },
         });
       } else {
-        const { data, error } = await supabase
+        const fullPayload: any = {
+          ...basePayload,
+          face_encoding: cleanPhone ? { parent_phone: cleanPhone } : null,
+          biometric_consent: true,
+        };
+        if (cleanPhone) fullPayload.parent_phone = cleanPhone;
+
+        let { data, error } = await supabase
           .from('students')
-          .insert([{
-            student_roll: cleanRoll,
-            full_name: newStudent.full_name.trim(),
-            email: cleanEmail,
-            academic_year: combinedYear,
-            parent_phone: cleanPhone,
-            face_encoding: null,
-            biometric_consent: true,
-          }])
+          .insert([fullPayload])
           .select();
 
-        if (error) throw error;
+        // If schema cache says parent_phone or biometric_consent does not exist (PGRST204)
+        if (error && (error.code === 'PGRST204' || error.message?.includes('parent_phone') || error.message?.includes('biometric_consent'))) {
+          const fallbackPayload: any = {
+            ...basePayload,
+            face_encoding: cleanPhone ? { parent_phone: cleanPhone } : null,
+          };
+          const { data: retryData, error: retryErr } = await supabase
+            .from('students')
+            .insert([fallbackPayload])
+            .select();
+          if (retryErr) throw retryErr;
+          data = retryData;
+        } else if (error) {
+          throw error;
+        }
 
         logAuditEvent({
           action: "CREATE_STUDENT",
@@ -146,9 +172,9 @@ export default function StudentDirectory() {
 
       closeModal();
       fetchStudents(); // Refresh the list
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving student:', error);
-      alert('Failed to save student. Check console for details.');
+      alert(error.message || 'Failed to save student.');
     } finally {
       setIsSubmitting(false);
     }
