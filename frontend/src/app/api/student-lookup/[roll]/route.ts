@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { supabaseServer } from '@/lib/supabaseServer';
 import { isCohortMatching } from '@/lib/cohort';
 import { fetchBackend } from '@/lib/serverBackend';
 
@@ -59,7 +59,7 @@ export async function GET(
     }
 
     // 4. Verify Session is active & unexpired (< 5.5 min)
-    const { data: sessData, error: sessErr } = await supabase
+    const { data: sessData, error: sessErr } = await supabaseServer
       .from('sessions')
       .select('id, class_name, start_time, created_at, target_academic_year')
       .eq('id', sessionId.trim())
@@ -82,13 +82,13 @@ export async function GET(
     }
 
     // 5. Query student non-sensitive fields
-    let { data: studentData } = await supabase
+    let { data: studentData } = await supabaseServer
       .from('students')
       .select('id, student_roll, full_name, academic_year, face_encoding')
       .ilike('student_roll', roll.trim());
 
     if (!studentData || studentData.length === 0) {
-      const resEq = await supabase
+      const resEq = await supabaseServer
         .from('students')
         .select('id, student_roll, full_name, academic_year, face_encoding')
         .eq('student_roll', roll.trim());
@@ -112,7 +112,7 @@ export async function GET(
     let isAlreadyPresent = false;
     let attendanceInfo = null;
 
-    const { data: attData } = await supabase
+    const { data: attData } = await supabaseServer
       .from('attendance')
       .select('id, status, capture_mode, confidence_score, recorded_at')
       .eq('session_id', sessionId)

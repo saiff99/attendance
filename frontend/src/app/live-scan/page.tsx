@@ -13,7 +13,7 @@ import {
   UserCheck, UserX, RotateCcw, Radio, AlertCircle
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
-import { supabase } from "@/lib/supabase";
+// Live Scan Faculty Portal
 import { getBackendUrl, getVideoBackendUrl } from "@/lib/api";
 import Webcam from "react-webcam";
 import { MjpegPlayer } from "@/components/MjpegPlayer";
@@ -136,13 +136,11 @@ export default function LiveScan() {
         const paramSessionId = urlParams ? urlParams.get("session_id") : null;
 
         if (paramSessionId) {
-          const { data, error } = await supabase
-            .from('sessions')
-            .select('*')
-            .eq('id', paramSessionId)
-            .single();
+          const res = await fetch(`/api/sessions/${encodeURIComponent(paramSessionId)}`);
+          const resData = await res.json();
+          const data = resData.session;
 
-          if (data && !error && isMounted) {
+          if (res.ok && data && isMounted) {
             if (typeof window !== "undefined") {
               localStorage.setItem("medattend_active_session_id", data.id);
               localStorage.setItem("medattend_active_session_title", data.class_name);
@@ -231,15 +229,16 @@ export default function LiveScan() {
         const cleanTopic = decodeSessionMetadata(activeSession.instructor_name).topic;
         const updatedInstructor = encodeSessionMetadata(cleanTopic, newConfig);
 
-        const { error } = await supabase
-          .from('sessions')
-          .update({ instructor_name: updatedInstructor })
-          .eq('id', activeSession.id);
+        const res = await fetch(`/api/sessions/${activeSession.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ instructor_name: updatedInstructor }),
+        });
 
-        if (!error) {
+        if (res.ok) {
           setActiveSession((prev: any) => prev ? { ...prev, instructor_name: updatedInstructor } : null);
         } else {
-          console.error("Failed to update active session geofence in Supabase:", error);
+          console.error("Failed to update active session geofence:", await res.text());
         }
       } catch (err) {
         console.error("Error updating active session geofence:", err);
@@ -422,14 +421,12 @@ export default function LiveScan() {
     if (!activeSession) return;
     try {
       const targetYear = activeSession.target_academic_year;
-      const { data, error } = await supabase
-        .from('students')
-        .select('id, student_roll, full_name, email, academic_year')
-        .order('student_roll', { ascending: true });
+      const res = await fetch('/api/students');
+      const resData = await res.json();
+      if (!res.ok) throw new Error(resData.error || 'Failed to fetch students');
 
-      if (error) throw error;
-
-      const filtered = (data || []).filter(s => isCohortMatching(targetYear, s.academic_year));
+      const data = resData.students || [];
+      const filtered = data.filter((s: any) => isCohortMatching(targetYear, s.academic_year));
 
       setEnrolledStudents(filtered);
     } catch (err) {
@@ -447,14 +444,10 @@ export default function LiveScan() {
   const fetchLogs = async () => {
     if (!activeSession) return;
     try {
-      const { data, error } = await supabase
-        .from('attendance')
-        .select('*, students(student_roll, full_name)')
-        .eq('session_id', activeSession.id)
-        .order('recorded_at', { ascending: false });
-
-      if (error) throw error;
-      setLogs(data || []);
+      const res = await fetch(`/api/attendance/session/${activeSession.id}`);
+      const resData = await res.json();
+      if (!res.ok) throw new Error(resData.error || 'Failed to fetch logs');
+      setLogs(resData.logs || []);
     } catch (error) {
       console.error("Failed to fetch logs:", error);
     }
@@ -489,16 +482,16 @@ export default function LiveScan() {
         target_academic_year: targetCohort
       };
 
-      const { data, error } = await supabase
-        .from('sessions')
-        .insert([newSession])
-        .select()
-        .single();
-
-      if (error) {
-        console.error("Supabase Error:", error);
-        throw error;
+      const res = await fetch('/api/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newSession),
+      });
+      const resData = await res.json();
+      if (!res.ok) {
+        throw new Error(resData.error || 'Failed to create session');
       }
+      const data = resData.session;
 
       if (typeof window !== "undefined") {
         localStorage.setItem("medattend_active_session_id", data.id);
@@ -642,20 +635,20 @@ export default function LiveScan() {
     if (!activeSession || !studentId) return;
     setMarkingStudentId(studentId);
     try {
-      const { error } = await supabase
-        .from('attendance')
-        .upsert(
-          {
-            session_id: activeSession.id,
-            student_id: studentId,
-            status: 'Present',
-            capture_mode: 'Manual Upload',
-            confidence_score: 1.0,
-            recorded_at: new Date().toISOString()
-          },
-          { onConflict: 'session_id,student_id' }
-        );
-      if (error) throw error;
+      const res = await fetch('/api/attendance/mark', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: activeSession.id,
+          student_id: studentId,
+          status: 'Present',
+          capture_mode: 'Manual Upload',
+          confidence_score: 1.0,
+          recorded_at: new Date().toISOString()
+        }),
+      });
+      const resData = await res.json();
+      if (!res.ok) throw new Error(resData.error || 'Failed to mark present');
       await fetchLogs();
     } catch (err: any) {
       alert("Failed to mark present: " + (err.message || "Unknown error"));
@@ -668,11 +661,11 @@ export default function LiveScan() {
     if (!logId) return;
     setUndoingLogId(logId);
     try {
-      const { error } = await supabase
-        .from('attendance')
-        .delete()
-        .eq('id', logId);
-      if (error) throw error;
+      const res = await fetch(`/api/attendance/mark?id=${encodeURIComponent(logId)}`, {
+        method: 'DELETE',
+      });
+      const resData = await res.json();
+      if (!res.ok) throw new Error(resData.error || 'Failed to undo attendance');
       await fetchLogs();
     } catch (err: any) {
       alert("Failed to undo attendance: " + (err.message || "Unknown error"));

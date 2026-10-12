@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { supabaseServer } from '@/lib/supabaseServer';
 import { fetchBackend } from '@/lib/serverBackend';
 import { getTodayDateStr, getStartOfTodayISO } from '@/lib/dateUtils';
 
@@ -46,7 +46,7 @@ export async function GET(request: Request) {
     const todayStr = getTodayDateStr();
     const startOfTodayIso = getStartOfTodayISO();
 
-    const { data: sessionData, error } = await supabase
+    const { data: sessionData, error } = await supabaseServer
       .from('sessions')
       .select('id, class_name, date, start_time, end_time, instructor_name, target_academic_year, created_at')
       .neq('class_name', '__SYSTEM_CONFIG__')
@@ -69,7 +69,7 @@ export async function GET(request: Request) {
     const attendanceMap: Record<string, number> = {};
 
     if (sessionIds.length > 0) {
-      const { data: attData } = await supabase
+      const { data: attData } = await supabaseServer
         .from('attendance')
         .select('session_id')
         .in('session_id', sessionIds);

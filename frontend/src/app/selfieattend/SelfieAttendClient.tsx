@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import Webcam from "react-webcam";
 import { getBackendUrl } from "@/lib/api";
-import { supabase } from "@/lib/supabase";
+// Biometric Attendance Client Component
 import {
   CampusGeofenceConfig,
   DEFAULT_GEOFENCE_CONFIG,
@@ -335,7 +335,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
     }
     const startTime = Date.now();
     try {
-      // 1. Try Same-Origin Next.js API route first
+      // 1. Try Same-Origin Next.js API route first (runs with server-side service_role)
       try {
         const localRes = await fetch("/api/active-sessions", {
           cache: "no-store",
@@ -343,35 +343,14 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
         });
         if (localRes.ok) {
           const data = await localRes.json();
-          if (data.sessions && Array.isArray(data.sessions) && data.sessions.length > 0) {
+          if (data.sessions && Array.isArray(data.sessions)) {
             processSessionsList(data.sessions);
             return;
           }
         }
       } catch (e) { }
 
-      // 2. Direct Supabase Query
-      const { data: sessionData, error } = await supabase
-        .from("sessions")
-        .select("id, class_name, date, start_time, end_time, instructor_name, target_academic_year, created_at")
-        .order("created_at", { ascending: false })
-        .limit(50);
-
-      if (!error && sessionData && sessionData.length > 0) {
-        const todayStr = getTodayDateStr();
-        const startOfTodayIso = getStartOfTodayISO();
-
-        const todaySessions = sessionData.filter((s: any) => {
-          const dateVal = s.date || '';
-          const createdVal = s.created_at || '';
-          return dateVal === todayStr || createdVal.startsWith(todayStr) || createdVal >= startOfTodayIso;
-        });
-
-        processSessionsList(todaySessions);
-        return;
-      }
-
-      // 3. Fallback to backend API
+      // 2. Fallback to backend API
       const res = await fetch(`${backendUrl}/api/active-sessions`, {
         headers: { "ngrok-skip-browser-warning": "69420" }
       });
@@ -427,77 +406,31 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
     const activeSess = overrideSession || selectedSession;
 
     try {
-      // 1. Try Same-Origin Next.js API route first
+      // 1. Try Same-Origin Next.js API route first (returns strictly non-sensitive fields: has_face_enrolled, etc.)
       const sessionIdParam = activeSess ? `?session_id=${encodeURIComponent(activeSess.id)}` : "";
       try {
         const localRes = await fetch(`/api/student-lookup/${encodeURIComponent(cleanRoll)}${sessionIdParam}`, {
           cache: "no-store",
           headers: { "ngrok-skip-browser-warning": "69420" }
         });
-        if (localRes.ok) {
-          const data = await localRes.json();
-          if (data.student) {
-            setStudent(data.student);
-            if (overrideRoll) setRollInput(overrideRoll);
-            return;
+        const data = await localRes.json().catch(() => ({}));
+        if (localRes.ok && data.student) {
+          setStudent(data.student);
+          if (overrideRoll) setRollInput(overrideRoll);
+          if (geofenceConfig.enabled && geofenceStatus === "idle") {
+            verifyUserLocation();
           }
+          return;
+        } else if (localRes.status === 403 || localRes.status === 404 || localRes.status === 429) {
+          throw new Error(data.detail || `No student found with Roll Number '${cleanRoll}'.`);
         }
-      } catch (e) { }
-
-      // 2. Direct Supabase Query
-      let { data: studentData } = await supabase
-        .from("students")
-        .select("id, student_roll, full_name, email, academic_year, face_encoding")
-        .ilike("student_roll", cleanRoll);
-
-      if (!studentData || studentData.length === 0) {
-        const resEq = await supabase
-          .from("students")
-          .select("id, student_roll, full_name, email, academic_year, face_encoding")
-          .eq("student_roll", cleanRoll);
-        studentData = resEq.data;
+      } catch (e: any) {
+        if (e.message && !e.message.includes('fetch')) {
+          throw e;
+        }
       }
 
-      if (studentData && studentData.length > 0) {
-        const stud = studentData[0];
-        const hasFace = !!(stud.face_encoding && Array.isArray(stud.face_encoding) && stud.face_encoding.length > 0);
-
-        let isAlreadyPresent = false;
-        let attendanceInfo = null;
-
-        if (activeSess) {
-          const { data: attData } = await supabase
-            .from("attendance")
-            .select("id, status, capture_mode, confidence_score, recorded_at")
-            .eq("session_id", activeSess.id)
-            .eq("student_id", stud.id);
-
-          if (attData && attData.length > 0) {
-            isAlreadyPresent = true;
-            attendanceInfo = attData[0];
-          }
-        }
-
-        const studYear = stud.academic_year || "1st Year";
-        const targetYear = activeSess?.target_academic_year;
-        const isMismatch = !isCohortMatching(targetYear, studYear);
-
-        setStudent({
-          id: stud.id,
-          student_roll: stud.student_roll,
-          full_name: stud.full_name,
-          academic_year: studYear,
-          has_face_enrolled: hasFace,
-          is_already_present: isAlreadyPresent,
-          attendance_info: attendanceInfo,
-          cohort_mismatch: isMismatch,
-          target_academic_year: targetYear,
-        });
-        if (overrideRoll) setRollInput(overrideRoll);
-        return;
-      }
-
-      // 3. Fallback to backend API
+      // 2. Fallback to backend API
       const res = await fetch(`${backendUrl}/api/student-lookup/${encodeURIComponent(cleanRoll)}${sessionIdParam}`, {
         headers: { "ngrok-skip-browser-warning": "69420" }
       });
@@ -508,6 +441,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
       }
 
       setStudent(data.student);
+      if (overrideRoll) setRollInput(overrideRoll);
       if (geofenceConfig.enabled && geofenceStatus === "idle") {
         verifyUserLocation();
       }

@@ -3,7 +3,7 @@
 import { useState, useRef } from "react";
 import { X, UploadCloud, FileSpreadsheet, Download, CheckCircle2, AlertCircle, Loader2, ArrowRight } from "lucide-react";
 import ExcelJS from "exceljs";
-import { supabase } from "@/lib/supabase";
+// Bulk Import Modal Component
 import { encodeStudentEmail, cleanPhoneNumber } from "@/lib/studentContact";
 
 interface BulkImportModalProps {
@@ -257,85 +257,28 @@ export function BulkImportModal({
 
     setIsImporting(true);
     setImportStatus("idle");
-    setImportProgress(10);
+    setImportProgress(25);
 
     try {
-      // 1. Fetch existing students by roll to prevent duplicate errors and preserve existing face_encoding
-      const { data: existingStudents, error: fetchErr } = await supabase
-        .from("students")
-        .select("id, student_roll, face_encoding");
-
-      if (fetchErr) throw fetchErr;
-
-      const existingMap = new Map<string, any>();
-      (existingStudents || []).forEach(s => {
-        if (s.student_roll) existingMap.set(s.student_roll.toLowerCase().trim(), s);
+      setImportProgress(50);
+      const res = await fetch('/api/students/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'import',
+          students: validStudents,
+          selectedYear,
+          useFileYear,
+        }),
       });
 
-      const toInsert: any[] = [];
-      const toUpdate: any[] = [];
-
-      validStudents.forEach((student) => {
-        const cleanRoll = student.student_roll.trim();
-        const cleanKey = cleanRoll.toLowerCase();
-        const generatedEmail = encodeStudentEmail(cleanRoll, student.parent_phone);
-        const academicYear = useFileYear ? student.academic_year : selectedYear;
-
-        if (existingMap.has(cleanKey)) {
-          const existing = existingMap.get(cleanKey);
-          toUpdate.push({
-            id: existing.id,
-            student_roll: cleanRoll,
-            full_name: student.full_name,
-            email: generatedEmail,
-            academic_year: academicYear,
-            parent_phone: student.parent_phone || null,
-          });
-        } else {
-          toInsert.push({
-            student_roll: cleanRoll,
-            full_name: student.full_name,
-            email: generatedEmail,
-            academic_year: academicYear,
-            parent_phone: student.parent_phone || null,
-            face_encoding: null,
-          });
-        }
-      });
-
-      setImportProgress(40);
-
-      // 2. Perform batch insert
-      if (toInsert.length > 0) {
-        // Chunk inserts by 50 to avoid payload limits
-        const chunkSize = 50;
-        for (let i = 0; i < toInsert.length; i += chunkSize) {
-          const chunk = toInsert.slice(i, i + chunkSize);
-          const { error: insertErr } = await supabase.from("students").insert(chunk);
-          if (insertErr) throw insertErr;
-          setImportProgress(Math.min(85, 40 + Math.round(((i + chunkSize) / toInsert.length) * 45)));
-        }
-      }
-
-      // 3. Perform updates for existing students
-      if (toUpdate.length > 0) {
-        for (const updateItem of toUpdate) {
-          await supabase
-            .from("students")
-            .update({
-              full_name: updateItem.full_name,
-              email: updateItem.email,
-              academic_year: updateItem.academic_year,
-              parent_phone: updateItem.parent_phone,
-            })
-            .eq("id", updateItem.id);
-        }
-      }
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to import students.');
 
       setImportProgress(100);
       setImportStatus("success");
       setStatusMessage(
-        `Successfully imported ${validStudents.length} students (${toInsert.length} new enrolled, ${toUpdate.length} updated). You can now setup their Face IDs anytime!`
+        `Successfully imported ${validStudents.length} students (${data.insertedCount || 0} new enrolled, ${data.updatedCount || 0} updated). You can now setup their Face IDs anytime!`
       );
 
       setTimeout(() => {

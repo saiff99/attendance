@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase';
+import { supabaseServer } from '@/lib/supabaseServer';
 
 const CLOUDFLARE_TUNNEL = "";
 const NGROK_TUNNEL = "";
@@ -80,7 +80,7 @@ export async function getLiveTunnelUrl(): Promise<string | null> {
     return cachedTunnelUrl;
   }
   try {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseServer
       .from('sessions')
       .select('instructor_name')
       .eq('id', '00000000-0000-0000-0000-000000000000')

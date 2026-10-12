@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { X, Calendar as CalendarIcon, CheckCircle2, XCircle } from "lucide-react";
-import { supabase } from "@/lib/supabase";
 import { getParentPhone, formatPhoneDisplay } from "@/lib/studentContact";
 
 interface StudentProfileModalProps {
@@ -19,14 +18,19 @@ export function StudentProfileModal({ student, isOpen, onClose }: StudentProfile
     if (isOpen && student?.id) {
       setLoading(true);
       const fetchAttendance = async () => {
-        const { data } = await supabase
-          .from("attendance")
-          .select("*, sessions(class_name, date)")
-          .eq("student_id", student.id)
-          .order("recorded_at", { ascending: false });
-        
-        setAttendance(data || []);
-        setLoading(false);
+        try {
+          const res = await fetch(`/api/students/${student.id}/attendance`);
+          const data = await res.json();
+          if (res.ok && data.attendance) {
+            setAttendance(data.attendance);
+          } else {
+            setAttendance([]);
+          }
+        } catch {
+          setAttendance([]);
+        } finally {
+          setLoading(false);
+        }
       };
       fetchAttendance();
     }

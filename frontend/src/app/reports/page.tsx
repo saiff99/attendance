@@ -6,7 +6,7 @@ import {
   ChevronDown, ChevronUp, Shield, UserCheck, UserX, Filter, RefreshCw, FileBarChart,
   GraduationCap, BookOpen, Sparkles
 } from "lucide-react";
-import { supabase } from "@/lib/supabase";
+// Academic Attendance Reports Component
 import { isCohortMatching } from "@/lib/cohort";
 import { DEFAULT_MBBS_SUBJECTS, getSubjectsForCohort } from "@/lib/academicSubjects";
 
@@ -81,23 +81,16 @@ export default function ReportsPage() {
   const fetchReports = async () => {
     setLoading(true);
     try {
-      const { data: allSessions } = await supabase
-        .from("sessions")
-        .select("id, class_name, target_academic_year")
-        .neq("class_name", "__SYSTEM_CONFIG__");
-      const sessionCount = allSessions?.length || 0;
+      const res = await fetch("/api/reports");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to fetch reports");
+
+      const allSessions = data.sessions || [];
+      const sessionCount = allSessions.length;
       setTotalSessions(sessionCount);
 
-      const { data: students, error: stuErr } = await supabase
-        .from("students")
-        .select("id, student_roll, full_name, email, academic_year")
-        .order("student_roll", { ascending: true });
-      if (stuErr) throw stuErr;
-
-      const { data: attendance, error: attErr } = await supabase
-        .from("attendance")
-        .select("session_id, student_id, status, capture_mode, recorded_at");
-      if (attErr) throw attErr;
+      const students = data.students || [];
+      const attendance = data.attendance || [];
 
       // Group attendance by student
       const attMap: Record<string, { present: number; manual: number; last?: string; attendedSessionIds: Set<string> }> = {};
@@ -120,23 +113,15 @@ export default function ReportsPage() {
 
       // Fetch dynamic subjects if available
       let allCurriculumSubjects = DEFAULT_MBBS_SUBJECTS;
-      try {
-        const { data: dbSubjects } = await supabase
-          .from("academic_subjects")
-          .select("*")
-          .eq("is_active", true);
-        if (dbSubjects && dbSubjects.length > 0) {
-          allCurriculumSubjects = dbSubjects;
-        }
-      } catch {
-        // Fallback to DEFAULT_MBBS_SUBJECTS
+      if (data.subjects && data.subjects.length > 0) {
+        allCurriculumSubjects = data.subjects;
       }
 
       const built: StudentReport[] = (students || []).map((s: any) => {
         const stats = attMap[s.id] || { present: 0, manual: 0, attendedSessionIds: new Set() };
 
         // Identify sessions targeted to or applicable to this student's specific cohort / year
-        const applicableSessions = (allSessions || []).filter(sess =>
+        const applicableSessions = (allSessions || []).filter((sess: any) =>
           isCohortMatching(sess.target_academic_year, s.academic_year)
         );
 
@@ -153,7 +138,7 @@ export default function ReportsPage() {
           subjectStatsMap[sub.name.toLowerCase()] = { totalClasses: 0, present: 0 };
         });
 
-        applicableSessions.forEach(sess => {
+        applicableSessions.forEach((sess: any) => {
           const rawSub = sess.class_name?.includes(" - ") ? sess.class_name.split(" - ")[0].trim() : sess.class_name?.trim() || "General";
           const key = rawSub.toLowerCase();
           const matchedKey = Object.keys(subjectStatsMap).find(k => k === key || key.includes(k) || k.includes(key));
@@ -214,13 +199,11 @@ export default function ReportsPage() {
     if (sessionHistory[studentId]) return;
     setLoadingHistory(studentId);
     try {
-      const { data } = await supabase
-        .from("attendance")
-        .select("status, capture_mode, recorded_at, sessions(class_name, date)")
-        .eq("student_id", studentId)
-        .order("recorded_at", { ascending: false })
-        .limit(10);
-      setSessionHistory(prev => ({ ...prev, [studentId]: data || [] }));
+      const res = await fetch(`/api/students/${studentId}/attendance`);
+      const data = await res.json();
+      if (res.ok && data.attendance) {
+        setSessionHistory(prev => ({ ...prev, [studentId]: data.attendance || [] }));
+      }
     } catch (err) {
       console.error(err);
     } finally {

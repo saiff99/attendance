@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { MessageSquare, Send, CheckCircle2, AlertCircle, X, Loader2, Phone, ShieldCheck, Users, RefreshCw, Check } from "lucide-react";
-import { supabase } from "@/lib/supabase";
+// WhatsApp Absentee Alert Modal Component
 import { getParentPhone, formatPhoneDisplay } from "@/lib/studentContact";
 import { isCohortMatching } from "@/lib/cohort";
 
@@ -43,20 +43,20 @@ export function WhatsAppAlertModal({
     if (!sessionId || !studentId) return;
     setMarkingStudentId(studentId);
     try {
-      const { error } = await supabase
-        .from('attendance')
-        .upsert(
-          {
-            session_id: sessionId,
-            student_id: studentId,
-            status: 'Present',
-            capture_mode: 'Manual Upload',
-            confidence_score: 1.0,
-            recorded_at: new Date().toISOString()
-          },
-          { onConflict: 'session_id,student_id' }
-        );
-      if (error) throw error;
+      const res = await fetch('/api/attendance/mark', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: sessionId,
+          student_id: studentId,
+          status: 'Present',
+          capture_mode: 'Manual Upload',
+          confidence_score: 1.0,
+          recorded_at: new Date().toISOString(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to mark present');
       await fetchSessionAbsentees();
     } catch (err: any) {
       alert("Failed to mark present: " + (err.message || "Unknown error"));
@@ -101,32 +101,25 @@ export function WhatsAppAlertModal({
     setSendResult(null);
     try {
       // 1. Fetch Session Info
-      const { data: session } = await supabase
-        .from('sessions')
-        .select('*')
-        .eq('id', sessionId)
-        .single();
-
+      const sessRes = await fetch(`/api/sessions/${sessionId}`);
+      const sessData = await sessRes.json();
+      const session = sessData.session;
       const targetYear = session?.target_academic_year;
 
       // 2. Fetch Enrolled Students for this specific cohort & sub-batch
-      const { data: rawStudents } = await supabase
-        .from('students')
-        .select('id, student_roll, full_name, email, academic_year, face_encoding')
-        .order('student_roll', { ascending: true });
-
-      const allStudents = (rawStudents || []).filter(s => isCohortMatching(targetYear, s.academic_year));
+      const stuRes = await fetch('/api/students');
+      const stuData = await stuRes.json();
+      const rawStudents = stuData.students || [];
+      const allStudents = rawStudents.filter((s: any) => isCohortMatching(targetYear, s.academic_year));
 
       // 3. Fetch Present Attendances
-      const { data: attendances } = await supabase
-        .from('attendance')
-        .select('student_id, status')
-        .eq('session_id', sessionId)
-        .eq('status', 'Present');
+      const attRes = await fetch(`/api/attendance/session/${sessionId}`);
+      const attData = await attRes.json();
+      const attendances = (attData.logs || []).filter((a: any) => a.status === 'Present');
 
-      const presentIds = new Set((attendances || []).map(a => a.student_id));
+      const presentIds = new Set(attendances.map((a: any) => a.student_id));
       const total = allStudents || [];
-      const absent = total.filter(s => !presentIds.has(s.id));
+      const absent = total.filter((s: any) => !presentIds.has(s.id));
 
       setTotalCount(total.length);
       setPresentCount(presentIds.size);

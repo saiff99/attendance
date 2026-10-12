@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { DownloadCloud, Loader2 } from "lucide-react";
-import { supabase } from "@/lib/supabase";
 
 export default function DownloadReportButton({ sessionId, sessionName }: { sessionId: string, sessionName: string }) {
   const [isDownloading, setIsDownloading] = useState(false);
@@ -10,14 +9,11 @@ export default function DownloadReportButton({ sessionId, sessionName }: { sessi
   const handleDownload = async () => {
     setIsDownloading(true);
     try {
-      // Fetch attendance records for this session
-      const { data, error } = await supabase
-        .from('attendance')
-        .select('recorded_at, status, confidence_score, students(student_roll, full_name, email)')
-        .eq('session_id', sessionId)
-        .order('recorded_at', { ascending: true });
-
-      if (error) throw error;
+      // Fetch attendance records for this session via secure API route
+      const res = await fetch(`/api/attendance/session/${sessionId}`);
+      const resData = await res.json();
+      if (!res.ok) throw new Error(resData.error || 'Failed to fetch attendance records.');
+      const data = resData.logs || [];
 
       if (!data || data.length === 0) {
         alert("No attendance records found for this session.");

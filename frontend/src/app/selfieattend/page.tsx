@@ -1,5 +1,5 @@
 import { Suspense } from 'react';
-import { supabase } from '@/lib/supabase';
+import { supabaseServer } from '@/lib/supabaseServer';
 import { SelfieAttendContent, ActiveSession } from './SelfieAttendClient';
 import { getTodayDateStr, getStartOfTodayISO } from '@/lib/dateUtils';
 
@@ -29,7 +29,7 @@ async function getInitialSessions(): Promise<ActiveSession[]> {
     const todayStr = getTodayDateStr();
     const startOfTodayIso = getStartOfTodayISO();
 
-    const { data: sessionData, error } = await supabase
+    const { data: sessionData, error } = await supabaseServer
       .from('sessions')
       .select('id, class_name, date, start_time, end_time, instructor_name, target_academic_year, created_at')
       .neq('class_name', '__SYSTEM_CONFIG__')

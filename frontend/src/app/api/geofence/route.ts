@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { supabaseServer } from '@/lib/supabaseServer';
 import { DEFAULT_GEOFENCE_CONFIG, CampusGeofenceConfig } from '@/lib/geofence';
 import { requireRoles } from '@/lib/serverAuth';
 
@@ -12,7 +12,7 @@ export async function GET() {
   try {
     // Try reading from Supabase settings if table exists
     try {
-      const { data, error } = await supabase
+      const { data, error } = await supabaseServer
         .from('settings')
         .select('value')
         .eq('key', 'campus_geofence')
@@ -50,7 +50,7 @@ export async function POST(request: Request) {
 
     // Persist to Supabase if possible
     try {
-      await supabase
+      await supabaseServer
         .from('settings')
         .upsert({ key: 'campus_geofence', value: updatedConfig }, { onConflict: 'key' });
     } catch (e) {}

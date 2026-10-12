@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useMemo } from "react";
 import { Search, UserPlus, FileDown, MoreHorizontal, X, UploadCloud, Loader2, Edit2, Trash2, Folder, ArrowLeft, Users, FileSpreadsheet, ArrowUpDown, ArrowUp, ArrowDown, MessageSquare, Phone, AlertTriangle, Lock } from "lucide-react";
-import { supabase } from "@/lib/supabase";
+// Student Directory
 import type { Student } from "@/types/database";
 import { StudentProfileModal } from "@/components/StudentProfileModal";
 import { FaceRegistrationModal } from "@/components/FaceRegistrationModal";
@@ -82,13 +82,10 @@ export default function StudentDirectory() {
   const fetchStudents = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('students')
-        .select('*')
-        .order('student_roll', { ascending: true });
-
-      if (error) throw error;
-      setStudents(data || []);
+      const res = await fetch('/api/students');
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to fetch students');
+      setStudents(data.students || []);
     } catch (error) {
       console.error('Error fetching students:', error);
     } finally {
@@ -132,98 +129,39 @@ export default function StudentDirectory() {
       : cleanBaseYear;
 
     try {
-      // Direct database duplicate verification (case-insensitive)
-      const { data: existingCheck } = await supabase
-        .from('students')
-        .select('id, student_roll, full_name, academic_year')
-        .ilike('student_roll', cleanRoll)
-        .maybeSingle();
-
-      if (existingCheck && (!editingId || existingCheck.id !== editingId)) {
-        setFormError(`Duplicate Roll Number! Roll "${existingCheck.student_roll}" is already registered to "${existingCheck.full_name}" (${existingCheck.academic_year || 'N/A'}).`);
-        setIsSubmitting(false);
-        return;
-      }
-
-      const basePayload: any = {
+      const payload = {
         student_roll: cleanRoll,
         full_name: newStudent.full_name.trim(),
         email: cleanEmail,
         academic_year: combinedYear,
+        parent_phone: cleanPhone,
       };
 
+      let res: Response;
       if (editingId) {
-        let updatePayload: any = { ...basePayload };
-        if (cleanPhone) updatePayload.parent_phone = cleanPhone;
-
-        let { error } = await supabase
-          .from('students')
-          .update(updatePayload)
-          .eq('id', editingId);
-
-        // If schema cache says parent_phone or biometric_consent does not exist
-        if (error && (error.code === 'PGRST204' || error.message?.includes('parent_phone') || error.message?.includes('biometric_consent'))) {
-          const { error: retryErr } = await supabase
-            .from('students')
-            .update(basePayload)
-            .eq('id', editingId);
-          if (retryErr) throw retryErr;
-        } else if (error) {
-          throw error;
-        }
-
-        logAuditEvent({
-          action: "UPDATE_STUDENT",
-          targetType: "student",
-          targetId: editingId,
-          details: { student_roll: cleanRoll, full_name: newStudent.full_name, academic_year: combinedYear },
+        res = await fetch(`/api/students/${editingId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
         });
       } else {
-        const fullPayload: any = {
-          ...basePayload,
-          face_encoding: cleanPhone ? { parent_phone: cleanPhone } : null,
-          biometric_consent: true,
-        };
-        if (cleanPhone) fullPayload.parent_phone = cleanPhone;
-
-        let { data, error } = await supabase
-          .from('students')
-          .insert([fullPayload])
-          .select();
-
-        // If schema cache says parent_phone or biometric_consent does not exist (PGRST204)
-        if (error && (error.code === 'PGRST204' || error.message?.includes('parent_phone') || error.message?.includes('biometric_consent'))) {
-          const fallbackPayload: any = {
-            ...basePayload,
-            face_encoding: cleanPhone ? { parent_phone: cleanPhone } : null,
-          };
-          const { data: retryData, error: retryErr } = await supabase
-            .from('students')
-            .insert([fallbackPayload])
-            .select();
-          if (retryErr) throw retryErr;
-          data = retryData;
-        } else if (error) {
-          throw error;
-        }
-
-        logAuditEvent({
-          action: "CREATE_STUDENT",
-          targetType: "student",
-          targetId: data?.[0]?.id || cleanRoll,
-          details: { student_roll: cleanRoll, full_name: newStudent.full_name, academic_year: combinedYear },
+        res = await fetch('/api/students', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
         });
+      }
+
+      const resData = await res.json();
+      if (!res.ok) {
+        throw new Error(resData.error || 'Failed to save student.');
       }
 
       closeModal();
       fetchStudents(); // Refresh the list
     } catch (error: any) {
       console.error('Error saving student:', error);
-      if (error?.code === '23505' || error?.message?.includes('duplicate key') || error?.message?.includes('students_student_roll_key')) {
-        setFormError(`Duplicate Roll Number! Roll "${cleanRoll}" already exists in the database.`);
-      } else {
-        setFormError(error.message || 'Failed to save student.');
-      }
+      setFormError(error.message || 'Failed to save student.');
     } finally {
       setIsSubmitting(false);
     }
@@ -237,22 +175,15 @@ export default function StudentDirectory() {
     if (!window.confirm("Are you sure you want to delete this student? This will also remove their attendance records.")) return;
 
     try {
-      // Delete any dependent attendance records first
-      await supabase.from('attendance').delete().eq('student_id', id);
-      const { error } = await supabase.from('students').delete().eq('id', id);
-      if (error) throw error;
-
-      logAuditEvent({
-        action: "DELETE_STUDENT",
-        targetType: "student",
-        targetId: id,
-      });
+      const res = await fetch(`/api/students/${id}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to delete student.');
 
       setSelectedIds(prev => prev.filter(item => item !== id));
       fetchStudents();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error deleting student:', error);
-      alert('Failed to delete student.');
+      alert(error.message || 'Failed to delete student.');
     }
   };
 
@@ -268,22 +199,19 @@ export default function StudentDirectory() {
 
     setIsBulkDeleting(true);
     try {
-      // First delete dependent attendance records for all selected students
-      await supabase.from('attendance').delete().in('student_id', selectedIds);
-      const { error } = await supabase.from('students').delete().in('id', selectedIds);
-      if (error) throw error;
-
-      logAuditEvent({
-        action: "BULK_DELETE_STUDENTS",
-        targetType: "student",
-        details: { count, student_ids: selectedIds },
+      const res = await fetch('/api/students/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete', ids: selectedIds }),
       });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to delete selected students.');
 
       setSelectedIds([]);
       await fetchStudents();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error during bulk deletion:', error);
-      alert('Failed to delete selected students. Check console for details.');
+      alert(error.message || 'Failed to delete selected students. Check console for details.');
     } finally {
       setIsBulkDeleting(false);
     }

@@ -9,7 +9,7 @@ import {
   RefreshCw, CheckCircle2, AlertCircle, ArrowRight, Sparkles,
   QrCode, ExternalLink, ShieldCheck, ChevronRight, Activity, Loader2
 } from "lucide-react";
-import { supabase } from "@/lib/supabase";
+// Ongoing Sessions Component
 import { getBackendUrl } from "@/lib/api";
 import { decodeSessionMetadata } from "@/lib/geofence";
 import { QRCodeSVG } from "qrcode.react";
@@ -38,11 +38,10 @@ export default function OngoingSessionsPage() {
   const [qrModalSession, setQrModalSession] = useState<ActiveSessionItem | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  // Fetch active sessions from backend / Supabase
+  // Fetch active sessions from secure /api/active-sessions route
   const fetchActiveSessions = useCallback(async (silent = false) => {
     if (!silent) setIsRefreshing(true);
     try {
-      // 1. Try Next.js API route first
       const res = await fetch("/api/active-sessions", {
         headers: { "ngrok-skip-browser-warning": "69420" },
         cache: "no-store"
@@ -57,70 +56,11 @@ export default function OngoingSessionsPage() {
           return;
         }
       }
-
-      // 2. Fallback: Query Supabase directly
-      const todayStr = getTodayDateStr();
-      const startOfTodayIso = getStartOfTodayISO();
-      const nowUtc = Date.now();
-
-      const { data: sessionData, error } = await supabase
-        .from("sessions")
-        .select("id, class_name, date, start_time, end_time, instructor_name, target_academic_year, created_at")
-        .neq("class_name", "__SYSTEM_CONFIG__")
-        .order("created_at", { ascending: false })
-        .limit(50);
-
-      if (!error && sessionData) {
-        const todaySessions = sessionData.filter((s: any) => {
-          const dateVal = s.date || "";
-          const createdVal = s.created_at || "";
-          return dateVal === todayStr || createdVal.startsWith(todayStr) || createdVal >= startOfTodayIso;
-        });
-
-        const sessionIds = todaySessions.map((s: any) => s.id);
-        const attendanceMap: Record<string, number> = {};
-
-        if (sessionIds.length > 0) {
-          const { data: attData } = await supabase
-            .from("attendance")
-            .select("session_id")
-            .in("session_id", sessionIds);
-
-          if (attData) {
-            attData.forEach((att: any) => {
-              if (att.session_id) {
-                attendanceMap[att.session_id] = (attendanceMap[att.session_id] || 0) + 1;
-              }
-            });
-          }
-        }
-
-        const enhanced: ActiveSessionItem[] = [];
-        for (const s of todaySessions) {
-          const timeStr = s.start_time || s.created_at;
-          if (!timeStr) continue;
-
-          const startMs = new Date(timeStr).getTime();
-          const elapsedSec = Math.floor((nowUtc - startMs) / 1000);
-          const rem = Math.max(0, 300 - elapsedSec);
-
-          if (rem > 0) {
-            enhanced.push({
-              ...s,
-              attendance_count: attendanceMap[s.id] || 0,
-              remaining_seconds: rem,
-              is_expired: false,
-              window_duration_seconds: 300
-            });
-          }
-        }
-        setSessions(enhanced);
-      }
     } catch (err) {
       console.error("Failed to fetch ongoing sessions:", err);
     } finally {
       setIsLoading(false);
-      setIsRefreshing(false);
+      if (!silent) setIsRefreshing(false);
     }
   }, []);
 
@@ -130,20 +70,8 @@ export default function OngoingSessionsPage() {
       fetchActiveSessions(true);
     }, 3000);
 
-    // Realtime Supabase subscription for instant attendance and session updates
-    const channel = supabase
-      .channel("ongoing_attendance_realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "attendance" }, () => {
-        fetchActiveSessions(true);
-      })
-      .on("postgres_changes", { event: "*", schema: "public", table: "sessions" }, () => {
-        fetchActiveSessions(true);
-      })
-      .subscribe();
-
     return () => {
       clearInterval(pollInterval);
-      supabase.removeChannel(channel);
     };
   }, [fetchActiveSessions]);
 

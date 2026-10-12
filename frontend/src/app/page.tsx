@@ -1,5 +1,5 @@
 import { Users, UserCheck, CalendarCheck, Activity, CalendarDays, TrendingUp } from "lucide-react";
-import { supabase } from "@/lib/supabase";
+import { supabaseServer } from "@/lib/supabaseServer";
 import DownloadReportButton from "@/components/DownloadReportButton";
 import { WhatsAppDashboardButton } from "@/components/WhatsAppDashboardButton";
 import { AttendanceChart } from "@/components/AttendanceChart";
@@ -11,7 +11,7 @@ export const revalidate = 0; // Dynamic rendering
 
 export default async function Dashboard() {
   // Fetch Total Students
-  const { count: totalStudents } = await supabase
+  const { count: totalStudents } = await supabaseServer
     .from('students')
     .select('*', { count: 'exact', head: true });
 
@@ -19,14 +19,14 @@ export default async function Dashboard() {
   const startOfToday = getStartOfTodayISO();
 
   // Fetch Today's Total Attendances (Cumulative sum of all present attendances marked today)
-  const { count: todayTotalPresent } = await supabase
+  const { count: todayTotalPresent } = await supabaseServer
     .from('attendance')
     .select('*', { count: 'exact', head: true })
     .eq('status', 'Present')
     .gte('recorded_at', startOfToday);
 
   // Fetch Today's Unique Attendance (unique students who attended classes today for Overall Distribution)
-  const { data: todayAttendanceRecords } = await supabase
+  const { data: todayAttendanceRecords } = await supabaseServer
     .from('attendance')
     .select('student_id')
     .eq('status', 'Present')
@@ -38,7 +38,7 @@ export default async function Dashboard() {
   const todayUniqueAbsent = Math.max(0, totalRegistered - todayUniquePresent);
 
   // Fetch Recent Sessions (Last 10)
-  const { data: recentSessions } = await supabase
+  const { data: recentSessions } = await supabaseServer
     .from('sessions')
     .select('id, class_name, instructor_name, created_at, attendance(count)')
     .neq('class_name', '__SYSTEM_CONFIG__')
@@ -54,7 +54,7 @@ export default async function Dashboard() {
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
   const startDate = sevenDaysAgo.toISOString();
 
-  const { data: recentAttendance } = await supabase
+  const { data: recentAttendance } = await supabaseServer
     .from('attendance')
     .select('status, recorded_at')
     .gte('recorded_at', startDate);
