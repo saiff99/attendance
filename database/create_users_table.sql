@@ -29,18 +29,7 @@ DROP POLICY IF EXISTS "allow_insert_app_users" ON app_users;
 DROP POLICY IF EXISTS "allow_update_app_users" ON app_users;
 DROP POLICY IF EXISTS "allow_delete_app_users" ON app_users;
 
--- Policies: Unrestricted server/service_role and secure application access
+-- Policies: Strict Zero-Trust (Service Role Only)
+-- Prevents attackers from inserting Super Admin accounts or modifying user profiles directly via Supabase API.
 CREATE POLICY "service_role_unrestricted_app_users" ON app_users
 FOR ALL TO service_role USING (true) WITH CHECK (true);
-
-CREATE POLICY "allow_read_app_users" ON app_users
-FOR SELECT TO anon, authenticated USING (true);
-
-CREATE POLICY "allow_insert_app_users" ON app_users
-FOR INSERT TO anon, authenticated WITH CHECK (true);
-
-CREATE POLICY "allow_update_app_users" ON app_users
-FOR UPDATE TO anon, authenticated USING (true) WITH CHECK (true);
-
-CREATE POLICY "allow_delete_app_users" ON app_users
-FOR DELETE TO anon, authenticated USING (true);
