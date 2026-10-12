@@ -130,8 +130,7 @@ signal.signal(signal.SIGTERM, cleanup)
 import hmac
 import hashlib
 
-DEFAULT_FALLBACK_API_KEY = "252c5e5c8d51b838c1ea2ce50212c91608cf1e934fc968060432bc7011ba8a03"
-INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY", "").strip() or DEFAULT_FALLBACK_API_KEY
+INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY", "").strip()
 
 
 def sign_tunnel_url(tunnel_url: str) -> str:

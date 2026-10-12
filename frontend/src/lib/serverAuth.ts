@@ -1,14 +1,11 @@
-const STABLE_AUTH_FALLBACK = 'medattend_auth_jwt_secure_key_8f92a3c7b1e4d6f0285a9c3d4e7b1a6f';
-
 function getAuthSecret(): string {
-  if (process.env.AUTH_SECRET && process.env.AUTH_SECRET.trim().length >= 16) {
-    return process.env.AUTH_SECRET.trim();
+  const secret = (process.env.AUTH_SECRET || process.env.JWT_SECRET || '').trim();
+  if (secret.length >= 16) {
+    return secret;
   }
-  if (process.env.JWT_SECRET && process.env.JWT_SECRET.trim().length >= 16) {
-    return process.env.JWT_SECRET.trim();
-  }
-  return STABLE_AUTH_FALLBACK;
+  throw new Error('FATAL SECURITY ERROR: AUTH_SECRET environment variable is missing or insecure. Configure AUTH_SECRET in your environment variables.');
 }
+
 
 export const SESSION_COOKIE_NAME = 'medattend_session';
 
