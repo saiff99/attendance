@@ -60,19 +60,57 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/', request.url));
   }
 
-  // 6. Enforce Student Role Isolation: Students can only access /portal, /selfieattend, /self-attendance, and allowed APIs
+  // 6. Enforce Student Role Isolation: Students can only access /portal, /selfieattend, /self-attendance, and allowed student APIs
   if (isAuthenticated && user?.role === 'Student') {
     if (pathname === '/') {
       return NextResponse.redirect(new URL('/portal', request.url));
     }
-    const adminRestrictedPaths = ['/live-scan', '/ongoing', '/students', '/users', '/audit-logs'];
+    const adminRestrictedPaths = ['/live-scan', '/ongoing', '/students', '/users', '/audit-logs', '/reports'];
     if (adminRestrictedPaths.some(p => pathname === p || pathname.startsWith(`${p}/`))) {
       return NextResponse.redirect(new URL('/portal', request.url));
     }
+
+    // Block all administrative backend and hardware control APIs from Student invocation
+    const adminRestrictedApis = [
+      '/api/ptz',
+      '/api/whatsapp',
+      '/api/start-live-scan',
+      '/api/process-attendance',
+      '/api/users',
+      '/api/audit-logs',
+      '/api/cameras',
+      '/api/ptz-cameras',
+      '/api/ptz-video-feed',
+      '/api/video-feed',
+      '/api/enroll-face',
+      '/api/enroll-face-burst',
+      '/api/upload-photo',
+      '/api/logs',
+    ];
+    if (adminRestrictedApis.some(p => pathname === p || pathname.startsWith(`${p}/`))) {
+      return NextResponse.json(
+        { success: false, error: 'Forbidden: Admin or Faculty privileges required.' },
+        { status: 403 }
+      );
+    }
+
+    // Block Students from modifying campus geofence configuration
+    if (pathname === '/api/geofence' && request.method !== 'GET') {
+      return NextResponse.json(
+        { success: false, error: 'Forbidden: Admin privileges required to update geofence.' },
+        { status: 403 }
+      );
+    }
   }
 
-  // 7. Restrict /audit-logs strictly to Super Admin role
-  if (pathname.startsWith('/audit-logs') && user?.role !== 'Super Admin') {
+  // 7. Restrict /audit-logs and /api/audit-logs strictly to Super Admin role
+  if ((pathname.startsWith('/audit-logs') || pathname.startsWith('/api/audit-logs')) && user?.role !== 'Super Admin') {
+    if (pathname.startsWith('/api/')) {
+      return NextResponse.json(
+        { success: false, error: 'Forbidden: Super Admin access required for audit logs.' },
+        { status: 403 }
+      );
+    }
     return NextResponse.redirect(new URL('/', request.url));
   }
 

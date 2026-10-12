@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { DEFAULT_GEOFENCE_CONFIG, CampusGeofenceConfig } from '@/lib/geofence';
+import { requireRoles } from '@/lib/serverAuth';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,6 +32,11 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const auth = await requireRoles(request, ['Super Admin']);
+    if (auth.errorResponse) {
+      return NextResponse.json(auth.errorResponse.body, { status: auth.errorResponse.status });
+    }
+
     const body = await request.json();
     const updatedConfig: CampusGeofenceConfig = {
       enabled: body.enabled !== undefined ? Boolean(body.enabled) : cachedGeofence.enabled,

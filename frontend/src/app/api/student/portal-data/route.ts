@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
       const cleanReqRoll = requestedRoll.trim();
       const res = await supabaseServer
         .from('students')
-        .select('id, student_roll, full_name, email, academic_year, face_encoding, portal_pin, created_at')
+        .select('id, student_roll, full_name, email, academic_year, face_encoding, portal_pin, portal_password_hash, created_at')
         .ilike('student_roll', cleanReqRoll)
         .maybeSingle();
       student = res.data;
@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
       if (session.studentId) {
         const res = await supabaseServer
           .from('students')
-          .select('id, student_roll, full_name, email, academic_year, face_encoding, portal_pin, created_at')
+          .select('id, student_roll, full_name, email, academic_year, face_encoding, portal_pin, portal_password_hash, created_at')
           .eq('id', session.studentId)
           .maybeSingle();
         student = res.data;
@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
       if (!student && session.studentRoll) {
         const res = await supabaseServer
           .from('students')
-          .select('id, student_roll, full_name, email, academic_year, face_encoding, portal_pin, created_at')
+          .select('id, student_roll, full_name, email, academic_year, face_encoding, portal_pin, portal_password_hash, created_at')
           .ilike('student_roll', session.studentRoll.trim())
           .maybeSingle();
         student = res.data;
@@ -65,7 +65,7 @@ export async function GET(request: NextRequest) {
     if (!student && (session.role === 'Super Admin' || session.role === 'Faculty')) {
       const res = await supabaseServer
         .from('students')
-        .select('id, student_roll, full_name, email, academic_year, face_encoding, portal_pin, created_at')
+        .select('id, student_roll, full_name, email, academic_year, face_encoding, portal_pin, portal_password_hash, created_at')
         .order('student_roll', { ascending: true })
         .limit(1)
         .maybeSingle();
@@ -77,7 +77,7 @@ export async function GET(request: NextRequest) {
     if (!student && session.studentRoll) {
       const res = await supabaseServer
         .from('students')
-        .select('id, student_roll, full_name, email, academic_year, face_encoding, portal_pin, created_at')
+        .select('id, student_roll, full_name, email, academic_year, face_encoding, portal_pin, portal_password_hash, created_at')
         .ilike('student_roll', session.studentRoll.trim())
         .maybeSingle();
       student = res.data;
@@ -304,7 +304,7 @@ export async function GET(request: NextRequest) {
         email: student.email,
         parentPhone: getParentPhone(student),
         hasFaceEnrolled: Boolean(student.face_encoding),
-        hasCustomPin: Boolean(student.portal_pin),
+        hasCustomPin: Boolean(student.portal_pin || student.portal_password_hash),
       },
       summary: {
         totalClasses: totalApplicableClasses,

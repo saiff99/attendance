@@ -37,24 +37,34 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Student record not found.' }, { status: 404 });
     }
 
-    // If student already has a PIN, verify old PIN (unless admin is resetting it)
-    if (session.role === 'Student' && student.portal_pin) {
-      if (!oldPin) {
-        return NextResponse.json({ success: false, error: 'Current PIN is required.' }, { status: 400 });
-      }
-      if (oldPin !== student.portal_pin.trim()) {
-        return NextResponse.json({ success: false, error: 'Current PIN is incorrect.' }, { status: 401 });
+    // If student already has a PIN or password hash, verify old PIN (unless admin is resetting it)
+    if (session.role === 'Student') {
+      const hasExistingSecurity = Boolean(student.portal_password_hash || student.portal_pin);
+      if (hasExistingSecurity) {
+        if (!oldPin) {
+          return NextResponse.json({ success: false, error: 'Current PIN is required.' }, { status: 400 });
+        }
+        let isOldMatch = false;
+        if (student.portal_password_hash && student.portal_password_hash.startsWith('$2')) {
+          isOldMatch = await bcrypt.compare(oldPin, student.portal_password_hash);
+        }
+        if (!isOldMatch && student.portal_pin) {
+          isOldMatch = (oldPin === student.portal_pin.trim());
+        }
+        if (!isOldMatch) {
+          return NextResponse.json({ success: false, error: 'Current PIN is incorrect.' }, { status: 401 });
+        }
       }
     }
 
-    // Hash the PIN with bcrypt
+    // Hash the PIN with bcrypt (10 rounds)
     const passwordHash = await bcrypt.hash(newPin, 10);
 
-    // Update students table
+    // Update students table: store salted bcrypt hash and clear plain text PIN
     const { error: updateErr } = await supabaseServer
       .from('students')
       .update({
-        portal_pin: newPin,
+        portal_pin: null,
         portal_password_hash: passwordHash,
       })
       .eq('id', student.id);

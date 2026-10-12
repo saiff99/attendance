@@ -123,3 +123,55 @@ export async function verifySessionToken(token: string): Promise<SessionPayload 
     return null;
   }
 }
+
+/**
+ * Extract and verify SessionPayload directly from incoming Request or NextRequest.
+ */
+export async function getSessionFromRequest(request: Request | any): Promise<SessionPayload | null> {
+  try {
+    // 1. If NextRequest with cookies API
+    if (request && typeof request.cookies?.get === 'function') {
+      const cookieVal = request.cookies.get(SESSION_COOKIE_NAME)?.value;
+      if (cookieVal) return verifySessionToken(cookieVal);
+    }
+
+    // 2. Fallback to standard cookie header
+    const rawHeader = request?.headers?.get?.('cookie') || '';
+    if (rawHeader) {
+      const match = rawHeader.match(new RegExp(`(?:^|;\\s*)${SESSION_COOKIE_NAME}=([^;]+)`));
+      if (match && match[1]) {
+        return verifySessionToken(decodeURIComponent(match[1]));
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Enforce role authorization for API routes.
+ */
+export async function requireRoles(
+  request: Request | any,
+  allowedRoles: ('Super Admin' | 'Faculty' | 'Student')[]
+): Promise<{ user: SessionPayload; errorResponse?: never } | { user?: never; errorResponse: any }> {
+  const session = await getSessionFromRequest(request);
+  if (!session) {
+    return {
+      errorResponse: {
+        status: 401,
+        body: { success: false, error: 'Unauthorized: Authentication session required.' }
+      }
+    };
+  }
+  if (!allowedRoles.includes(session.role)) {
+    return {
+      errorResponse: {
+        status: 403,
+        body: { success: false, error: 'Forbidden: Insufficient role permissions.' }
+      }
+    };
+  }
+  return { user: session };
+}

@@ -3,9 +3,9 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { 
-  Camera, CheckCircle2, ShieldCheck, AlertCircle, RefreshCw, 
-  UserCheck, ArrowRight, ArrowLeft, Clock, MapPin, BookOpen, 
+import {
+  Camera, CheckCircle2, ShieldCheck, AlertCircle, RefreshCw,
+  UserCheck, ArrowRight, ArrowLeft, Clock, MapPin, BookOpen,
   Sparkles, SwitchCamera, Check, X, ShieldAlert, GraduationCap,
   Building2, HelpCircle, Lock, Timer, Hourglass, Navigation, Loader2,
   Eye, EyeOff, Smile, Activity
@@ -13,11 +13,11 @@ import {
 import Webcam from "react-webcam";
 import { getBackendUrl } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
-import { 
-  CampusGeofenceConfig, 
-  DEFAULT_GEOFENCE_CONFIG, 
-  calculateDistanceMeters, 
-  formatDistance, 
+import {
+  CampusGeofenceConfig,
+  DEFAULT_GEOFENCE_CONFIG,
+  calculateDistanceMeters,
+  formatDistance,
   getUserCoordinates,
   decodeSessionMetadata,
   getLocalGeofence
@@ -78,7 +78,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
     }
     return "select_session";
   });
-  
+
   // User Authentication & Student Cohort Awareness
   const { user } = useAuth();
   const isStudentUser = Boolean(user && user.role === "Student");
@@ -106,11 +106,11 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
     }
     return null;
   });
-  
+
   // Live Clock for Real-Time 1-second Countdown Ticks (Hydration safe)
   const [isMounted, setIsMounted] = useState(false);
   const [nowTime, setNowTime] = useState<number>(Date.now());
-  
+
   useEffect(() => {
     setIsMounted(true);
     setNowTime(Date.now());
@@ -137,14 +137,14 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [submittingAttendance, setSubmittingAttendance] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
-  
+
   // Active Liveness & Blink Detection States
   const [livenessPhase, setLivenessPhase] = useState<"positioning" | "ready" | "blinking" | "verified">("positioning");
   const [livenessPrompt, setLivenessPrompt] = useState<string>("Center your face inside the oval");
   const [blinkDetected, setBlinkDetected] = useState<boolean>(false);
   const livenessCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const livenessHistoryRef = useRef<number[]>([]);
-  
+
   // Result States
   const [resultData, setResultData] = useState<{
     success: boolean;
@@ -223,7 +223,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
     try {
       const coords = await getUserCoordinates(12000);
       setUserCoords({ latitude: coords.latitude, longitude: coords.longitude });
-      
+
       const dist = calculateDistanceMeters(
         coords.latitude,
         coords.longitude,
@@ -348,7 +348,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
             return;
           }
         }
-      } catch (e) {}
+      } catch (e) { }
 
       // 2. Direct Supabase Query
       const { data: sessionData, error } = await supabase
@@ -442,7 +442,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
             return;
           }
         }
-      } catch (e) {}
+      } catch (e) { }
 
       // 2. Direct Supabase Query
       let { data: studentData } = await supabase
@@ -649,7 +649,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
           if (typeof window !== "undefined" && window.navigator && window.navigator.vibrate) {
             window.navigator.vibrate([40, 30, 80]);
           }
-        } catch (e) {}
+        } catch (e) { }
 
         // Automatically capture high-res frame 150ms after blink
         setTimeout(() => {
@@ -936,8 +936,8 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                     Selfie check-in is valid for <strong>5 minutes</strong> from start time:
                   </p>
                 </div>
-                <button 
-                  onClick={() => fetchActiveSessions()} 
+                <button
+                  onClick={() => fetchActiveSessions()}
                   disabled={isRefreshing || loadingSessions}
                   className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all cursor-pointer disabled:opacity-60"
                   title="Refresh Sessions"
@@ -1027,11 +1027,10 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                           }
                         }}
                         disabled={isExp}
-                        className={`w-full text-left group p-3.5 rounded-xl border transition-all duration-150 flex items-center justify-between ${
-                          isExp
-                            ? "bg-slate-950/40 border-slate-800/50 opacity-60 cursor-not-allowed"
-                            : "bg-slate-950/70 hover:bg-indigo-950/30 active:bg-indigo-900/40 border-slate-800 hover:border-indigo-500/50 cursor-pointer shadow-md hover:shadow-indigo-500/10"
-                        }`}
+                        className={`w-full text-left group p-3.5 rounded-xl border transition-all duration-150 flex items-center justify-between ${isExp
+                          ? "bg-slate-950/40 border-slate-800/50 opacity-60 cursor-not-allowed"
+                          : "bg-slate-950/70 hover:bg-indigo-950/30 active:bg-indigo-900/40 border-slate-800 hover:border-indigo-500/50 cursor-pointer shadow-md hover:shadow-indigo-500/10"
+                          }`}
                       >
                         <div className="min-w-0 pr-2">
                           <div className="flex items-center gap-2 mb-1">
@@ -1040,7 +1039,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                               {sess.class_name}
                             </h4>
                           </div>
-                          
+
                           <div className="flex items-center gap-2.5 text-xs text-slate-400 flex-wrap">
                             <span className="truncate">👨‍🏫 {decodeSessionMetadata(sess.instructor_name).topic || "Faculty"}</span>
                             {sess.target_academic_year && (
@@ -1054,13 +1053,12 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                         <div className="flex flex-col items-end gap-1.5 shrink-0">
                           {/* 5-Min Timer Pill */}
                           {!isExp ? (
-                            <span 
+                            <span
                               suppressHydrationWarning
-                              className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold flex items-center gap-1 shadow-sm ${
-                                remSec <= 60 
-                                  ? "bg-red-500/20 text-red-300 border border-red-500/40 animate-pulse" 
-                                  : "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
-                              }`}
+                              className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold flex items-center gap-1 shadow-sm ${remSec <= 60
+                                ? "bg-red-500/20 text-red-300 border border-red-500/40 animate-pulse"
+                                : "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
+                                }`}
                             >
                               <Timer className="w-3.5 h-3.5" />
                               <span suppressHydrationWarning>{formatTimeMMSS(remSec)} left</span>
@@ -1100,15 +1098,14 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
         {/* ========================================================================= */}
         {step === "enter_roll" && selectedSession && (
           <div className="flex flex-col gap-3.5 animate-in fade-in slide-in-from-right-3 duration-200">
-            
+
             {/* Live Remaining Countdown Banner */}
-            <div className={`p-3 rounded-xl border flex items-center justify-between shadow-lg transition-all ${
-              isSelectedExpired 
-                ? "bg-red-950/50 border-red-500/50 text-red-300"
-                : selectedRemainingSec <= 60
-                  ? "bg-amber-950/40 border-amber-500/40 text-amber-300 animate-pulse"
-                  : "bg-indigo-950/40 border-indigo-500/30 text-indigo-300"
-            }`}>
+            <div className={`p-3 rounded-xl border flex items-center justify-between shadow-lg transition-all ${isSelectedExpired
+              ? "bg-red-950/50 border-red-500/50 text-red-300"
+              : selectedRemainingSec <= 60
+                ? "bg-amber-950/40 border-amber-500/40 text-amber-300 animate-pulse"
+                : "bg-indigo-950/40 border-indigo-500/30 text-indigo-300"
+              }`}>
               <div className="flex items-center gap-2 min-w-0">
                 <span className={`w-2 h-2 rounded-full shrink-0 ${isSelectedExpired ? "bg-red-500" : "bg-amber-400 animate-ping"}`} />
                 <div className="min-w-0">
@@ -1120,15 +1117,14 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
               </div>
 
               <div className="flex items-center gap-1.5 shrink-0">
-                <div className={`px-2.5 py-1 rounded-lg font-mono font-bold text-xs flex items-center gap-1 ${
-                  isSelectedExpired 
-                    ? "bg-red-500/20 text-red-400 border border-red-500/30"
-                    : "bg-slate-900 text-amber-300 border border-amber-500/30 text-sm"
-                }`}>
+                <div className={`px-2.5 py-1 rounded-lg font-mono font-bold text-xs flex items-center gap-1 ${isSelectedExpired
+                  ? "bg-red-500/20 text-red-400 border border-red-500/30"
+                  : "bg-slate-900 text-amber-300 border border-amber-500/30 text-sm"
+                  }`}>
                   <Timer className="w-3.5 h-3.5" />
                   {isSelectedExpired ? "00:00 (Closed)" : formatTimeMMSS(selectedRemainingSec)}
                 </div>
-                <button 
+                <button
                   onClick={() => {
                     hasAutoSelectedRef.current = true;
                     if (typeof window !== "undefined" && window.location.search) {
@@ -1228,22 +1224,20 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                   );
 
                   return (
-                    <div className={`mt-4 p-4 rounded-2xl border flex flex-col gap-3 animate-in fade-in zoom-in-95 duration-150 ${
-                      isCohortMismatch
-                        ? "bg-rose-950/40 border-rose-500/50 shadow-lg shadow-rose-950/30"
-                        : student.is_already_present
+                    <div className={`mt-4 p-4 rounded-2xl border flex flex-col gap-3 animate-in fade-in zoom-in-95 duration-150 ${isCohortMismatch
+                      ? "bg-rose-950/40 border-rose-500/50 shadow-lg shadow-rose-950/30"
+                      : student.is_already_present
                         ? "bg-emerald-950/40 border-emerald-500/50 shadow-lg shadow-emerald-950/30"
                         : "bg-slate-950/80 border-slate-800"
-                    }`}>
+                      }`}>
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2.5 min-w-0">
-                          <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shrink-0 ${
-                            isCohortMismatch
-                              ? "bg-rose-500/20 border border-rose-500/50 text-rose-300"
-                              : student.is_already_present
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shrink-0 ${isCohortMismatch
+                            ? "bg-rose-500/20 border border-rose-500/50 text-rose-300"
+                            : student.is_already_present
                               ? "bg-emerald-500/20 border border-emerald-500/50 text-emerald-300"
                               : "bg-indigo-500/10 border border-indigo-500/30 text-indigo-300"
-                          }`}>
+                            }`}>
                             {student.full_name.substring(0, 2).toUpperCase()}
                           </div>
                           <div className="min-w-0">
@@ -1251,11 +1245,10 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <span className="text-xs text-slate-400 font-mono">Roll: {student.student_roll}</span>
                               <span className="text-slate-600">•</span>
-                              <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${
-                                isCohortMismatch 
-                                  ? "bg-rose-500/20 border-rose-500/40 text-rose-300 font-bold" 
-                                  : "bg-slate-800 border-slate-700 text-slate-300"
-                              }`}>
+                              <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${isCohortMismatch
+                                ? "bg-rose-500/20 border-rose-500/40 text-rose-300 font-bold"
+                                : "bg-slate-800 border-slate-700 text-slate-300"
+                                }`}>
                                 {student.academic_year}
                               </span>
                             </div>
@@ -1263,7 +1256,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                         </div>
 
                         {isCohortMismatch ? (
-                          <div 
+                          <div
                             className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40 text-xs font-bold shrink-0 animate-in zoom-in-75 duration-150 shadow-sm"
                             title="Cohort Mismatch: Not allowed for this session"
                           >
@@ -1271,7 +1264,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                             <span>Wrong Cohort</span>
                           </div>
                         ) : student.is_already_present ? (
-                          <div 
+                          <div
                             className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs font-bold shrink-0 animate-in zoom-in-75 duration-150 shadow-sm"
                             title="Attendance Already Recorded by CCTV Cameras"
                           >
@@ -1279,7 +1272,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                             <span>Present</span>
                           </div>
                         ) : (
-                          <div 
+                          <div
                             className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-500/15 text-red-300 border border-red-500/30 text-xs font-bold shrink-0 animate-in zoom-in-75 duration-150 shadow-sm"
                             title="Not Yet Detected by CCTV Cameras"
                           >
@@ -1324,28 +1317,26 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
 
                       {/* GPS Geofence Security Verification Status */}
                       {effectiveGeofence.enabled && !isCohortMismatch && !student.is_already_present && student.has_face_enrolled && (
-                        <div className={`p-3.5 rounded-xl border flex flex-col gap-2 transition-all ${
-                          geofenceStatus === "allowed"
-                            ? "bg-emerald-950/40 border-emerald-500/40 text-emerald-300 shadow-sm shadow-emerald-950/20"
-                            : geofenceStatus === "blocked"
+                        <div className={`p-3.5 rounded-xl border flex flex-col gap-2 transition-all ${geofenceStatus === "allowed"
+                          ? "bg-emerald-950/40 border-emerald-500/40 text-emerald-300 shadow-sm shadow-emerald-950/20"
+                          : geofenceStatus === "blocked"
                             ? "bg-rose-950/60 border-rose-500/50 text-rose-300 shadow-md shadow-rose-950/30"
                             : geofenceStatus === "permission_error"
-                            ? "bg-amber-950/50 border-amber-500/40 text-amber-300"
-                            : "bg-slate-900/90 border-slate-800 text-slate-300"
-                        }`}>
+                              ? "bg-amber-950/50 border-amber-500/40 text-amber-300"
+                              : "bg-slate-900/90 border-slate-800 text-slate-300"
+                          }`}>
                           <div className="flex items-center justify-between gap-2">
                             <div className="flex items-center gap-2">
-                              <MapPin className={`w-4 h-4 shrink-0 ${
-                                geofenceStatus === "allowed" ? "text-emerald-400" :
+                              <MapPin className={`w-4 h-4 shrink-0 ${geofenceStatus === "allowed" ? "text-emerald-400" :
                                 geofenceStatus === "blocked" ? "text-rose-400" :
-                                geofenceStatus === "permission_error" ? "text-amber-400" : "text-indigo-400"
-                              }`} />
+                                  geofenceStatus === "permission_error" ? "text-amber-400" : "text-indigo-400"
+                                }`} />
                               <span className="font-bold text-xs text-white">
                                 {geofenceStatus === "allowed" ? "GPS Boundary: Verified Inside Campus" :
-                                 geofenceStatus === "blocked" ? "GPS Boundary Check: Outside Campus" :
-                                 geofenceStatus === "permission_error" ? "Location Permission Needed" :
-                                 geofenceStatus === "checking" ? "Checking Classroom GPS Coordinates..." :
-                                 "GPS Geofence Protection"}
+                                  geofenceStatus === "blocked" ? "GPS Boundary Check: Outside Campus" :
+                                    geofenceStatus === "permission_error" ? "Location Permission Needed" :
+                                      geofenceStatus === "checking" ? "Checking Classroom GPS Coordinates..." :
+                                        "GPS Geofence Protection"}
                               </span>
                             </div>
 
@@ -1435,13 +1426,12 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                         <button
                           onClick={handleProceedToSelfie}
                           disabled={geofenceStatus === "checking" || geofenceStatus === "blocked"}
-                          className={`w-full py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 mt-1 ${
-                            geofenceStatus === "blocked"
-                              ? "bg-slate-800 text-slate-500 border border-slate-700/50 cursor-not-allowed opacity-75"
-                              : geofenceStatus === "checking"
+                          className={`w-full py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 mt-1 ${geofenceStatus === "blocked"
+                            ? "bg-slate-800 text-slate-500 border border-slate-700/50 cursor-not-allowed opacity-75"
+                            : geofenceStatus === "checking"
                               ? "bg-indigo-900/60 text-indigo-200 cursor-wait"
                               : "bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-lg shadow-emerald-600/25 cursor-pointer"
-                          }`}
+                            }`}
                         >
                           {geofenceStatus === "checking" ? (
                             <><Loader2 className="w-4 h-4 animate-spin" /> Verifying Classroom GPS...</>
@@ -1465,7 +1455,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
         {/* ========================================================================= */}
         {step === "capture_selfie" && student && selectedSession && (
           <div className="flex flex-col gap-3 animate-in fade-in slide-in-from-right-3 duration-200">
-            
+
             <div className="flex items-center justify-between px-1">
               <button
                 onClick={() => {
@@ -1484,11 +1474,10 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                     <span>GPS In-Range</span>
                   </span>
                 )}
-                <span className={`px-2 py-0.5 rounded text-[11px] font-mono font-bold flex items-center gap-1 ${
-                  isSelectedExpired 
-                    ? "bg-red-500/20 text-red-400 border border-red-500/30" 
-                    : "bg-slate-900 text-amber-300 border border-amber-500/30"
-                }`}>
+                <span className={`px-2 py-0.5 rounded text-[11px] font-mono font-bold flex items-center gap-1 ${isSelectedExpired
+                  ? "bg-red-500/20 text-red-400 border border-red-500/30"
+                  : "bg-slate-900 text-amber-300 border border-amber-500/30"
+                  }`}>
                   <Timer className="w-3 h-3" />
                   {isSelectedExpired ? "Expired" : formatTimeMMSS(selectedRemainingSec)}
                 </span>
@@ -1556,38 +1545,34 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                           />
 
                           <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center">
-                            <div className={`w-[68%] h-[68%] border-2 rounded-[50%] relative flex items-center justify-center transition-all duration-300 ${
-                              livenessPhase === "verified"
-                                ? "border-emerald-400 shadow-[0_0_50px_rgba(52,211,153,0.4)]"
-                                : livenessPhase === "blinking"
+                            <div className={`w-[68%] h-[68%] border-2 rounded-[50%] relative flex items-center justify-center transition-all duration-300 ${livenessPhase === "verified"
+                              ? "border-emerald-400 shadow-[0_0_50px_rgba(52,211,153,0.4)]"
+                              : livenessPhase === "blinking"
                                 ? "border-cyan-400 shadow-[0_0_50px_rgba(34,211,238,0.3)] animate-pulse"
                                 : livenessPhase === "ready"
-                                ? "border-amber-400/90 shadow-[0_0_50px_rgba(251,191,36,0.25)]"
-                                : "border-dashed border-indigo-400/70 shadow-[0_0_50px_rgba(99,102,241,0.15)]"
-                            }`}>
-                              <div className={`absolute left-0 right-0 h-0.5 bg-gradient-to-r from-transparent ${
-                                livenessPhase === "verified" ? "via-emerald-400" :
+                                  ? "border-amber-400/90 shadow-[0_0_50px_rgba(251,191,36,0.25)]"
+                                  : "border-dashed border-indigo-400/70 shadow-[0_0_50px_rgba(99,102,241,0.15)]"
+                              }`}>
+                              <div className={`absolute left-0 right-0 h-0.5 bg-gradient-to-r from-transparent ${livenessPhase === "verified" ? "via-emerald-400" :
                                 livenessPhase === "blinking" ? "via-cyan-400" :
-                                livenessPhase === "ready" ? "via-amber-400" : "via-indigo-400"
-                              } to-transparent animate-scan`} />
-                              <div className={`absolute top-2 w-4 h-1 rounded-full ${
-                                livenessPhase === "verified" ? "bg-emerald-400" :
+                                  livenessPhase === "ready" ? "via-amber-400" : "via-indigo-400"
+                                } to-transparent animate-scan`} />
+                              <div className={`absolute top-2 w-4 h-1 rounded-full ${livenessPhase === "verified" ? "bg-emerald-400" :
                                 livenessPhase === "ready" || livenessPhase === "blinking" ? "bg-amber-400" : "bg-indigo-400"
-                              }`} />
-                              <div className={`absolute bottom-2 w-4 h-1 rounded-full ${
-                                livenessPhase === "verified" ? "bg-emerald-400" :
+                                }`} />
+                              <div className={`absolute bottom-2 w-4 h-1 rounded-full ${livenessPhase === "verified" ? "bg-emerald-400" :
                                 livenessPhase === "ready" || livenessPhase === "blinking" ? "bg-amber-400" : "bg-indigo-400"
-                              }`} />
+                                }`} />
                             </div>
 
                             <div className="mt-3 flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-black/75 backdrop-blur-md border text-xs font-semibold shadow-lg transition-all duration-200"
                               style={{
                                 borderColor: livenessPhase === "verified" ? "rgba(52,211,153,0.5)" :
-                                             livenessPhase === "blinking" ? "rgba(34,211,238,0.5)" :
-                                             livenessPhase === "ready" ? "rgba(251,191,36,0.5)" : "rgba(255,255,255,0.15)",
+                                  livenessPhase === "blinking" ? "rgba(34,211,238,0.5)" :
+                                    livenessPhase === "ready" ? "rgba(251,191,36,0.5)" : "rgba(255,255,255,0.15)",
                                 color: livenessPhase === "verified" ? "#6ee7b7" :
-                                       livenessPhase === "blinking" ? "#67e8f9" :
-                                       livenessPhase === "ready" ? "#fde68a" : "#ffffff"
+                                  livenessPhase === "blinking" ? "#67e8f9" :
+                                    livenessPhase === "ready" ? "#fde68a" : "#ffffff"
                               }}
                             >
                               {livenessPhase === "verified" ? (
@@ -1615,9 +1600,9 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                     </>
                   ) : (
                     <div className="relative w-full h-full">
-                      <img 
-                        src={capturedImage} 
-                        alt="Captured Selfie" 
+                      <img
+                        src={capturedImage}
+                        alt="Captured Selfie"
                         className="w-full h-full object-cover"
                       />
                       <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-black/80 backdrop-blur-md px-3.5 py-1 rounded-full border border-emerald-500/40 text-xs text-emerald-300 font-bold flex items-center gap-1.5 shadow-lg">
@@ -1686,17 +1671,15 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
         {/* ========================================================================= */}
         {step === "result" && resultData && (
           <div className="flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-200">
-            <div className={`rounded-3xl border p-6 sm:p-7 shadow-2xl flex flex-col items-center text-center ${
-              resultData.success 
-                ? "bg-slate-900/90 border-emerald-500/40 shadow-emerald-950/20" 
-                : "bg-slate-900/90 border-red-500/40 shadow-red-950/20"
-            }`}>
-              
-              <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 shadow-xl ${
-                resultData.success 
-                  ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 shadow-emerald-500/20" 
-                  : "bg-red-500/20 text-red-400 border border-red-500/40 shadow-red-500/20"
+            <div className={`rounded-3xl border p-6 sm:p-7 shadow-2xl flex flex-col items-center text-center ${resultData.success
+              ? "bg-slate-900/90 border-emerald-500/40 shadow-emerald-950/20"
+              : "bg-slate-900/90 border-red-500/40 shadow-red-950/20"
               }`}>
+
+              <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 shadow-xl ${resultData.success
+                ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 shadow-emerald-500/20"
+                : "bg-red-500/20 text-red-400 border border-red-500/40 shadow-red-500/20"
+                }`}>
                 {resultData.success ? (
                   <CheckCircle2 className="w-9 h-9" />
                 ) : (
@@ -1705,11 +1688,11 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
               </div>
 
               <h2 className="text-lg sm:text-xl font-bold text-white">
-                {resultData.success 
-                  ? (resultData.already_marked ? "Already Marked Present" : "Attendance Verified & Marked!") 
+                {resultData.success
+                  ? (resultData.already_marked ? "Already Marked Present" : "Attendance Verified & Marked!")
                   : "Face Verification Failed"}
               </h2>
-              
+
               <p className="text-xs text-slate-300 mt-1.5 max-w-xs">
                 {resultData.message}
               </p>
@@ -1779,7 +1762,8 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
       </footer>
 
       {/* Animation Style */}
-      <style dangerouslySetInnerHTML={{__html: `
+      <style dangerouslySetInnerHTML={{
+        __html: `
         @keyframes scan {
           0% { top: 15%; opacity: 0.8; }
           50% { top: 85%; opacity: 1; }

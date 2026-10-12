@@ -1,10 +1,16 @@
 import { NextResponse } from 'next/server';
 import { fetchBackend } from '@/lib/serverBackend';
+import { requireRoles } from '@/lib/serverAuth';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
   try {
+    const auth = await requireRoles(req, ['Super Admin']);
+    if (auth.errorResponse) {
+      return NextResponse.json(auth.errorResponse.body, { status: auth.errorResponse.status });
+    }
+
     const body = await req.json();
     const res = await fetchBackend('/api/whatsapp/update-token', {
       method: 'POST',
