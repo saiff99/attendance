@@ -109,29 +109,37 @@ export default function LoginPage() {
         </div>
 
         {/* Tab Switcher: Admin / Faculty vs Student Portal */}
-        <div className="grid grid-cols-2 p-1 bg-slate-950/80 border border-slate-800 rounded-2xl mb-5">
+        <div className="relative grid grid-cols-2 p-1 bg-slate-950/80 border border-slate-800 rounded-2xl mb-5 select-none">
+          {/* Animated Sliding Pill Indicator */}
+          <div
+            className={`absolute top-1 bottom-1 left-1 w-[calc(50%-4px)] rounded-xl bg-indigo-600 shadow-md shadow-indigo-600/30 transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] pointer-events-none ${
+              loginMode === "student" ? "translate-x-full" : "translate-x-0"
+            }`}
+          />
+
           <button
             type="button"
             onClick={() => setLoginMode("admin")}
-            className={`py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+            className={`relative z-10 py-2.5 px-3 rounded-xl text-xs font-bold transition-colors duration-200 flex items-center justify-center gap-1.5 cursor-pointer ${
               loginMode === "admin"
-                ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
+                ? "text-white"
                 : "text-slate-400 hover:text-white"
             }`}
           >
-            <ShieldCheck className="w-3.5 h-3.5" />
+            <ShieldCheck className={`w-3.5 h-3.5 transition-transform duration-200 ${loginMode === "admin" ? "scale-105" : ""}`} />
             <span>Staff &amp; Admin</span>
           </button>
+
           <button
             type="button"
             onClick={() => setLoginMode("student")}
-            className={`py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+            className={`relative z-10 py-2.5 px-3 rounded-xl text-xs font-bold transition-colors duration-200 flex items-center justify-center gap-1.5 cursor-pointer ${
               loginMode === "student"
-                ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
+                ? "text-white"
                 : "text-slate-400 hover:text-white"
             }`}
           >
-            <GraduationCap className="w-3.5 h-3.5" />
+            <GraduationCap className={`w-3.5 h-3.5 transition-transform duration-200 ${loginMode === "student" ? "scale-105" : ""}`} />
             <span>Student Portal</span>
           </button>
         </div>
