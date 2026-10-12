@@ -83,18 +83,17 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
   const { user } = useAuth();
   const isStudentUser = Boolean(user && user.role === "Student");
   const studentCohort = user?.academicYear || "";
-  const [showAllCohorts, setShowAllCohorts] = useState<boolean>(false);
 
   // Data States
   const [sessions, setSessions] = useState<ActiveSession[]>(initialSessions);
 
-  // Filter active sessions strictly for logged-in student's cohort (unless toggled to show all)
+  // Filter active sessions strictly for logged-in student's cohort
   const displayedSessions = useMemo(() => {
-    if (isStudentUser && !showAllCohorts && studentCohort) {
+    if (isStudentUser && studentCohort) {
       return sessions.filter((sess) => isCohortMatching(sess.target_academic_year, studentCohort));
     }
     return sessions;
-  }, [sessions, isStudentUser, showAllCohorts, studentCohort]);
+  }, [sessions, isStudentUser, studentCohort]);
 
   const [loadingSessions, setLoadingSessions] = useState<boolean>(initialSessions.length === 0);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
@@ -907,21 +906,15 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          {isStudentUser && (
-            <a
-              href="/portal"
-              className="px-2.5 py-1 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold border border-slate-700 transition-all flex items-center gap-1 cursor-pointer"
-              title="Return to Student Portal"
-            >
-              <span>← Portal</span>
-            </a>
-          )}
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-950/60 border border-emerald-500/30 text-emerald-400 text-[11px] font-medium">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            AI Active
-          </div>
-        </div>
+        {isStudentUser && (
+          <a
+            href="/portal"
+            className="px-2.5 py-1 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold border border-slate-700 transition-all flex items-center gap-1 cursor-pointer"
+            title="Return to Student Portal"
+          >
+            <span>← Portal</span>
+          </a>
+        )}
       </header>
 
       {/* Main Container */}
@@ -982,62 +975,34 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                   <div>
                     <h3 className="text-sm font-semibold text-white">No Live Lectures for {studentCohort}</h3>
                     <p className="text-xs text-slate-400 mt-1 max-w-xs">
-                      No attendance sessions are currently running for your cohort. ({sessions.length} {sessions.length === 1 ? "class is" : "classes are"} running in other cohorts).
+                      No attendance sessions are currently running for your cohort. Please wait for the professor to start the session.
                     </p>
                   </div>
-                  <div className="flex items-center gap-2 flex-wrap justify-center mt-2">
-                    <button
-                      type="button"
-                      onClick={() => setShowAllCohorts(true)}
-                      className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition-all cursor-pointer border border-slate-700"
-                    >
-                      <span>Show All Batches ({sessions.length})</span>
-                    </button>
-                    <button
-                      onClick={() => fetchActiveSessions()}
-                      disabled={isRefreshing || loadingSessions}
-                      className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-1.5 transition-all shadow-md shadow-indigo-600/25 cursor-pointer disabled:opacity-60"
-                    >
-                      <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin" : ""}`} />
-                      <span>{isRefreshing ? "Refreshing..." : "Check Again"}</span>
-                    </button>
-                  </div>
+                  <button
+                    onClick={() => fetchActiveSessions()}
+                    disabled={isRefreshing || loadingSessions}
+                    className="mt-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-1.5 transition-all shadow-md shadow-indigo-600/25 cursor-pointer disabled:opacity-60"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin" : ""}`} />
+                    <span>{isRefreshing ? "Refreshing..." : "Check Again"}</span>
+                  </button>
                 </div>
               ) : (
                 <div className="flex flex-col gap-2.5 mt-2">
                   {/* Cohort Filter Banner for Logged-In Students */}
                   {isStudentUser && studentCohort && (
-                    <div className="flex items-center justify-between p-2.5 rounded-xl bg-indigo-950/40 border border-indigo-500/30 text-xs">
+                    <div className="flex items-center p-2.5 rounded-xl bg-indigo-950/40 border border-indigo-500/30 text-xs">
                       <div className="flex items-center gap-2 min-w-0">
                         <GraduationCap className="w-4 h-4 text-indigo-400 shrink-0" />
                         <div className="min-w-0">
                           <span className="font-semibold text-white">
-                            {!showAllCohorts ? `${studentCohort} Classes Only` : `Showing All Batches (${sessions.length})`}
+                            {studentCohort} Classes Only
                           </span>
                           <span className="text-slate-400 text-[11px] block truncate">
                             Logged in as {user?.name || user?.studentRoll}
                           </span>
                         </div>
                       </div>
-                      {!showAllCohorts ? (
-                        sessions.length > displayedSessions.length && (
-                          <button
-                            type="button"
-                            onClick={() => setShowAllCohorts(true)}
-                            className="text-[11px] font-medium text-indigo-300 hover:text-white bg-indigo-500/20 hover:bg-indigo-500/30 px-2.5 py-1 rounded-lg border border-indigo-500/30 transition-all shrink-0 cursor-pointer"
-                          >
-                            Show all ({sessions.length})
-                          </button>
-                        )
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => setShowAllCohorts(false)}
-                          className="text-[11px] font-semibold text-indigo-400 hover:text-indigo-300 bg-slate-900 px-2.5 py-1 rounded-lg border border-slate-700 transition-all shrink-0 cursor-pointer"
-                        >
-                          Filter: {studentCohort}
-                        </button>
-                      )}
                     </div>
                   )}
 
