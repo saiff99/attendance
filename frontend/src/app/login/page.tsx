@@ -3,11 +3,10 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Activity, Lock, User, ArrowRight, ShieldCheck,
-  AlertCircle, Smartphone, Eye, EyeOff, Loader2, CheckCircle2,
+  Activity, Lock, User, ShieldCheck,
+  AlertCircle, Eye, EyeOff, Loader2, CheckCircle2,
   GraduationCap, KeyRound
 } from "lucide-react";
-import Link from "next/link";
 import { useAuth } from "@/lib/auth";
 
 export default function LoginPage() {
@@ -244,19 +243,6 @@ export default function LoginPage() {
             </button>
           </div>
         </form>
-
-        {/* Student Selfie Quick Link */}
-        <div className="mt-6 pt-5 border-t border-slate-800/80 flex flex-col items-center text-center gap-2">
-          <p className="text-xs text-slate-400">Attending an active classroom session right now?</p>
-          <Link
-            href="/selfieattend"
-            className="w-full py-2.5 px-4 rounded-xl bg-slate-800/90 hover:bg-slate-700/90 border border-slate-700/70 text-emerald-300 hover:text-emerald-200 text-xs font-semibold flex items-center justify-center gap-2 transition-all shadow-sm group"
-          >
-            <Smartphone className="w-4 h-4 text-emerald-400 transition-transform group-hover:scale-110" />
-            <span>Open Student Selfie Attendance</span>
-            <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-1" />
-          </Link>
-        </div>
       </div>
 
       {/* Footer */}
