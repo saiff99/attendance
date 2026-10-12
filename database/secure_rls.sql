@@ -18,11 +18,15 @@ ALTER TABLE IF EXISTS academic_subjects ENABLE ROW LEVEL SECURITY;
 -- Anonymous and public clients CANNOT read, insert, update, or delete accounts.
 -- Prevents attackers from inserting Super Admin accounts or changing passwords.
 -- ==============================================================================
-DROP POLICY IF EXISTS "service_role_unrestricted_app_users" ON app_users;
-DROP POLICY IF EXISTS "allow_read_app_users" ON app_users;
-DROP POLICY IF EXISTS "allow_insert_app_users" ON app_users;
-DROP POLICY IF EXISTS "allow_update_app_users" ON app_users;
-DROP POLICY IF EXISTS "allow_delete_app_users" ON app_users;
+-- Dynamically drop ALL previous policies on app_users (regardless of their name)
+DO $$ 
+DECLARE 
+    pol RECORD;
+BEGIN
+    FOR pol IN (SELECT policyname FROM pg_policies WHERE tablename = 'app_users' AND schemaname = 'public') LOOP
+        EXECUTE 'DROP POLICY IF EXISTS ' || quote_ident(pol.policyname) || ' ON public.app_users';
+    END LOOP;
+END $$;
 
 -- Only server / service_role has access to user credentials and admin profiles:
 CREATE POLICY "service_role_unrestricted_app_users"
