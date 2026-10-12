@@ -109,9 +109,10 @@ export async function GET(request: NextRequest) {
     // 2. Fetch Sessions applicable to this cohort
     const { data: sessions, error: sessErr } = await supabaseServer
       .from('sessions')
-      .select('id, class_name, date, start_time, end_time, instructor_name, target_academic_year')
+      .select('id, class_name, date, start_time, end_time, instructor_name, target_academic_year, created_at')
       .neq('class_name', '__SYSTEM_CONFIG__')
-      .order('date', { ascending: false });
+      .order('date', { ascending: false })
+      .order('start_time', { ascending: false });
 
     if (sessErr) {
       throw sessErr;
@@ -120,6 +121,13 @@ export async function GET(request: NextRequest) {
     const applicableSessions = (sessions || []).filter(s =>
       isCohortMatching(s.target_academic_year, studentYear)
     );
+
+    // Ensure applicable sessions are strictly sorted descending by start_time / created_at
+    applicableSessions.sort((a, b) => {
+      const timeA = new Date(a.start_time || a.created_at || a.date).getTime();
+      const timeB = new Date(b.start_time || b.created_at || b.date).getTime();
+      return timeB - timeA;
+    });
 
     // 3. Fetch Attendance Records for this Student
     const { data: attendanceLogs, error: attErr } = await supabaseServer
@@ -275,7 +283,23 @@ export async function GET(request: NextRequest) {
     }
 
     // 6. Recent Session Attendance Logs (Last 20 sessions)
-    const recentSessions = applicableSessions.slice(0, 20).map(sess => {
+    // Strictly sort so that newly marked attendance or newly started sessions appear at the very top
+    const sortedForRecent = [...applicableSessions].sort((a, b) => {
+      const attA = presentSessionMap.get(a.id);
+      const attB = presentSessionMap.get(b.id);
+
+      const timeA = Math.max(
+        attA?.recorded_at ? new Date(attA.recorded_at).getTime() : 0,
+        new Date(a.start_time || a.created_at || a.date).getTime()
+      );
+      const timeB = Math.max(
+        attB?.recorded_at ? new Date(attB.recorded_at).getTime() : 0,
+        new Date(b.start_time || b.created_at || b.date).getTime()
+      );
+      return timeB - timeA;
+    });
+
+    const recentSessions = sortedForRecent.slice(0, 20).map(sess => {
       const isPresent = presentSessionMap.has(sess.id);
       const attInfo = presentSessionMap.get(sess.id);
       return {

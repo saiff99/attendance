@@ -59,6 +59,17 @@ interface PortalData {
   recentSessions: RecentSession[];
 }
 
+function formatSessionTime(isoString?: string | null): string {
+  if (!isoString) return "";
+  try {
+    const d = new Date(isoString);
+    if (isNaN(d.getTime())) return isoString;
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+  } catch {
+    return isoString;
+  }
+}
+
 export default function StudentPortalPage() {
   const { user, logout } = useAuth();
   const router = useRouter();
@@ -98,7 +109,14 @@ export default function StudentPortalPage() {
 
   useEffect(() => {
     fetchPortalData();
-  }, [fetchPortalData]);
+
+    // Auto re-fetch latest attendance data when user switches back to this tab
+    const handleFocus = () => {
+      fetchPortalData(selectedRoll || undefined);
+    };
+    window.addEventListener("focus", handleFocus);
+    return () => window.removeEventListener("focus", handleFocus);
+  }, [fetchPortalData, selectedRoll]);
 
   const handleUpdatePin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -564,13 +582,24 @@ export default function StudentPortalPage() {
               </div>
               <p className="text-xs text-slate-400 mt-0.5">Verification logs from Live Scan AI &amp; GPS Selfie portal.</p>
             </div>
-            <Link
-              href="/selfieattend"
-              className="flex items-center gap-1 text-xs font-semibold text-indigo-400 hover:text-indigo-300 transition-colors"
-            >
-              <span>Take Attendance</span>
-              <ArrowUpRight className="w-3.5 h-3.5" />
-            </Link>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => fetchPortalData(selectedRoll || undefined)}
+                disabled={loading}
+                className="py-1 px-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5"
+                title="Refresh Logs"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 text-indigo-400 ${loading ? 'animate-spin' : ''}`} />
+                <span className="hidden sm:inline">Refresh</span>
+              </button>
+              <Link
+                href="/selfieattend"
+                className="flex items-center gap-1 text-xs font-semibold text-indigo-400 hover:text-indigo-300 transition-colors"
+              >
+                <span>Take Attendance</span>
+                <ArrowUpRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
           </div>
 
           {recentSessions.length === 0 ? (
@@ -606,7 +635,7 @@ export default function StudentPortalPage() {
                           <>
                             <span>•</span>
                             <span className="flex items-center gap-1">
-                              <Clock className="w-3 h-3 text-slate-500" /> {session.startTime}
+                              <Clock className="w-3 h-3 text-slate-500" /> {formatSessionTime(session.startTime)}
                             </span>
                           </>
                         )}
