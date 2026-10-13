@@ -331,6 +331,9 @@ export default function AuditLogsPage() {
             className="px-3 py-2 bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700/80 rounded-xl text-xs sm:text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
           >
             <option value="all">All Actions</option>
+            <option value="CREATE_MANUAL_ATTENDANCE">Manual Attendance Added</option>
+            <option value="UPDATE_MANUAL_ATTENDANCE">Manual Attendance Updated</option>
+            <option value="DELETE_MANUAL_ATTENDANCE">Manual Attendance Removed</option>
             <option value="ENROLL_FACE">Face Enrolled</option>
             <option value="CREATE_STUDENT">Student Created</option>
             <option value="UPDATE_STUDENT">Student Updated</option>
