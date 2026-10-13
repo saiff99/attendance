@@ -840,15 +840,14 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
           </div>
         </div>
 
-        {isStudentUser && (
-          <a
-            href="/portal"
-            className="px-2.5 py-1 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold border border-slate-700 transition-all flex items-center gap-1 cursor-pointer"
-            title="Return to Student Portal"
-          >
-            <span>← Portal</span>
-          </a>
-        )}
+        <a
+          href="/portal"
+          className="group inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-800/80 hover:bg-indigo-600/20 text-slate-300 hover:text-white text-xs font-semibold border border-slate-700/80 hover:border-indigo-500/40 transition-all duration-200 backdrop-blur-md shadow-sm hover:shadow-md hover:shadow-indigo-500/10 cursor-pointer active:scale-95"
+          title="Return to Student Portal"
+        >
+          <ArrowLeft className="w-3.5 h-3.5 text-indigo-400 group-hover:text-indigo-300 group-hover:-translate-x-0.5 transition-transform duration-200 shrink-0" />
+          <span className="tracking-tight">Back to Portal</span>
+        </a>
       </header>
 
       {/* Main Container */}
