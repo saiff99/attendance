@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useMemo } from "react";
-import { Search, UserPlus, FileDown, MoreHorizontal, X, UploadCloud, Loader2, Edit2, Trash2, Folder, ArrowLeft, Users, FileSpreadsheet, ArrowUpDown, ArrowUp, ArrowDown, MessageSquare, Phone, AlertTriangle, Lock, KeyRound } from "lucide-react";
+import { Search, UserPlus, FileDown, MoreHorizontal, X, UploadCloud, Loader2, Edit2, Trash2, Folder, ArrowLeft, Users, FileSpreadsheet, ArrowUpDown, ArrowUp, ArrowDown, MessageSquare, Phone, AlertTriangle, Lock, KeyRound, CheckCircle2 } from "lucide-react";
 // Student Directory
 import type { Student } from "@/types/database";
 import { StudentProfileModal } from "@/components/StudentProfileModal";
@@ -24,6 +24,12 @@ export default function StudentDirectory() {
 
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+
+  // Custom Centered Modal for PIN Reset
+  const [resetPinTarget, setResetPinTarget] = useState<{ id: string; name: string; roll: string } | null>(null);
+  const [isResettingPin, setIsResettingPin] = useState(false);
+  const [resetPinSuccess, setResetPinSuccess] = useState<string | null>(null);
+  const [resetPinError, setResetPinError] = useState<string | null>(null);
 
   // Sorting State - default ordered by Roll Number ascending
   type SortField = 'student_roll' | 'full_name' | 'academic_year';
@@ -187,23 +193,30 @@ export default function StudentDirectory() {
     }
   };
 
-  const handleResetPin = async (id: string, name: string, roll: string) => {
-    const confirmed = window.confirm(
-      `Are you sure you want to reset the Portal PIN for ${name} (Roll: ${roll})?\n\nThis will clear their custom PIN and restore initial login so they can create a new PIN.`
-    );
-    if (!confirmed) return;
+  const confirmResetPin = async () => {
+    if (!resetPinTarget) return;
+    setIsResettingPin(true);
+    setResetPinSuccess(null);
+    setResetPinError(null);
 
     try {
-      const res = await fetch(`/api/students/${id}/reset-pin`, { method: "POST" });
+      const res = await fetch(`/api/students/${resetPinTarget.id}/reset-pin`, { method: "POST" });
       const data = await res.json();
       if (!res.ok || !data.success) {
         throw new Error(data.error || "Failed to reset PIN.");
       }
-      alert(`Success: Portal PIN for ${name} (Roll: ${roll}) has been reset successfully.`);
+      setResetPinSuccess(`The security PIN has been cleared. Initial login is now restored.`);
       fetchStudents();
+      setTimeout(() => {
+        setResetPinTarget(null);
+        setResetPinSuccess(null);
+        setResetPinError(null);
+      }, 1500);
     } catch (err: any) {
       console.error("Error resetting student PIN:", err);
-      alert(err.message || "Failed to reset PIN.");
+      setResetPinError(err.message || "Failed to reset PIN.");
+    } finally {
+      setIsResettingPin(false);
     }
   };
 
@@ -768,7 +781,9 @@ export default function StudentDirectory() {
                                         </button>
                                         <button
                                           onClick={() => {
-                                            handleResetPin(student.id, student.full_name, student.student_roll);
+                                            setResetPinTarget({ id: student.id, name: student.full_name, roll: student.student_roll });
+                                            setResetPinSuccess(null);
+                                            setResetPinError(null);
                                             setOpenDropdownId(null);
                                           }}
                                           className="text-amber-600 dark:text-amber-400 w-full text-left px-3.5 py-2 text-xs sm:text-sm hover:bg-amber-50 dark:hover:bg-amber-900/30 hover:text-amber-700 dark:hover:text-amber-300 flex items-center transition-colors font-medium cursor-pointer"
@@ -1012,6 +1027,113 @@ export default function StudentDirectory() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* Modern Centered Reset PIN Modal */}
+        {resetPinTarget && (
+          <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
+            <div className="bg-slate-900 border border-amber-500/30 rounded-3xl p-6 sm:p-7 max-w-md w-full shadow-2xl relative overflow-hidden text-white animate-in zoom-in-95 duration-200">
+              {/* Top ambient glow */}
+              <div className="absolute top-0 right-0 w-48 h-48 bg-amber-500/10 blur-[80px] rounded-full pointer-events-none" />
+
+              {/* Close Button */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (!isResettingPin) {
+                    setResetPinTarget(null);
+                    setResetPinSuccess(null);
+                    setResetPinError(null);
+                  }
+                }}
+                disabled={isResettingPin}
+                className="absolute top-5 right-5 text-slate-400 hover:text-white transition-colors p-1.5 rounded-xl hover:bg-slate-800 cursor-pointer disabled:opacity-40"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              <div className="flex items-center gap-3.5 mb-5">
+                <div className="w-12 h-12 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-400 flex items-center justify-center shadow-lg shadow-amber-500/10 shrink-0">
+                  <KeyRound className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-white tracking-tight">Reset Portal PIN</h3>
+                  <p className="text-xs text-slate-400">Student Account Recovery</p>
+                </div>
+              </div>
+
+              {resetPinSuccess ? (
+                <div className="p-4 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 flex items-start gap-3 my-4 animate-in zoom-in-95">
+                  <div className="p-1 rounded-full bg-emerald-500/20 text-emerald-400 shrink-0 mt-0.5">
+                    <CheckCircle2 className="w-5 h-5" />
+                  </div>
+                  <div className="text-xs">
+                    <p className="font-bold text-sm text-emerald-200">PIN Reset Complete</p>
+                    <p className="mt-1 text-emerald-300/90">{resetPinSuccess}</p>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {resetPinError && (
+                    <div className="p-3.5 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-300 flex items-start gap-2.5 mb-4 text-xs animate-in zoom-in-95">
+                      <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                      <span>{resetPinError}</span>
+                    </div>
+                  )}
+
+                  <div className="bg-slate-950/70 border border-slate-800 rounded-2xl p-4 mb-4">
+                    <div className="flex items-center justify-between text-xs mb-2">
+                      <span className="text-slate-400">Student Name</span>
+                      <span className="font-bold text-white text-sm">{resetPinTarget.name}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-slate-400">Roll Number</span>
+                      <span className="font-mono font-bold text-amber-400 px-2 py-0.5 rounded-md bg-amber-500/10 border border-amber-500/20">
+                        {resetPinTarget.roll}
+                      </span>
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-slate-300 leading-relaxed mb-6">
+                    Are you sure you want to reset this student&apos;s security PIN? This will clear their current PIN and restore initial login access so they can set a fresh PIN upon their next login.
+                  </p>
+
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      disabled={isResettingPin}
+                      onClick={() => {
+                        setResetPinTarget(null);
+                        setResetPinSuccess(null);
+                        setResetPinError(null);
+                      }}
+                      className="flex-1 py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition-all cursor-pointer disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isResettingPin}
+                      onClick={confirmResetPin}
+                      className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 text-xs font-black shadow-lg shadow-amber-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                    >
+                      {isResettingPin ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
+                          <span>Resetting...</span>
+                        </>
+                      ) : (
+                        <>
+                          <KeyRound className="w-4 h-4" />
+                          <span>Confirm Reset</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         )}
