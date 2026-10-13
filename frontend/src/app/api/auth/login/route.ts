@@ -53,6 +53,7 @@ export async function POST(request: Request) {
     const body = await request.json();
     const username = (body.username || '').trim().toLowerCase();
     const password = (body.password || '').trim();
+    const mode = (body.mode || '').trim().toLowerCase(); // 'admin' | 'student' | ''
 
     const rateKey = `${clientIp}:${username || 'unknown'}`;
     const now = Date.now();
@@ -94,50 +95,52 @@ export async function POST(request: Request) {
       academicYear: undefined as string | undefined,
     };
 
-    // 1. First check dynamic Supabase app_users table
-    try {
-      const { data: dbUser, error: dbErr } = await supabaseServer
-        .from('app_users')
-        .select('*')
-        .ilike('username', username)
-        .maybeSingle();
+    // 1. Check dynamic Supabase app_users table (Only for Admin/Faculty mode or unspecified mode)
+    if (mode !== 'student') {
+      try {
+        const { data: dbUser, error: dbErr } = await supabaseServer
+          .from('app_users')
+          .select('*')
+          .ilike('username', username)
+          .maybeSingle();
 
-      if (!dbErr && dbUser) {
-        if (!dbUser.is_active) {
-          return NextResponse.json(
-            { success: false, error: 'Your account has been deactivated. Please contact the administrator.' },
-            { status: 403 }
-          );
+        if (!dbErr && dbUser) {
+          if (!dbUser.is_active) {
+            return NextResponse.json(
+              { success: false, error: 'Your account has been deactivated. Please contact the administrator.' },
+              { status: 403 }
+            );
+          }
+
+          const isMatch = await bcrypt.compare(password, dbUser.password_hash);
+          if (isMatch) {
+            authSuccess = true;
+            authUser = {
+              username: dbUser.username,
+              name: dbUser.full_name,
+              role: dbUser.role as 'Super Admin' | 'Faculty',
+              department: dbUser.department || '',
+              studentId: undefined,
+              studentRoll: undefined,
+              academicYear: undefined,
+            };
+
+            // Update last_login timestamp asynchronously
+            Promise.resolve(
+              supabaseServer
+                .from('app_users')
+                .update({ last_login: new Date().toISOString() })
+                .eq('id', dbUser.id)
+            ).catch(() => {});
+          }
         }
-
-        const isMatch = await bcrypt.compare(password, dbUser.password_hash);
-        if (isMatch) {
-          authSuccess = true;
-          authUser = {
-            username: dbUser.username,
-            name: dbUser.full_name,
-            role: dbUser.role as 'Super Admin' | 'Faculty',
-            department: dbUser.department || '',
-            studentId: undefined,
-            studentRoll: undefined,
-            academicYear: undefined,
-          };
-
-          // Update last_login timestamp asynchronously
-          Promise.resolve(
-            supabaseServer
-              .from('app_users')
-              .update({ last_login: new Date().toISOString() })
-              .eq('id', dbUser.id)
-          ).catch(() => {});
-        }
+      } catch (dbEx) {
+        console.warn('[LOGIN DB CHECK FAILED, FALLING BACK TO BUILT-IN]', dbEx);
       }
-    } catch (dbEx) {
-      console.warn('[LOGIN DB CHECK FAILED, FALLING BACK TO BUILT-IN]', dbEx);
     }
 
-    // 2. Fallback to built-in user directory if not matched in DB
-    if (!authSuccess) {
+    // 2. Fallback to built-in user directory (Only for Admin/Faculty mode or unspecified mode)
+    if (!authSuccess && mode !== 'student') {
       const targetUser = USER_DIRECTORY[username];
       if (targetUser) {
         const customPlain = process.env[targetUser.plainEnvVar]?.trim();
@@ -168,8 +171,8 @@ export async function POST(request: Request) {
       }
     }
 
-    // 3. Fallback to Supabase students table for Student Portal Login
-    if (!authSuccess) {
+    // 3. Fallback to Supabase students table for Student Portal Login (Only for Student mode or unspecified mode)
+    if (!authSuccess && mode !== 'admin') {
       try {
         const { data: student, error: stuErr } = await supabaseServer
           .from('students')
@@ -226,6 +229,52 @@ export async function POST(request: Request) {
     }
 
     if (!authSuccess) {
+      // Check if user accidentally entered credentials for the other tab
+      if (mode === 'admin') {
+        try {
+          const { data: studentMatch } = await supabaseServer
+            .from('students')
+            .select('id, student_roll')
+            .or(`student_roll.ilike.${username},email.ilike.${username}`)
+            .maybeSingle();
+
+          if (studentMatch) {
+            return NextResponse.json(
+              {
+                success: false,
+                error: 'This account belongs to a Student. Please switch to the "Student Portal" tab to sign in.',
+              },
+              { status: 403 }
+            );
+          }
+        } catch {}
+      }
+
+      if (mode === 'student') {
+        try {
+          const isBuiltin = Boolean(USER_DIRECTORY[username]);
+          let isDbStaff = false;
+          if (!isBuiltin) {
+            const { data: dbUser } = await supabaseServer
+              .from('app_users')
+              .select('id')
+              .ilike('username', username)
+              .maybeSingle();
+            isDbStaff = Boolean(dbUser);
+          }
+
+          if (isBuiltin || isDbStaff) {
+            return NextResponse.json(
+              {
+                success: false,
+                error: 'This is a Staff/Admin account. Please switch to the "Staff & Admin" tab to sign in.',
+              },
+              { status: 403 }
+            );
+          }
+        } catch {}
+      }
+
       const curr = loginAttempts[rateKey] || { count: 0, firstAttempt: now };
       curr.count += 1;
       loginAttempts[rateKey] = curr;
@@ -234,11 +283,17 @@ export async function POST(request: Request) {
         action: 'FAILED_LOGIN_ATTEMPT',
         targetType: 'system',
         actorId: username,
-        details: { reason: 'Incorrect credentials', ip: clientIp, attemptCount: curr.count },
+        details: { reason: 'Incorrect credentials', ip: clientIp, attemptCount: curr.count, mode },
       });
 
+      const genericError = mode === 'student'
+        ? 'Invalid Student Roll Number or PIN.'
+        : mode === 'admin'
+          ? 'Invalid username or password for Staff & Admin.'
+          : 'Invalid username or password.';
+
       return NextResponse.json(
-        { success: false, error: 'Invalid username or password.' },
+        { success: false, error: genericError },
         { status: 401 }
       );
     }

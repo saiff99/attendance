@@ -17,7 +17,7 @@ interface AuthContextType {
   user: AuthUser | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (username: string, pass: string) => Promise<{ success: boolean; error?: string; user?: AuthUser }>;
+  login: (username: string, pass: string, mode?: "admin" | "student") => Promise<{ success: boolean; error?: string; user?: AuthUser }>;
   logout: () => Promise<void>;
   refreshSession: () => Promise<void>;
 }
@@ -67,7 +67,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     refreshSession();
   }, [refreshSession]);
 
-  const login = async (usernameInput: string, passwordInput: string): Promise<{ success: boolean; error?: string; user?: AuthUser }> => {
+  const login = async (
+    usernameInput: string,
+    passwordInput: string,
+    mode?: "admin" | "student"
+  ): Promise<{ success: boolean; error?: string; user?: AuthUser }> => {
     const cleanUser = usernameInput.trim().toLowerCase();
     const cleanPass = passwordInput.trim();
 
@@ -81,6 +85,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         body: JSON.stringify({
           username: cleanUser,
           password: cleanPass,
+          mode,
         }),
       });
 

@@ -19,7 +19,7 @@ export default function LoginPage() {
   const [isSuccess, setIsSuccess] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
-  const { login, isAuthenticated, isLoading, user } = useAuth();
+  const { login, logout, isAuthenticated, isLoading, user } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
@@ -59,9 +59,23 @@ export default function LoginPage() {
     // Micro-delay for smooth perceptible feedback
     await new Promise((r) => setTimeout(r, 200));
 
-    const res = await login(username, password);
+    const res = await login(username, password, loginMode);
 
     if (res.success) {
+      // Role safeguard: ensure authenticated user role matches current loginMode
+      if (loginMode === "admin" && res.user?.role === "Student") {
+        await logout();
+        setLoading(false);
+        setError('This account belongs to a Student. Please switch to the "Student Portal" tab to sign in.');
+        return;
+      }
+      if (loginMode === "student" && res.user?.role !== "Student") {
+        await logout();
+        setLoading(false);
+        setError('This is a Staff/Admin account. Please switch to the "Staff & Admin" tab to sign in.');
+        return;
+      }
+
       setIsSuccess(true);
       const destination = res.user?.role === "Student" ? "/portal" : "/";
       router.replace(destination);
