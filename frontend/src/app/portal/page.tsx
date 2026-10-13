@@ -118,6 +118,32 @@ export default function StudentPortalPage() {
     return () => window.removeEventListener("focus", handleFocus);
   }, [fetchPortalData, selectedRoll]);
 
+  // Strictly filter Recent Class Attendance to the last 7 days (Top-level hook complying with React Rules of Hooks)
+  const last7DaysSessions = useMemo(() => {
+    const list = data?.recentSessions;
+    if (!list || list.length === 0) return [];
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    sevenDaysAgo.setHours(0, 0, 0, 0);
+    const cutoff = sevenDaysAgo.getTime();
+
+    return list.filter((sess) => {
+      const recordedTime = sess.recordedAt ? new Date(sess.recordedAt).getTime() : 0;
+      const startTime = sess.startTime ? new Date(sess.startTime).getTime() : 0;
+      let dateTime = 0;
+      if (sess.date) {
+        const dStr = sess.date.includes("T") ? sess.date : `${sess.date}T00:00:00`;
+        dateTime = new Date(dStr).getTime();
+      }
+      const sessionTime = Math.max(
+        isNaN(recordedTime) ? 0 : recordedTime,
+        isNaN(startTime) ? 0 : startTime,
+        isNaN(dateTime) ? 0 : dateTime
+      );
+      return sessionTime >= cutoff;
+    });
+  }, [data?.recentSessions]);
+
   const handleUpdatePin = async (e: React.FormEvent) => {
     e.preventDefault();
     setPinLoading(true);
@@ -221,33 +247,8 @@ export default function StudentPortalPage() {
     );
   }
 
-  const { student, summary, subjects, recentSessions } = data;
+  const { student, summary, subjects } = data;
   const isElevatedViewer = data.viewerRole === "Super Admin" || data.viewerRole === "Faculty" || user?.role === "Super Admin" || user?.role === "Faculty";
-
-  // Strictly filter Recent Class Attendance to the last 7 days
-  const last7DaysSessions = useMemo(() => {
-    if (!recentSessions || recentSessions.length === 0) return [];
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    sevenDaysAgo.setHours(0, 0, 0, 0);
-    const cutoff = sevenDaysAgo.getTime();
-
-    return recentSessions.filter((sess) => {
-      const recordedTime = sess.recordedAt ? new Date(sess.recordedAt).getTime() : 0;
-      const startTime = sess.startTime ? new Date(sess.startTime).getTime() : 0;
-      let dateTime = 0;
-      if (sess.date) {
-        const dStr = sess.date.includes("T") ? sess.date : `${sess.date}T00:00:00`;
-        dateTime = new Date(dStr).getTime();
-      }
-      const sessionTime = Math.max(
-        isNaN(recordedTime) ? 0 : recordedTime,
-        isNaN(startTime) ? 0 : startTime,
-        isNaN(dateTime) ? 0 : dateTime
-      );
-      return sessionTime >= cutoff;
-    });
-  }, [recentSessions]);
 
   return (
     <div className="min-h-screen bg-[#070B12] text-slate-100 pb-16 selection:bg-indigo-500 selection:text-white">
