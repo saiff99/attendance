@@ -1653,7 +1653,6 @@ export default function LiveScan() {
                     const studentName = log.students?.full_name?.toUpperCase() || "UNKNOWN STUDENT";
                     const studentRoll = log.students?.student_roll || "N/A";
                     const time = new Date(log.recorded_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-                    const confidence = Math.round((log.confidence_score || 0.95) * 100);
                     const isManual = log.capture_mode === 'Manual Upload' || log.capture_mode === 'Manual Override';
 
                     return (
@@ -1679,11 +1678,11 @@ export default function LiveScan() {
                             <span className="font-mono bg-gray-200/80 dark:bg-slate-900 px-1 sm:px-1.5 py-0.5 rounded text-gray-700 dark:text-slate-300 border border-gray-300/80 dark:border-slate-800">
                               {studentRoll}
                             </span>
-                            <span>•</span>
-                            {isManual ? (
-                              <span className="text-purple-600 dark:text-purple-400 font-semibold">Faculty Verified</span>
-                            ) : (
-                              <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{confidence}% match</span>
+                            {isManual && (
+                              <>
+                                <span>•</span>
+                                <span className="text-purple-600 dark:text-purple-400 font-semibold">Faculty Verified</span>
+                              </>
                             )}
                           </div>
                         </div>
@@ -2147,11 +2146,9 @@ export default function LiveScan() {
                               {student.name}
                             </span>
                           </div>
-                          {student.confidence !== undefined && (
-                            <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800/80 shrink-0">
-                              {Math.round(student.confidence)}% Match
-                            </span>
-                          )}
+                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800/80 shrink-0">
+                            Present
+                          </span>
                         </div>
                       ))}
                     </div>
