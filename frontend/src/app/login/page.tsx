@@ -198,7 +198,7 @@ export default function LoginPage() {
                   setPassword(e.target.value);
                   setError(null);
                 }}
-                placeholder={loginMode === "student" ? "e.g. 950426" : "Enter password"}
+                placeholder={loginMode === "student" ? "Enter 6-digit PIN" : "Enter password"}
                 className="w-full pl-10 pr-10 py-3 rounded-xl bg-slate-950/80 border border-slate-800 text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-base sm:text-sm font-medium transition-all duration-200 disabled:opacity-60"
               />
               <button
@@ -212,7 +212,7 @@ export default function LoginPage() {
             </div>
             {loginMode === "student" && (
               <p className="text-[11px] text-slate-500 mt-1.5">
-                First time logging in? Enter your Roll Number or default PIN (123456).
+                Enter your registered 6-digit Security PIN.
               </p>
             )}
           </div>

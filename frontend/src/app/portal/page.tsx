@@ -309,6 +309,29 @@ export default function StudentPortalPage() {
 
       {/* Main Content Area */}
       <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8 space-y-6 sm:space-y-8">
+        {/* First Time PIN Setup Banner if custom PIN is not yet set */}
+        {!student.hasCustomPin && (
+          <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-amber-500/10 via-amber-600/10 to-indigo-500/10 border border-amber-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xl">
+            <div className="flex items-start sm:items-center gap-3.5">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0 shadow-md">
+                <KeyRound className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-amber-300">Initial Setup: Set Your Secret 6-Digit PIN</h3>
+                <p className="text-xs text-slate-300 mt-0.5">
+                  Please create your personal 6-digit PIN. Once saved, this PIN will be your permanent login key.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setIsPinModalOpen(true)}
+              className="w-full sm:w-auto py-2.5 px-5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-950 font-black text-xs shadow-lg shadow-amber-500/20 transition-all shrink-0 cursor-pointer text-center"
+            >
+              Set My Secret PIN
+            </button>
+          </div>
+        )}
+
         {/* Student Identity Hero Card */}
         <div className="bg-gradient-to-br from-slate-900/90 via-slate-900/80 to-slate-950 border border-slate-800 rounded-3xl p-5 sm:p-7 shadow-2xl relative overflow-hidden backdrop-blur-xl">
           <div className="absolute top-0 right-0 w-80 h-80 bg-indigo-500/10 blur-[100px] rounded-full pointer-events-none" />
