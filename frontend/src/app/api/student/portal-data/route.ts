@@ -282,24 +282,43 @@ export async function GET(request: NextRequest) {
       else overallStatus = 'At Risk';
     }
 
-    // 6. Recent Session Attendance Logs (Last 20 sessions)
-    // Strictly sort so that newly marked attendance or newly started sessions appear at the very top
-    const sortedForRecent = [...applicableSessions].sort((a, b) => {
-      const attA = presentSessionMap.get(a.id);
-      const attB = presentSessionMap.get(b.id);
+    // 6. Recent Session Attendance Logs (Strictly Last 7 Days)
+    const now = new Date();
+    const sevenDaysAgo = new Date(now);
+    sevenDaysAgo.setDate(now.getDate() - 7);
+    sevenDaysAgo.setHours(0, 0, 0, 0); // Start of day 7 days ago
+    const sevenDaysAgoMs = sevenDaysAgo.getTime();
 
-      const timeA = Math.max(
-        attA?.recorded_at ? new Date(attA.recorded_at).getTime() : 0,
-        new Date(a.start_time || a.created_at || a.date).getTime()
+    const getSessionTimeMs = (sess: typeof applicableSessions[0]) => {
+      const att = presentSessionMap.get(sess.id);
+      const attTime = att?.recorded_at ? new Date(att.recorded_at).getTime() : 0;
+      const sessStartTime = sess.start_time ? new Date(sess.start_time).getTime() : 0;
+      const sessCreatedAt = sess.created_at ? new Date(sess.created_at).getTime() : 0;
+      let sessDateTime = 0;
+      if (sess.date) {
+        const dStr = sess.date.includes('T') ? sess.date : `${sess.date}T00:00:00`;
+        sessDateTime = new Date(dStr).getTime();
+      }
+      return Math.max(
+        isNaN(attTime) ? 0 : attTime,
+        isNaN(sessStartTime) ? 0 : sessStartTime,
+        isNaN(sessCreatedAt) ? 0 : sessCreatedAt,
+        isNaN(sessDateTime) ? 0 : sessDateTime
       );
-      const timeB = Math.max(
-        attB?.recorded_at ? new Date(attB.recorded_at).getTime() : 0,
-        new Date(b.start_time || b.created_at || b.date).getTime()
-      );
-      return timeB - timeA;
+    };
+
+    // Filter strictly for sessions from the last 7 days
+    const last7DaysSessions = applicableSessions.filter(sess => {
+      const sessionTime = getSessionTimeMs(sess);
+      return sessionTime >= sevenDaysAgoMs;
     });
 
-    const recentSessions = sortedForRecent.slice(0, 20).map(sess => {
+    // Strictly sort so that newly marked attendance or newly started sessions appear at the very top
+    const sortedForRecent = [...last7DaysSessions].sort((a, b) => {
+      return getSessionTimeMs(b) - getSessionTimeMs(a);
+    });
+
+    const recentSessions = sortedForRecent.map(sess => {
       const isPresent = presentSessionMap.has(sess.id);
       const attInfo = presentSessionMap.get(sess.id);
       return {

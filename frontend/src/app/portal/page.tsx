@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -223,6 +223,31 @@ export default function StudentPortalPage() {
 
   const { student, summary, subjects, recentSessions } = data;
   const isElevatedViewer = data.viewerRole === "Super Admin" || data.viewerRole === "Faculty" || user?.role === "Super Admin" || user?.role === "Faculty";
+
+  // Strictly filter Recent Class Attendance to the last 7 days
+  const last7DaysSessions = useMemo(() => {
+    if (!recentSessions || recentSessions.length === 0) return [];
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    sevenDaysAgo.setHours(0, 0, 0, 0);
+    const cutoff = sevenDaysAgo.getTime();
+
+    return recentSessions.filter((sess) => {
+      const recordedTime = sess.recordedAt ? new Date(sess.recordedAt).getTime() : 0;
+      const startTime = sess.startTime ? new Date(sess.startTime).getTime() : 0;
+      let dateTime = 0;
+      if (sess.date) {
+        const dStr = sess.date.includes("T") ? sess.date : `${sess.date}T00:00:00`;
+        dateTime = new Date(dStr).getTime();
+      }
+      const sessionTime = Math.max(
+        isNaN(recordedTime) ? 0 : recordedTime,
+        isNaN(startTime) ? 0 : startTime,
+        isNaN(dateTime) ? 0 : dateTime
+      );
+      return sessionTime >= cutoff;
+    });
+  }, [recentSessions]);
 
   return (
     <div className="min-h-screen bg-[#070B12] text-slate-100 pb-16 selection:bg-indigo-500 selection:text-white">
@@ -614,11 +639,14 @@ export default function StudentPortalPage() {
         <section className="bg-slate-900/90 border border-slate-800 rounded-3xl p-5 sm:p-7 shadow-2xl relative overflow-hidden backdrop-blur-xl">
           <div className="flex items-center justify-between mb-5">
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2.5">
                 <Calendar className="w-5 h-5 text-indigo-400" />
                 <h2 className="text-lg sm:text-xl font-bold text-white tracking-tight">Recent Class Attendance Log</h2>
+                <span className="text-[10px] sm:text-[11px] font-semibold px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
+                  Last 7 Days
+                </span>
               </div>
-              <p className="text-xs text-slate-400 mt-0.5">Verification logs from Live Scan AI &amp; GPS Selfie portal.</p>
+              <p className="text-xs text-slate-400 mt-1">Verification logs from Live Scan AI &amp; GPS Selfie portal (Past 7 days).</p>
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -640,13 +668,13 @@ export default function StudentPortalPage() {
             </div>
           </div>
 
-          {recentSessions.length === 0 ? (
+          {last7DaysSessions.length === 0 ? (
             <div className="text-center py-10 bg-slate-950/40 rounded-2xl border border-slate-800/60">
-              <p className="text-xs text-slate-500">No session attendance recorded yet for this cohort.</p>
+              <p className="text-xs text-slate-500">No session attendance recorded in the last 7 days.</p>
             </div>
           ) : (
             <div className="space-y-2.5">
-              {recentSessions.map((session, i) => (
+              {last7DaysSessions.map((session, i) => (
                 <div
                   key={session.sessionId || i}
                   className="p-3.5 rounded-2xl bg-slate-950/60 border border-slate-800/80 hover:border-slate-700/80 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3"
