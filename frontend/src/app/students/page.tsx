@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useMemo } from "react";
-import { Search, UserPlus, FileDown, MoreHorizontal, X, UploadCloud, Loader2, Edit2, Trash2, Folder, ArrowLeft, Users, FileSpreadsheet, ArrowUpDown, ArrowUp, ArrowDown, MessageSquare, Phone, AlertTriangle, Lock } from "lucide-react";
+import { Search, UserPlus, FileDown, MoreHorizontal, X, UploadCloud, Loader2, Edit2, Trash2, Folder, ArrowLeft, Users, FileSpreadsheet, ArrowUpDown, ArrowUp, ArrowDown, MessageSquare, Phone, AlertTriangle, Lock, KeyRound } from "lucide-react";
 // Student Directory
 import type { Student } from "@/types/database";
 import { StudentProfileModal } from "@/components/StudentProfileModal";
@@ -184,6 +184,26 @@ export default function StudentDirectory() {
     } catch (error: any) {
       console.error('Error deleting student:', error);
       alert(error.message || 'Failed to delete student.');
+    }
+  };
+
+  const handleResetPin = async (id: string, name: string, roll: string) => {
+    const confirmed = window.confirm(
+      `Are you sure you want to reset the Portal PIN for ${name} (Roll: ${roll})?\n\nThis will clear their custom PIN and restore initial login so they can create a new PIN.`
+    );
+    if (!confirmed) return;
+
+    try {
+      const res = await fetch(`/api/students/${id}/reset-pin`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Failed to reset PIN.");
+      }
+      alert(`Success: Portal PIN for ${name} (Roll: ${roll}) has been reset successfully.`);
+      fetchStudents();
+    } catch (err: any) {
+      console.error("Error resetting student PIN:", err);
+      alert(err.message || "Failed to reset PIN.");
     }
   };
 
@@ -711,7 +731,7 @@ export default function StudentDirectory() {
                                   {openDropdownId === student.id && (
                                     <>
                                       <div className="fixed inset-0 z-40" onClick={() => setOpenDropdownId(null)}></div>
-                                      <div className={`absolute right-0 z-50 w-36 rounded-xl bg-white dark:bg-gray-800 shadow-2xl border border-gray-200 dark:border-gray-700 py-1.5 ring-1 ring-black/10 focus:outline-none ${idx >= Math.max(1, filteredStudents.length - 2) || idx === filteredStudents.length - 1
+                                      <div className={`absolute right-0 z-50 w-40 rounded-xl bg-white dark:bg-gray-800 shadow-2xl border border-gray-200 dark:border-gray-700 py-1.5 ring-1 ring-black/10 focus:outline-none ${idx >= Math.max(1, filteredStudents.length - 2) || idx === filteredStudents.length - 1
                                           ? 'bottom-full mb-2 origin-bottom-right'
                                           : 'top-full mt-1.5 origin-top-right'
                                         }`}>
@@ -741,10 +761,20 @@ export default function StudentDirectory() {
                                             setIsModalOpen(true);
                                             setOpenDropdownId(null);
                                           }}
-                                          className="text-gray-700 dark:text-gray-200 w-full text-left px-3.5 py-2 text-xs sm:text-sm hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center transition-colors font-medium"
+                                          className="text-gray-700 dark:text-gray-200 w-full text-left px-3.5 py-2 text-xs sm:text-sm hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center transition-colors font-medium cursor-pointer"
                                         >
                                           <Edit2 className="w-4 h-4 mr-2.5 text-gray-400 dark:text-gray-500" />
                                           Edit
+                                        </button>
+                                        <button
+                                          onClick={() => {
+                                            handleResetPin(student.id, student.full_name, student.student_roll);
+                                            setOpenDropdownId(null);
+                                          }}
+                                          className="text-amber-600 dark:text-amber-400 w-full text-left px-3.5 py-2 text-xs sm:text-sm hover:bg-amber-50 dark:hover:bg-amber-900/30 hover:text-amber-700 dark:hover:text-amber-300 flex items-center transition-colors font-medium cursor-pointer"
+                                        >
+                                          <KeyRound className="w-4 h-4 mr-2.5 text-amber-500" />
+                                          Reset PIN
                                         </button>
                                         {isSuperAdmin && (
                                           <button
@@ -752,7 +782,7 @@ export default function StudentDirectory() {
                                               handleDelete(student.id);
                                               setOpenDropdownId(null);
                                             }}
-                                            className="text-red-600 dark:text-red-400 w-full text-left px-3.5 py-2 text-xs sm:text-sm hover:bg-red-50 dark:hover:bg-red-900/30 flex items-center transition-colors font-medium"
+                                            className="text-red-600 dark:text-red-400 w-full text-left px-3.5 py-2 text-xs sm:text-sm hover:bg-red-50 dark:hover:bg-red-900/30 flex items-center transition-colors font-medium cursor-pointer"
                                           >
                                             <Trash2 className="w-4 h-4 mr-2.5 text-red-500" />
                                             Delete

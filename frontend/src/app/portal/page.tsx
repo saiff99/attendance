@@ -723,21 +723,6 @@ export default function StudentPortalPage() {
             )}
 
             <form onSubmit={handleUpdatePin} className="space-y-4">
-              {student.hasCustomPin && (
-                <div>
-                  <label className="block text-xs font-semibold text-slate-400 mb-1">Current PIN</label>
-                  <input
-                    type="password"
-                    maxLength={10}
-                    required
-                    value={oldPin}
-                    onChange={(e) => setOldPin(e.target.value)}
-                    placeholder="Enter current PIN"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white text-sm focus:outline-none focus:border-indigo-500"
-                  />
-                </div>
-              )}
-
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="block text-xs font-semibold text-slate-400">New 6-Digit PIN</label>

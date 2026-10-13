@@ -37,23 +37,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Student record not found.' }, { status: 404 });
     }
 
-    // If student already has a PIN or password hash, verify old PIN (unless admin is resetting it)
-    if (session.role === 'Student') {
-      const hasExistingSecurity = Boolean(student.portal_password_hash || student.portal_pin);
-      if (hasExistingSecurity) {
-        if (!oldPin) {
-          return NextResponse.json({ success: false, error: 'Current PIN is required.' }, { status: 400 });
-        }
-        let isOldMatch = false;
-        if (student.portal_password_hash && student.portal_password_hash.startsWith('$2')) {
-          isOldMatch = await bcrypt.compare(oldPin, student.portal_password_hash);
-        }
-        if (!isOldMatch && student.portal_pin) {
-          isOldMatch = (oldPin === student.portal_pin.trim());
-        }
-        if (!isOldMatch) {
-          return NextResponse.json({ success: false, error: 'Current PIN is incorrect.' }, { status: 401 });
-        }
+    // If oldPin is provided, verify it; otherwise allow authenticated session to update new PIN directly
+    if (session.role === 'Student' && oldPin) {
+      let isOldMatch = false;
+      if (student.portal_password_hash && student.portal_password_hash.startsWith('$2')) {
+        isOldMatch = await bcrypt.compare(oldPin, student.portal_password_hash);
+      }
+      if (!isOldMatch && student.portal_pin) {
+        isOldMatch = (oldPin === student.portal_pin.trim());
+      }
+      if (!isOldMatch) {
+        return NextResponse.json({ success: false, error: 'Current PIN is incorrect.' }, { status: 401 });
       }
     }
 
