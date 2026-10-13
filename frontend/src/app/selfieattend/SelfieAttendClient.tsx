@@ -1654,8 +1654,8 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                   {resultData.confidence && (
                     <div className="flex items-center justify-between text-xs pt-0.5">
                       <span className="text-slate-400">AI Confidence:</span>
-                      <span className="font-mono text-emerald-400 font-bold">
-                        {(resultData.confidence * 100).toFixed(0)}% Match
+                      <span className="text-emerald-400 font-bold">
+                        Matched
                       </span>
                     </div>
                   )}
