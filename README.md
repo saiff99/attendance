@@ -1,4 +1,4 @@
-# 🎓 MedAttend AI — Enterprise Smart Attendance & Multi-Camera Surveillance System
+# 🎓 MedAttend AI — Enterprise Smart Attendance, Medical Student Portal & Multi-Camera Surveillance System
 
 [![Next.js](https://img.shields.io/badge/Next.js-16.2.4-black?style=for-the-badge&logo=next.js)](https://nextjs.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688?style=for-the-badge&logo=fastapi)](https://fastapi.tiangolo.com/)
@@ -9,15 +9,23 @@
 [![TailwindCSS](https://img.shields.io/badge/Tailwind_CSS-v4-38B2AC?style=for-the-badge&logo=tailwind-css)](https://tailwindcss.com/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-3178C6?style=for-the-badge&logo=typescript)](https://www.typescriptlang.org/)
 
-> **MedAttend AI** is an end-to-end, high-performance automated attendance and classroom surveillance system designed for large educational auditoriums, medical colleges, and enterprise lecture halls (tested for **300+ students** across **6 simultaneous CCTV cameras**). 
-> It pairs ultra-fast biometric facial recognition (InsightFace ArcFace 512D) with dual-stream RTSP camera pipelines, ONVIF PTZ motor controls, isolated non-blocking WhatsApp parent notification workers, adaptive thermal load balancing, and production auto-recovery watchdogs.
+> **MedAttend AI** is an enterprise-grade, end-to-end automated academic attendance and classroom surveillance system designed for large educational auditoriums, medical colleges, and institutions (**tested for 300+ students across 6 simultaneous CCTV streams**).
+> 
+> It pairs ultra-fast biometric facial recognition (InsightFace ArcFace 512D) with dual-stream RTSP camera pipelines, ONVIF PTZ controls, isolated WhatsApp parent notifications, a dedicated **Medical Student Portal** (with 7-day attendance logs & curriculum eligibility), **GPS Selfie Check-In**, **Enterprise Audit Logging**, and macOS 1-click desktop launchers.
 
 ---
 
 ## 📑 Table of Contents
 
-- [✨ Key Enterprise Features](#-key-enterprise-features)
+- [✨ Core Enterprise Features](#-core-enterprise-features)
 - [🏛️ System Architecture](#️-system-architecture)
+- [🎯 Application Modules & Portals](#-application-modules--portals)
+  - [1. Student Medical Portal (`/portal`)](#1-student-medical-portal-portal)
+  - [2. GPS Selfie Attendance Portal (`/selfieattend`)](#2-gps-selfie-attendance-portal-selfieattend)
+  - [3. Dual-Tab Role Authentication (`/login`)](#3-dual-tab-role-authentication-login)
+  - [4. Enterprise Audit Logs (`/audit-logs`)](#4-enterprise-audit-logs-audit-logs)
+  - [5. Live Multi-Camera Surveillance (`/live-scan`)](#5-live-multi-camera-surveillance-live-scan)
+  - [6. Academic Reports & Excel Export (`/reports`)](#6-academic-reports--excel-export-reports)
 - [⚙️ Classroom & Hardware Optimization (300+ Students)](#️-classroom--hardware-optimization-300-students)
 - [💻 Tech Stack](#-tech-stack)
 - [⚙️ Prerequisites](#️-prerequisites)
@@ -30,7 +38,7 @@
   - [5. Environment Configuration](#5-environment-configuration)
   - [6. Meta WhatsApp Cloud API Setup](#6-meta-whatsapp-cloud-api-setup)
   - [7. Multi-Camera RTSP Grid Configuration](#7-multi-camera-rtsp-grid-configuration)
-- [🖥️ Production Watchdogs & Manual Commands](#️-production-watchdogs--manual-commands)
+- [🖥️ Production Watchdogs & Desktop Launchers](#️-production-watchdogs--desktop-launchers)
 - [📁 Project Directory Structure](#-project-directory-structure)
 - [🔌 API Endpoints Reference](#-api-endpoints-reference)
 - [❓ Troubleshooting & FAQs](#-troubleshooting--faqs)
@@ -38,40 +46,33 @@
 
 ---
 
-## ✨ Key Enterprise Features
+## ✨ Core Enterprise Features
 
 ### 👁️ 1. Ultra-Fast Biometric AI Engine (ArcFace 512D)
-- **InsightFace Buffalo_SC (MobileFaceNet + RetinaFace)**: Extracts high-dimensional 512D face embeddings with CoreML / GPU acceleration.
-- **High-Recall Distant Detection (`det_thresh=0.15`, `det_size=(640, 640)`)**: Reliably detects and recognizes faces seated in the farthest rows of massive 300+ student lecture halls.
-- **Zero-Backlog Timestamp Scheduling**: Always processes only the latest video frame per camera with zero frame queue or processing lag.
-- **Auto-Sleep on 100% Attendance**: When all enrolled students in a cohort have been marked present, AI scanning enters a low-power rest state.
+- **InsightFace Buffalo_SC (MobileFaceNet + RetinaFace)**: High-dimensional 512D face embeddings with CoreML / GPU acceleration.
+- **High-Recall Distant Detection (`det_thresh=0.15`, `det_size=(640, 640)`)**: Reliably detects seated students in the farthest rows of massive 300+ student lecture halls.
+- **Zero-Backlog Timestamp Scheduling**: Always processes only the latest video frame per camera with zero buffer lag.
+- **Clean Match Feedback**: User-friendly UI displaying intuitive verified states without confusing raw percentage numbers.
+- **Auto-Sleep on 100% Attendance**: Switches to low-power standby when all students in a cohort have been marked present.
 
 ### 🌡️ 2. Adaptive Thermal Load Controller & Eco-Power Engine
-- **Rolling Average Load Balancing**: Dynamically balances AI scan intervals between **0.8s and 2.0s** based on real-time inference latency (EMA). Keeps MacBooks and edge servers cool during multi-hour lectures without dropping recognition accuracy.
-- **Eco-Power Idle Sleep**: When no attendance session is active and no user is previewing cameras in the web UI, camera grabbing threads switch to low-power idle sleep (`0.5s`), saving >70% CPU power.
-- **Instant On-Demand Wakeup (<0.05s)**: Live streams instantly resume full 20–25 FPS playback the exact millisecond a user opens the web preview or starts a session.
+- **Rolling Average Load Balancing**: Balances AI scan intervals between **0.8s and 2.0s** based on inference latency (EMA). Keeps hardware cool during long multi-hour lectures.
+- **Eco-Power Idle Sleep**: When no session is active and no cameras are previewed, grabbers sleep (`0.5s`), cutting idle CPU consumption by >70%.
+- **Instant On-Demand Wakeup (<0.05s)**: Resumes full 20–25 FPS playback instantly when an operator views cameras or starts a session.
 
 ### 📹 3. Dual-Stream Multi-Camera Grid & PTZ Hardware Controls
-- **6-Camera Simultaneous Grid**: Native support for 6 IP CCTV RTSP feeds covering 1st Row, 2nd Row, and Left/Middle/Right auditorium wings.
-- **Dual Stream Topology**:
-  - **Main Stream**: High-resolution video for crisp operator live UI monitoring.
-  - **AI Sub-Stream**: Optimized 960×540 sub-stream for lightning-fast AI face processing.
-- **ONVIF PTZ Motor Controls**: Real-time Pan, Tilt, and Zoom commands directly from the web dashboard.
+- **6-Camera Simultaneous Grid**: Native RTSP feeds covering 1st Row, 2nd Row, and Left/Middle/Right auditorium wings.
+- **Dual Stream Topology**: High-res Main Stream for operators + 960×540 Sub-Stream for ultra-fast AI inference.
+- **ONVIF PTZ Motor Controls**: Real-time Pan, Tilt, and Zoom hardware control from the web dashboard.
 
 ### 💬 4. Isolated Non-Blocking WhatsApp Parent Notifier
-- **Dedicated Background Worker Queue**: WhatsApp API calls execute in an isolated non-blocking queue (`whatsapp_event_queue`), preventing parent notification bursts from blocking camera FPS or AI face scanning.
+- **Dedicated Queue Worker**: Runs in an isolated queue (`whatsapp_event_queue`), preventing WhatsApp notification bursts from blocking camera streaming or AI scans.
 - **Meta Official Cloud API (Graph v21.0)**: Sends official absentee notices with student name, roll number, subject, and timestamp.
-- **Live In-Modal Token Updater**: Update expired Meta temporary access tokens and retry failed alerts on-the-fly without restarting backend servers.
+- **Live In-Modal Token Updater**: Update expired tokens and retry failed alerts on-the-fly without server restarts.
 
-### 🧹 5. Session Memory Garbage Cleanup & Anti-Duplicate Protection
-- **Spatial Cache & 60s Tracking**: Prevents redundant face recognitions for seated students using spatial coordinate matching (`distance_px=80.0`).
-- **End-of-Session Memory Purge**: Automatic RAM cleanup (`gc.collect()`, spatial caches, and face embeddings) when a class session ends.
-- **Database Unique Constraint**: Safe, thread-safe database commits with unique `(session_id, student_id)` constraint to prevent duplicate attendance logs.
-
-### 📱 6. Geofenced Student Mobile Attendance (Selfie Check-in)
-- **Anti-Proxy Biometrics**: Allows students to check in from their mobile browsers (`/self-attendance`).
-- **GPS Haversine Geofencing**: Enforces check-ins strictly within classroom GPS coordinates and radius tolerances.
-- **Device Fingerprint Locking**: Prevents students from logging in from unauthorized devices.
+### 🔒 5. Enterprise Security & Audit Log Ledger
+- **Tamper-Evident Audit Trails**: Every manual attendance override, PIN reset, and security event is permanently logged with IP address, user agent, actor details, and timestamps.
+- **Role Safeguards**: Strict separation prevents students from accessing faculty hubs and staff from logging into student portal views.
 
 ---
 
@@ -81,10 +82,12 @@
                                       ┌─────────────────────────────────┐
                                       │       Client Web / Mobile       │
                                       │   (Next.js 16 + Tailwind v4)    │
-                                      │      [Production Port 3000]     │
+                                      │  - Student Portal (/portal)     │
+                                      │  - GPS Selfie (/selfieattend)   │
+                                      │  - Admin Hub & CCTV Grid        │
                                       └────────────────┬────────────────┘
                                                        │
-                                     HTTPS / WebSocket / Next.js API Proxy
+                                      HTTPS / WebSocket / Next.js API Proxy
                                                        │
                                                        ▼
        ┌────────────────────────────────────────────────────────────────────────────────────────┐
@@ -98,16 +101,57 @@
        │  ┌────────────▼────────────┐  ┌─────────────▼─────────────┐  ┌──────────▼───────────┐  │
        │  │  InsightFace ArcFace    │  │   Session State & Spatial │  │ ONVIF PTZ Hardware   │  │
        │  │   512D CoreML / ONNX    │  │     Cache Garbage Purge   │  │   Motor Controller   │  │
-       │  └─────────────────────────┘  └───────────────────────────┘  └──────────────────────┘  │
-       └───────────────┬─────────────────────────────┬───────────────────────────┬──────────────┘
+       │  └────────────┬────────────┘  └─────────────┬─────────────┘  └──────────┬───────────┘  │
+       └───────────────┼─────────────────────────────┼───────────────────────────┼──────────────┘
                        │                             │                           │
                        ▼                             ▼                           ▼
         ┌────────────────────────────┐  ┌───────────────────────────┐  ┌────────────────────────┐
         │   Supabase (PostgreSQL)    │  │     6x IP CCTV Cameras    │  │  Meta WhatsApp Cloud   │
         │    - Students & 512D Vector│  │   - RTSP 4K Mainstream    │  │        API v21.0       │
         │    - Attendance Ledger     │  │   - 960x540 AI Sub-Stream │  │   (Parent Absentee)    │
+        │    - Enterprise Audit Logs │  │   - ONVIF PTZ Controller  │  │                        │
         └────────────────────────────┘  └───────────────────────────┘  └────────────────────────┘
 ```
+
+---
+
+## 🎯 Application Modules & Portals
+
+### 1. Student Medical Portal (`/portal`)
+Designed specifically for MBBS and academic curriculum tracking:
+- **7-Day Recent Class Attendance Log**: Strictly lists verified sessions from the last 7 days with live scan/selfie timestamps and a **`Last 7 Days`** badge.
+- **Curriculum Performance Breakdown**: Comprehensive subject-wise breakdown (Total Classes, Present, Absent, Attendance Percentage, and Health Status: Good / Borderline / Low).
+- **Eligibility Badging**: Immediate feedback on examination eligibility (Eligible $\ge 75\%$, Borderline $65\%\text{--}74\%$, At Risk $< 65\%$).
+- **Centered Security PIN Modal**: Self-service 6-digit PIN reset dialog with validation and random generator.
+- **Biometric Enrolled Status**: Real-time indicator displaying registered facial vector readiness.
+- **Elevated Faculty Viewer**: Super Admins and Faculty can search and inspect individual student profiles with full privacy controls.
+
+### 2. GPS Selfie Attendance Portal (`/selfieattend`)
+Mobile-friendly student self-check-in:
+- **Haversine GPS Geofencing**: Validates that student is physically inside the designated lecture hall radius.
+- **Anti-Spoof Biometric Matching**: Front-facing selfie capture with instant ArcFace 512D vector matching.
+- **Polished Navigation**: Clear "Back to Portal" action and responsive mobile layout.
+
+### 3. Dual-Tab Role Authentication (`/login`)
+- **Staff & Admin Tab**: Access for Faculty and Super Administrators.
+- **Student Portal Tab**: Dedicated entry for students using Roll Number and 6-digit Security PIN.
+- **Strict Role Enforcement**: Prevents accidental cross-portal logins and redirects users to their appropriate interfaces.
+
+### 4. Enterprise Audit Logs (`/audit-logs`)
+Full compliance and governance for sensitive institutional operations:
+- Records manual attendance insertions and deletions (`attendance/mark`).
+- Tracks student PIN changes, credential resets, and administrative overrides.
+- Searchable by action, severity (INFO / WARN / CRITICAL), actor, and date.
+
+### 5. Live Multi-Camera Surveillance (`/live-scan`)
+- 6-Camera simultaneous grid with real-time bounding boxes and student identification overlays.
+- ONVIF PTZ control pad with pan/tilt/zoom speeds and preset recall.
+- Real-time present student counter and cohort attendance statistics.
+
+### 6. Academic Reports & Excel Export (`/reports`)
+- Comprehensive cohort and subject attendance logs.
+- Export to formatted Microsoft Excel (`.xlsx`) and CSV files.
+- Visual attendance distributions, deficit warnings, and parent communication records.
 
 ---
 
@@ -133,11 +177,11 @@
 | Layer | Technologies |
 | :--- | :--- |
 | **Frontend** | [Next.js 16](https://nextjs.org/) (App Router), [React 19](https://react.dev/), [TypeScript 5](https://www.typescriptlang.org/) |
-| **Styling & UI** | [Tailwind CSS v4](https://tailwindcss.com/), [Lucide React](https://lucide.dev/), [Recharts](https://recharts.org/) |
+| **Styling & UI** | [Tailwind CSS v4](https://tailwindcss.com/), [Lucide React](https://lucide.dev/), [Recharts](https://recharts.org/), [ExcelJS](https://github.com/exceljs/exceljs) |
 | **Backend Core** | [FastAPI](https://fastapi.tiangolo.com/), [Uvicorn](https://www.uvicorn.org/) (Production Mode), [Pydantic v2](https://docs.pydantic.dev/) |
 | **Computer Vision** | [InsightFace](https://github.com/deepinsight/insightface) (`buffalo_sc`), [ONNX Runtime](https://onnxruntime.ai/) (CoreML / CUDA), [OpenCV](https://opencv.org/) |
 | **Camera Protocols** | RTSP (H.264 / H.265), ONVIF (`onvif-zeep`) |
-| **Database & Auth** | [Supabase](https://supabase.com/) (PostgreSQL with JSONB Vector Encodings & Unique Constraints) |
+| **Database & Auth** | [Supabase](https://supabase.com/) (PostgreSQL with JSONB Vector Encodings, Row-Level Security & Audit Tables) |
 | **Notifications** | [Meta WhatsApp Cloud API](https://developers.facebook.com/) (Graph v21.0) |
 | **Tunnels & Networking** | [Cloudflare Tunnels](https://cloudflare.com/) (Secure zero-config remote student check-in) |
 
@@ -164,9 +208,9 @@
 ## 🚀 Quick Start (1-Click Production Launch)
 
 MedAttend includes an automated production process manager (`start.py` / `start.sh`) featuring:
-1. **Port Cleaning**: Gracefully frees ports `3000` and `8000` without system disruption.
-2. **Next.js Production Builder**: Automatically builds and boots the production Next.js frontend (`npm start`).
-3. **FastAPI Production Engine**: Runs Uvicorn in production mode without hot-reload CPU overhead.
+1. **Port Cleaning**: Safely frees ports `3000` and `8000` without system disruption.
+2. **Next.js Production Builder**: Automatically builds and runs the optimized production bundle (`npm start`).
+3. **FastAPI Production Engine**: Runs Uvicorn in production mode without dev hot-reload overhead.
 4. **Dual Watchdogs**: Continuous background health checks with automatic sub-second recovery.
 5. **Cloudflare Tunnel Auto-Sync**: Automatically syncs public mobile check-in URL to Supabase.
 
@@ -182,6 +226,8 @@ chmod +x start.sh
 
 Open **`http://localhost:3000`** in your browser!
 
+> 💡 **macOS Desktop User?** Double-click `Start_Attendance.command` or launch `Attendance.app` directly from your Applications/Desktop folder!
+
 ---
 
 ## 🛠️ Detailed Step-by-Step Installation
@@ -196,8 +242,8 @@ cd attendance
 
 ### 2. Database Setup (Supabase PostgreSQL)
 
-1. Create a free account at [Supabase](https://supabase.com/) and create a new project.
-2. Navigate to **SQL Editor** and run the following schema:
+1. Create a project at [Supabase](https://supabase.com/).
+2. In the **SQL Editor**, run the following schema:
 
 ```sql
 -- Enable UUID extension
@@ -209,8 +255,11 @@ CREATE TABLE IF NOT EXISTS students (
     student_roll VARCHAR(50) UNIQUE NOT NULL,
     full_name VARCHAR(255) NOT NULL,
     email VARCHAR(255) UNIQUE NOT NULL,
-    academic_year VARCHAR(50),
+    academic_year VARCHAR(50) DEFAULT '1st Year',
+    parent_phone VARCHAR(50),
     face_encoding JSONB,
+    portal_pin VARCHAR(20),
+    portal_password_hash VARCHAR(255),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -223,6 +272,18 @@ CREATE TABLE IF NOT EXISTS sessions (
     end_time TIMESTAMP WITH TIME ZONE NOT NULL,
     instructor_name VARCHAR(255) NOT NULL,
     target_academic_year VARCHAR(50),
+    is_active BOOLEAN DEFAULT false,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Academic Subjects Table
+CREATE TABLE IF NOT EXISTS academic_subjects (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(255) NOT NULL,
+    code VARCHAR(50),
+    department VARCHAR(255),
+    academic_year VARCHAR(50),
+    is_active BOOLEAN DEFAULT true,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -238,13 +299,28 @@ CREATE TABLE IF NOT EXISTS attendance (
     UNIQUE(session_id, student_id)
 );
 
--- Indexes for Ultra-Fast Queries
+-- Enterprise Audit Logs Table
+CREATE TABLE IF NOT EXISTS audit_logs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    actor VARCHAR(255) NOT NULL,
+    action VARCHAR(100) NOT NULL,
+    target VARCHAR(255),
+    details JSONB,
+    severity VARCHAR(50) DEFAULT 'INFO',
+    ip_address VARCHAR(100),
+    user_agent TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Performance Indexes
 CREATE INDEX IF NOT EXISTS idx_attendance_session ON attendance(session_id);
 CREATE INDEX IF NOT EXISTS idx_attendance_student ON attendance(student_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_date ON sessions(date);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at DESC);
 ```
 
-3. Copy your **Project URL** and **Anon Key** from **Project Settings > API**.
+3. Copy your **Project URL**, **Anon Key**, and **Service Role Key** from **Project Settings > API**.
 
 ---
 
@@ -286,7 +362,7 @@ Create `backend/.env` (or copy from `backend/.env.example`):
 ```env
 # Supabase Database
 SUPABASE_URL="https://your-project.supabase.co"
-SUPABASE_KEY="your-supabase-anon-or-service-role-key"
+SUPABASE_KEY="your-supabase-service-role-key"
 
 # Camera RTSP URLs (comma-separated for 6 cameras, or "0" for webcam)
 CCTV_URLS="rtsp://admin:pass@192.168.1.101:554/stream1,rtsp://admin:pass@192.168.1.102:554/stream1"
@@ -316,6 +392,7 @@ Create `frontend/.env.local`:
 ```env
 NEXT_PUBLIC_SUPABASE_URL="https://your-project.supabase.co"
 NEXT_PUBLIC_SUPABASE_ANON_KEY="your-supabase-anon-key"
+SUPABASE_SERVICE_ROLE_KEY="your-supabase-service-role-key"
 NEXT_PUBLIC_BACKEND_URL="http://localhost:8000"
 ```
 
@@ -328,8 +405,7 @@ NEXT_PUBLIC_BACKEND_URL="http://localhost:8000"
 3. Under **WhatsApp > API Setup**, copy:
    - **Phone number ID** ➡️ `WHATSAPP_PHONE_ID`
    - **Temporary access token** ➡️ `WHATSAPP_TOKEN`
-4. Add recipient numbers to the test list.
-5. In the MedAttend Dashboard, you can test alerts or update expired tokens at any time via the **WhatsApp Alert Modal**.
+4. In the MedAttend Dashboard, you can test alerts or update expired tokens at any time via the **WhatsApp Alert Modal**.
 
 ---
 
@@ -347,28 +423,16 @@ CCTV_AI_URLS="rtsp://admin:pass@192.168.1.51:554/cam/realmonitor?channel=1&subty
 
 ---
 
-## 🖥️ Production Watchdogs & Manual Commands
+## 🖥️ Production Watchdogs & Desktop Launchers
 
-### Automated 1-Click Launch (Recommended)
-```bash
-./start.sh
-# or python3 start.py
-```
+MedAttend is built for resilient, zero-maintenance institutional deployment:
 
-### Manual Service Execution (Development Mode)
-
-#### Terminal 1: Backend
-```bash
-cd backend
-source .venv/bin/activate
-uvicorn main:app --port 8000
-```
-
-#### Terminal 2: Frontend
-```bash
-cd frontend
-npm run dev
-```
+| Launcher / Script | Target OS / Use Case | Description |
+| :--- | :--- | :--- |
+| **`./start.sh`** | macOS / Linux Terminal | 1-Click launcher with auto-build, port cleanup, and watchdogs. |
+| **`Start_Attendance.command`** | macOS Finder | Double-clickable desktop script to launch system into production. |
+| **`Stop_Attendance.command`** | macOS Finder | Double-clickable desktop script to gracefully terminate all services. |
+| **`Attendance.app`** | macOS Application Bundle | Native macOS application launcher icon. |
 
 ---
 
@@ -379,7 +443,9 @@ attendance/
 ├── README.md                      # Complete Project Documentation & Architecture
 ├── start.sh                       # 1-Click Production Shell Launcher
 ├── start.py                       # Dual-Watchdog Process Manager & Tunnel Orchestrator
-├── Start_Attendance.command       # macOS Double-Clickable Desktop Launcher
+├── Start_Attendance.command       # macOS Desktop Launch Shortcut
+├── Stop_Attendance.command        # macOS Desktop Stop Shortcut
+├── Attendance.app/                # macOS Native Application Bundle
 │
 ├── database/
 │   └── schema.sql                 # PostgreSQL / Supabase Schema & Performance Indexes
@@ -401,20 +467,39 @@ attendance/
     ├── package.json               # Node Dependencies
     ├── src/
     │   ├── app/
-    │   │   ├── page.tsx           # Main Analytics Dashboard
+    │   │   ├── page.tsx           # Main Analytics & Ongoing Session Dashboard
+    │   │   ├── portal/            # Medical Student Portal (7-Day Log & Curriculum)
+    │   │   ├── selfieattend/      # GPS Geofenced Selfie Check-in Portal
+    │   │   ├── audit-logs/        # Enterprise Security & Audit Log Ledger
+    │   │   ├── reports/           # Academic Reports & Excel (.xlsx) Exporter
     │   │   ├── live-scan/         # 6-Camera Live Surveillance & Biometric Overlay Grid
     │   │   ├── students/          # Student Biometric Directory & Face Enrollment
-    │   │   ├── self-attendance/   # Geofenced Mobile Student Attendance Portal
-    │   │   └── api/               # Server-Side API Proxies
-    │   └── components/
-    │       ├── Header.tsx         # Navigation & Session Switcher
-    │       ├── WhatsAppAlertModal.tsx # WhatsApp Token Updater & Absentee Dispatcher
-    │       └── ...                # Modals, Video Overlays, and Metric Cards
+    │   │   ├── login/             # Dual-Tab (Staff/Admin vs Student) Authentication
+    │   │   └── api/               # Server-Side API Proxies & Session Guards
+    │   ├── components/            # Reusable UI Components, Modals & Video Players
+    │   └── lib/                   # Auth Helpers, Supabase Client & Audit Logger
 ```
 
 ---
 
 ## 🔌 API Endpoints Reference
+
+### 🎓 Student Portal & Self-Attendance
+| Endpoint | Method | Description |
+| :--- | :--- | :--- |
+| `/api/student/portal-data` | `GET` | Returns 7-day attendance logs, subject breakdown, and eligibility status |
+| `/api/student/change-pin` | `POST` | Allows student to securely update their 6-digit access PIN |
+| `/api/student/reset-pin` | `POST` | Admin endpoint to reset a student's PIN to default |
+| `/api/selfie-attendance` | `POST` | Processes mobile selfie image with GPS coordinate geofence check |
+
+### 🔒 Authentication & Audit Logs
+| Endpoint | Method | Description |
+| :--- | :--- | :--- |
+| `/api/auth/login` | `POST` | Dual-mode login for Staff/Admin or Student with role protection |
+| `/api/auth/me` | `GET` | Retrieves current session user info and role |
+| `/api/auth/logout` | `POST` | Invalidates session and clears authentication cookies |
+| `/api/audit-logs` | `GET` | Fetches filtered administrative and security audit trail records |
+| `/api/attendance/mark` | `POST` | Manually mark/delete attendance records (with mandatory audit logging) |
 
 ### 📹 Live Video & Camera Management
 | Endpoint | Method | Description |
@@ -422,7 +507,6 @@ attendance/
 | `/api/video-feed/{session_id}` | `GET` | MJPEG video stream with real-time bounding boxes & cosine confidence |
 | `/api/ptz-video-feed/{session_id}` | `GET` | Live stream from active ONVIF PTZ camera |
 | `/api/cameras` | `GET` | Returns list and connection health of all CCTV cameras |
-| `/api/ptz-cameras` | `GET` | Returns list of configured PTZ cameras |
 | `/api/ptz/move` | `POST` | Dispatches Pan/Tilt/Zoom motor velocity commands |
 
 ### 🧬 Biometric Enrollment & AI Processing
@@ -431,14 +515,6 @@ attendance/
 | `/api/enroll-face/{student_id}` | `POST` | Stores 512D ArcFace embeddings from snapshot |
 | `/api/enroll-face-burst/{student_id}` | `POST` | Multi-shot burst enrollment for multi-angle robustness |
 | `/api/upload-photo` | `POST` | Processes batch photo for server-side face enrollment |
-| `/api/process-attendance` | `POST` | Batch photo attendance recognition |
-| `/api/selfie-attendance` | `POST` | Mobile selfie biometric & GPS geofence verification |
-
-### 🧹 Session State & Memory Lifecycle
-| Endpoint | Method | Description |
-| :--- | :--- | :--- |
-| `/api/session/cleanup/{session_id}` | `POST` | Purges spatial tracking cache and forces garbage collection |
-| `/api/session/reset-memory` | `POST` | Resets all active camera face trackers across the entire system |
 
 ### 💬 WhatsApp Dispatcher & Queue
 | Endpoint | Method | Description |
@@ -455,13 +531,16 @@ attendance/
 ### Q1: Why does the system stay cool even during 300-student classes?
 > **Answer**: MedAttend uses an **Adaptive Thermal Load Controller** (`stream.py`) that monitors rolling AI inference latency. When inference load increases, it automatically adjusts scan intervals within safe bounds (0.8s–2.0s), preventing thermal throttling. Additionally, seated students are tracked via a 60-second spatial cache to eliminate redundant ArcFace calculations.
 
-### Q2: What happens when no attendance session is running?
+### Q2: How does the Student Portal protect student attendance privacy?
+> **Answer**: The portal features **Role-Based Isolation**. Students can only log in with their assigned Roll Number and personal 6-digit PIN, giving them access exclusively to their own curriculum stats and past 7 days of verified attendance. Faculty and Super Admins have elevated viewing controls to monitor entire cohorts.
+
+### Q3: What happens when no attendance session is running?
 > **Answer**: The system enters **Eco-Power Idle Mode**. Camera grabbing loops pause active decoding (`time.sleep(0.5)`), reducing idle CPU usage by over 70%. When a user opens the live preview or starts a class, streams instantly resume full 20–25 FPS playback in under 0.05 seconds.
 
-### Q3: `Meta Access Token expired (OAuth 190)` error?
+### Q4: `Meta Access Token expired (OAuth 190)` error?
 > **Answer**: Meta developer tokens expire every 24 hours. Simply paste your new token directly into the **WhatsApp Alert Modal** in the web dashboard and click **"Save & Retry"**. It updates in memory and in `.env` automatically without restarting the server.
 
-### Q4: Port 3000 or 8000 already in use?
+### Q5: Port 3000 or 8000 already in use?
 > **Answer**: Simply launch the app using `./start.sh`. The built-in process manager identifies and cleans only conflicting local processes before starting the production services.
 
 ---
