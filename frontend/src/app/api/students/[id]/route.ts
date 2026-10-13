@@ -2,6 +2,7 @@ import { NextResponse, NextRequest } from 'next/server';
 import { supabaseServer } from '@/lib/supabaseServer';
 import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/serverAuth';
 import { logAuditEvent } from '@/lib/auditLog';
+import { getParentPhone } from '@/lib/studentContact';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,7 +27,7 @@ export async function GET(
     const { id } = await params;
     const { data, error } = await supabaseServer
       .from('students')
-      .select('id, student_roll, full_name, email, academic_year, parent_phone, face_encoding, created_at')
+      .select('id, student_roll, full_name, email, academic_year, face_encoding, created_at')
       .eq('id', id)
       .maybeSingle();
 
@@ -41,10 +42,7 @@ export async function GET(
         : typeof data.face_encoding === 'object' && Object.keys(data.face_encoding).length > 0 && !(data.face_encoding as any).parent_phone)
     );
 
-    let phone = data.parent_phone || null;
-    if (!phone && data.face_encoding && typeof data.face_encoding === 'object' && !Array.isArray(data.face_encoding) && (data.face_encoding as any).parent_phone) {
-      phone = (data.face_encoding as any).parent_phone;
-    }
+    const phone = getParentPhone(data) || null;
 
     return NextResponse.json({
       success: true,
@@ -122,7 +120,7 @@ export async function PUT(
     };
     if (cleanPhone) basePayload.parent_phone = cleanPhone;
 
-    const selectFields = 'id, student_roll, full_name, email, academic_year, parent_phone, face_encoding, created_at';
+    const selectFields = 'id, student_roll, full_name, email, academic_year, face_encoding, created_at';
 
     let { data, error } = await supabaseServer
       .from('students')
@@ -159,10 +157,7 @@ export async function PUT(
         : typeof data.face_encoding === 'object' && Object.keys(data.face_encoding).length > 0 && !(data.face_encoding as any).parent_phone)
     );
 
-    let phone = data?.parent_phone || null;
-    if (!phone && data?.face_encoding && typeof data.face_encoding === 'object' && !Array.isArray(data.face_encoding) && (data.face_encoding as any).parent_phone) {
-      phone = (data.face_encoding as any).parent_phone;
-    }
+    const phone = getParentPhone(data) || cleanPhone || null;
 
     const sanitizedStudent = data ? {
       id: data.id,

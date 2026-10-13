@@ -3,6 +3,7 @@ import { supabaseServer } from '@/lib/supabaseServer';
 import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/serverAuth';
 import { isCohortMatching } from '@/lib/cohort';
 import { logAuditEvent } from '@/lib/auditLog';
+import { getParentPhone } from '@/lib/studentContact';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,7 +27,7 @@ export async function GET(request: NextRequest) {
 
     const { data, error } = await supabaseServer
       .from('students')
-      .select('id, student_roll, full_name, email, academic_year, parent_phone, face_encoding, created_at')
+      .select('id, student_roll, full_name, email, academic_year, face_encoding, created_at')
       .order('student_roll', { ascending: true });
 
     if (error) throw error;
@@ -44,10 +45,7 @@ export async function GET(request: NextRequest) {
           : typeof s.face_encoding === 'object' && Object.keys(s.face_encoding).length > 0 && !(s.face_encoding as any).parent_phone)
       );
 
-      let phone = s.parent_phone || null;
-      if (!phone && s.face_encoding && typeof s.face_encoding === 'object' && !Array.isArray(s.face_encoding) && (s.face_encoding as any).parent_phone) {
-        phone = (s.face_encoding as any).parent_phone;
-      }
+      const phone = getParentPhone(s) || null;
 
       return {
         id: s.id,
@@ -129,7 +127,7 @@ export async function POST(request: NextRequest) {
     };
     if (cleanPhone) fullPayload.parent_phone = cleanPhone;
 
-    const selectFields = 'id, student_roll, full_name, email, academic_year, parent_phone, created_at';
+    const selectFields = 'id, student_roll, full_name, email, academic_year, created_at';
 
     let { data, error } = await supabaseServer
       .from('students')
@@ -166,7 +164,7 @@ export async function POST(request: NextRequest) {
       full_name: data.full_name,
       email: data.email,
       academic_year: data.academic_year,
-      parent_phone: data.parent_phone || cleanPhone || null,
+      parent_phone: cleanPhone || null,
       created_at: data.created_at,
       has_face: false,
       face_encoding: null,
