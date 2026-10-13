@@ -139,13 +139,26 @@ export default function StudentPortalPage() {
       if (!res.ok || !result.success) {
         throw new Error(result.error || "Failed to update PIN");
       }
+
+      // Immediately update student state so the initial setup banner vanishes instantly
+      setData((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          student: {
+            ...prev.student,
+            hasCustomPin: true,
+          },
+        };
+      });
+
       setPinMessage({ type: "success", text: "Security PIN updated successfully!" });
       setTimeout(() => {
         setIsPinModalOpen(false);
         setOldPin("");
         setNewPin("");
         setPinMessage(null);
-      }, 1500);
+      }, 700);
     } catch (err: any) {
       setPinMessage({ type: "error", text: err.message || "Could not update PIN." });
     } finally {
