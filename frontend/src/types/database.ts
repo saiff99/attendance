@@ -5,7 +5,8 @@ export interface Student {
   email: string;
   academic_year?: string;
   parent_phone?: string;
-  face_encoding?: Record<string, unknown>;
+  face_encoding?: Record<string, unknown> | boolean | null;
+  has_face?: boolean;
   created_at: string;
 }
 

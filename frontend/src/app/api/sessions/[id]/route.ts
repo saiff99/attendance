@@ -9,6 +9,19 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const sessionCookie = request.cookies.get(SESSION_COOKIE_NAME)?.value;
+    if (!sessionCookie) {
+      return NextResponse.json({ success: false, error: 'Unauthorized.' }, { status: 401 });
+    }
+
+    const session = await verifySessionToken(sessionCookie);
+    if (!session || (session.role !== 'Super Admin' && session.role !== 'Faculty')) {
+      return NextResponse.json(
+        { success: false, error: 'Forbidden. Faculty or Super Admin access required.' },
+        { status: 403 }
+      );
+    }
+
     const { id } = await params;
     if (!id) {
       return NextResponse.json({ success: false, error: 'Session ID required.' }, { status: 400 });
@@ -16,9 +29,10 @@ export async function GET(
 
     const { data, error } = await supabaseServer
       .from('sessions')
-      .select('*')
+      .select('id, class_name, date, start_time, end_time, instructor_name, target_academic_year, created_at')
       .eq('id', id)
-      .single();
+      .neq('class_name', '__SYSTEM_CONFIG__')
+      .maybeSingle();
 
     if (error || !data) {
       return NextResponse.json({ success: false, error: 'Session not found.' }, { status: 404 });
@@ -64,7 +78,8 @@ export async function PATCH(
       .from('sessions')
       .update(updatePayload)
       .eq('id', id)
-      .select()
+      .neq('class_name', '__SYSTEM_CONFIG__')
+      .select('id, class_name, date, start_time, end_time, instructor_name, target_academic_year, created_at')
       .single();
 
     if (error) throw error;

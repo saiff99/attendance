@@ -26,15 +26,41 @@ export async function GET(request: NextRequest) {
 
     const { data, error } = await supabaseServer
       .from('students')
-      .select('*')
+      .select('id, student_roll, full_name, email, academic_year, parent_phone, face_encoding, created_at')
       .order('student_roll', { ascending: true });
 
     if (error) throw error;
 
-    let students = data || [];
+    let rawStudents = data || [];
     if (cohort && cohort !== 'All') {
-      students = students.filter(s => isCohortMatching(cohort, s.academic_year));
+      rawStudents = rawStudents.filter(s => isCohortMatching(cohort, s.academic_year));
     }
+
+    const students = rawStudents.map((s: any) => {
+      const hasFace = !!(
+        s.face_encoding &&
+        (Array.isArray(s.face_encoding)
+          ? s.face_encoding.length > 0
+          : typeof s.face_encoding === 'object' && Object.keys(s.face_encoding).length > 0 && !(s.face_encoding as any).parent_phone)
+      );
+
+      let phone = s.parent_phone || null;
+      if (!phone && s.face_encoding && typeof s.face_encoding === 'object' && !Array.isArray(s.face_encoding) && (s.face_encoding as any).parent_phone) {
+        phone = (s.face_encoding as any).parent_phone;
+      }
+
+      return {
+        id: s.id,
+        student_roll: s.student_roll,
+        full_name: s.full_name,
+        email: s.email,
+        academic_year: s.academic_year,
+        parent_phone: phone,
+        created_at: s.created_at,
+        has_face: hasFace,
+        face_encoding: hasFace ? true : null,
+      };
+    });
 
     return NextResponse.json({
       success: true,
@@ -103,10 +129,12 @@ export async function POST(request: NextRequest) {
     };
     if (cleanPhone) fullPayload.parent_phone = cleanPhone;
 
+    const selectFields = 'id, student_roll, full_name, email, academic_year, parent_phone, created_at';
+
     let { data, error } = await supabaseServer
       .from('students')
       .insert([fullPayload])
-      .select()
+      .select(selectFields)
       .single();
 
     if (error && (error.code === 'PGRST204' || error.message?.includes('parent_phone') || error.message?.includes('biometric_consent'))) {
@@ -117,7 +145,7 @@ export async function POST(request: NextRequest) {
       const retry = await supabaseServer
         .from('students')
         .insert([fallbackPayload])
-        .select()
+        .select(selectFields)
         .single();
       if (retry.error) throw retry.error;
       data = retry.data;
@@ -132,9 +160,21 @@ export async function POST(request: NextRequest) {
       details: { student_roll: cleanRoll, full_name: cleanName, academic_year: cleanYear },
     });
 
+    const sanitizedStudent = data ? {
+      id: data.id,
+      student_roll: data.student_roll,
+      full_name: data.full_name,
+      email: data.email,
+      academic_year: data.academic_year,
+      parent_phone: data.parent_phone || cleanPhone || null,
+      created_at: data.created_at,
+      has_face: false,
+      face_encoding: null,
+    } : null;
+
     return NextResponse.json({
       success: true,
-      student: data,
+      student: sanitizedStudent,
     });
   } catch (err: any) {
     console.error('Error creating student via API:', err);

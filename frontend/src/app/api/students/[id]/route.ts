@@ -5,6 +5,67 @@ import { logAuditEvent } from '@/lib/auditLog';
 
 export const dynamic = 'force-dynamic';
 
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const sessionCookie = request.cookies.get(SESSION_COOKIE_NAME)?.value;
+    if (!sessionCookie) {
+      return NextResponse.json({ success: false, error: 'Unauthorized.' }, { status: 401 });
+    }
+
+    const session = await verifySessionToken(sessionCookie);
+    if (!session || (session.role !== 'Super Admin' && session.role !== 'Faculty')) {
+      return NextResponse.json(
+        { success: false, error: 'Forbidden. Faculty or Super Admin access required.' },
+        { status: 403 }
+      );
+    }
+
+    const { id } = await params;
+    const { data, error } = await supabaseServer
+      .from('students')
+      .select('id, student_roll, full_name, email, academic_year, parent_phone, face_encoding, created_at')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (error || !data) {
+      return NextResponse.json({ success: false, error: 'Student not found.' }, { status: 404 });
+    }
+
+    const hasFace = !!(
+      data.face_encoding &&
+      (Array.isArray(data.face_encoding)
+        ? data.face_encoding.length > 0
+        : typeof data.face_encoding === 'object' && Object.keys(data.face_encoding).length > 0 && !(data.face_encoding as any).parent_phone)
+    );
+
+    let phone = data.parent_phone || null;
+    if (!phone && data.face_encoding && typeof data.face_encoding === 'object' && !Array.isArray(data.face_encoding) && (data.face_encoding as any).parent_phone) {
+      phone = (data.face_encoding as any).parent_phone;
+    }
+
+    return NextResponse.json({
+      success: true,
+      student: {
+        id: data.id,
+        student_roll: data.student_roll,
+        full_name: data.full_name,
+        email: data.email,
+        academic_year: data.academic_year,
+        parent_phone: phone,
+        created_at: data.created_at,
+        has_face: hasFace,
+        face_encoding: hasFace ? true : null,
+      },
+    });
+  } catch (err: any) {
+    console.error('Error fetching student via API:', err);
+    return NextResponse.json({ success: false, error: err.message || 'Failed to fetch student' }, { status: 500 });
+  }
+}
+
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -61,11 +122,13 @@ export async function PUT(
     };
     if (cleanPhone) basePayload.parent_phone = cleanPhone;
 
+    const selectFields = 'id, student_roll, full_name, email, academic_year, parent_phone, face_encoding, created_at';
+
     let { data, error } = await supabaseServer
       .from('students')
       .update(basePayload)
       .eq('id', id)
-      .select()
+      .select(selectFields)
       .single();
 
     if (error && (error.code === 'PGRST204' || error.message?.includes('parent_phone'))) {
@@ -74,7 +137,7 @@ export async function PUT(
         .from('students')
         .update(basePayload)
         .eq('id', id)
-        .select()
+        .select(selectFields)
         .single();
       if (retry.error) throw retry.error;
       data = retry.data;
@@ -89,9 +152,33 @@ export async function PUT(
       details: { student_roll: cleanRoll, full_name: cleanName, academic_year: cleanYear },
     });
 
+    const hasFace = !!(
+      data?.face_encoding &&
+      (Array.isArray(data.face_encoding)
+        ? data.face_encoding.length > 0
+        : typeof data.face_encoding === 'object' && Object.keys(data.face_encoding).length > 0 && !(data.face_encoding as any).parent_phone)
+    );
+
+    let phone = data?.parent_phone || null;
+    if (!phone && data?.face_encoding && typeof data.face_encoding === 'object' && !Array.isArray(data.face_encoding) && (data.face_encoding as any).parent_phone) {
+      phone = (data.face_encoding as any).parent_phone;
+    }
+
+    const sanitizedStudent = data ? {
+      id: data.id,
+      student_roll: data.student_roll,
+      full_name: data.full_name,
+      email: data.email,
+      academic_year: data.academic_year,
+      parent_phone: phone,
+      created_at: data.created_at,
+      has_face: hasFace,
+      face_encoding: hasFace ? true : null,
+    } : null;
+
     return NextResponse.json({
       success: true,
-      student: data,
+      student: sanitizedStudent,
     });
   } catch (err: any) {
     console.error('Error updating student via API:', err);
