@@ -375,7 +375,7 @@ export default function StudentPortalPage() {
                       : "bg-amber-500/10 text-amber-400 border border-amber-500/20"
                   }`}>
                     {student.hasFaceEnrolled ? <Check className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />}
-                    {student.hasFaceEnrolled ? "Biometrics Registered (AI Ready)" : "Biometrics Pending"}
+                    {student.hasFaceEnrolled ? "Biometrics Registered" : "Biometrics Pending"}
                   </span>
                 </div>
               </div>
