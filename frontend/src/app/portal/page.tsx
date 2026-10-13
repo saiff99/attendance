@@ -382,29 +382,31 @@ export default function StudentPortalPage() {
             </div>
 
             {/* Right: Exam Eligibility Badge */}
-            <div className="flex flex-col sm:items-end justify-center bg-slate-950/60 border border-slate-800/80 rounded-2xl p-4 sm:p-5">
-              <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold mb-1">
+            <div className="flex flex-col items-center justify-center text-center bg-slate-950/60 border border-slate-800/80 rounded-2xl p-4 sm:p-5">
+              <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold mb-1.5 text-center">
                 NMC University Eligibility
               </span>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center justify-center">
                 {summary.status === "Eligible" ? (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-bold text-sm shadow-inner">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                    Eligible for Exams
+                  <span className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-bold text-sm shadow-inner text-center">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>Eligible for Exams</span>
                   </span>
                 ) : summary.status === "Borderline" ? (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-300 font-bold text-sm shadow-inner">
-                    <AlertTriangle className="w-4 h-4 text-amber-400" />
-                    Borderline (Requires Caution)
+                  <span className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-300 font-bold text-sm shadow-inner text-center">
+                    <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                    <span>Borderline (Requires Caution)</span>
                   </span>
                 ) : (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-rose-500/20 border border-rose-500/40 text-rose-300 font-bold text-sm shadow-inner">
-                    <XCircle className="w-4 h-4 text-rose-400" />
-                    Attendance Shortage (&lt;75%)
+                  <span className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-rose-500/20 border border-rose-500/40 text-rose-300 font-bold text-sm shadow-inner text-center">
+                    <XCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                    <span>Attendance Shortage (&lt;75%)</span>
                   </span>
                 )}
               </div>
-              <p className="text-[10px] text-slate-500 mt-1 sm:text-right">Minimum 75% required across all departments</p>
+              <p className="text-[10px] text-slate-500 mt-1.5 text-center">
+                Minimum 75% required across all departments
+              </p>
             </div>
           </div>
         </div>
