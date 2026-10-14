@@ -1,9 +1,9 @@
 // MedAttend PWA Service Worker
-const CACHE_NAME = 'medattend-pwa-v1';
+const CACHE_NAME = 'medattend-pwa-v2';
 const STATIC_ASSETS = [
   '/',
-  '/selfieattend',
   '/portal',
+  '/selfieattend',
   '/manifest.json',
   '/icons/icon-192x192.png',
   '/icons/icon-512x512.png',
@@ -61,7 +61,7 @@ self.addEventListener('fetch', (event) => {
         })
         .catch(() => {
           return caches.match(event.request).then((cached) => {
-            return cached || caches.match('/selfieattend');
+            return cached || caches.match('/');
           });
         })
     );
