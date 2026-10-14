@@ -163,6 +163,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
   const [geofenceStatus, setGeofenceStatus] = useState<"idle" | "checking" | "allowed" | "blocked" | "permission_error">("idle");
   const [geofenceDistance, setGeofenceDistance] = useState<number | null>(null);
   const [geofenceErrorMessage, setGeofenceErrorMessage] = useState<string | null>(null);
+  const isVerifyingRef = useRef(false);
 
   const backendUrl = getBackendUrl();
 
@@ -197,18 +198,6 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
     return geofenceConfig;
   }, [selectedSession, geofenceConfig]);
 
-  // When selected session changes, reset or auto-allow if geofence is disabled for this session
-  useEffect(() => {
-    if (!effectiveGeofence.enabled) {
-      setGeofenceStatus("allowed");
-      setGeofenceErrorMessage(null);
-    } else {
-      setGeofenceStatus("idle");
-      setGeofenceDistance(null);
-      setGeofenceErrorMessage(null);
-    }
-  }, [effectiveGeofence]);
-
   // Verify User GPS Location against Geofence boundary
   const verifyUserLocation = useCallback(async (): Promise<boolean> => {
     if (!effectiveGeofence.enabled) {
@@ -217,6 +206,11 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
       return true;
     }
 
+    if (isVerifyingRef.current) {
+      return false;
+    }
+
+    isVerifyingRef.current = true;
     setGeofenceStatus("checking");
     setGeofenceErrorMessage(null);
 
@@ -249,8 +243,23 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
         err.message || "Please allow GPS location access in your browser settings to verify you are physically present in the classroom."
       );
       return false;
+    } finally {
+      isVerifyingRef.current = false;
     }
   }, [effectiveGeofence]);
+
+  // When selected session changes, reset or auto-allow if geofence is disabled for this session
+  useEffect(() => {
+    if (!effectiveGeofence.enabled) {
+      setGeofenceStatus("allowed");
+      setGeofenceErrorMessage(null);
+    } else {
+      setGeofenceStatus("checking");
+      setGeofenceDistance(null);
+      setGeofenceErrorMessage(null);
+      verifyUserLocation();
+    }
+  }, [effectiveGeofence, verifyUserLocation]);
 
   // Helper: calculate remaining seconds for any session (5-minute / 300s window)
   const getSessionRemainingSeconds = useCallback((sess: ActiveSession) => {
@@ -417,7 +426,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
         if (localRes.ok && data.student) {
           setStudent(data.student);
           if (overrideRoll) setRollInput(overrideRoll);
-          if (geofenceConfig.enabled && geofenceStatus === "idle") {
+          if (effectiveGeofence.enabled && geofenceStatus !== "allowed") {
             verifyUserLocation();
           }
           return;
@@ -442,7 +451,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
 
       setStudent(data.student);
       if (overrideRoll) setRollInput(overrideRoll);
-      if (geofenceConfig.enabled && geofenceStatus === "idle") {
+      if (effectiveGeofence.enabled && geofenceStatus !== "allowed") {
         verifyUserLocation();
       }
     } catch (err: any) {
@@ -467,12 +476,26 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
       return;
     }
 
-    if (geofenceConfig.enabled && geofenceStatus !== "allowed") {
-      const allowed = await verifyUserLocation();
-      if (!allowed) {
+    // STRICT LOCATION VERIFICATION:
+    // If geofence protection is enabled, the camera can NEVER open unless geofenceStatus is explicitly verified and allowed!
+    if (effectiveGeofence.enabled) {
+      if (geofenceStatus === "blocked") {
+        setLookupError(geofenceErrorMessage || `Location Boundary Rejection: You are outside the allowed ${effectiveGeofence.radiusMeters}m classroom boundary. Camera access is blocked.`);
         return;
       }
+      if (geofenceStatus === "permission_error") {
+        setLookupError(geofenceErrorMessage || "Location Permission Required: Please allow GPS location access in your browser settings to verify classroom presence.");
+        return;
+      }
+      if (geofenceStatus !== "allowed") {
+        const allowed = await verifyUserLocation();
+        if (!allowed) {
+          setLookupError(geofenceErrorMessage || `Location Boundary Rejection: You are outside the allowed ${effectiveGeofence.radiusMeters}m classroom boundary. Camera access is blocked.`);
+          return;
+        }
+      }
     }
+
     setStep("capture_selfie");
   };
 
@@ -687,6 +710,15 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
       setResultData({
         success: false,
         message: `Cohort Restriction: This attendance session is strictly for '${targetYear}' students. Your profile is registered as '${studentYear}'.`,
+      });
+      setStep("result");
+      return;
+    }
+
+    if (effectiveGeofence.enabled && geofenceStatus !== "allowed") {
+      setResultData({
+        success: false,
+        message: geofenceErrorMessage || `Location Boundary Rejection: You must be physically inside ${effectiveGeofence.campusName} (${effectiveGeofence.radiusMeters}m radius) to record attendance.`,
       });
       setStep("result");
       return;
@@ -935,6 +967,19 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                             Logged in as {user?.name || user?.studentRoll}
                           </span>
                         </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Location Alert on Session List */}
+                  {effectiveGeofence.enabled && geofenceStatus === "blocked" && (
+                    <div className="flex items-center gap-2.5 p-3 rounded-xl bg-rose-950/60 border border-rose-500/40 text-xs text-rose-200 animate-in fade-in">
+                      <MapPin className="w-4 h-4 text-rose-400 shrink-0" />
+                      <div className="min-w-0">
+                        <span className="font-bold text-white block">Outside Campus Boundary</span>
+                        <span className="text-[11px] text-rose-300/80 block">
+                          You are currently outside the classroom area ({geofenceDistance !== null ? `${formatDistance(geofenceDistance)} away` : "out of range"}). Attendance requires physical presence inside the lecture hall.
+                        </span>
                       </div>
                     </div>
                   )}
@@ -1356,24 +1401,61 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                           <span>Attendance Confirmed • Return to Classes</span>
                         </button>
                       ) : (
-                        <button
-                          onClick={handleProceedToSelfie}
-                          disabled={geofenceStatus === "checking" || geofenceStatus === "blocked"}
-                          className={`w-full py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 mt-1 ${geofenceStatus === "blocked"
-                            ? "bg-slate-800 text-slate-500 border border-slate-700/50 cursor-not-allowed opacity-75"
-                            : geofenceStatus === "checking"
-                              ? "bg-indigo-900/60 text-indigo-200 cursor-wait"
-                              : "bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-lg shadow-emerald-600/25 cursor-pointer"
-                            }`}
-                        >
-                          {geofenceStatus === "checking" ? (
-                            <><Loader2 className="w-4 h-4 animate-spin" /> Verifying Classroom GPS...</>
-                          ) : geofenceStatus === "blocked" ? (
-                            <><ShieldAlert className="w-4 h-4 text-rose-400" /> Blocked • Outside Classroom Boundary</>
-                          ) : (
-                            <><Camera className="w-4 h-4" /> Proceed to Take Selfie</>
+                        <div className="flex flex-col gap-2 mt-1">
+                          {/* Explicit Warning Banner when Outside Classroom Boundary */}
+                          {effectiveGeofence.enabled && geofenceStatus === "blocked" && (
+                            <div className="p-3.5 rounded-xl bg-rose-950/70 border border-rose-500/50 text-rose-200 flex flex-col gap-1.5 shadow-lg shadow-rose-950/30 animate-in fade-in">
+                              <div className="flex items-center gap-2 text-rose-300 font-bold text-xs">
+                                <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0" />
+                                <span>Camera Access Blocked • Outside Campus Boundary</span>
+                              </div>
+                              <p className="text-xs text-rose-100 font-medium leading-relaxed">
+                                {geofenceErrorMessage || `You are outside the ${effectiveGeofence.radiusMeters}m boundary of ${effectiveGeofence.campusName}.`}
+                              </p>
+                              <p className="text-[11px] text-rose-300/80">
+                                The selfie camera cannot be opened from outside campus. You must be physically inside the lecture hall to take selfie attendance.
+                              </p>
+                            </div>
                           )}
-                        </button>
+
+                          {/* Explicit Warning Banner when Location Permission Denied */}
+                          {effectiveGeofence.enabled && geofenceStatus === "permission_error" && (
+                            <div className="p-3.5 rounded-xl bg-amber-950/70 border border-amber-500/50 text-amber-200 flex flex-col gap-1.5 shadow-lg shadow-amber-950/30 animate-in fade-in">
+                              <div className="flex items-center gap-2 text-amber-300 font-bold text-xs">
+                                <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0" />
+                                <span>Location Permission Required</span>
+                              </div>
+                              <p className="text-xs text-amber-100 font-medium leading-relaxed">
+                                {geofenceErrorMessage || "Please allow GPS location access in your browser settings to verify you are physically present in the classroom."}
+                              </p>
+                            </div>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={handleProceedToSelfie}
+                            disabled={effectiveGeofence.enabled && (geofenceStatus === "checking" || geofenceStatus === "blocked" || geofenceStatus === "permission_error")}
+                            className={`w-full py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${
+                              effectiveGeofence.enabled && geofenceStatus === "blocked"
+                                ? "bg-slate-900 text-rose-400/80 border border-rose-500/30 cursor-not-allowed opacity-80 shadow-inner"
+                                : effectiveGeofence.enabled && geofenceStatus === "permission_error"
+                                  ? "bg-slate-900 text-amber-400/80 border border-amber-500/30 cursor-not-allowed opacity-80"
+                                  : effectiveGeofence.enabled && geofenceStatus === "checking"
+                                    ? "bg-indigo-900/60 text-indigo-200 border border-indigo-500/30 cursor-wait"
+                                    : "bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-lg shadow-emerald-600/25 cursor-pointer"
+                            }`}
+                          >
+                            {effectiveGeofence.enabled && geofenceStatus === "checking" ? (
+                              <><Loader2 className="w-4 h-4 animate-spin" /> Verifying Classroom GPS...</>
+                            ) : effectiveGeofence.enabled && geofenceStatus === "blocked" ? (
+                              <><ShieldAlert className="w-4 h-4 text-rose-400" /> Blocked • Outside Classroom Boundary</>
+                            ) : effectiveGeofence.enabled && geofenceStatus === "permission_error" ? (
+                              <><ShieldAlert className="w-4 h-4 text-amber-400" /> Blocked • Location Permission Needed</>
+                            ) : (
+                              <><Camera className="w-4 h-4" /> Proceed to Take Selfie</>
+                            )}
+                          </button>
+                        </div>
                       )}
                     </div>
                   );
