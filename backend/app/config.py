@@ -136,31 +136,57 @@ def is_cohort_matching(target_cohort: Optional[str], student_year: Optional[str]
 import math
 
 DEFAULT_GEOFENCE_CONFIG = {
-    "enabled": False,
-    "latitude": 22.4285,
-    "longitude": 88.2435,
-    "radiusMeters": 200.0,
-    "campusName": "Jagannath Gupta Institute of Medical Sciences (JIMSH)",
+    "enabled": True,  # Secure by default: always enabled
+    "latitude": 22.451550,
+    "longitude": 88.172366,
+    "radiusMeters": 30.0,
+    "campusName": "JIMSH Medical College Campus & Lecture Halls",
 }
 
 
 def get_server_geofence_config() -> dict:
-    """Fetches the latest geofence settings from Supabase or returns defaults."""
+    """Fetches the latest geofence settings from Supabase or returns secure defaults."""
     try:
         if supabase:
             res = supabase.table("settings").select("value").eq("key", "campus_geofence").execute()
             if res.data and res.data[0].get("value"):
                 val = res.data[0]["value"]
+                enabled_val = val.get("enabled")
+                enabled = bool(enabled_val) if enabled_val is not None else DEFAULT_GEOFENCE_CONFIG["enabled"]
+
+                try:
+                    lat = float(val.get("latitude", DEFAULT_GEOFENCE_CONFIG["latitude"]))
+                    if math.isnan(lat) or math.isinf(lat) or not (-90.0 <= lat <= 90.0):
+                        lat = DEFAULT_GEOFENCE_CONFIG["latitude"]
+                except (ValueError, TypeError):
+                    lat = DEFAULT_GEOFENCE_CONFIG["latitude"]
+
+                try:
+                    lng = float(val.get("longitude", DEFAULT_GEOFENCE_CONFIG["longitude"]))
+                    if math.isnan(lng) or math.isinf(lng) or not (-180.0 <= lng <= 180.0):
+                        lng = DEFAULT_GEOFENCE_CONFIG["longitude"]
+                except (ValueError, TypeError):
+                    lng = DEFAULT_GEOFENCE_CONFIG["longitude"]
+
+                try:
+                    radius = float(val.get("radiusMeters", DEFAULT_GEOFENCE_CONFIG["radiusMeters"]))
+                    if math.isnan(radius) or math.isinf(radius) or radius <= 0:
+                        radius = DEFAULT_GEOFENCE_CONFIG["radiusMeters"]
+                except (ValueError, TypeError):
+                    radius = DEFAULT_GEOFENCE_CONFIG["radiusMeters"]
+
+                campus_name = str(val.get("campusName", DEFAULT_GEOFENCE_CONFIG["campusName"])).strip() or DEFAULT_GEOFENCE_CONFIG["campusName"]
+
                 return {
-                    "enabled": bool(val.get("enabled", False)),
-                    "latitude": float(val.get("latitude", DEFAULT_GEOFENCE_CONFIG["latitude"])),
-                    "longitude": float(val.get("longitude", DEFAULT_GEOFENCE_CONFIG["longitude"])),
-                    "radiusMeters": float(val.get("radiusMeters", DEFAULT_GEOFENCE_CONFIG["radiusMeters"])),
-                    "campusName": str(val.get("campusName", DEFAULT_GEOFENCE_CONFIG["campusName"])),
+                    "enabled": enabled,
+                    "latitude": lat,
+                    "longitude": lng,
+                    "radiusMeters": radius,
+                    "campusName": campus_name,
                 }
-    except Exception:
-        pass
-    return DEFAULT_GEOFENCE_CONFIG
+    except Exception as e:
+        print("Warning: Failed to fetch campus_geofence from Supabase settings, using secure default:", e)
+    return DEFAULT_GEOFENCE_CONFIG.copy()
 
 
 def calculate_haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:

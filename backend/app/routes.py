@@ -1,6 +1,9 @@
 import os
 import io
 import time
+import math
+import re
+import urllib.parse
 import random
 import asyncio
 from datetime import datetime, timezone
@@ -751,37 +754,8 @@ async def selfie_attendance(
                 detail=f"Device Lock: This phone/device has already submitted attendance for Roll '{other_roll}' in this session. One device cannot be used for multiple students."
             )
 
-    # 3. Server-Side GPS Geofence Check
-    geofence = get_server_geofence_config()
-    if geofence.get("enabled"):
-        if latitude is None or longitude is None:
-            raise HTTPException(
-                status_code=403,
-                detail="GPS location is required for attendance. Please enable device GPS/Location and grant permission."
-            )
-        try:
-            actual_dist = calculate_haversine_distance(
-                float(latitude),
-                float(longitude),
-                float(geofence["latitude"]),
-                float(geofence["longitude"])
-            )
-            max_radius = float(geofence.get("radiusMeters", 200.0))
-            if actual_dist > max_radius:
-                campus_name = geofence.get("campusName", "College Campus")
-                raise HTTPException(
-                    status_code=403,
-                    detail=f"Geofence Restriction: You are {int(actual_dist)}m away from {campus_name}. Attendance is only permitted within {int(max_radius)}m of the campus."
-                )
-        except HTTPException:
-            raise
-        except Exception as geo_err:
-            print("Server geofence calculation error:", geo_err)
-
-    contents = await safe_read_image_file(file, MAX_SELFIE_IMAGE_SIZE)
-    
-    # 4. Check 5-minute session expiration window & Target Cohort
-    session_res = supabase.table("sessions").select("id, start_time, created_at, class_name, target_academic_year").eq("id", session_id).execute()
+    # 3. Check Session Expiration & Load Metadata
+    session_res = supabase.table("sessions").select("id, start_time, created_at, class_name, target_academic_year, instructor_name").eq("id", session_id).execute()
     if not session_res.data:
         raise HTTPException(status_code=404, detail="Lecture session not found.")
         
@@ -803,6 +777,89 @@ async def selfie_attendance(
             raise
         except Exception as err:
             print("Timestamp check error:", err)
+
+    # 4. Server-Side GPS Geofence Check (Strict Fail-Safe Enforcement)
+    geofence = get_server_geofence_config()
+    sess_instructor = sess_obj.get("instructor_name") or ""
+    gps_match = re.search(r"\[GPS:([-\d.]+),([-\d.]+),(\d+),([01])(?:,([^\]]*))?\]", sess_instructor)
+    if gps_match:
+        try:
+            sess_campus_name = "College Campus & Lecture Halls"
+            if gps_match.group(5):
+                try:
+                    sess_campus_name = urllib.parse.unquote(gps_match.group(5))
+                except Exception:
+                    sess_campus_name = gps_match.group(5)
+            geofence = {
+                "latitude": float(gps_match.group(1)),
+                "longitude": float(gps_match.group(2)),
+                "radiusMeters": float(gps_match.group(3)),
+                "enabled": gps_match.group(4) == "1",
+                "campusName": sess_campus_name,
+            }
+        except Exception as parse_err:
+            print("Session GPS metadata parse error:", parse_err)
+
+    if geofence.get("enabled", True):
+        if latitude is None or longitude is None:
+            raise HTTPException(
+                status_code=403,
+                detail="GPS location is required for attendance. Please enable device GPS/Location and grant permission."
+            )
+
+        # Explicitly validate and reject NaN, Infinity, out-of-range or malformed coordinates
+        try:
+            lat = float(latitude)
+            lng = float(longitude)
+            if math.isnan(lat) or math.isnan(lng) or math.isinf(lat) or math.isinf(lng):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Invalid GPS coordinates: NaN or Infinite values are strictly rejected."
+                )
+            if not (-90.0 <= lat <= 90.0 and -180.0 <= lng <= 180.0):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Invalid GPS coordinates: Latitude must be between -90 and 90, Longitude between -180 and 180."
+                )
+        except HTTPException:
+            raise
+        except (ValueError, TypeError):
+            raise HTTPException(
+                status_code=400,
+                detail="Malformed GPS coordinates provided."
+            )
+
+        try:
+            center_lat = float(geofence["latitude"])
+            center_lng = float(geofence["longitude"])
+            max_radius = float(geofence.get("radiusMeters", 30.0))
+            campus_name = str(geofence.get("campusName", "College Campus & Lecture Halls"))
+
+            if math.isnan(center_lat) or math.isnan(center_lng) or math.isnan(max_radius):
+                raise ValueError("Corrupted geofence reference coordinates.")
+
+            actual_dist = calculate_haversine_distance(lat, lng, center_lat, center_lng)
+            if math.isnan(actual_dist) or math.isinf(actual_dist):
+                raise HTTPException(
+                    status_code=403,
+                    detail="Could not calculate physical distance from campus. Geofence verification failed."
+                )
+
+            if actual_dist > max_radius:
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"Geofence Restriction: You are {int(actual_dist)}m away from {campus_name}. Attendance is only permitted within {int(max_radius)}m of the classroom/campus."
+                )
+        except HTTPException:
+            raise
+        except Exception as geo_err:
+            print("Server geofence verification error:", geo_err)
+            raise HTTPException(
+                status_code=403,
+                detail="Geofence validation failed: Could not securely verify physical presence inside the classroom boundary."
+            )
+
+    contents = await safe_read_image_file(file, MAX_SELFIE_IMAGE_SIZE)
 
     # 5. Fetch Student from DB
     res = supabase.table("students").select(
