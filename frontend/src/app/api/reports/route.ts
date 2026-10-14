@@ -23,7 +23,8 @@ export async function GET(request: NextRequest) {
     const { data: allSessions, error: sessErr } = await supabaseServer
       .from('sessions')
       .select('id, class_name, target_academic_year')
-      .neq('class_name', '__SYSTEM_CONFIG__');
+      .neq('class_name', '__SYSTEM_CONFIG__')
+      .neq('class_name', '__GEOFENCE_CONFIG__');
     if (sessErr) throw sessErr;
 
     // 2. Fetch students

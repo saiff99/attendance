@@ -42,6 +42,7 @@ export default async function Dashboard() {
     .from('sessions')
     .select('id, class_name, instructor_name, created_at, attendance(count)')
     .neq('class_name', '__SYSTEM_CONFIG__')
+    .neq('class_name', '__GEOFENCE_CONFIG__')
     .order('created_at', { ascending: false })
     .limit(10);
 

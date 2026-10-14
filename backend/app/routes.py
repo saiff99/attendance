@@ -535,10 +535,14 @@ async def get_active_sessions():
         ).order("created_at", desc=True).limit(50).execute()
         
         all_sessions = res.data or []
-        # Filter strictly for today's sessions
+        # Filter strictly for today's sessions and exclude system configs
         sessions = [
             s for s in all_sessions 
-            if s.get("date") == today_local or (s.get("created_at") and s["created_at"].startswith(today_local)) or (s.get("created_at") and s["created_at"] >= start_of_today_iso)
+            if not s.get("class_name", "").startswith("__") and (
+                s.get("date") == today_local 
+                or (s.get("created_at") and s["created_at"].startswith(today_local)) 
+                or (s.get("created_at") and s["created_at"] >= start_of_today_iso)
+            )
         ]
         
         # Batch fetch attendance counts in a single query (1 network call vs 50)
@@ -922,14 +926,9 @@ async def selfie_attendance(
         image_np = np.array(image)
         image_bgr = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
         
-        # Anti-Spoofing / Blur check (Laplacian variance)
+        # Anti-Spoofing / Blur check (Adaptive frame & face Laplacian variance)
         gray = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
         lap_var = float(cv2.Laplacian(gray, cv2.CV_64F).var())
-        if lap_var < 20.0:
-            raise HTTPException(
-                status_code=400,
-                detail="Selfie image is too blurry or out of focus. Please hold your phone steady in a well-lit area."
-            )
 
         faces = app_fa.get(image_bgr)
         if not faces:
@@ -945,6 +944,19 @@ async def selfie_attendance(
         # Face Proximity / Coverage Check
         first_face = valid_faces[0]
         bbox = first_face.bbox
+        h_img, w_img = gray.shape[:2]
+        bx1, by1, bx2, by2 = int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])
+        face_crop = gray[max(0, by1):min(h_img, by2), max(0, bx1):min(w_img, bx2)]
+        face_lap_var = float(cv2.Laplacian(face_crop, cv2.CV_64F).var()) if face_crop.size > 0 else lap_var
+
+        # Intelligent blur check: either whole frame or the face region must have sufficient focus
+        # Strictly rejects if BOTH frame and face region lack edge sharpness
+        if lap_var < 14.0 and face_lap_var < 16.0:
+            raise HTTPException(
+                status_code=400,
+                detail="Selfie image is too blurry or out of focus. Please hold your phone steady in a well-lit area."
+            )
+
         face_w = bbox[2] - bbox[0]
         face_h = bbox[3] - bbox[1]
         face_area_ratio = (face_w * face_h) / float(image_bgr.shape[0] * image_bgr.shape[1])

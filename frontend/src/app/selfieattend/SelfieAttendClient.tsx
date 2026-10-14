@@ -19,6 +19,7 @@ import {
   calculateDistanceMeters,
   formatDistance,
   getUserCoordinates,
+  getCalibratedHighPrecisionGPS,
   decodeSessionMetadata,
   getLocalGeofence
 } from "@/lib/geofence";
@@ -163,9 +164,35 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
   const [geofenceStatus, setGeofenceStatus] = useState<"idle" | "checking" | "allowed" | "blocked" | "permission_error">("idle");
   const [geofenceDistance, setGeofenceDistance] = useState<number | null>(null);
   const [geofenceErrorMessage, setGeofenceErrorMessage] = useState<string | null>(null);
+  const [gpsFixStatus, setGpsFixStatus] = useState<string>("");
   const isVerifyingRef = useRef(false);
+  const activeVerificationPromiseRef = useRef<Promise<boolean> | null>(null);
 
   const backendUrl = getBackendUrl();
+
+  // Stop all camera media tracks immediately to release device hardware & clear recording indicator
+  const stopCameraStream = useCallback(() => {
+    try {
+      if (webcamRef.current?.video?.srcObject) {
+        const stream = webcamRef.current.video.srcObject as MediaStream;
+        stream.getTracks().forEach((track) => {
+          try {
+            track.stop();
+          } catch {}
+        });
+      }
+    } catch {}
+  }, []);
+
+  // Stop camera stream whenever step is not capture_selfie or on unmount
+  useEffect(() => {
+    if (step !== "capture_selfie") {
+      stopCameraStream();
+    }
+    return () => {
+      stopCameraStream();
+    };
+  }, [step, stopCameraStream]);
 
   // Load Geofence Configuration from API / localStorage
   useEffect(() => {
@@ -198,54 +225,76 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
     return geofenceConfig;
   }, [selectedSession, geofenceConfig]);
 
-  // Verify User GPS Location against Geofence boundary
+  // Verify User GPS Location against Geofence boundary using High-Precision Multi-Sample Calibrator
   const verifyUserLocation = useCallback(async (): Promise<boolean> => {
     if (!effectiveGeofence.enabled) {
       setGeofenceStatus("allowed");
       setGeofenceErrorMessage(null);
+      setGpsFixStatus("");
       return true;
     }
 
-    if (isVerifyingRef.current) {
-      return false;
+    // If verification is already actively in-flight, return the existing promise so caller seamlessly awaits it
+    if (activeVerificationPromiseRef.current) {
+      return activeVerificationPromiseRef.current;
     }
 
-    isVerifyingRef.current = true;
-    setGeofenceStatus("checking");
-    setGeofenceErrorMessage(null);
+    const verificationPromise = (async (): Promise<boolean> => {
+      isVerifyingRef.current = true;
+      setGeofenceStatus("checking");
+      setGeofenceErrorMessage(null);
 
-    try {
-      const coords = await getUserCoordinates(12000);
-      setUserCoords({ latitude: coords.latitude, longitude: coords.longitude });
+      try {
+        // High-Precision Multi-Sample GPS Calibrator (1.5-3.5s) to eliminate indoor jitter and coarse cell-tower readings
+        let coords: { latitude: number; longitude: number };
+        try {
+          const calib = await getCalibratedHighPrecisionGPS((p) => {
+            setGpsFixStatus(`Locking GPS (${p.sampleCount} fixes, ±${p.bestAccuracy}m)...`);
+          }, 3500);
+          coords = { latitude: calib.latitude, longitude: calib.longitude };
+        } catch {
+          // Fallback to standard geolocation if calibrated sampling was interrupted
+          coords = await getUserCoordinates(8000);
+        }
 
-      const dist = calculateDistanceMeters(
-        coords.latitude,
-        coords.longitude,
-        effectiveGeofence.latitude,
-        effectiveGeofence.longitude
-      );
-      setGeofenceDistance(dist);
+        setUserCoords({ latitude: coords.latitude, longitude: coords.longitude });
 
-      if (dist <= effectiveGeofence.radiusMeters) {
-        setGeofenceStatus("allowed");
-        setGeofenceErrorMessage(null);
-        return true;
-      } else {
-        setGeofenceStatus("blocked");
-        setGeofenceErrorMessage(
-          `Location Boundary Rejection: You are ${formatDistance(dist)} away from the classroom/campus (${effectiveGeofence.campusName}). Allowed radius is ${effectiveGeofence.radiusMeters}m. Attendance cannot be submitted from home or hostel.`
+        const dist = calculateDistanceMeters(
+          coords.latitude,
+          coords.longitude,
+          effectiveGeofence.latitude,
+          effectiveGeofence.longitude
         );
+        setGeofenceDistance(dist);
+
+        if (dist <= effectiveGeofence.radiusMeters) {
+          setGeofenceStatus("allowed");
+          setGeofenceErrorMessage(null);
+          setGpsFixStatus("");
+          return true;
+        } else {
+          setGeofenceStatus("blocked");
+          setGeofenceErrorMessage(
+            `Location Boundary Rejection: You are ${formatDistance(dist)} away from the classroom/campus (${effectiveGeofence.campusName}). Allowed radius is ${effectiveGeofence.radiusMeters}m. Attendance cannot be submitted from home or hostel.`
+          );
+          setGpsFixStatus("");
+          return false;
+        }
+      } catch (err: any) {
+        setGeofenceStatus("permission_error");
+        setGeofenceErrorMessage(
+          err.message || "Please allow GPS location access in your browser settings to verify you are physically present in the classroom."
+        );
+        setGpsFixStatus("");
         return false;
+      } finally {
+        isVerifyingRef.current = false;
+        activeVerificationPromiseRef.current = null;
       }
-    } catch (err: any) {
-      setGeofenceStatus("permission_error");
-      setGeofenceErrorMessage(
-        err.message || "Please allow GPS location access in your browser settings to verify you are physically present in the classroom."
-      );
-      return false;
-    } finally {
-      isVerifyingRef.current = false;
-    }
+    })();
+
+    activeVerificationPromiseRef.current = verificationPromise;
+    return verificationPromise;
   }, [effectiveGeofence]);
 
   // When selected session changes, reset or auto-allow if geofence is disabled for this session
@@ -737,9 +786,16 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
       let deviceId = "";
       try {
         deviceId = localStorage.getItem("medattend_device_id") || "";
+        if (!deviceId && typeof document !== "undefined") {
+          const cookieMatch = document.cookie.match(/(?:^|;\s*)medattend_device_id=([^;]+)/);
+          if (cookieMatch) deviceId = decodeURIComponent(cookieMatch[1]);
+        }
         if (!deviceId) {
           deviceId = "dev_" + Math.random().toString(36).substring(2, 12) + "_" + Date.now().toString(36);
           localStorage.setItem("medattend_device_id", deviceId);
+          if (typeof document !== "undefined") {
+            document.cookie = `medattend_device_id=${encodeURIComponent(deviceId)}; max-age=31536000; path=/; SameSite=Lax`;
+          }
         }
       } catch (e) {
         deviceId = "dev_" + Math.random().toString(36).substring(2, 12);
@@ -835,6 +891,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
   // Reset to initial state
   const handleReset = () => {
     hasAutoSelectedRef.current = true;
+    stopCameraStream();
     setCapturedImage(null);
     setResultData(null);
     setLookupError(null);
@@ -1446,7 +1503,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                             }`}
                           >
                             {effectiveGeofence.enabled && geofenceStatus === "checking" ? (
-                              <><Loader2 className="w-4 h-4 animate-spin" /> Verifying Classroom GPS...</>
+                              <><Loader2 className="w-4 h-4 animate-spin" /> {gpsFixStatus || "Verifying Classroom GPS..."}</>
                             ) : effectiveGeofence.enabled && geofenceStatus === "blocked" ? (
                               <><ShieldAlert className="w-4 h-4 text-rose-400" /> Blocked • Outside Classroom Boundary</>
                             ) : effectiveGeofence.enabled && geofenceStatus === "permission_error" ? (
@@ -1474,6 +1531,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
             <div className="flex items-center justify-between px-1">
               <button
                 onClick={() => {
+                  stopCameraStream();
                   setCapturedImage(null);
                   setStep("enter_roll");
                 }}

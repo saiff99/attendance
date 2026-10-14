@@ -10,7 +10,7 @@ let cachedGeofence: CampusGeofenceConfig = { ...DEFAULT_GEOFENCE_CONFIG };
 
 export async function GET() {
   try {
-    // Try reading from Supabase settings if table exists
+    // 1. Try reading from Supabase settings if table exists
     try {
       const { data, error } = await supabaseServer
         .from('settings')
@@ -20,6 +20,21 @@ export async function GET() {
 
       if (!error && data?.value) {
         cachedGeofence = { ...DEFAULT_GEOFENCE_CONFIG, ...data.value };
+        return NextResponse.json({ success: true, config: cachedGeofence });
+      }
+    } catch (e) {}
+
+    // 2. Fallback to sessions table system row (00000000-0000-0000-0000-000000000001)
+    try {
+      const { data: sessData, error: sessErr } = await supabaseServer
+        .from('sessions')
+        .select('instructor_name')
+        .eq('id', '00000000-0000-0000-0000-000000000001')
+        .single();
+
+      if (!sessErr && sessData?.instructor_name) {
+        const parsed = JSON.parse(sessData.instructor_name);
+        cachedGeofence = { ...DEFAULT_GEOFENCE_CONFIG, ...parsed };
         return NextResponse.json({ success: true, config: cachedGeofence });
       }
     } catch (e) {}
@@ -48,11 +63,26 @@ export async function POST(request: Request) {
 
     cachedGeofence = updatedConfig;
 
-    // Persist to Supabase if possible
+    // 1. Persist to Supabase settings table if possible
     try {
       await supabaseServer
         .from('settings')
         .upsert({ key: 'campus_geofence', value: updatedConfig }, { onConflict: 'key' });
+    } catch (e) {}
+
+    // 2. Persist to sessions table system config row for guaranteed durability
+    try {
+      await supabaseServer
+        .from('sessions')
+        .upsert({
+          id: '00000000-0000-0000-0000-000000000001',
+          class_name: '__GEOFENCE_CONFIG__',
+          instructor_name: JSON.stringify(updatedConfig),
+          date: '2000-01-01',
+          start_time: '2000-01-01T00:00:00Z',
+          end_time: '2000-01-01T00:00:00Z',
+          target_academic_year: 'System'
+        });
     } catch (e) {}
 
     return NextResponse.json({ success: true, config: cachedGeofence });

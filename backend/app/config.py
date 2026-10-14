@@ -1,8 +1,14 @@
 import os
+import json
+import math
 from dotenv import load_dotenv
 from supabase import create_client, Client
 
-# Load environment variables from .env file
+# Load environment variables explicitly from backend/.env or parent
+_backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_env_path = os.path.join(_backend_dir, ".env")
+if os.path.exists(_env_path):
+    load_dotenv(_env_path)
 load_dotenv()
 
 # Supabase Initialization
@@ -144,48 +150,65 @@ DEFAULT_GEOFENCE_CONFIG = {
 }
 
 
+def _parse_and_sanitize_geofence(val: dict) -> dict:
+    """Sanitizes and bounds raw geofence dictionary values."""
+    enabled_val = val.get("enabled")
+    enabled = bool(enabled_val) if enabled_val is not None else DEFAULT_GEOFENCE_CONFIG["enabled"]
+
+    try:
+        lat = float(val.get("latitude", DEFAULT_GEOFENCE_CONFIG["latitude"]))
+        if math.isnan(lat) or math.isinf(lat) or not (-90.0 <= lat <= 90.0):
+            lat = DEFAULT_GEOFENCE_CONFIG["latitude"]
+    except (ValueError, TypeError):
+        lat = DEFAULT_GEOFENCE_CONFIG["latitude"]
+
+    try:
+        lng = float(val.get("longitude", DEFAULT_GEOFENCE_CONFIG["longitude"]))
+        if math.isnan(lng) or math.isinf(lng) or not (-180.0 <= lng <= 180.0):
+            lng = DEFAULT_GEOFENCE_CONFIG["longitude"]
+    except (ValueError, TypeError):
+        lng = DEFAULT_GEOFENCE_CONFIG["longitude"]
+
+    try:
+        radius = float(val.get("radiusMeters", DEFAULT_GEOFENCE_CONFIG["radiusMeters"]))
+        if math.isnan(radius) or math.isinf(radius) or radius <= 0:
+            radius = DEFAULT_GEOFENCE_CONFIG["radiusMeters"]
+    except (ValueError, TypeError):
+        radius = DEFAULT_GEOFENCE_CONFIG["radiusMeters"]
+
+    campus_name = str(val.get("campusName", DEFAULT_GEOFENCE_CONFIG["campusName"])).strip() or DEFAULT_GEOFENCE_CONFIG["campusName"]
+
+    return {
+        "enabled": enabled,
+        "latitude": lat,
+        "longitude": lng,
+        "radiusMeters": radius,
+        "campusName": campus_name,
+    }
+
+
 def get_server_geofence_config() -> dict:
-    """Fetches the latest geofence settings from Supabase or returns secure defaults."""
+    """Fetches the latest geofence settings from Supabase (settings table or system session row) or returns secure defaults."""
+    # 1. Try public.settings table
     try:
         if supabase:
             res = supabase.table("settings").select("value").eq("key", "campus_geofence").execute()
             if res.data and res.data[0].get("value"):
-                val = res.data[0]["value"]
-                enabled_val = val.get("enabled")
-                enabled = bool(enabled_val) if enabled_val is not None else DEFAULT_GEOFENCE_CONFIG["enabled"]
+                return _parse_and_sanitize_geofence(res.data[0]["value"])
+    except Exception:
+        pass
 
-                try:
-                    lat = float(val.get("latitude", DEFAULT_GEOFENCE_CONFIG["latitude"]))
-                    if math.isnan(lat) or math.isinf(lat) or not (-90.0 <= lat <= 90.0):
-                        lat = DEFAULT_GEOFENCE_CONFIG["latitude"]
-                except (ValueError, TypeError):
-                    lat = DEFAULT_GEOFENCE_CONFIG["latitude"]
+    # 2. Fallback to sessions table system config row (00000000-0000-0000-0000-000000000001)
+    try:
+        if supabase:
+            res2 = supabase.table("sessions").select("instructor_name").eq("id", "00000000-0000-0000-0000-000000000001").execute()
+            if res2.data and res2.data[0].get("instructor_name"):
+                raw_json = res2.data[0]["instructor_name"]
+                parsed = json.loads(raw_json)
+                return _parse_and_sanitize_geofence(parsed)
+    except Exception:
+        pass
 
-                try:
-                    lng = float(val.get("longitude", DEFAULT_GEOFENCE_CONFIG["longitude"]))
-                    if math.isnan(lng) or math.isinf(lng) or not (-180.0 <= lng <= 180.0):
-                        lng = DEFAULT_GEOFENCE_CONFIG["longitude"]
-                except (ValueError, TypeError):
-                    lng = DEFAULT_GEOFENCE_CONFIG["longitude"]
-
-                try:
-                    radius = float(val.get("radiusMeters", DEFAULT_GEOFENCE_CONFIG["radiusMeters"]))
-                    if math.isnan(radius) or math.isinf(radius) or radius <= 0:
-                        radius = DEFAULT_GEOFENCE_CONFIG["radiusMeters"]
-                except (ValueError, TypeError):
-                    radius = DEFAULT_GEOFENCE_CONFIG["radiusMeters"]
-
-                campus_name = str(val.get("campusName", DEFAULT_GEOFENCE_CONFIG["campusName"])).strip() or DEFAULT_GEOFENCE_CONFIG["campusName"]
-
-                return {
-                    "enabled": enabled,
-                    "latitude": lat,
-                    "longitude": lng,
-                    "radiusMeters": radius,
-                    "campusName": campus_name,
-                }
-    except Exception as e:
-        print("Warning: Failed to fetch campus_geofence from Supabase settings, using secure default:", e)
     return DEFAULT_GEOFENCE_CONFIG.copy()
 
 

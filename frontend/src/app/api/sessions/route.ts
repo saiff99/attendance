@@ -27,6 +27,7 @@ export async function GET(request: NextRequest) {
       .from('sessions')
       .select('id, class_name, date, start_time, end_time, instructor_name, target_academic_year, created_at')
       .neq('class_name', '__SYSTEM_CONFIG__')
+      .neq('class_name', '__GEOFENCE_CONFIG__')
       .order('created_at', { ascending: false })
       .limit(limit);
 
