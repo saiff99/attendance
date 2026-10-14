@@ -84,7 +84,15 @@ export async function POST(request: NextRequest) {
       action: 'START_SESSION',
       targetType: 'session',
       targetId: data?.id,
-      details: { class_name: className, instructor: session.name, target_cohort: body.target_academic_year },
+      actorId: session.username || session.name || 'admin',
+      request,
+      details: {
+        class_name: className,
+        instructor: session.name,
+        target_cohort: body.target_academic_year,
+        actor_name: session.name,
+        actor_role: session.role,
+      },
     });
 
     return NextResponse.json({

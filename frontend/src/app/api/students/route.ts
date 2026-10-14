@@ -155,7 +155,15 @@ export async function POST(request: NextRequest) {
       action: 'ADD_STUDENT',
       targetType: 'student',
       targetId: data?.id || cleanRoll,
-      details: { student_roll: cleanRoll, full_name: cleanName, academic_year: cleanYear },
+      actorId: session.username || session.name || 'admin',
+      request,
+      details: {
+        student_roll: cleanRoll,
+        full_name: cleanName,
+        academic_year: cleanYear,
+        actor_name: session.name,
+        actor_role: session.role,
+      },
     });
 
     const sanitizedStudent = data ? {

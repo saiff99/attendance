@@ -42,7 +42,14 @@ export async function POST(request: NextRequest) {
         action: 'BULK_DELETE_STUDENTS',
         targetType: 'student',
         targetId: `count:${ids.length}`,
-        details: { count: ids.length, deleted_at: new Date().toISOString() },
+        actorId: session.username || session.name || 'admin',
+        request,
+        details: {
+          count: ids.length,
+          deleted_at: new Date().toISOString(),
+          actor_name: session.name,
+          actor_role: session.role,
+        },
       });
 
       return NextResponse.json({ success: true, deletedCount: ids.length });
@@ -151,7 +158,15 @@ export async function POST(request: NextRequest) {
         action: 'BULK_IMPORT_STUDENTS',
         targetType: 'student',
         targetId: `inserted:${toInsert.length},updated:${toUpdate.length}`,
-        details: { inserted: toInsert.length, updated: toUpdate.length, total: rawStudents.length },
+        actorId: session.username || session.name || 'admin',
+        request,
+        details: {
+          inserted: toInsert.length,
+          updated: toUpdate.length,
+          total: rawStudents.length,
+          actor_name: session.name,
+          actor_role: session.role,
+        },
       });
 
       return NextResponse.json({

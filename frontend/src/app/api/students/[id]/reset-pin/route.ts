@@ -56,11 +56,13 @@ export async function POST(
       action: 'RESET_STUDENT_PIN',
       targetType: 'student',
       targetId: id,
+      actorId: session.username || session.name || 'admin',
+      request,
       details: {
         student_roll: student.student_roll,
         full_name: student.full_name,
-        reset_by: session.name || session.username,
-        role: session.role,
+        actor_name: session.name,
+        actor_role: session.role,
       },
     });
 

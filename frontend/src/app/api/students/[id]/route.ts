@@ -147,7 +147,15 @@ export async function PUT(
       action: 'UPDATE_STUDENT',
       targetType: 'student',
       targetId: id,
-      details: { student_roll: cleanRoll, full_name: cleanName, academic_year: cleanYear },
+      actorId: session.username || session.name || 'faculty',
+      request,
+      details: {
+        student_roll: cleanRoll,
+        full_name: cleanName,
+        academic_year: cleanYear,
+        actor_name: session.name,
+        actor_role: session.role,
+      },
     });
 
     const hasFace = !!(
@@ -212,7 +220,13 @@ export async function DELETE(
       action: 'DELETE_STUDENT',
       targetType: 'student',
       targetId: id,
-      details: { deleted_at: new Date().toISOString() },
+      actorId: session.username || session.name || 'admin',
+      request,
+      details: {
+        deleted_at: new Date().toISOString(),
+        actor_name: session.name,
+        actor_role: session.role,
+      },
     });
 
     return NextResponse.json({ success: true });

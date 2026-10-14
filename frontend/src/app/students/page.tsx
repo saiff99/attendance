@@ -8,7 +8,6 @@ import { StudentProfileModal } from "@/components/StudentProfileModal";
 import { FaceRegistrationModal } from "@/components/FaceRegistrationModal";
 import { BulkImportModal } from "@/components/BulkImportModal";
 import { getParentPhone, formatPhoneDisplay, encodeStudentEmail, cleanPhoneNumber } from "@/lib/studentContact";
-import { logAuditEvent } from "@/lib/auditLog";
 import { useAuth } from "@/lib/auth";
 
 export default function StudentDirectory() {

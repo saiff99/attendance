@@ -116,7 +116,15 @@ export async function POST(request: NextRequest) {
       action: 'CREATE_SUBJECT',
       targetType: 'system',
       targetId: data.id,
-      details: { academic_year, name, code },
+      actorId: session.username || session.name || 'admin',
+      request,
+      details: {
+        academic_year,
+        name,
+        code,
+        actor_name: session.name,
+        actor_role: session.role,
+      },
     });
 
     return NextResponse.json({

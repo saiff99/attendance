@@ -50,7 +50,13 @@ export async function PATCH(
       action: 'UPDATE_SUBJECT',
       targetType: 'system',
       targetId: id,
-      details: updatePayload,
+      actorId: session.username || session.name || 'admin',
+      request,
+      details: {
+        ...updatePayload,
+        actor_name: session.name,
+        actor_role: session.role,
+      },
     });
 
     return NextResponse.json({
@@ -97,6 +103,12 @@ export async function DELETE(
       action: 'DELETE_SUBJECT',
       targetType: 'system',
       targetId: id,
+      actorId: session.username || session.name || 'admin',
+      request,
+      details: {
+        actor_name: session.name,
+        actor_role: session.role,
+      },
     });
 
     return NextResponse.json({

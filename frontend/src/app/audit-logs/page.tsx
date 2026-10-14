@@ -95,7 +95,7 @@ export default function AuditLogsPage() {
       if (searchTerm.trim()) {
         const term = searchTerm.toLowerCase();
         const actionMatch = log.action.toLowerCase().includes(term);
-        const actorMatch = log.actor_id?.toLowerCase().includes(term);
+        const actorMatch = log.actor_id?.toLowerCase().includes(term) || (log.details?.actor_name && String(log.details.actor_name).toLowerCase().includes(term));
         const targetTypeMatch = log.target_type?.toLowerCase().includes(term);
         const targetIdMatch = log.target_id?.toLowerCase().includes(term);
         const detailsMatch = log.details ? JSON.stringify(log.details).toLowerCase().includes(term) : false;
@@ -427,9 +427,12 @@ export default function AuditLogsPage() {
 
                       {/* Actor */}
                       <td className="py-3.5 px-4 whitespace-nowrap">
-                        <span className="inline-flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-300 font-medium bg-gray-100 dark:bg-gray-800/80 border border-gray-200/50 dark:border-gray-700/50 px-2.5 py-1 rounded-lg">
-                          <User className="w-3 h-3 text-gray-400" />
-                          {entry.actor_id}
+                        <span className="inline-flex items-center gap-1.5 text-xs text-gray-700 dark:text-gray-200 font-medium bg-gray-100 dark:bg-gray-800/80 border border-gray-200/50 dark:border-gray-700/50 px-2.5 py-1 rounded-lg">
+                          <User className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                          <span className="font-semibold text-gray-900 dark:text-white">{entry.actor_id}</span>
+                          {entry.details?.actor_role && (
+                            <span className="text-[10px] text-gray-400 font-normal">({entry.details.actor_role})</span>
+                          )}
                         </span>
                       </td>
 
@@ -493,8 +496,18 @@ export default function AuditLogsPage() {
                   <span className="font-bold text-indigo-600 dark:text-indigo-400">{selectedLogForModal.action}</span>
                 </div>
                 <div className="bg-gray-50 dark:bg-gray-800/50 p-3 rounded-xl border border-gray-100 dark:border-gray-800">
-                  <span className="text-gray-400 block mb-0.5 font-medium">Actor</span>
-                  <span className="font-semibold text-gray-800 dark:text-gray-200">{selectedLogForModal.actor_id}</span>
+                  <span className="text-gray-400 block mb-0.5 font-medium">Actor (Username)</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-bold text-gray-900 dark:text-white">{selectedLogForModal.actor_id}</span>
+                    {selectedLogForModal.details?.actor_role && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-medium">
+                        {selectedLogForModal.details.actor_role}
+                      </span>
+                    )}
+                  </div>
+                  {selectedLogForModal.details?.actor_name && (
+                    <span className="text-[11px] text-gray-500 block mt-0.5">{selectedLogForModal.details.actor_name}</span>
+                  )}
                 </div>
                 <div className="bg-gray-50 dark:bg-gray-800/50 p-3 rounded-xl border border-gray-100 dark:border-gray-800">
                   <span className="text-gray-400 block mb-0.5 font-medium">Target ({selectedLogForModal.target_type})</span>

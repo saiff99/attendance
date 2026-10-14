@@ -1,6 +1,7 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { fetchBackend } from '@/lib/serverBackend';
 import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/serverAuth';
+import { logAuditEvent } from '@/lib/auditLog';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -54,6 +55,22 @@ export async function POST(
       const text = await res.text().catch(() => '');
       data = { detail: text || `Upstream returned status ${res.status}` };
     }
+    if (res.ok) {
+      logAuditEvent({
+        action: 'ENROLL_FACE',
+        targetType: 'student',
+        targetId: studentId,
+        actorId: session.username || session.name || 'admin',
+        request,
+        details: {
+          student_id: studentId,
+          frames_count: files.length,
+          actor_name: session.name,
+          actor_role: session.role,
+        },
+      });
+    }
+
     return NextResponse.json(data, { status: res.status });
   } catch (err: any) {
     console.error('Face enrollment error:', err);
