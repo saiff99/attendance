@@ -7,6 +7,9 @@ const PUBLIC_PATHS = [
   '/login',
   '/self-attendance',
   '/selfieattend',
+  '/manifest.json',
+  '/manifest.webmanifest',
+  '/sw.js',
   '/api/auth/login',
   '/api/selfie-attendance',
   '/api/active-sessions',
@@ -16,7 +19,7 @@ const PUBLIC_PATHS = [
 ];
 
 // Strict static asset file extension regex (prevents path bypass like /api/video-feed/a.b)
-const STATIC_ASSET_REGEX = /\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|woff|woff2|ttf|eot)$/i;
+const STATIC_ASSET_REGEX = /\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|json|webmanifest|woff|woff2|ttf|eot)$/i;
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
