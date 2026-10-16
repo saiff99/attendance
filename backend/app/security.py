@@ -1,4 +1,5 @@
 import os
+import hmac
 from typing import Set
 from fastapi import Request, Response, HTTPException
 from fastapi.responses import JSONResponse
@@ -48,21 +49,21 @@ def is_authorized_request(request: Request) -> bool:
     if is_public_path(path):
         return True
 
-    # 2. Check X-Internal-API-Key header
+    # 2. Check X-Internal-API-Key header (constant-time comparison)
     api_key_header = request.headers.get("x-internal-api-key") or request.headers.get("X-Internal-API-Key")
-    if INTERNAL_API_KEY and api_key_header and api_key_header.strip() == INTERNAL_API_KEY:
+    if INTERNAL_API_KEY and api_key_header and hmac.compare_digest(api_key_header.strip(), INTERNAL_API_KEY):
         return True
 
-    # 3. Check Authorization header (Bearer <key>)
+    # 3. Check Authorization header (Bearer <key>, constant-time comparison)
     auth_header = request.headers.get("authorization") or request.headers.get("Authorization")
     if INTERNAL_API_KEY and auth_header and auth_header.startswith("Bearer "):
         token = auth_header.split(" ", 1)[1].strip()
-        if token == INTERNAL_API_KEY:
+        if hmac.compare_digest(token, INTERNAL_API_KEY):
             return True
 
-    # 4. Check query parameter token (?key=... or ?token=...)
+    # 4. Check query parameter token (?key=... or ?token=..., constant-time comparison)
     query_key = request.query_params.get("key") or request.query_params.get("token") or request.query_params.get("api_key")
-    if INTERNAL_API_KEY and query_key and query_key.strip() == INTERNAL_API_KEY:
+    if INTERNAL_API_KEY and query_key and hmac.compare_digest(query_key.strip(), INTERNAL_API_KEY):
         return True
 
     # 5. Check if request is directly from local loopback AND NOT forwarded from Cloudflare/external proxy

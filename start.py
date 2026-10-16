@@ -8,6 +8,7 @@ Monitors system health and automatically recovers from crashes without killing u
 import os
 import sys
 import time
+from datetime import datetime, timezone
 import re
 import signal
 import subprocess
@@ -145,30 +146,37 @@ def sign_tunnel_url(tunnel_url: str) -> str:
 def update_supabase_tunnel_url(tunnel_url: str):
     """Updates the live tunnel URL with cryptographic signature in Supabase so Vercel securely connects."""
     try:
-        signed_payload_url = sign_tunnel_url(tunnel_url)
-        url = f"{SUPABASE_URL}/rest/v1/sessions?id=eq.00000000-0000-0000-0000-000000000000"
-        headers = {
-            "apikey": SUPABASE_KEY,
-            "Authorization": f"Bearer {SUPABASE_KEY}",
-            "Content-Type": "application/json",
-            "Prefer": "return=representation"
-        }
-        payload = {
-            "instructor_name": signed_payload_url
-        }
-        req = Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers, method="PATCH")
-        with urlopen(req, timeout=8) as res:
-            resp_body = res.read().decode("utf-8")
-            if res.status in (200, 204) and resp_body != "[]":
-                return True
+        clean_url = tunnel_url.strip()
+        sig = hmac.new(INTERNAL_API_KEY.encode("utf-8"), clean_url.encode("utf-8"), hashlib.sha256).hexdigest() if INTERNAL_API_KEY else ""
+        signed_payload_url = f"{clean_url}#sig={sig}" if sig else clean_url
 
-        upsert_url = f"{SUPABASE_URL}/rest/v1/sessions?on_conflict=id"
-        upsert_headers = {
+        headers = {
             "apikey": SUPABASE_KEY,
             "Authorization": f"Bearer {SUPABASE_KEY}",
             "Content-Type": "application/json",
             "Prefer": "resolution=merge-duplicates"
         }
+
+        # 1. Primary: Dedicated settings table (Enterprise Security Pattern)
+        try:
+            settings_url = f"{SUPABASE_URL}/rest/v1/settings?on_conflict=key"
+            settings_payload = {
+                "key": "tunnel_config",
+                "value": {
+                    "url": clean_url,
+                    "signature": sig,
+                    "signed_url": signed_payload_url,
+                    "updated_at": datetime.now(timezone.utc).isoformat()
+                }
+            }
+            req_set = Request(settings_url, data=json.dumps(settings_payload).encode("utf-8"), headers=headers, method="POST")
+            with urlopen(req_set, timeout=8) as res_set:
+                pass
+        except Exception as e_set:
+            pass
+
+        # 2. Backward Compatibility: Special sessions row (Legacy Fallback)
+        upsert_url = f"{SUPABASE_URL}/rest/v1/sessions?on_conflict=id"
         full_payload = {
             "id": "00000000-0000-0000-0000-000000000000",
             "class_name": "__SYSTEM_CONFIG__",
@@ -178,7 +186,7 @@ def update_supabase_tunnel_url(tunnel_url: str):
             "end_time": "2000-01-01T00:00:00Z",
             "target_academic_year": "System"
         }
-        req2 = Request(upsert_url, data=json.dumps(full_payload).encode("utf-8"), headers=upsert_headers, method="POST")
+        req2 = Request(upsert_url, data=json.dumps(full_payload).encode("utf-8"), headers=headers, method="POST")
         with urlopen(req2, timeout=8) as res2:
             if res2.status in (200, 201, 204):
                 return True
