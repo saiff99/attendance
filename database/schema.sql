@@ -147,41 +147,53 @@ CREATE INDEX IF NOT EXISTS idx_academic_subjects_name ON public.academic_subject
 -- ==============================================================================
 -- 10. Row Level Security (RLS) & Zero-Trust Production Policies
 -- All client interactions are mediated server-side via Next.js API routes & FastAPI
--- using SUPABASE_SERVICE_ROLE_KEY. Anonymous public direct writes are blocked.
+-- using SUPABASE_SERVICE_ROLE_KEY. Anonymous public direct writes and reads are blocked.
 -- ==============================================================================
 ALTER TABLE public.students ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.students FORCE ROW LEVEL SECURITY;
 ALTER TABLE public.sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.sessions FORCE ROW LEVEL SECURITY;
 ALTER TABLE public.attendance ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.attendance FORCE ROW LEVEL SECURITY;
 ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.audit_logs FORCE ROW LEVEL SECURITY;
 ALTER TABLE public.app_users ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.academic_subjects ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.app_users FORCE ROW LEVEL SECURITY;
 ALTER TABLE public.settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.settings FORCE ROW LEVEL SECURITY;
+ALTER TABLE public.academic_subjects ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.academic_subjects FORCE ROW LEVEL SECURITY;
 
--- Service Role Full Unrestricted Access on All Tables
-DROP POLICY IF EXISTS "service_role_full_students" ON public.students;
+-- Dynamic Purge: Drop all legacy policies across core tables
+DO $$ 
+DECLARE 
+    r RECORD;
+BEGIN
+    FOR r IN (
+        SELECT schemaname, tablename, policyname 
+        FROM pg_policies 
+        WHERE schemaname = 'public' 
+          AND tablename IN ('students', 'sessions', 'attendance', 'audit_logs', 'app_users', 'settings', 'academic_subjects')
+    ) LOOP
+        EXECUTE format('DROP POLICY IF EXISTS %I ON %I.%I', r.policyname, r.schemaname, r.tablename);
+    END LOOP;
+END $$;
+
+-- Service Role Full Unrestricted Access on All Tables (Server-Side Only)
 CREATE POLICY "service_role_full_students" ON public.students FOR ALL TO service_role USING (true) WITH CHECK (true);
-
-DROP POLICY IF EXISTS "service_role_full_sessions" ON public.sessions;
 CREATE POLICY "service_role_full_sessions" ON public.sessions FOR ALL TO service_role USING (true) WITH CHECK (true);
-
-DROP POLICY IF EXISTS "service_role_full_attendance" ON public.attendance;
 CREATE POLICY "service_role_full_attendance" ON public.attendance FOR ALL TO service_role USING (true) WITH CHECK (true);
-
-DROP POLICY IF EXISTS "service_role_full_audit_logs" ON public.audit_logs;
 CREATE POLICY "service_role_full_audit_logs" ON public.audit_logs FOR ALL TO service_role USING (true) WITH CHECK (true);
-
-DROP POLICY IF EXISTS "service_role_full_app_users" ON public.app_users;
 CREATE POLICY "service_role_full_app_users" ON public.app_users FOR ALL TO service_role USING (true) WITH CHECK (true);
-
-DROP POLICY IF EXISTS "service_role_full_academic_subjects" ON public.academic_subjects;
+CREATE POLICY "service_role_full_settings" ON public.settings FOR ALL TO service_role USING (true) WITH CHECK (true);
 CREATE POLICY "service_role_full_academic_subjects" ON public.academic_subjects FOR ALL TO service_role USING (true) WITH CHECK (true);
 
-DROP POLICY IF EXISTS "service_role_full_settings" ON public.settings;
-CREATE POLICY "service_role_full_settings" ON public.settings FOR ALL TO service_role USING (true) WITH CHECK (true);
-
--- Allow public read of subjects for faculty session creation dropdowns
-DROP POLICY IF EXISTS "Allow public read of academic_subjects" ON public.academic_subjects;
-CREATE POLICY "Allow public read of academic_subjects" ON public.academic_subjects FOR SELECT USING (true);
+-- Limited read of active curriculum subjects for faculty session creation dropdowns
+CREATE POLICY "academic_subjects_public_read_active" 
+ON public.academic_subjects 
+FOR SELECT 
+TO anon, authenticated 
+USING (is_active = true);
 
 -- ==============================================================================
 -- 11. Seed Data: Default MBBS Curriculum Academic Subjects

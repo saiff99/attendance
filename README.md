@@ -242,10 +242,19 @@ cd attendance
 
 ### 2. Database Setup (Supabase PostgreSQL)
 
+#### Option A: Fresh Database Setup
 1. Create a project at [Supabase](https://supabase.com/).
 2. In the **SQL Editor**, run the complete unified production schema located in [`database/schema.sql`](database/schema.sql). 
 
-This initializes all 7 tables, performance indexes, and Zero-Trust RLS policies:
+This initializes all 7 tables, performance indexes, seed curriculum subjects, and Zero-Trust RLS policies with automatic purge of legacy policies.
+
+#### Option B: Existing Database Hardening (Zero-Downtime Migration)
+If you already have a running database with existing student and attendance data:
+1. Navigate to **Supabase Dashboard > SQL Editor**.
+2. Run [`database/migrations/09_zero_trust_rls_purge_and_verification.sql`](database/migrations/09_zero_trust_rls_purge_and_verification.sql).
+3. This dynamically drops all legacy permissive policies, locks down sensitive tables to `service_role` only, and executes an automated assertion verifying that zero permissive policies remain.
+
+#### Tables & Security Architecture:
 - **`students`**: Student demographics, 512D ArcFace encodings, portal credentials (`portal_pin`, `portal_password_hash`, `last_portal_login`), and DPDP consent flags.
 - **`sessions`**: Class sessions, dates, schedules, and target batches.
 - **`attendance`**: Biometric and manual attendance logs with hardware-level unique constraint `(session_id, student_id)`.
@@ -253,8 +262,6 @@ This initializes all 7 tables, performance indexes, and Zero-Trust RLS policies:
 - **`app_users`**: Role-based access control (Super Admin & Faculty credentials with bcrypt hashes).
 - **`academic_subjects`**: Dynamic curriculum subjects configured per academic year with default MBBS curriculum seed data.
 - **`settings`**: Shared persistent storage for multi-instance login rate limiting, system configuration, and Cloudflare tunnel synchronizations.
-
-> **Tip**: If applying incremental migrations to an existing database, run the versioned scripts in [`database/migrations/`](database/migrations/) sequentially.
 
 3. Copy your **Project URL**, **Anon Key**, and **Service Role Key** from **Project Settings > API**.
 
