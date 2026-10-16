@@ -811,7 +811,7 @@ export default function StudentDirectory() {
                                   {openDropdownId === student.id && (
                                     <>
                                       <div className="fixed inset-0 z-40" onClick={() => setOpenDropdownId(null)}></div>
-                                      <div className={`absolute right-0 z-50 w-40 rounded-xl bg-white dark:bg-gray-800 shadow-2xl border border-gray-200 dark:border-gray-700 py-1.5 ring-1 ring-black/10 focus:outline-none ${idx >= Math.max(1, filteredStudents.length - 2) || idx === filteredStudents.length - 1
+                                      <div className={`absolute right-0 z-50 w-40 rounded-xl bg-white dark:bg-gray-800 shadow-2xl border border-gray-200 dark:border-gray-700 py-1.5 ring-1 ring-black/10 focus:outline-none ${filteredStudents.length > 3 && idx >= filteredStudents.length - 2
                                           ? 'bottom-full mb-2 origin-bottom-right'
                                           : 'top-full mt-1.5 origin-top-right'
                                         }`}>
