@@ -13,7 +13,14 @@ load_dotenv()
 
 # Supabase Initialization
 SUPABASE_URL = os.getenv("SUPABASE_URL", "https://bsphlgmxzmlbgzanpujh.supabase.co")
-SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_KEY", "sb_publishable_u8O4lCQg9KtcxeLj7nxqFg_xu3v2WLz")
+SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_KEY")
+
+if not SUPABASE_KEY:
+    raise RuntimeError(
+        "[CRITICAL SECURITY ERROR] SUPABASE_SERVICE_ROLE_KEY is missing from environment! "
+        "Backend server-side operations require service-role credentials to interact with the database under Zero-Trust RLS. "
+        "Silent fallback to public/anon keys is strictly disabled."
+    )
 
 try:
     supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
