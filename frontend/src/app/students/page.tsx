@@ -10,14 +10,36 @@ import { BulkImportModal } from "@/components/BulkImportModal";
 import { getParentPhone, formatPhoneDisplay, encodeStudentEmail, cleanPhoneNumber } from "@/lib/studentContact";
 import { useAuth } from "@/lib/auth";
 
+// In-memory module cache for instant navigation between tabs without layout shift
+let memoryStudentsCache: Student[] | null = null;
+
+function getInitialStudents(): Student[] {
+  if (memoryStudentsCache && memoryStudentsCache.length > 0) return memoryStudentsCache;
+  if (typeof window !== "undefined") {
+    try {
+      const stored = sessionStorage.getItem("medattend_students_cache");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          memoryStudentsCache = parsed;
+          return parsed;
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return [];
+}
+
 export default function StudentDirectory() {
   const { user } = useAuth();
   const isSuperAdmin = user?.role === "Super Admin";
 
   const [searchTerm, setSearchTerm] = useState("");
   const [activeView, setActiveView] = useState<string | null>(null);
-  const [students, setStudents] = useState<Student[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [students, setStudents] = useState<Student[]>(() => getInitialStudents());
+  const [loading, setLoading] = useState<boolean>(() => getInitialStudents().length === 0);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
@@ -90,13 +112,22 @@ export default function StudentDirectory() {
     setIsFaceModalOpen(true);
   };
 
-  const fetchStudents = async () => {
-    setLoading(true);
+  const fetchStudents = async (forceLoading = false) => {
+    if (forceLoading || (!students.length && !memoryStudentsCache)) {
+      setLoading(true);
+    }
     try {
       const res = await fetch('/api/students');
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to fetch students');
-      setStudents(data.students || []);
+      const list = data.students || [];
+      memoryStudentsCache = list;
+      if (typeof window !== "undefined") {
+        try {
+          sessionStorage.setItem("medattend_students_cache", JSON.stringify(list));
+        } catch {}
+      }
+      setStudents(list);
     } catch (error) {
       console.error('Error fetching students:', error);
     } finally {
@@ -493,9 +524,13 @@ export default function StudentDirectory() {
                     <div className={`p-3 rounded-xl ${folder.iconBg} flex items-center justify-center shadow-inner`}>
                       <Folder className="w-7 h-7 sm:w-8 sm:h-8" />
                     </div>
-                    <div className="flex items-center space-x-1 text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 px-2.5 sm:px-3 py-1 rounded-full border border-gray-100 dark:border-gray-700">
-                      <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1" />
-                      {count}
+                    <div className="flex items-center space-x-1 text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 px-2.5 sm:px-3 py-1 rounded-full border border-gray-100 dark:border-gray-700 min-w-[3rem] justify-center">
+                      <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1 text-gray-400" />
+                      {loading && students.length === 0 ? (
+                        <span className="inline-block w-4 h-3.5 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+                      ) : (
+                        <span>{count}</span>
+                      )}
                     </div>
                   </div>
                   <h3 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white relative z-10">{folder.title}</h3>
@@ -541,7 +576,7 @@ export default function StudentDirectory() {
                     >
                       <span>{b === 'All' ? 'All Group' : b}</span>
                       <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${isSelected ? 'bg-indigo-700 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400'}`}>
-                        {bCount}
+                        {loading && students.length === 0 ? "..." : bCount}
                       </span>
                     </button>
                   );
