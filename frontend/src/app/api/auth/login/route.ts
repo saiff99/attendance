@@ -40,10 +40,103 @@ const BUILTIN_USER_HASHES: Record<string, string> = {
   faculty: '$2b$10$zre7r25egIL9M5o9H5nL4eQZuyzr8kIfK9AjD5jH/7eVtqtbNS25O',
 };
 
-// In-memory sliding window rate limiter: max 5 failed attempts per 15 minutes
-const loginAttempts: Record<string, { count: number; firstAttempt: number }> = {};
+// Dual-Layer Persistent Rate Limiter (Memory Fast-Cache + Persistent Supabase Storage)
+// Survived across server restarts, PM2 recycles, and multi-instance / serverless deployments
+const loginAttemptsCache: Record<string, { count: number; firstAttempt: number; lockedUntil?: number }> = {};
 const MAX_ATTEMPTS = 5;
-const WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+const WINDOW_MS = 15 * 60 * 1000; // 15 minutes lockout window
+
+async function checkRateLimit(rateKey: string, now: number): Promise<{ locked: boolean; remainingSeconds: number }> {
+  // 1. Fast in-memory check
+  const cached = loginAttemptsCache[rateKey];
+  if (cached) {
+    if (cached.lockedUntil && now < cached.lockedUntil) {
+      const remainingSeconds = Math.ceil((cached.lockedUntil - now) / 1000);
+      return { locked: true, remainingSeconds };
+    }
+    if (now - cached.firstAttempt > WINDOW_MS) {
+      delete loginAttemptsCache[rateKey];
+    } else if (cached.count >= MAX_ATTEMPTS) {
+      const remainingSeconds = Math.ceil((cached.firstAttempt + WINDOW_MS - now) / 1000);
+      return { locked: true, remainingSeconds };
+    }
+  }
+
+  // 2. Persistent Supabase settings check (survives server restart & serverless scaling)
+  try {
+    const dbKey = `rl_login:${rateKey}`;
+    const { data, error } = await supabaseServer
+      .from('settings')
+      .select('value')
+      .eq('key', dbKey)
+      .maybeSingle();
+
+    if (!error && data?.value) {
+      const val = data.value;
+      const firstAttempt = Number(val.firstAttempt) || now;
+      const count = Number(val.count) || 0;
+      const lockedUntil = Number(val.lockedUntil) || 0;
+
+      // Sync into memory cache
+      loginAttemptsCache[rateKey] = { count, firstAttempt, lockedUntil };
+
+      if (lockedUntil && now < lockedUntil) {
+        const remainingSeconds = Math.ceil((lockedUntil - now) / 1000);
+        return { locked: true, remainingSeconds };
+      }
+      if (now - firstAttempt > WINDOW_MS) {
+        Promise.resolve(supabaseServer.from('settings').delete().eq('key', dbKey)).catch(() => {});
+        delete loginAttemptsCache[rateKey];
+      } else if (count >= MAX_ATTEMPTS) {
+        const remainingSeconds = Math.ceil((firstAttempt + WINDOW_MS - now) / 1000);
+        return { locked: true, remainingSeconds };
+      }
+    }
+  } catch (e) {
+    // Fail-open on database glitch to ensure legitimate users are never locked out
+  }
+
+  return { locked: false, remainingSeconds: 0 };
+}
+
+async function recordFailedAttempt(rateKey: string, now: number): Promise<number> {
+  const cached = loginAttemptsCache[rateKey] || { count: 0, firstAttempt: now };
+  cached.count += 1;
+  if (cached.count >= MAX_ATTEMPTS && !cached.lockedUntil) {
+    cached.lockedUntil = now + WINDOW_MS;
+  }
+  loginAttemptsCache[rateKey] = cached;
+
+  // Persist to Supabase settings
+  try {
+    const dbKey = `rl_login:${rateKey}`;
+    await supabaseServer
+      .from('settings')
+      .upsert({
+        key: dbKey,
+        value: {
+          count: cached.count,
+          firstAttempt: cached.firstAttempt,
+          lockedUntil: cached.lockedUntil || (cached.count >= MAX_ATTEMPTS ? now + WINDOW_MS : 0),
+          lastAttempt: now,
+        },
+      });
+  } catch (e) {
+    console.warn('[RATE LIMIT DB SYNC WARNING]', e);
+  }
+
+  return cached.count;
+}
+
+async function resetRateLimit(rateKey: string): Promise<void> {
+  delete loginAttemptsCache[rateKey];
+  try {
+    const dbKey = `rl_login:${rateKey}`;
+    await supabaseServer.from('settings').delete().eq('key', dbKey);
+  } catch (e) {
+    // Graceful catch
+  }
+}
 
 export async function POST(request: Request) {
   try {
@@ -57,24 +150,20 @@ export async function POST(request: Request) {
 
     const rateKey = `${clientIp}:${username || 'unknown'}`;
     const now = Date.now();
-    const record = loginAttempts[rateKey];
 
-    if (record) {
-      if (now - record.firstAttempt > WINDOW_MS) {
-        delete loginAttempts[rateKey];
-      } else if (record.count >= MAX_ATTEMPTS) {
-        const remainingSeconds = Math.ceil((record.firstAttempt + WINDOW_MS - now) / 1000);
-        return NextResponse.json(
-          {
-            success: false,
-            error: `Too many failed login attempts. Account locked for security. Please try again in ${remainingSeconds}s.`,
-          },
-          {
-            status: 429,
-            headers: { 'Retry-After': remainingSeconds.toString() },
-          }
-        );
-      }
+    // Check shared & persistent rate limiter
+    const rateStatus = await checkRateLimit(rateKey, now);
+    if (rateStatus.locked) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Too many failed login attempts. Account locked for security. Please try again in ${rateStatus.remainingSeconds}s.`,
+        },
+        {
+          status: 429,
+          headers: { 'Retry-After': rateStatus.remainingSeconds.toString() },
+        }
+      );
     }
 
     if (!username || !password) {
@@ -275,15 +364,13 @@ export async function POST(request: Request) {
         } catch {}
       }
 
-      const curr = loginAttempts[rateKey] || { count: 0, firstAttempt: now };
-      curr.count += 1;
-      loginAttempts[rateKey] = curr;
+      const attemptCount = await recordFailedAttempt(rateKey, now);
 
       logAuditEvent({
         action: 'FAILED_LOGIN_ATTEMPT',
         targetType: 'system',
         actorId: username,
-        details: { reason: 'Incorrect credentials', ip: clientIp, attemptCount: curr.count, mode },
+        details: { reason: 'Incorrect credentials', ip: clientIp, attemptCount, mode },
       });
 
       const genericError = mode === 'student'
@@ -298,8 +385,8 @@ export async function POST(request: Request) {
       );
     }
 
-    // Reset rate limiter on successful authentication
-    delete loginAttempts[rateKey];
+    // Reset shared persistent and in-memory rate limiter on successful authentication
+    await resetRateLimit(rateKey);
 
     // Log successful login audit entry
     logAuditEvent({
