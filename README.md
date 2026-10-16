@@ -243,82 +243,18 @@ cd attendance
 ### 2. Database Setup (Supabase PostgreSQL)
 
 1. Create a project at [Supabase](https://supabase.com/).
-2. In the **SQL Editor**, run the following schema:
+2. In the **SQL Editor**, run the complete unified production schema located in [`database/schema.sql`](database/schema.sql). 
 
-```sql
--- Enable UUID extension
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+This initializes all 7 tables, performance indexes, and Zero-Trust RLS policies:
+- **`students`**: Student demographics, 512D ArcFace encodings, portal credentials (`portal_pin`, `portal_password_hash`, `last_portal_login`), and DPDP consent flags.
+- **`sessions`**: Class sessions, dates, schedules, and target batches.
+- **`attendance`**: Biometric and manual attendance logs with hardware-level unique constraint `(session_id, student_id)`.
+- **`audit_logs`**: Immutable security audit trail (`actor_id`, `action`, `target_type`, `target_id`, `details`, `ip_address`).
+- **`app_users`**: Role-based access control (Super Admin & Faculty credentials with bcrypt hashes).
+- **`academic_subjects`**: Dynamic curriculum subjects configured per academic year with default MBBS curriculum seed data.
+- **`settings`**: Shared persistent storage for multi-instance login rate limiting, system configuration, and Cloudflare tunnel synchronizations.
 
--- Students Table
-CREATE TABLE IF NOT EXISTS students (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    student_roll VARCHAR(50) UNIQUE NOT NULL,
-    full_name VARCHAR(255) NOT NULL,
-    email VARCHAR(255) UNIQUE NOT NULL,
-    academic_year VARCHAR(50) DEFAULT '1st Year',
-    parent_phone VARCHAR(50),
-    face_encoding JSONB,
-    portal_pin VARCHAR(20),
-    portal_password_hash VARCHAR(255),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
--- Sessions Table
-CREATE TABLE IF NOT EXISTS sessions (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    class_name VARCHAR(255) NOT NULL,
-    date DATE NOT NULL,
-    start_time TIMESTAMP WITH TIME ZONE NOT NULL,
-    end_time TIMESTAMP WITH TIME ZONE NOT NULL,
-    instructor_name VARCHAR(255) NOT NULL,
-    target_academic_year VARCHAR(50),
-    is_active BOOLEAN DEFAULT false,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
--- Academic Subjects Table
-CREATE TABLE IF NOT EXISTS academic_subjects (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    name VARCHAR(255) NOT NULL,
-    code VARCHAR(50),
-    department VARCHAR(255),
-    academic_year VARCHAR(50),
-    is_active BOOLEAN DEFAULT true,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
--- Attendance Table with Unique Constraint
-CREATE TABLE IF NOT EXISTS attendance (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    session_id UUID NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-    student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
-    status VARCHAR(50) NOT NULL CHECK (status IN ('Present', 'Absent')),
-    capture_mode VARCHAR(50) NOT NULL CHECK (capture_mode IN ('Live Scan', 'Manual Upload', 'Selfie Check-in')),
-    confidence_score FLOAT,
-    recorded_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(session_id, student_id)
-);
-
--- Enterprise Audit Logs Table
-CREATE TABLE IF NOT EXISTS audit_logs (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    actor VARCHAR(255) NOT NULL,
-    action VARCHAR(100) NOT NULL,
-    target VARCHAR(255),
-    details JSONB,
-    severity VARCHAR(50) DEFAULT 'INFO',
-    ip_address VARCHAR(100),
-    user_agent TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
--- Performance Indexes
-CREATE INDEX IF NOT EXISTS idx_attendance_session ON attendance(session_id);
-CREATE INDEX IF NOT EXISTS idx_attendance_student ON attendance(student_id);
-CREATE INDEX IF NOT EXISTS idx_sessions_date ON sessions(date);
-CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action);
-CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at DESC);
-```
+> **Tip**: If applying incremental migrations to an existing database, run the versioned scripts in [`database/migrations/`](database/migrations/) sequentially.
 
 3. Copy your **Project URL**, **Anon Key**, and **Service Role Key** from **Project Settings > API**.
 

@@ -1,112 +1,209 @@
 -- ==============================================================================
--- 🎓 Supabase Production Schema for Smart Attendance System (MedAttend AI)
+-- 🎓 MedAttend AI — Production Database Schema (Supabase PostgreSQL)
+-- Complete, Idempotent, Unified Enterprise Schema
+-- Includes all 7 Tables, Indexes, Constraints, and Zero-Trust RLS Policies.
+-- Safe to run on fresh databases or existing production instances.
 -- ==============================================================================
 
--- 1. Enable uuid-ossp extension for UUID generation
+-- 1. Enable Required PostgreSQL Extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
+-- ==============================================================================
 -- 2. Table: students
-CREATE TABLE IF NOT EXISTS students (
+-- Stores enrolled student demographic data, biometric encodings & portal credentials
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS public.students (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     student_roll VARCHAR(50) UNIQUE NOT NULL,
     full_name VARCHAR(255) NOT NULL,
     email VARCHAR(255) UNIQUE NOT NULL,
     academic_year VARCHAR(50) DEFAULT '1st Year',
     parent_phone VARCHAR(50),
-    face_encoding JSONB, -- Stores 512D vector embeddings for InsightFace ArcFace recognition (Never store raw unencrypted images)
-    biometric_consent BOOLEAN DEFAULT true, -- DPDP Act 2023: Explicit consent for biometric attendance processing
-    biometric_consent_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    face_encoding JSONB, -- 512D ArcFace vector embeddings for InsightFace recognition
+    portal_pin VARCHAR(20), -- Optional initial or legacy PIN
+    portal_password_hash TEXT, -- Salted bcrypt hash for student portal authentication
+    last_portal_login TIMESTAMPTZ,
+    biometric_consent BOOLEAN DEFAULT true, -- DPDP Act 2023 compliance
+    biometric_consent_date TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     manual_marked_count INTEGER DEFAULT 0,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Ensure portal auth columns exist if table was already created by an older migration
+ALTER TABLE public.students 
+ADD COLUMN IF NOT EXISTS portal_password_hash TEXT,
+ADD COLUMN IF NOT EXISTS portal_pin VARCHAR(20),
+ADD COLUMN IF NOT EXISTS last_portal_login TIMESTAMPTZ,
+ADD COLUMN IF NOT EXISTS parent_phone VARCHAR(50),
+ADD COLUMN IF NOT EXISTS biometric_consent BOOLEAN DEFAULT true,
+ADD COLUMN IF NOT EXISTS biometric_consent_date TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+ADD COLUMN IF NOT EXISTS manual_marked_count INTEGER DEFAULT 0;
+
+-- ==============================================================================
 -- 3. Table: sessions
-CREATE TABLE IF NOT EXISTS sessions (
+-- Classroom and clinic attendance sessions created by faculties
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS public.sessions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     class_name VARCHAR(255) NOT NULL,
     date DATE NOT NULL,
-    start_time TIMESTAMP WITH TIME ZONE NOT NULL,
-    end_time TIMESTAMP WITH TIME ZONE NOT NULL,
+    start_time TIMESTAMPTZ NOT NULL,
+    end_time TIMESTAMPTZ NOT NULL,
     instructor_name VARCHAR(255) NOT NULL,
     target_academic_year VARCHAR(50) DEFAULT 'All',
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
+-- ==============================================================================
 -- 4. Table: attendance
-CREATE TABLE IF NOT EXISTS attendance (
+-- Verified biometric & manual attendance logs with duplicate prevention
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS public.attendance (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    session_id UUID NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-    student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+    session_id UUID NOT NULL REFERENCES public.sessions(id) ON DELETE CASCADE,
+    student_id UUID NOT NULL REFERENCES public.students(id) ON DELETE CASCADE,
     status VARCHAR(50) NOT NULL CHECK (status IN ('Present', 'Absent')),
-    capture_mode VARCHAR(50) NOT NULL CHECK (capture_mode IN ('Live Scan', 'Manual Upload', 'Selfie Scan', 'Manual Entry')),
+    capture_mode VARCHAR(50) NOT NULL CHECK (capture_mode IN ('Live Scan', 'Manual Upload', 'Selfie Scan', 'Manual Entry', 'Selfie Check-in')),
     confidence_score FLOAT,
-    recorded_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT unique_session_student UNIQUE(session_id, student_id) -- Database-level duplicate prevention
+    recorded_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT unique_session_student UNIQUE (session_id, student_id)
 );
 
--- 5. Table: audit_logs (Audit Trail for DPDP compliance, biometric changes, overrides & deletions)
-CREATE TABLE IF NOT EXISTS audit_logs (
+-- ==============================================================================
+-- 5. Table: audit_logs
+-- Immutable tamper-evident audit trail for DPDP compliance and security actions
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS public.audit_logs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     actor_id VARCHAR(255) DEFAULT 'system_admin',
-    action VARCHAR(100) NOT NULL, -- e.g. 'ENROLL_FACE', 'RESET_FACE', 'DELETE_STUDENT', 'MANUAL_OVERRIDE', 'CONSENT_REVOKE'
-    target_type VARCHAR(100) NOT NULL, -- 'student', 'attendance', 'session', 'system'
+    action VARCHAR(100) NOT NULL,
+    target_type VARCHAR(100) NOT NULL,
     target_id VARCHAR(255),
     details JSONB,
     ip_address VARCHAR(100),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
--- 6. Performance Indexes
-CREATE INDEX IF NOT EXISTS idx_students_roll ON students(student_roll);
-CREATE INDEX IF NOT EXISTS idx_students_year ON students(academic_year);
-CREATE INDEX IF NOT EXISTS idx_sessions_date ON sessions(date);
-CREATE INDEX IF NOT EXISTS idx_sessions_year ON sessions(target_academic_year);
-CREATE INDEX IF NOT EXISTS idx_attendance_session ON attendance(session_id);
-CREATE INDEX IF NOT EXISTS idx_attendance_student ON attendance(student_id);
-CREATE INDEX IF NOT EXISTS idx_attendance_recorded_at ON attendance(recorded_at);
-CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action);
-CREATE INDEX IF NOT EXISTS idx_audit_logs_target ON audit_logs(target_type, target_id);
-CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);
+-- ==============================================================================
+-- 6. Table: app_users
+-- Role-based access control (RBAC) for Super Admin and Faculty accounts
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS public.app_users (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    username VARCHAR(50) UNIQUE NOT NULL,
+    full_name VARCHAR(255) NOT NULL,
+    email VARCHAR(255) UNIQUE,
+    password_hash TEXT NOT NULL,
+    role VARCHAR(50) DEFAULT 'Faculty' CHECK (role IN ('Super Admin', 'Faculty')),
+    department VARCHAR(100),
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    last_login TIMESTAMPTZ
+);
 
 -- ==============================================================================
--- 7. Row Level Security (RLS) & Zero-Trust Production Protection Policies
--- All client interactions are mediated server-side via Next.js and FastAPI
--- using SUPABASE_SERVICE_ROLE_KEY. Direct public REST access via anon is blocked.
+-- 7. Table: academic_subjects
+-- Dynamic curriculum subjects configured per academic year
 -- ==============================================================================
+CREATE TABLE IF NOT EXISTS public.academic_subjects (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    academic_year TEXT NOT NULL,
+    name TEXT NOT NULL,
+    code TEXT,
+    department TEXT,
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
+);
 
-ALTER TABLE students ENABLE ROW LEVEL SECURITY;
-ALTER TABLE sessions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE attendance ENABLE ROW LEVEL SECURITY;
-ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
+-- ==============================================================================
+-- 8. Table: settings
+-- Persistent shared configuration, rate-limiting lockout store, and tunnel state
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS public.settings (
+    key TEXT PRIMARY KEY,
+    value JSONB NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
 
--- 1. Students Policies (Service Role Only)
-DROP POLICY IF EXISTS "allow_read_students" ON students;
-DROP POLICY IF EXISTS "allow_insert_students" ON students;
-DROP POLICY IF EXISTS "allow_update_students" ON students;
-DROP POLICY IF EXISTS "allow_delete_students" ON students;
-DROP POLICY IF EXISTS "service_role_full_students" ON students;
-CREATE POLICY "service_role_full_students" ON students FOR ALL TO service_role USING (true) WITH CHECK (true);
+-- ==============================================================================
+-- 9. Performance Indexes
+-- ==============================================================================
+CREATE INDEX IF NOT EXISTS idx_students_roll ON public.students(student_roll);
+CREATE INDEX IF NOT EXISTS idx_students_year ON public.students(academic_year);
+CREATE INDEX IF NOT EXISTS idx_sessions_date ON public.sessions(date);
+CREATE INDEX IF NOT EXISTS idx_sessions_year ON public.sessions(target_academic_year);
+CREATE INDEX IF NOT EXISTS idx_attendance_session ON public.attendance(session_id);
+CREATE INDEX IF NOT EXISTS idx_attendance_student ON public.attendance(student_id);
+CREATE INDEX IF NOT EXISTS idx_attendance_recorded_at ON public.attendance(recorded_at);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON public.audit_logs(action);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_target ON public.audit_logs(target_type, target_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON public.audit_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_app_users_username ON public.app_users(username);
+CREATE INDEX IF NOT EXISTS idx_app_users_role ON public.app_users(role);
+CREATE INDEX IF NOT EXISTS idx_academic_subjects_year ON public.academic_subjects(academic_year);
+CREATE INDEX IF NOT EXISTS idx_academic_subjects_name ON public.academic_subjects(name);
 
--- 2. Sessions Policies (Service Role Only)
-DROP POLICY IF EXISTS "allow_read_sessions" ON sessions;
-DROP POLICY IF EXISTS "allow_insert_sessions" ON sessions;
-DROP POLICY IF EXISTS "allow_update_sessions" ON sessions;
-DROP POLICY IF EXISTS "allow_delete_sessions" ON sessions;
-DROP POLICY IF EXISTS "service_role_full_sessions" ON sessions;
-CREATE POLICY "service_role_full_sessions" ON sessions FOR ALL TO service_role USING (true) WITH CHECK (true);
+-- ==============================================================================
+-- 10. Row Level Security (RLS) & Zero-Trust Production Policies
+-- All client interactions are mediated server-side via Next.js API routes & FastAPI
+-- using SUPABASE_SERVICE_ROLE_KEY. Anonymous public direct writes are blocked.
+-- ==============================================================================
+ALTER TABLE public.students ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.attendance ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.app_users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.academic_subjects ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.settings ENABLE ROW LEVEL SECURITY;
 
--- 3. Attendance Policies (Service Role Only)
-DROP POLICY IF EXISTS "allow_read_attendance" ON attendance;
-DROP POLICY IF EXISTS "allow_insert_attendance" ON attendance;
-DROP POLICY IF EXISTS "allow_update_attendance" ON attendance;
-DROP POLICY IF EXISTS "allow_delete_attendance" ON attendance;
-DROP POLICY IF EXISTS "service_role_full_attendance" ON attendance;
-CREATE POLICY "service_role_full_attendance" ON attendance FOR ALL TO service_role USING (true) WITH CHECK (true);
+-- Service Role Full Unrestricted Access on All Tables
+DROP POLICY IF EXISTS "service_role_full_students" ON public.students;
+CREATE POLICY "service_role_full_students" ON public.students FOR ALL TO service_role USING (true) WITH CHECK (true);
 
--- 4. Audit Logs Policies (Service Role Only)
-DROP POLICY IF EXISTS "allow_read_audit_logs" ON audit_logs;
-DROP POLICY IF EXISTS "allow_insert_audit_logs" ON audit_logs;
-DROP POLICY IF EXISTS "service_role_full_audit_logs" ON audit_logs;
-CREATE POLICY "service_role_full_audit_logs" ON audit_logs FOR ALL TO service_role USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "service_role_full_sessions" ON public.sessions;
+CREATE POLICY "service_role_full_sessions" ON public.sessions FOR ALL TO service_role USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "service_role_full_attendance" ON public.attendance;
+CREATE POLICY "service_role_full_attendance" ON public.attendance FOR ALL TO service_role USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "service_role_full_audit_logs" ON public.audit_logs;
+CREATE POLICY "service_role_full_audit_logs" ON public.audit_logs FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "service_role_full_app_users" ON public.app_users;
+CREATE POLICY "service_role_full_app_users" ON public.app_users FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "service_role_full_academic_subjects" ON public.academic_subjects;
+CREATE POLICY "service_role_full_academic_subjects" ON public.academic_subjects FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "service_role_full_settings" ON public.settings;
+CREATE POLICY "service_role_full_settings" ON public.settings FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+-- Allow public read of subjects for faculty session creation dropdowns
+DROP POLICY IF EXISTS "Allow public read of academic_subjects" ON public.academic_subjects;
+CREATE POLICY "Allow public read of academic_subjects" ON public.academic_subjects FOR SELECT USING (true);
+
+-- ==============================================================================
+-- 11. Seed Data: Default MBBS Curriculum Academic Subjects
+-- ==============================================================================
+INSERT INTO public.academic_subjects (academic_year, name, code)
+SELECT v.year, v.name, v.code
+FROM (VALUES
+    ('1st Year', 'Anatomy', 'ANAT'),
+    ('1st Year', 'Physiology', 'PHYS'),
+    ('1st Year', 'Biochemistry', 'BIOC'),
+    ('2nd Year', 'Pathology', 'PATH'),
+    ('2nd Year', 'Pharmacology', 'PHAR'),
+    ('2nd Year', 'Microbiology', 'MICR'),
+    ('2nd Year', 'Forensic Medicine & Toxicology', 'FMT'),
+    ('3rd Year', 'Ophthalmology', 'OPHT'),
+    ('3rd Year', 'ENT (Otorhinolaryngology)', 'ENT'),
+    ('3rd Year', 'Community Medicine', 'COMM'),
+    ('4th Year', 'General Medicine', 'MED'),
+    ('4th Year', 'General Surgery', 'SURG'),
+    ('4th Year', 'Pediatrics', 'PED'),
+    ('4th Year', 'Obstetrics & Gynaecology', 'OBG')
+) AS v(year, name, code)
+WHERE NOT EXISTS (
+    SELECT 1 FROM public.academic_subjects WHERE name = v.name AND academic_year = v.year
+);
