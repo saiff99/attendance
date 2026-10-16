@@ -893,26 +893,8 @@ async def selfie_attendance(
         raise HTTPException(status_code=400, detail=f"Student {student['full_name']} (Roll: {clean_roll}) does not have face biometric data enrolled yet. Please contact the administrator.")
         
     known_encoding = np.array(student["face_encoding"])
-    
-    # 7. Check if already marked present in this session
-    existing_att = supabase.table("attendance").select("id, recorded_at, confidence_score").eq("session_id", session_id).eq("student_id", student["id"]).execute()
-    if existing_att.data:
-        rec_time = existing_att.data[0].get("recorded_at", "Earlier Today")
-        # Ensure device lock is registered even if already present
-        if device_id and device_id.strip():
-            session_device_locks.setdefault(session_id, {})[device_id.strip()] = clean_roll.upper()
-        return {
-            "success": True,
-            "already_marked": True,
-            "message": f"Attendance is already recorded for {student['full_name']} (Roll: {clean_roll})!",
-            "student_name": student["full_name"],
-            "student_roll": student["student_roll"],
-            "academic_year": student.get("academic_year") or "MBBS",
-            "recorded_at": rec_time,
-            "confidence": existing_att.data[0].get("confidence_score", 0.95)
-        }
-        
-    # 8. AI Face Recognition & Anti-Spoofing Verification
+
+    # 7. AI Face Recognition & Anti-Spoofing Verification (Runs FIRST to prevent unauthorized attendance probing)
     if not (AI_ENABLED and app_fa):
         raise HTTPException(
             status_code=503,
@@ -1024,7 +1006,25 @@ async def selfie_attendance(
     except Exception as e:
         print("Error in selfie face matching:", e)
         raise HTTPException(status_code=500, detail="AI face analysis failed. Please try again.")
-        
+
+    # 8. Check if already marked present in this session (Verified strictly AFTER authentic biometric face match)
+    existing_att = supabase.table("attendance").select("id, recorded_at, confidence_score").eq("session_id", session_id).eq("student_id", student["id"]).execute()
+    if existing_att.data:
+        rec_time = existing_att.data[0].get("recorded_at", "Earlier Today")
+        # Ensure device lock is registered even if already present
+        if device_id and device_id.strip():
+            session_device_locks.setdefault(session_id, {})[device_id.strip()] = clean_roll.upper()
+        return {
+            "success": True,
+            "already_marked": True,
+            "message": f"Attendance is already recorded for {student['full_name']} (Roll: {clean_roll})!",
+            "student_name": student["full_name"],
+            "student_roll": student["student_roll"],
+            "academic_year": student.get("academic_year") or "MBBS",
+            "recorded_at": rec_time,
+            "confidence": existing_att.data[0].get("confidence_score", confidence_score)
+        }
+
     # 9. Record Attendance in Supabase
     try:
         try:
