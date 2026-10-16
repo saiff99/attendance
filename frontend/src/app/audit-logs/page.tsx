@@ -53,7 +53,7 @@ export default function AuditLogsPage() {
     if (!isSuperAdmin) return;
     try {
       setIsRefreshing(true);
-      const res = await fetch("/api/audit-logs?limit=200", {
+      const res = await fetch("/api/audit-logs?limit=500", {
         cache: "no-store",
       });
       if (res.ok) {

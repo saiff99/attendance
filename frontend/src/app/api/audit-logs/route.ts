@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
 
     // 2. Fetch logs from Supabase
     const { searchParams } = new URL(request.url);
-    const limit = Math.min(200, Math.max(10, parseInt(searchParams.get("limit") || "100", 10)));
+    const limit = Math.min(500, Math.max(10, parseInt(searchParams.get("limit") || "500", 10)));
     const action = searchParams.get("action");
     const targetType = searchParams.get("target_type");
 
