@@ -138,6 +138,34 @@ WITH CHECK (true);
 
 
 -- ==============================================================================
+-- 🔒 7. SETTINGS TABLE — STRICT ZERO-TRUST (SERVICE ROLE ONLY)
+-- Creates settings table if missing and locks it down to service_role only.
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS public.settings (
+    key TEXT PRIMARY KEY,
+    value JSONB NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE IF EXISTS public.settings ENABLE ROW LEVEL SECURITY;
+
+DO $$ 
+DECLARE 
+    pol RECORD;
+BEGIN
+    FOR pol IN (SELECT policyname FROM pg_policies WHERE tablename = 'settings' AND schemaname = 'public') LOOP
+        EXECUTE 'DROP POLICY IF EXISTS ' || quote_ident(pol.policyname) || ' ON public.settings';
+    END LOOP;
+END $$;
+
+CREATE POLICY "service_role_unrestricted_settings"
+ON public.settings
+FOR ALL
+TO service_role
+USING (true)
+WITH CHECK (true);
+
+
+-- ==============================================================================
 -- 🚀 Verification Query
 -- ==============================================================================
 SELECT tablename, policyname, roles, cmd, qual

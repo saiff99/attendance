@@ -69,7 +69,9 @@ CREATE INDEX IF NOT EXISTS idx_audit_logs_target ON audit_logs(target_type, targ
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);
 
 -- ==============================================================================
--- 7. Row Level Security (RLS) & Protection Policies
+-- 7. Row Level Security (RLS) & Zero-Trust Production Protection Policies
+-- All client interactions are mediated server-side via Next.js and FastAPI
+-- using SUPABASE_SERVICE_ROLE_KEY. Direct public REST access via anon is blocked.
 -- ==============================================================================
 
 ALTER TABLE students ENABLE ROW LEVEL SECURITY;
@@ -77,29 +79,34 @@ ALTER TABLE sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE attendance ENABLE ROW LEVEL SECURITY;
 ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
 
--- Students Policies
+-- 1. Students Policies (Service Role Only)
+DROP POLICY IF EXISTS "allow_read_students" ON students;
+DROP POLICY IF EXISTS "allow_insert_students" ON students;
+DROP POLICY IF EXISTS "allow_update_students" ON students;
+DROP POLICY IF EXISTS "allow_delete_students" ON students;
+DROP POLICY IF EXISTS "service_role_full_students" ON students;
 CREATE POLICY "service_role_full_students" ON students FOR ALL TO service_role USING (true) WITH CHECK (true);
-CREATE POLICY "allow_read_students" ON students FOR SELECT TO authenticated, anon USING (true);
-CREATE POLICY "allow_insert_students" ON students FOR INSERT TO authenticated, anon WITH CHECK (true);
-CREATE POLICY "allow_update_students" ON students FOR UPDATE TO authenticated, anon USING (true) WITH CHECK (true);
-CREATE POLICY "allow_delete_students" ON students FOR DELETE TO authenticated, service_role USING (true);
 
--- Sessions Policies
+-- 2. Sessions Policies (Service Role Only)
+DROP POLICY IF EXISTS "allow_read_sessions" ON sessions;
+DROP POLICY IF EXISTS "allow_insert_sessions" ON sessions;
+DROP POLICY IF EXISTS "allow_update_sessions" ON sessions;
+DROP POLICY IF EXISTS "allow_delete_sessions" ON sessions;
+DROP POLICY IF EXISTS "service_role_full_sessions" ON sessions;
 CREATE POLICY "service_role_full_sessions" ON sessions FOR ALL TO service_role USING (true) WITH CHECK (true);
-CREATE POLICY "allow_read_sessions" ON sessions FOR SELECT TO authenticated, anon USING (true);
-CREATE POLICY "allow_insert_sessions" ON sessions FOR INSERT TO authenticated, anon WITH CHECK (true);
-CREATE POLICY "allow_update_sessions" ON sessions FOR UPDATE TO authenticated, anon USING (true) WITH CHECK (true);
-CREATE POLICY "allow_delete_sessions" ON sessions FOR DELETE TO authenticated, service_role USING (true);
 
--- Attendance Policies
+-- 3. Attendance Policies (Service Role Only)
+DROP POLICY IF EXISTS "allow_read_attendance" ON attendance;
+DROP POLICY IF EXISTS "allow_insert_attendance" ON attendance;
+DROP POLICY IF EXISTS "allow_update_attendance" ON attendance;
+DROP POLICY IF EXISTS "allow_delete_attendance" ON attendance;
+DROP POLICY IF EXISTS "service_role_full_attendance" ON attendance;
 CREATE POLICY "service_role_full_attendance" ON attendance FOR ALL TO service_role USING (true) WITH CHECK (true);
-CREATE POLICY "allow_read_attendance" ON attendance FOR SELECT TO authenticated, anon USING (true);
-CREATE POLICY "allow_insert_attendance" ON attendance FOR INSERT TO authenticated, anon WITH CHECK (true);
-CREATE POLICY "allow_update_attendance" ON attendance FOR UPDATE TO authenticated, anon USING (true) WITH CHECK (true);
-CREATE POLICY "allow_delete_attendance" ON attendance FOR DELETE TO authenticated, service_role USING (true);
 
--- Audit Logs Policies
+-- 4. Audit Logs Policies (Service Role Only)
+DROP POLICY IF EXISTS "allow_read_audit_logs" ON audit_logs;
+DROP POLICY IF EXISTS "allow_insert_audit_logs" ON audit_logs;
+DROP POLICY IF EXISTS "service_role_full_audit_logs" ON audit_logs;
 CREATE POLICY "service_role_full_audit_logs" ON audit_logs FOR ALL TO service_role USING (true) WITH CHECK (true);
-CREATE POLICY "allow_read_audit_logs" ON audit_logs FOR SELECT TO authenticated, anon USING (true);
-CREATE POLICY "allow_insert_audit_logs" ON audit_logs FOR INSERT TO authenticated, anon WITH CHECK (true);
+
 
