@@ -217,7 +217,16 @@ async def enroll_face(student_id: str, file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail="Failed to process image.")
 
     try:
-        supabase.table("students").update({"face_encoding": encoding}).eq("id", student_id).execute()
+        consent_now = datetime.now(timezone.utc).isoformat()
+        try:
+            supabase.table("students").update({
+                "face_encoding": encoding,
+                "biometric_consent": True,
+                "biometric_consent_date": consent_now
+            }).eq("id", student_id).execute()
+        except Exception:
+            supabase.table("students").update({"face_encoding": encoding}).eq("id", student_id).execute()
+
         from app.stream import cleanup_session_state
         cleanup_session_state(None)
     except Exception as e:
@@ -287,7 +296,16 @@ async def enroll_face_burst(student_id: str, files: List[UploadFile] = File(...)
         raise HTTPException(status_code=500, detail="Failed to process images.")
 
     try:
-        supabase.table("students").update({"face_encoding": encoding_list}).eq("id", student_id).execute()
+        consent_now = datetime.now(timezone.utc).isoformat()
+        try:
+            supabase.table("students").update({
+                "face_encoding": encoding_list,
+                "biometric_consent": True,
+                "biometric_consent_date": consent_now
+            }).eq("id", student_id).execute()
+        except Exception:
+            supabase.table("students").update({"face_encoding": encoding_list}).eq("id", student_id).execute()
+
         from app.stream import cleanup_session_state
         cleanup_session_state(None)
     except Exception as e:
@@ -299,6 +317,32 @@ async def enroll_face_burst(student_id: str, files: List[UploadFile] = File(...)
         "message": f"Face data enrolled successfully using {valid_count} angles!", 
         "ai_used": AI_ENABLED
     }
+
+
+@router.post("/api/students/{student_id}/revoke-biometrics")
+async def revoke_biometrics(student_id: str):
+    """
+    DPDP Act 2023 Compliance: Allows explicit revocation of biometric consent
+    and completely erases facial vector embeddings for the specified student.
+    """
+    try:
+        try:
+            supabase.table("students").update({
+                "face_encoding": None,
+                "biometric_consent": False,
+                "biometric_consent_date": None
+            }).eq("id", student_id).execute()
+        except Exception:
+            supabase.table("students").update({
+                "face_encoding": None
+            }).eq("id", student_id).execute()
+
+        from app.stream import cleanup_session_state
+        cleanup_session_state(None)
+        return {"success": True, "message": "Biometric face template erased and consent revoked."}
+    except Exception as e:
+        print("Error revoking biometrics:", e)
+        raise HTTPException(status_code=500, detail="Failed to revoke biometric data.")
 
 
 @router.post("/api/process-attendance")

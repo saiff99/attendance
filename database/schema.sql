@@ -24,8 +24,8 @@ CREATE TABLE IF NOT EXISTS public.students (
     portal_pin VARCHAR(20), -- Optional initial or legacy PIN
     portal_password_hash TEXT, -- Salted bcrypt hash for student portal authentication
     last_portal_login TIMESTAMPTZ,
-    biometric_consent BOOLEAN DEFAULT true, -- DPDP Act 2023 compliance
-    biometric_consent_date TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    biometric_consent BOOLEAN DEFAULT false, -- DPDP Act 2023: Explicit consent (opt-in only)
+    biometric_consent_date TIMESTAMPTZ, -- Timestamp recorded upon explicit enrollment
     manual_marked_count INTEGER DEFAULT 0,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
@@ -36,8 +36,8 @@ ADD COLUMN IF NOT EXISTS portal_password_hash TEXT,
 ADD COLUMN IF NOT EXISTS portal_pin VARCHAR(20),
 ADD COLUMN IF NOT EXISTS last_portal_login TIMESTAMPTZ,
 ADD COLUMN IF NOT EXISTS parent_phone VARCHAR(50),
-ADD COLUMN IF NOT EXISTS biometric_consent BOOLEAN DEFAULT true,
-ADD COLUMN IF NOT EXISTS biometric_consent_date TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+ADD COLUMN IF NOT EXISTS biometric_consent BOOLEAN DEFAULT false,
+ADD COLUMN IF NOT EXISTS biometric_consent_date TIMESTAMPTZ,
 ADD COLUMN IF NOT EXISTS manual_marked_count INTEGER DEFAULT 0;
 
 -- ==============================================================================

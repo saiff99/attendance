@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useMemo } from "react";
-import { Search, UserPlus, FileDown, MoreHorizontal, X, UploadCloud, Loader2, Edit2, Trash2, Folder, ArrowLeft, Users, FileSpreadsheet, ArrowUpDown, ArrowUp, ArrowDown, MessageSquare, Phone, AlertTriangle, Lock, KeyRound, CheckCircle2 } from "lucide-react";
+import { Search, UserPlus, FileDown, MoreHorizontal, X, UploadCloud, Loader2, Edit2, Trash2, Folder, ArrowLeft, Users, FileSpreadsheet, ArrowUpDown, ArrowUp, ArrowDown, MessageSquare, Phone, AlertTriangle, Lock, KeyRound, CheckCircle2, UserX } from "lucide-react";
 // Student Directory
 import type { Student } from "@/types/database";
 import { StudentProfileModal } from "@/components/StudentProfileModal";
@@ -29,6 +29,12 @@ export default function StudentDirectory() {
   const [isResettingPin, setIsResettingPin] = useState(false);
   const [resetPinSuccess, setResetPinSuccess] = useState<string | null>(null);
   const [resetPinError, setResetPinError] = useState<string | null>(null);
+
+  // Custom Modal for DPDP Biometric Revocation / Face Template Erasure
+  const [revokeBiometricTarget, setRevokeBiometricTarget] = useState<{ id: string; name: string; roll: string } | null>(null);
+  const [isRevokingBiometric, setIsRevokingBiometric] = useState(false);
+  const [revokeBiometricSuccess, setRevokeBiometricSuccess] = useState<string | null>(null);
+  const [revokeBiometricError, setRevokeBiometricError] = useState<string | null>(null);
 
   // Sorting State - default ordered by Roll Number ascending
   type SortField = 'student_roll' | 'full_name' | 'academic_year';
@@ -216,6 +222,33 @@ export default function StudentDirectory() {
       setResetPinError(err.message || "Failed to reset PIN.");
     } finally {
       setIsResettingPin(false);
+    }
+  };
+
+  const confirmRevokeBiometric = async () => {
+    if (!revokeBiometricTarget) return;
+    setIsRevokingBiometric(true);
+    setRevokeBiometricSuccess(null);
+    setRevokeBiometricError(null);
+
+    try {
+      const res = await fetch(`/api/students/${revokeBiometricTarget.id}/revoke-biometrics`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Failed to revoke biometrics.");
+      }
+      setRevokeBiometricSuccess(`Facial biometric template erased and consent revoked.`);
+      fetchStudents();
+      setTimeout(() => {
+        setRevokeBiometricTarget(null);
+        setRevokeBiometricSuccess(null);
+        setRevokeBiometricError(null);
+      }, 1500);
+    } catch (err: any) {
+      console.error("Error revoking biometrics:", err);
+      setRevokeBiometricError(err.message || "Failed to revoke biometrics.");
+    } finally {
+      setIsRevokingBiometric(false);
     }
   };
 
@@ -790,6 +823,21 @@ export default function StudentDirectory() {
                                           <KeyRound className="w-4 h-4 mr-2.5 text-amber-500" />
                                           Reset PIN
                                         </button>
+                                        {isSuperAdmin && student.face_encoding && (
+                                          <button
+                                            onClick={() => {
+                                              setRevokeBiometricTarget({ id: student.id, name: student.full_name, roll: student.student_roll });
+                                              setRevokeBiometricSuccess(null);
+                                              setRevokeBiometricError(null);
+                                              setOpenDropdownId(null);
+                                            }}
+                                            className="text-rose-600 dark:text-rose-400 w-full text-left px-3.5 py-2 text-xs sm:text-sm hover:bg-rose-50 dark:hover:bg-rose-900/30 hover:text-rose-700 dark:hover:text-rose-300 flex items-center transition-colors font-medium cursor-pointer"
+                                            title="Revoke DPDP biometric consent and erase face template"
+                                          >
+                                            <UserX className="w-4 h-4 mr-2.5 text-rose-500" />
+                                            Remove Face ID
+                                          </button>
+                                        )}
                                         {isSuperAdmin && (
                                           <button
                                             onClick={() => {
@@ -1128,6 +1176,107 @@ export default function StudentDirectory() {
                           <KeyRound className="w-4 h-4" />
                           <span>Confirm Reset</span>
                         </>
+                      )}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* DPDP Biometric Revocation / Face Erasure Modal */}
+        {revokeBiometricTarget && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
+            <div className="relative w-full max-w-md rounded-3xl bg-slate-900 border border-slate-800 p-6 sm:p-7 shadow-2xl shadow-rose-950/20 text-left">
+              {/* Close Button */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (!isRevokingBiometric) {
+                    setRevokeBiometricTarget(null);
+                    setRevokeBiometricSuccess(null);
+                    setRevokeBiometricError(null);
+                  }
+                }}
+                disabled={isRevokingBiometric}
+                className="absolute top-5 right-5 text-slate-400 hover:text-white transition-colors p-1.5 rounded-xl hover:bg-slate-800 cursor-pointer disabled:opacity-40"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              <div className="flex items-center gap-3.5 mb-5">
+                <div className="w-12 h-12 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-400 flex items-center justify-center shadow-lg shadow-rose-500/10 shrink-0">
+                  <UserX className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-white tracking-tight">Remove Face ID & Revoke Consent</h3>
+                  <p className="text-xs text-slate-400">DPDP Act 2023 Biometric Erasure</p>
+                </div>
+              </div>
+
+              {revokeBiometricSuccess ? (
+                <div className="p-4 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 flex items-start gap-3 my-4 animate-in zoom-in-95">
+                  <div className="p-1 rounded-full bg-emerald-500/20 text-emerald-400 shrink-0 mt-0.5">
+                    <CheckCircle2 className="w-5 h-5" />
+                  </div>
+                  <div className="text-xs">
+                    <p className="font-bold text-sm text-emerald-200">Biometric Template Erased</p>
+                    <p className="mt-1 text-emerald-300/90">{revokeBiometricSuccess}</p>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {revokeBiometricError && (
+                    <div className="p-3.5 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-300 flex items-start gap-2.5 mb-4 text-xs animate-in zoom-in-95">
+                      <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                      <span>{revokeBiometricError}</span>
+                    </div>
+                  )}
+
+                  <div className="bg-slate-950/70 border border-slate-800 rounded-2xl p-4 mb-4">
+                    <div className="flex items-center justify-between text-xs mb-2">
+                      <span className="text-slate-400">Student Name</span>
+                      <span className="font-bold text-white text-sm">{revokeBiometricTarget.name}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-slate-400">Roll Number</span>
+                      <span className="font-mono font-bold text-rose-400 px-2 py-0.5 rounded-md bg-rose-500/10 border border-rose-500/20">
+                        {revokeBiometricTarget.roll}
+                      </span>
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-slate-300 leading-relaxed mb-6">
+                    Are you sure you want to erase this student&apos;s facial biometric template and revoke consent? This complies with DPDP Act 2023 Section 6(4). Their student account and past attendance logs will remain intact, and they can be re-enrolled at any time.
+                  </p>
+
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      disabled={isRevokingBiometric}
+                      onClick={() => {
+                        setRevokeBiometricTarget(null);
+                        setRevokeBiometricSuccess(null);
+                        setRevokeBiometricError(null);
+                      }}
+                      className="flex-1 py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition-all cursor-pointer disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isRevokingBiometric}
+                      onClick={confirmRevokeBiometric}
+                      className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-500 hover:to-rose-600 text-white text-xs font-black shadow-lg shadow-rose-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                    >
+                      {isRevokingBiometric ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Erasing...</span>
+                        </>
+                      ) : (
+                        <span>Erase Face ID</span>
                       )}
                     </button>
                   </div>

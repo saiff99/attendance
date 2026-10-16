@@ -123,7 +123,8 @@ export async function POST(request: NextRequest) {
     const fullPayload: any = {
       ...basePayload,
       face_encoding: cleanPhone ? { parent_phone: cleanPhone } : null,
-      biometric_consent: true,
+      biometric_consent: false,
+      biometric_consent_date: null,
     };
     if (cleanPhone) fullPayload.parent_phone = cleanPhone;
 
