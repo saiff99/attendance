@@ -346,6 +346,174 @@ async function runTests() {
     }
   }
 
+  // --- Suite 11: Attendance API Strict Schema Validation & Faculty Scope Authorization ---
+  console.log('\n--- Suite 11: Attendance API Strict Schema Validation & Faculty Scope Authorization ---');
+  {
+    // Authenticate Faculty member
+    let facultySessionCookie = '';
+    const facLogin = await request('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ username: 'faculty', password: 'faculty123', mode: 'admin' }),
+    });
+    if (facLogin.status === 200 && facLogin.headers.get('set-cookie')) {
+      const match = facLogin.headers.get('set-cookie').match(/medattend_session=([^;]+)/);
+      if (match) facultySessionCookie = `medattend_session=${match[1]}`;
+    }
+    assert(Boolean(facultySessionCookie), 'Authenticated Faculty user received medattend_session cookie');
+
+    // 1. Unauthenticated requests rejected
+    const unauthPost = await request('/api/attendance/mark', {
+      method: 'POST',
+      body: JSON.stringify({ session_id: '00000000-0000-0000-0000-000000000000', student_id: '00000000-0000-0000-0000-000000000000' }),
+    });
+    assert(unauthPost.status === 401, 'Unauthenticated POST mark attendance REJECTED (HTTP 401)');
+
+    const unauthDel = await request('/api/attendance/mark?id=00000000-0000-0000-0000-000000000000', {
+      method: 'DELETE',
+    });
+    assert(unauthDel.status === 401, 'Unauthenticated DELETE attendance REJECTED (HTTP 401)');
+
+    // 2. Student role calling mark/delete rejected with HTTP 403
+    const studentMark = await request('/api/attendance/mark', {
+      method: 'POST',
+      headers: { Cookie: studentCookie },
+      body: JSON.stringify({ session_id: '00000000-0000-0000-0000-000000000000', student_id: '00000000-0000-0000-0000-000000000000' }),
+    });
+    assert(studentMark.status === 403, 'Student role calling mark attendance REJECTED with HTTP 403');
+
+    // 3. Schema validation: Malformed/non-UUID IDs rejected with HTTP 400
+    const invalidUuid = await request('/api/attendance/mark', {
+      method: 'POST',
+      headers: { Cookie: adminSessionCookie },
+      body: JSON.stringify({ session_id: 'invalid-session-123', student_id: 'invalid-student-456' }),
+    });
+    assert(invalidUuid.status === 400, 'Non-UUID session_id and student_id REJECTED (HTTP 400)');
+
+    // 4. Schema validation: Invalid status rejected with HTTP 400
+    const validSessionId = '6581a431-42ca-40fe-b1c6-530f258eb658'; // Session owned by Rajashri Mam
+    const validStudentId = '7c138d01-37e5-4074-9900-66a111d9e580'; // Student SAIF (3rd Year)
+
+    const invalidStatus = await request('/api/attendance/mark', {
+      method: 'POST',
+      headers: { Cookie: adminSessionCookie },
+      body: JSON.stringify({
+        session_id: validSessionId,
+        student_id: validStudentId,
+        status: 'Excused_Absence', // Invalid enum
+      }),
+    });
+    assert(invalidStatus.status === 400, 'Invalid attendance status REJECTED (HTTP 400)');
+
+    // 5. Schema validation: Invalid confidence score rejected with HTTP 400
+    const negConfidence = await request('/api/attendance/mark', {
+      method: 'POST',
+      headers: { Cookie: adminSessionCookie },
+      body: JSON.stringify({
+        session_id: validSessionId,
+        student_id: validStudentId,
+        status: 'Present',
+        confidence_score: -0.25,
+      }),
+    });
+    assert(negConfidence.status === 400, 'Negative confidence score REJECTED (HTTP 400)');
+
+    const highConfidence = await request('/api/attendance/mark', {
+      method: 'POST',
+      headers: { Cookie: adminSessionCookie },
+      body: JSON.stringify({
+        session_id: validSessionId,
+        student_id: validStudentId,
+        status: 'Present',
+        confidence_score: 1.5,
+      }),
+    });
+    assert(highConfidence.status === 400, 'Out-of-range confidence (>1.0) REJECTED (HTTP 400)');
+
+    const strConfidence = await request('/api/attendance/mark', {
+      method: 'POST',
+      headers: { Cookie: adminSessionCookie },
+      body: JSON.stringify({
+        session_id: validSessionId,
+        student_id: validStudentId,
+        status: 'Present',
+        confidence_score: 'high_confidence',
+      }),
+    });
+    assert(strConfidence.status === 400, 'Non-numeric confidence string REJECTED (HTTP 400)');
+
+    // 6. Schema validation: Invalid capture_mode rejected with HTTP 400
+    const invalidMode = await request('/api/attendance/mark', {
+      method: 'POST',
+      headers: { Cookie: adminSessionCookie },
+      body: JSON.stringify({
+        session_id: validSessionId,
+        student_id: validStudentId,
+        status: 'Present',
+        capture_mode: 'Hacked Injected Mode',
+      }),
+    });
+    assert(invalidMode.status === 400, 'Unallowlisted capture_mode REJECTED (HTTP 400)');
+
+    // 7. Faculty Scope Isolation: Faculty cannot mark attendance for another Faculty\'s session (HTTP 403)
+    const unauthorizedFacMark = await request('/api/attendance/mark', {
+      method: 'POST',
+      headers: { Cookie: facultySessionCookie },
+      body: JSON.stringify({
+        session_id: validSessionId, // Owned by Rajashri Mam
+        student_id: validStudentId,
+        status: 'Present',
+        capture_mode: 'Manual Entry',
+      }),
+    });
+    assert(unauthorizedFacMark.status === 403, 'Faculty modifying another Faculty member\'s session REJECTED (HTTP 403)');
+
+    // 8. Faculty Scope Isolation: Faculty cannot delete attendance from another Faculty\'s session (HTTP 403)
+    const unauthorizedFacDel = await request('/api/attendance/mark', {
+      method: 'DELETE',
+      headers: { Cookie: facultySessionCookie },
+      body: JSON.stringify({
+        session_id: validSessionId,
+        student_id: validStudentId,
+      }),
+    });
+    assert(unauthorizedFacDel.status === 403 || unauthorizedFacDel.status === 404, 'Faculty deleting another Faculty member\'s session record REJECTED (HTTP 403/404)');
+
+    // 9. Faculty Scope Isolation: Faculty cannot view logs for another Faculty\'s session (HTTP 403)
+    const unauthorizedFacLogs = await request(`/api/attendance/session/${validSessionId}`, {
+      method: 'GET',
+      headers: { Cookie: facultySessionCookie },
+    });
+    assert(unauthorizedFacLogs.status === 403, 'Faculty viewing logs for another Faculty member\'s session REJECTED (HTTP 403)');
+
+    // 10. Super Admin Authorized Override: Marks attendance, enforces server timestamp, logs audit trail (HTTP 200)
+    const adminMark = await request('/api/attendance/mark', {
+      method: 'POST',
+      headers: { Cookie: adminSessionCookie },
+      body: JSON.stringify({
+        session_id: validSessionId,
+        student_id: validStudentId,
+        status: 'Present',
+        capture_mode: 'Manual Entry',
+        confidence_score: 0.98,
+        reason: 'Super Admin manual verification override test',
+      }),
+    });
+    assert(adminMark.status === 200 && adminMark.data?.success === true, 'Authorized Super Admin attendance mark succeeded (HTTP 200)');
+    assert(Boolean(adminMark.data?.data?.recorded_at), 'Server-controlled recorded_at timestamp present in record');
+
+    // 11. Super Admin Authorized Deletion / Undo (HTTP 200)
+    const adminDel = await request('/api/attendance/mark', {
+      method: 'DELETE',
+      headers: { Cookie: adminSessionCookie },
+      body: JSON.stringify({
+        session_id: validSessionId,
+        student_id: validStudentId,
+        reason: 'Clean up test record after automated audit verification',
+      }),
+    });
+    assert(adminDel.status === 200 && adminDel.data?.success === true, 'Authorized Super Admin attendance deletion succeeded (HTTP 200)');
+  }
+
   // Summary
   console.log('\n=======================================================');
   console.log(`📊 Test Summary: ${passedTests} Passed, ${failedTests} Failed`);

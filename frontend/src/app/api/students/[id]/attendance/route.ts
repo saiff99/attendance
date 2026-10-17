@@ -2,6 +2,8 @@ import { NextResponse, NextRequest } from 'next/server';
 import { supabaseServer } from '@/lib/supabaseServer';
 import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/serverAuth';
 
+import { isValidUuid } from '@/lib/attendanceAuth';
+
 export const dynamic = 'force-dynamic';
 
 export async function GET(
@@ -20,6 +22,9 @@ export async function GET(
     }
 
     const { id } = await params;
+    if (!id || !isValidUuid(id)) {
+      return NextResponse.json({ success: false, error: 'Invalid Student ID format. Valid UUID required.' }, { status: 400 });
+    }
 
     // Student can view their own profile, Faculty/Admin can view any student
     if (session.role === 'Student' && session.studentId && session.studentId !== id) {
