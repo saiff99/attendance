@@ -1661,11 +1661,6 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                               <span>{livenessPrompt}</span>
                             </div>
                           </div>
-
-                          <div className="absolute top-3 right-3 px-2.5 py-1.5 rounded-full bg-black/60 backdrop-blur-md text-emerald-400 border border-emerald-500/30 text-[11px] font-semibold flex items-center gap-1.5 shadow-sm pointer-events-none select-none">
-                            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                            <span>Front Camera Only</span>
-                          </div>
                         </>
                       )}
                     </>
