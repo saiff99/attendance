@@ -468,9 +468,12 @@ export default function StudentDirectory() {
             <div>
               <button
                 onClick={() => { setActiveView(null); setSearchTerm(""); }}
-                className="mb-3 sm:mb-4 inline-flex items-center text-xs sm:text-sm font-medium text-gray-500 hover:text-indigo-600 dark:text-gray-400 dark:hover:text-indigo-400 transition-colors"
+                className="group mb-3 sm:mb-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/80 dark:bg-gray-900/80 hover:bg-indigo-50/70 dark:hover:bg-slate-800/90 border border-gray-200/90 dark:border-gray-800 hover:border-indigo-300/80 dark:hover:border-indigo-500/40 text-xs sm:text-sm font-semibold text-gray-700 dark:text-gray-300 hover:text-indigo-600 dark:hover:text-indigo-300 backdrop-blur-md shadow-xs hover:shadow-sm transition-all duration-200 active:scale-95 cursor-pointer"
               >
-                <ArrowLeft className="mr-1 h-3.5 w-3.5 sm:h-4 sm:w-4" /> Back to Folders
+                <div className="flex items-center justify-center w-5 h-5 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 group-hover:bg-indigo-100 dark:group-hover:bg-indigo-950/70 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                  <ArrowLeft className="h-3.5 w-3.5 transition-transform duration-200 group-hover:-translate-x-0.5" />
+                </div>
+                <span>Back to Folders</span>
               </button>
               <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-gray-900 dark:text-white">Directory: {activeView}</h1>
               <p className="mt-1 text-xs sm:text-sm text-gray-500 dark:text-gray-400">Manage students inside the {activeView} cohort.</p>
