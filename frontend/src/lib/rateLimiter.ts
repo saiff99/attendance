@@ -28,18 +28,18 @@ const inFlightMutexes = new Map<string, Promise<any>>();
  */
 export async function withKeyLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
   const currentLock = inFlightMutexes.get(key) || Promise.resolve();
-  let resolveCurrent: () => void;
-  const newLock = new Promise<void>((resolve) => {
-    resolveCurrent = resolve;
+  let release: () => void = () => {};
+  const nextLock = new Promise<void>((resolve) => {
+    release = resolve;
   });
-  inFlightMutexes.set(key, currentLock.then(() => newLock));
+  inFlightMutexes.set(key, nextLock);
 
+  await currentLock;
   try {
-    await currentLock;
     return await fn();
   } finally {
-    resolveCurrent!();
-    if (inFlightMutexes.get(key) === currentLock.then(() => newLock)) {
+    release();
+    if (inFlightMutexes.get(key) === nextLock) {
       inFlightMutexes.delete(key);
     }
   }
@@ -214,6 +214,10 @@ export async function acquireLoginSlot(
   if (accountKey) {
     const slotAcquired = await withKeyLock(accountKey, async () => {
       const mem = memoryRateCache[accountKey];
+      if (mem && mem.lockedUntil && now < mem.lockedUntil) {
+        const remainingSeconds = Math.max(1, Math.ceil((mem.lockedUntil - now) / 1000));
+        return { allowed: false, remainingSeconds };
+      }
       const count = (mem && now - mem.firstAttempt <= LOCKOUT_WINDOW_MS) ? mem.count : 0;
       const inFlight = inFlightAttempts.get(accountKey) || 0;
 
@@ -241,21 +245,27 @@ export async function acquireLoginSlot(
   const release = async (success: boolean) => {
     if (accountKey) {
       await withKeyLock(accountKey, async () => {
-        const inFlight = inFlightAttempts.get(accountKey) || 1;
-        if (inFlight <= 1) {
-          inFlightAttempts.delete(accountKey);
-        } else {
-          inFlightAttempts.set(accountKey, inFlight - 1);
+        try {
+          if (success) {
+            await resetLoginRateLimit(username);
+          } else {
+            await recordSingleFailureWithCAS(accountKey, MAX_ACCOUNT_FAILED_ATTEMPTS, now, simulateStorageFailure);
+          }
+        } finally {
+          const inFlight = inFlightAttempts.get(accountKey) || 1;
+          if (inFlight <= 1) {
+            inFlightAttempts.delete(accountKey);
+          } else {
+            inFlightAttempts.set(accountKey, inFlight - 1);
+          }
         }
       });
-    }
 
-    if (success) {
-      if (accountKey) {
-        await resetLoginRateLimit(username);
+      if (!success) {
+        await withKeyLock(ipKey, async () => {
+          await recordSingleFailureWithCAS(ipKey, MAX_IP_FAILED_ATTEMPTS, now, simulateStorageFailure);
+        });
       }
-    } else {
-      await recordFailedLogin(username, clientIp, now, simulateStorageFailure);
     }
   };
 

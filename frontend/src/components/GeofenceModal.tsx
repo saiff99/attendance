@@ -32,23 +32,6 @@ export function GeofenceModal({ isOpen, onClose, initialConfig, onConfigSaved }:
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [savedSuccess, setSavedSuccess] = useState(false);
 
-  useEffect(() => {
-    if (isOpen) {
-      setSavedSuccess(false);
-      setGpsError(null);
-      setGpsStatus(null);
-      setGpsAccuracy(null);
-      if (initialConfig) {
-        setConfig(initialConfig);
-        setLoading(false);
-      } else {
-        const local = getLocalGeofence();
-        setConfig(local);
-        fetchConfig();
-      }
-    }
-  }, [isOpen, initialConfig]);
-
   const fetchConfig = async () => {
     setLoading(true);
     try {
@@ -66,6 +49,23 @@ export function GeofenceModal({ isOpen, onClose, initialConfig, onConfigSaved }:
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (isOpen) {
+      setSavedSuccess(false);
+      setGpsError(null);
+      setGpsStatus(null);
+      setGpsAccuracy(null);
+      if (initialConfig) {
+        setConfig(initialConfig);
+        setLoading(false);
+      } else {
+        const local = getLocalGeofence();
+        setConfig(local);
+        fetchConfig();
+      }
+    }
+  }, [isOpen, initialConfig]);
 
   const handleCaptureCurrentLocation = async () => {
     setCapturingGPS(true);

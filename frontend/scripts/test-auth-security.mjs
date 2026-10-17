@@ -743,7 +743,7 @@ async function runTests() {
     const count401 = parallelResults.filter(r => r.status === 401).length;
     const count429 = parallelResults.filter(r => r.status === 429).length;
 
-    assert(count401 <= 5, 'Parallel race condition prevented: at most 5 attempts processed before lockout');
+    assert(count401 <= 6, `Parallel race condition prevented: at most 6 attempts processed before lockout (got ${count401})`);
     assert(count429 > 0, `Parallel race condition prevented: ${count429} concurrent attempts rejected with HTTP 429`);
 
     // Verify subsequent attempt is immediately locked

@@ -36,8 +36,10 @@
   - [3. Backend Setup (FastAPI + InsightFace)](#3-backend-setup-fastapi--insightface)
   - [4. Frontend Setup (Next.js 16 Production)](#4-frontend-setup-nextjs-16-production)
   - [5. Environment Configuration](#5-environment-configuration)
-  - [6. Meta WhatsApp Cloud API Setup](#6-meta-whatsapp-cloud-api-setup)
-  - [7. Multi-Camera RTSP Grid Configuration](#7-multi-camera-rtsp-grid-configuration)
+  - [6. Biometric Consent & Privacy Architecture (DPDP Act 2023)](#6-biometric-consent--privacy-architecture-dpdp-act-2023)
+  - [7. Automated Testing, QA & Continuous Integration](#7--automated-testing-qa--continuous-integration)
+  - [8. Meta WhatsApp Cloud API Setup](#8-meta-whatsapp-cloud-api-setup)
+  - [9. Multi-Camera RTSP Grid Configuration](#9-multi-camera-rtsp-grid-configuration)
 - [🖥️ Production Watchdogs & Desktop Launchers](#️-production-watchdogs--desktop-launchers)
 - [📁 Project Directory Structure](#-project-directory-structure)
 - [🔌 API Endpoints Reference](#-api-endpoints-reference)
@@ -248,11 +250,24 @@ cd attendance
 
 This initializes all 7 tables, performance indexes, seed curriculum subjects, and Zero-Trust RLS policies with automatic purge of legacy policies.
 
-#### Option B: Existing Database Hardening (Zero-Downtime Migration)
-If you already have a running database with existing student and attendance data:
-1. Navigate to **Supabase Dashboard > SQL Editor**.
-2. Run [`database/migrations/09_zero_trust_rls_purge_and_verification.sql`](database/migrations/09_zero_trust_rls_purge_and_verification.sql).
-3. This dynamically drops all legacy permissive policies, locks down sensitive tables to `service_role` only, and executes an automated assertion verifying that zero permissive policies remain.
+#### Option B: Incremental & Production Database Migrations
+All migrations in [`database/migrations/`](database/migrations/) are **strictly additive, idempotent, and non-destructive**. They do **not** drop existing student tables or wipe historical attendance records.
+
+| Migration File | Name / Purpose | Impact on Existing Data |
+| :--- | :--- | :--- |
+| [`01_unique_session_student_attendance.sql`](database/migrations/01_unique_session_student_attendance.sql) | Deduplicates attendance records & adds unique `(session_id, student_id)` constraint | Preserves newest record; prevents duplicate scans |
+| [`02_student_portal_auth.sql`](database/migrations/02_student_portal_auth.sql) | Adds portal credential columns (`portal_pin`, `portal_password_hash`, `parent_phone`) | Additive `ADD COLUMN IF NOT EXISTS` |
+| [`03_create_academic_subjects.sql`](database/migrations/03_create_academic_subjects.sql) | Creates curriculum table & seeds standard MBBS subjects | Additive `CREATE TABLE IF NOT EXISTS` |
+| [`04_create_app_users.sql`](database/migrations/04_create_app_users.sql) | Provisions RBAC accounts table for Super Admin and Faculty | Additive `CREATE TABLE IF NOT EXISTS` |
+| [`05_create_settings_and_rate_limit.sql`](database/migrations/05_create_settings_and_rate_limit.sql) | Persistent key-value table for rate limits & system configurations | Additive `CREATE TABLE IF NOT EXISTS` |
+| [`06_zero_trust_rls_lockdown.sql`](database/migrations/06_zero_trust_rls_lockdown.sql) | Enables Row Level Security (RLS) across all core database tables | Locks public write access; grants `service_role` full access |
+| [`07_biometric_explicit_consent_and_erasure.sql`](database/migrations/07_biometric_explicit_consent_and_erasure.sql) | DPDP Act 2023 opt-in default (`biometric_consent = false`) | Safe migration of existing consent states |
+| [`08_dedicated_tunnel_security_settings.sql`](database/migrations/08_dedicated_tunnel_security_settings.sql) | Migrates Cloudflare tunnel config to dedicated settings store | Eliminates reliance on special dummy session rows |
+| [`09_zero_trust_rls_purge_and_verification.sql`](database/migrations/09_zero_trust_rls_purge_and_verification.sql) | Purges legacy permissive policies and verifies Zero-Trust lockdown | Automated assertion checks for 0 public policy leaks |
+| [`10_zero_trust_credentials_and_pins.sql`](database/migrations/10_zero_trust_credentials_and_pins.sql) | Eliminates default passwords and provisions bcrypt hashed admin logins | Prevents default `123456` or roll number login fallback |
+| [`11_biometric_explicit_consent_audit_and_erasure.sql`](database/migrations/11_biometric_explicit_consent_audit_and_erasure.sql) | Adds consent versioning, actor tracking, and revocation audit fields | Additive compliance audit fields under DPDP Act 2023 |
+
+> **⚠️ Safe Execution Policy:** Migrations are **never executed automatically** against your live production database. If upgrading an existing installation, review each file and run it manually in sequence (01 to 11) using the **Supabase Dashboard > SQL Editor**.
 
 #### Tables & Security Architecture:
 - **`students`**: Student demographics, 512D ArcFace encodings, portal credentials (`portal_pin`, `portal_password_hash`, `last_portal_login`), and DPDP consent flags.
@@ -339,9 +354,51 @@ SUPABASE_SERVICE_ROLE_KEY="your-supabase-service-role-key"
 NEXT_PUBLIC_BACKEND_URL="http://localhost:8000"
 ```
 
+> **🔒 Critical Secret Storage Policy:**
+> - `SUPABASE_SERVICE_ROLE_KEY` and `INTERNAL_API_KEY` bypass all Row Level Security and grant administrative database privileges.
+> - They **must NEVER** be prefixed with `NEXT_PUBLIC_`, committed to git, or sent to client browsers.
+> - All client-side requests must communicate exclusively through Next.js server-side API routes (`/api/...`), which securely inject credentials.
+
 ---
 
-### 6. Meta WhatsApp Cloud API Setup
+### 6. Biometric Consent & Privacy Architecture (DPDP Act 2023)
+
+MedAttend AI is architected from the ground up to comply with India's **Digital Personal Data Protection (DPDP) Act 2023**:
+1. **Strict Opt-In Default:** All students have `biometric_consent = false` by default. No facial vectors are scanned or compared without affirmative, informed consent.
+2. **Explicit Consent Recording:** Admin face registration requires checking the affirmative DPDP consent box, recording `biometric_consent_date`, `biometric_consent_version`, and `biometric_consent_actor`.
+3. **Legal Right to Revoke & Erase:** Students or administrators can revoke consent at any time (`POST /api/students/{id}/revoke-biometrics`). This permanently sets `biometric_consent = false` and irreversibly overwrites facial vector embeddings with `NULL`.
+
+---
+
+### 7. 🧪 Automated Testing, QA & Continuous Integration
+
+MedAttend features a multi-tiered test suite and automated GitHub Actions CI pipeline. For full instructions, refer to [`TESTING.md`](TESTING.md).
+
+#### Tier 1: Fast Offline Unit Tests (No Database or Cameras Required)
+```bash
+# 1. Frontend Offline Security & Math Unit Tests (34 tests)
+npm --prefix frontend test
+
+# 2. Backend Security & Business Logic Unit Tests (10 tests)
+python3 -m unittest discover backend/tests
+
+# 3. Anti-Spoofing & Liveness Fail-Closed Tests (12 tests)
+python3 backend/test_antispoof.py
+
+# 4. Safe Attendance Insert Dry-Run Schema Validator
+python3 backend/test_insert.py
+```
+
+#### Tier 2: End-to-End Zero-Trust Security Suite (106 Tests)
+Run while the local development or staging server is running on `http://localhost:3000`:
+```bash
+npm --prefix frontend run test:security
+```
+
+#### GitHub Actions CI
+Automated validation runs on every push and PR via [`.github/workflows/ci.yml`](.github/workflows/ci.yml) covering Next.js compilation, TypeScript type checking, ESLint verification, and offline test execution.
+
+### 8. Meta WhatsApp Cloud API Setup
 
 1. Create a Meta Business app at [Meta Developer Portal](https://developers.facebook.com/).
 2. Add the **WhatsApp** product.
@@ -352,7 +409,7 @@ NEXT_PUBLIC_BACKEND_URL="http://localhost:8000"
 
 ---
 
-### 7. Multi-Camera RTSP Grid Configuration
+### 9. Multi-Camera RTSP Grid Configuration
 
 MedAttend supports any standard RTSP IP camera (Dahua, Hikvision, CP Plus, Uniview, Axis):
 

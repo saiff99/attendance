@@ -69,43 +69,6 @@ export function FaceRegistrationModal({ isOpen, onClose, studentId, studentName,
     setCountdown(3);
   };
 
-  useEffect(() => {
-    if (status !== 'scanning' || countdown === null) return;
-
-    if (countdown > 0) {
-      const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
-      return () => clearTimeout(timer);
-    } else if (countdown === 0) {
-      // Time to capture!
-      if (webcamRef.current) {
-        const imageSrc = webcamRef.current.getScreenshot();
-        if (imageSrc) {
-          framesRef.current.push(imageSrc);
-        }
-      }
-      
-      const currentFrame = framesRef.current.length;
-      const totalFrames = 5;
-      
-      setProgress((currentFrame / totalFrames) * 100);
-      
-      if (currentFrame < totalFrames) {
-        // Move to next instruction and reset countdown
-        // We use a tiny timeout so the user sees "Capturing..." or the flash effect momentarily
-        const flashTimer = setTimeout(() => {
-          setInstructionIndex(currentFrame);
-          setCountdown(3);
-        }, 500);
-        return () => clearTimeout(flashTimer);
-      } else {
-        // Done capturing all frames
-        setStatus('processing');
-        setCountdown(null);
-        processFrames();
-      }
-    }
-  }, [countdown, status]);
-
   // Resize and compress base64 data URL to optimized Blob (Crisp 960px @ 0.90 quality, ~60KB per frame)
   const compressImage = async (dataurl: string, maxWidth = 960, maxHeight = 960, quality = 0.90): Promise<Blob> => {
     return new Promise((resolve) => {
@@ -235,6 +198,43 @@ export function FaceRegistrationModal({ isOpen, onClose, studentId, studentName,
       setErrorMessage(error.message || "Failed to process face. Please try again in better lighting.");
     }
   };
+
+  useEffect(() => {
+    if (status !== 'scanning' || countdown === null) return;
+
+    if (countdown > 0) {
+      const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+      return () => clearTimeout(timer);
+    } else if (countdown === 0) {
+      // Time to capture!
+      if (webcamRef.current) {
+        const imageSrc = webcamRef.current.getScreenshot();
+        if (imageSrc) {
+          framesRef.current.push(imageSrc);
+        }
+      }
+      
+      const currentFrame = framesRef.current.length;
+      const totalFrames = 5;
+      
+      setProgress((currentFrame / totalFrames) * 100);
+      
+      if (currentFrame < totalFrames) {
+        // Move to next instruction and reset countdown
+        // We use a tiny timeout so the user sees "Capturing..." or the flash effect momentarily
+        const flashTimer = setTimeout(() => {
+          setInstructionIndex(currentFrame);
+          setCountdown(3);
+        }, 500);
+        return () => clearTimeout(flashTimer);
+      } else {
+        // Done capturing all frames
+        setStatus('processing');
+        setCountdown(null);
+        processFrames();
+      }
+    }
+  }, [countdown, status]);
 
   if (!isOpen) return null;
 
