@@ -23,9 +23,9 @@ export async function PATCH(
     }
 
     const { id } = await params;
-    if (!id || id.startsWith('builtin-')) {
+    if (!id) {
       return NextResponse.json(
-        { success: false, error: 'Cannot modify built-in system administrator accounts via database.' },
+        { success: false, error: 'User ID is required.' },
         { status: 400 }
       );
     }
@@ -105,9 +105,9 @@ export async function DELETE(
     }
 
     const { id } = await params;
-    if (!id || id.startsWith('builtin-')) {
+    if (!id) {
       return NextResponse.json(
-        { success: false, error: 'Cannot delete built-in system administrator accounts.' },
+        { success: false, error: 'User ID is required.' },
         { status: 400 }
       );
     }

@@ -112,6 +112,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = async () => {
+    const roleBeforeLogout = user?.role;
     try {
       await fetch("/api/auth/logout", { method: "POST" });
     } catch {
@@ -119,6 +120,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     setUser(null);
     localStorage.removeItem(AUTH_STORAGE_KEY);
+    if (typeof window !== "undefined") {
+      if (roleBeforeLogout === "Student") {
+        localStorage.setItem("medattend_login_mode", "student");
+      } else if (roleBeforeLogout === "Super Admin" || roleBeforeLogout === "Faculty") {
+        localStorage.setItem("medattend_login_mode", "admin");
+      }
+    }
     router.push("/login");
   };
 

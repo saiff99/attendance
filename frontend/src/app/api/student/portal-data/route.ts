@@ -347,7 +347,7 @@ export async function GET(request: NextRequest) {
         email: student.email,
         parentPhone: getParentPhone(student),
         hasFaceEnrolled: Boolean(student.face_encoding),
-        hasCustomPin: Boolean(student.portal_pin || student.portal_password_hash),
+        hasCustomPin: Boolean(student.portal_password_hash && student.portal_pin !== 'TEMP'),
       },
       summary: {
         totalClasses: totalApplicableClasses,

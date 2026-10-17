@@ -3,6 +3,9 @@ import { supabaseServer } from '@/lib/supabaseServer';
 import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/serverAuth';
 import { logAuditEvent } from '@/lib/auditLog';
 
+import crypto from 'crypto';
+import bcrypt from 'bcryptjs';
+
 export const dynamic = 'force-dynamic';
 
 export async function POST(
@@ -39,12 +42,16 @@ export async function POST(
       return NextResponse.json({ success: false, error: 'Student not found.' }, { status: 404 });
     }
 
-    // Reset PIN and password hash so initial login is restored
+    // Generate cryptographically random 6-digit temporary activation PIN
+    const tempPin = Math.floor(100000 + crypto.randomInt(900000)).toString();
+    const tempPinHash = await bcrypt.hash(tempPin, 10);
+
+    // Save temporary hash and tag portal_pin as 'TEMP'
     const { error: resetErr } = await supabaseServer
       .from('students')
       .update({
-        portal_pin: null,
-        portal_password_hash: null,
+        portal_pin: 'TEMP',
+        portal_password_hash: tempPinHash,
       })
       .eq('id', id);
 
@@ -63,12 +70,16 @@ export async function POST(
         full_name: student.full_name,
         actor_name: session.name,
         actor_role: session.role,
+        temporary_pin_issued: true,
       },
     });
 
     return NextResponse.json({
       success: true,
-      message: `PIN for ${student.full_name} (Roll: ${student.student_roll}) has been reset successfully.`,
+      tempPin,
+      studentRoll: student.student_roll,
+      fullName: student.full_name,
+      message: `Temporary activation PIN for ${student.full_name} (Roll: ${student.student_roll}) has been generated successfully.`,
     });
   } catch (err: any) {
     console.error('Error resetting student PIN:', err);

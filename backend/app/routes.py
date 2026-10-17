@@ -179,7 +179,27 @@ async def safe_read_image_file(file: UploadFile, max_size: int = MAX_SELFIE_IMAG
 
 
 @router.post("/api/enroll-face/{student_id}")
-async def enroll_face(student_id: str, file: UploadFile = File(...)):
+async def enroll_face(
+    student_id: str, 
+    file: UploadFile = File(...),
+    consent_granted: Optional[str] = Form(None),
+    consent_version: Optional[str] = Form("v1.0-dpdp"),
+    actor: Optional[str] = Form("Super Admin")
+):
+    # Strict DPDP Act 2023 Compliance: Explicit affirmative consent is mandatory
+    is_consented = False
+    if consent_granted is not None:
+        if isinstance(consent_granted, bool) and consent_granted is True:
+            is_consented = True
+        elif str(consent_granted).strip().lower() in ("true", "1", "yes", "affirmative"):
+            is_consented = True
+
+    if not is_consented:
+        raise HTTPException(
+            status_code=400,
+            detail="Biometric consent is mandatory before enrolling facial template (DPDP Act 2023). Explicit affirmative consent must be confirmed."
+        )
+
     contents = await safe_read_image_file(file, MAX_SELFIE_IMAGE_SIZE)
     
     if not (AI_ENABLED and app_fa):
@@ -218,14 +238,14 @@ async def enroll_face(student_id: str, file: UploadFile = File(...)):
 
     try:
         consent_now = datetime.now(timezone.utc).isoformat()
-        try:
-            supabase.table("students").update({
-                "face_encoding": encoding,
-                "biometric_consent": True,
-                "biometric_consent_date": consent_now
-            }).eq("id", student_id).execute()
-        except Exception:
-            supabase.table("students").update({"face_encoding": encoding}).eq("id", student_id).execute()
+        res = supabase.table("students").update({
+            "face_encoding": encoding,
+            "biometric_consent": True,
+            "biometric_consent_date": consent_now
+        }).eq("id", student_id).execute()
+
+        if hasattr(res, 'error') and res.error:
+            raise RuntimeError(f"Database error: {res.error}")
 
         from app.stream import cleanup_session_state
         cleanup_session_state(None)
@@ -233,10 +253,35 @@ async def enroll_face(student_id: str, file: UploadFile = File(...)):
         print("Database error:", str(e))
         raise HTTPException(status_code=500, detail="Failed to save face encoding to database.")
 
-    return {"success": True, "message": "Face data enrolled successfully!", "ai_used": AI_ENABLED}
+    return {
+        "success": True, 
+        "message": "Face data enrolled successfully with explicit affirmative consent!", 
+        "consent_version": consent_version,
+        "ai_used": AI_ENABLED
+    }
 
 @router.post("/api/enroll-face-burst/{student_id}")
-async def enroll_face_burst(student_id: str, files: List[UploadFile] = File(...)):
+async def enroll_face_burst(
+    student_id: str, 
+    files: List[UploadFile] = File(...),
+    consent_granted: Optional[str] = Form(None),
+    consent_version: Optional[str] = Form("v1.0-dpdp"),
+    actor: Optional[str] = Form("Super Admin")
+):
+    # Strict DPDP Act 2023 Compliance: Explicit affirmative consent is mandatory
+    is_consented = False
+    if consent_granted is not None:
+        if isinstance(consent_granted, bool) and consent_granted is True:
+            is_consented = True
+        elif str(consent_granted).strip().lower() in ("true", "1", "yes", "affirmative"):
+            is_consented = True
+
+    if not is_consented:
+        raise HTTPException(
+            status_code=400,
+            detail="Biometric consent is mandatory before enrolling facial template (DPDP Act 2023). Explicit affirmative consent must be confirmed."
+        )
+
     if not files:
         raise HTTPException(status_code=400, detail="No files uploaded.")
         
@@ -297,14 +342,14 @@ async def enroll_face_burst(student_id: str, files: List[UploadFile] = File(...)
 
     try:
         consent_now = datetime.now(timezone.utc).isoformat()
-        try:
-            supabase.table("students").update({
-                "face_encoding": encoding_list,
-                "biometric_consent": True,
-                "biometric_consent_date": consent_now
-            }).eq("id", student_id).execute()
-        except Exception:
-            supabase.table("students").update({"face_encoding": encoding_list}).eq("id", student_id).execute()
+        res = supabase.table("students").update({
+            "face_encoding": encoding_list,
+            "biometric_consent": True,
+            "biometric_consent_date": consent_now
+        }).eq("id", student_id).execute()
+
+        if hasattr(res, 'error') and res.error:
+            raise RuntimeError(f"Database error: {res.error}")
 
         from app.stream import cleanup_session_state
         cleanup_session_state(None)
@@ -314,7 +359,8 @@ async def enroll_face_burst(student_id: str, files: List[UploadFile] = File(...)
 
     return {
         "success": True, 
-        "message": f"Face data enrolled successfully using {valid_count} angles!", 
+        "message": f"Face data enrolled successfully using {valid_count} angles with explicit affirmative consent!", 
+        "consent_version": consent_version,
         "ai_used": AI_ENABLED
     }
 
@@ -322,27 +368,43 @@ async def enroll_face_burst(student_id: str, files: List[UploadFile] = File(...)
 @router.post("/api/students/{student_id}/revoke-biometrics")
 async def revoke_biometrics(student_id: str):
     """
-    DPDP Act 2023 Compliance: Allows explicit revocation of biometric consent
-    and completely erases facial vector embeddings for the specified student.
+    DPDP Act 2023 Compliance: Allows explicit revocation of biometric consent,
+    erases facial vector embeddings, and immediately purges in-memory caches.
     """
+    # 1. Verify student exists
     try:
-        try:
-            supabase.table("students").update({
-                "face_encoding": None,
-                "biometric_consent": False,
-                "biometric_consent_date": None
-            }).eq("id", student_id).execute()
-        except Exception:
-            supabase.table("students").update({
-                "face_encoding": None
-            }).eq("id", student_id).execute()
-
-        from app.stream import cleanup_session_state
-        cleanup_session_state(None)
-        return {"success": True, "message": "Biometric face template erased and consent revoked."}
+        check = supabase.table("students").select("id, student_roll, full_name").eq("id", student_id).execute()
+        if not check.data:
+            raise HTTPException(status_code=404, detail=f"Student {student_id} not found.")
+    except HTTPException:
+        raise
     except Exception as e:
-        print("Error revoking biometrics:", e)
-        raise HTTPException(status_code=500, detail="Failed to revoke biometric data.")
+        raise HTTPException(status_code=500, detail=f"Database lookup error: {str(e)}")
+
+    # 2. Database Erasure: erase facial embedding and reset consent flags
+    try:
+        res = supabase.table("students").update({
+            "face_encoding": None,
+            "biometric_consent": False,
+            "biometric_consent_date": None
+        }).eq("id", student_id).execute()
+
+        if hasattr(res, 'error') and res.error:
+            raise RuntimeError(f"Database update error: {res.error}")
+    except Exception as e:
+        print(f"[ERROR] Failed to erase biometric data from DB for {student_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to erase biometric data from database: {str(e)}")
+
+    # 3. Immediately purge student from in-memory stream caches
+    from app.stream import invalidate_student_biometrics
+    invalidation_result = invalidate_student_biometrics(student_id)
+
+    return {
+        "success": True, 
+        "student_id": student_id,
+        "message": "Biometric face template permanently erased, consent revoked, and active memory caches invalidated.",
+        "invalidation": invalidation_result
+    }
 
 
 @router.post("/api/process-attendance")

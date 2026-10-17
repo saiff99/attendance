@@ -431,9 +431,10 @@ attendance/
 | Endpoint | Method | Description |
 | :--- | :--- | :--- |
 | `/api/student/portal-data` | `GET` | Returns 7-day attendance logs, subject breakdown, and eligibility status |
-| `/api/student/change-pin` | `POST` | Allows student to securely update their 6-digit access PIN |
-| `/api/student/reset-pin` | `POST` | Admin endpoint to reset a student's PIN to default |
+| `/api/students/{id}/reset-pin` | `POST` | Admin endpoint to generate a cryptographically random 6-digit temporary activation PIN |
 | `/api/selfie-attendance` | `POST` | Processes mobile selfie image with GPS coordinate geofence check |
+
+> **Automated Security Tests**: Run `npm --prefix frontend run test:security` to execute the full 23-test Zero-Trust authentication and PIN verification suite.
 
 ### 🔒 Authentication & Audit Logs
 | Endpoint | Method | Description |

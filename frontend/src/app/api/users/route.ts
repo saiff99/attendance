@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      users: dataWithBuiltins(dbUsers || []),
+      users: dbUsers || [],
       tableReady: true,
     });
   } catch (error: any) {
@@ -96,13 +96,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check for reserved built-in usernames
-    if (['admin', 'saif'].includes(username)) {
-      return NextResponse.json(
-        { success: false, error: `The username '${username}' is reserved for built-in super administrator.` },
-        { status: 400 }
-      );
-    }
 
     // Check if user already exists in DB
     const { data: existingUser } = await supabaseServer
@@ -177,38 +170,3 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Helper: augment with built-in accounts for complete transparency
-function dataWithBuiltins(dbUsers: any[]) {
-  const existingUsernames = new Set(dbUsers.map(u => u.username.toLowerCase()));
-  const builtins: any[] = [];
-
-  if (!existingUsernames.has('admin')) {
-    builtins.push({
-      id: 'builtin-admin',
-      username: 'admin',
-      full_name: 'Administrator',
-      email: 'admin@medattend.local',
-      role: 'Super Admin',
-      department: 'Central Administration',
-      is_active: true,
-      created_at: new Date('2026-01-01').toISOString(),
-      is_builtin: true,
-    });
-  }
-
-  if (!existingUsernames.has('saif')) {
-    builtins.push({
-      id: 'builtin-saif',
-      username: 'saif',
-      full_name: 'SK SAIFUDDIN',
-      email: 'saif@medattend.local',
-      role: 'Super Admin',
-      department: 'Executive Administration',
-      is_active: true,
-      created_at: new Date('2026-01-01').toISOString(),
-      is_builtin: true,
-    });
-  }
-
-  return [...dbUsers, ...builtins];
-}

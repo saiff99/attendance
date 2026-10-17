@@ -40,43 +40,35 @@ export async function POST(
       return NextResponse.json({ success: false, error: 'Student record not found.' }, { status: 404 });
     }
 
-    // 1. Permanently erase biometric face encoding and reset consent flags
-    let resetErr: any = null;
-    try {
-      const res = await supabaseServer
-        .from('students')
-        .update({
-          face_encoding: null,
-          biometric_consent: false,
-          biometric_consent_date: null,
-        })
-        .eq('id', id);
-      resetErr = res.error;
-    } catch {
-      const fallbackRes = await supabaseServer
-        .from('students')
-        .update({ face_encoding: null })
-        .eq('id', id);
-      resetErr = fallbackRes.error;
+    // 1. Permanently erase biometric face encoding and reset consent flags in database
+    const { error: resetErr } = await supabaseServer
+      .from('students')
+      .update({
+        face_encoding: null,
+        biometric_consent: false,
+        biometric_consent_date: null,
+      })
+      .eq('id', id);
+
+    if (resetErr) {
+      console.error('[ERASURE ERROR] Failed to reset biometric consent in database:', resetErr);
+      return NextResponse.json(
+        { success: false, error: `Database update failed while revoking biometrics: ${resetErr.message}` },
+        { status: 500 }
+      );
     }
 
-    if (resetErr && (resetErr.code === 'PGRST204' || resetErr.message?.includes('biometric_consent'))) {
-      const fallbackRes = await supabaseServer
-        .from('students')
-        .update({ face_encoding: null })
-        .eq('id', id);
-      if (fallbackRes.error) throw fallbackRes.error;
-    } else if (resetErr) {
-      throw resetErr;
-    }
-
-    // 2. Notify AI backend to invalidate in-memory stream cache
+    // 2. Notify AI backend to immediately invalidate in-memory stream and session cache
+    let backendInvalidationResult: any = null;
     try {
-      await fetchBackend(`/api/students/${encodeURIComponent(id)}/revoke-biometrics`, {
+      const backendRes = await fetchBackend(`/api/students/${encodeURIComponent(id)}/revoke-biometrics`, {
         method: 'POST',
       });
-    } catch {
-      // Gracefully continue even if backend is offline
+      if (backendRes.ok) {
+        backendInvalidationResult = await backendRes.json().catch(() => null);
+      }
+    } catch (bErr) {
+      console.warn('[WARN] AI backend unreachable for immediate stream cache invalidation:', bErr);
     }
 
     // 3. Log Immutable Audit Event for DPDP Compliance

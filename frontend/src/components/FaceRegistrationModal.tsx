@@ -33,6 +33,7 @@ export function FaceRegistrationModal({ isOpen, onClose, studentId, studentName,
   const [progress, setProgress] = useState(0);
   const [errorMessage, setErrorMessage] = useState("");
   const [countdown, setCountdown] = useState<number | null>(null);
+  const [consentConfirmed, setConsentConfirmed] = useState(false);
   
   const webcamRef = useRef<Webcam>(null);
   const framesRef = useRef<string[]>([]);
@@ -45,6 +46,7 @@ export function FaceRegistrationModal({ isOpen, onClose, studentId, studentName,
       setProgress(0);
       setErrorMessage("");
       setCountdown(null);
+      setConsentConfirmed(false);
       framesRef.current = [];
     }
   }, [isOpen]);
@@ -53,6 +55,11 @@ export function FaceRegistrationModal({ isOpen, onClose, studentId, studentName,
     if (!isSuperAdmin) {
       setStatus('error');
       setErrorMessage("Access Denied: Only Super Admin can register or update student Face ID biometrics.");
+      return;
+    }
+    if (!consentConfirmed) {
+      setStatus('error');
+      setErrorMessage("Biometric consent is mandatory under the DPDP Act 2023. Please check the affirmative consent box.");
       return;
     }
     setStatus('scanning');
@@ -165,6 +172,11 @@ export function FaceRegistrationModal({ isOpen, onClose, studentId, studentName,
         const blob = await compressImage(frameBase64, 640, 640, 0.85);
         formData.append('files', blob, `frame_${i}.jpg`);
       }
+
+      // Explicit Affirmative Biometric Consent (DPDP Act 2023)
+      formData.append('consent_granted', 'true');
+      formData.append('consent_version', 'v1.0-dpdp');
+      formData.append('actor', 'Super Admin');
 
       // 1. Try Same-Origin Next.js API route first
       let response: Response | null = null;
@@ -360,14 +372,31 @@ export function FaceRegistrationModal({ isOpen, onClose, studentId, studentName,
           </div>
 
           {/* Instructions / Actions */}
-          <div className="h-20 flex items-center justify-center text-center w-full">
+          <div className="min-h-[6rem] flex items-center justify-center text-center w-full">
             {status === 'idle' && (
               isSuperAdmin ? (
-                <div className="flex flex-col items-center space-y-4 w-full">
-                  <p className="text-gray-600 dark:text-gray-300 font-medium text-sm">Position student face within the circle frame.</p>
+                <div className="flex flex-col items-center space-y-3 w-full">
+                  <label className="flex items-start gap-2.5 max-w-sm text-left p-2 rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 cursor-pointer transition-colors hover:bg-gray-100 dark:hover:bg-gray-800">
+                    <input
+                      type="checkbox"
+                      id="biometric-consent-checkbox"
+                      checked={consentConfirmed}
+                      onChange={(e) => setConsentConfirmed(e.target.checked)}
+                      className="mt-0.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer w-4 h-4"
+                    />
+                    <span className="text-xs text-gray-600 dark:text-gray-300 leading-snug">
+                      I confirm affirmative biometric consent has been obtained from the student for facial attendance recognition (DPDP Act 2023).
+                    </span>
+                  </label>
                   <button 
+                    id="btn-start-scanning"
                     onClick={startScanning}
-                    className="w-full max-w-[200px] py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold transition-colors flex items-center justify-center cursor-pointer shadow-md shadow-indigo-600/20"
+                    disabled={!consentConfirmed}
+                    className={`w-full max-w-[200px] py-2.5 rounded-xl font-semibold transition-all flex items-center justify-center cursor-pointer shadow-md ${
+                      consentConfirmed 
+                        ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/20' 
+                        : 'bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed opacity-60 shadow-none'
+                    }`}
                   >
                     <Camera className="w-5 h-5 mr-2" />
                     Get Started

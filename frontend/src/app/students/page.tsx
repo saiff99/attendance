@@ -51,6 +51,8 @@ export default function StudentDirectory() {
   const [isResettingPin, setIsResettingPin] = useState(false);
   const [resetPinSuccess, setResetPinSuccess] = useState<string | null>(null);
   const [resetPinError, setResetPinError] = useState<string | null>(null);
+  const [resetPinTempPin, setResetPinTempPin] = useState<string | null>(null);
+  const [pinCopied, setPinCopied] = useState(false);
 
   // Custom Modal for DPDP Biometric Revocation / Face Template Erasure
   const [revokeBiometricTarget, setRevokeBiometricTarget] = useState<{ id: string; name: string; roll: string } | null>(null);
@@ -234,6 +236,8 @@ export default function StudentDirectory() {
     setIsResettingPin(true);
     setResetPinSuccess(null);
     setResetPinError(null);
+    setResetPinTempPin(null);
+    setPinCopied(false);
 
     try {
       const res = await fetch(`/api/students/${resetPinTarget.id}/reset-pin`, { method: "POST" });
@@ -241,13 +245,9 @@ export default function StudentDirectory() {
       if (!res.ok || !data.success) {
         throw new Error(data.error || "Failed to reset PIN.");
       }
-      setResetPinSuccess(`The security PIN has been cleared. Initial login is now restored.`);
+      setResetPinTempPin(data.tempPin || null);
+      setResetPinSuccess(data.message || `Temporary activation PIN generated successfully.`);
       fetchStudents();
-      setTimeout(() => {
-        setResetPinTarget(null);
-        setResetPinSuccess(null);
-        setResetPinError(null);
-      }, 1500);
     } catch (err: any) {
       console.error("Error resetting student PIN:", err);
       setResetPinError(err.message || "Failed to reset PIN.");
@@ -1128,6 +1128,8 @@ export default function StudentDirectory() {
                     setResetPinTarget(null);
                     setResetPinSuccess(null);
                     setResetPinError(null);
+                    setResetPinTempPin(null);
+                    setPinCopied(false);
                   }
                 }}
                 disabled={isResettingPin}
@@ -1146,15 +1148,57 @@ export default function StudentDirectory() {
                 </div>
               </div>
 
-              {resetPinSuccess ? (
-                <div className="p-4 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 flex items-start gap-3 my-4 animate-in zoom-in-95">
-                  <div className="p-1 rounded-full bg-emerald-500/20 text-emerald-400 shrink-0 mt-0.5">
-                    <CheckCircle2 className="w-5 h-5" />
+              {resetPinSuccess && resetPinTempPin ? (
+                <div className="space-y-4 my-2 animate-in zoom-in-95">
+                  <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-200">
+                    <div className="flex items-center gap-2 mb-2 text-xs font-bold text-amber-300 uppercase tracking-wider">
+                      <KeyRound className="w-4 h-4 text-amber-400" />
+                      <span>One-Time Activation PIN Generated</span>
+                    </div>
+                    <p className="text-xs text-slate-300 mb-3">
+                      Share this temporary 6-digit PIN with <strong className="text-white">{resetPinTarget.name}</strong> (Roll: {resetPinTarget.roll}). The student must use this PIN to log in and set their secret permanent PIN.
+                    </p>
+                    
+                    <div className="flex items-center justify-between gap-3 bg-slate-950 p-3 rounded-xl border border-amber-500/30">
+                      <span className="font-mono text-2xl font-black text-amber-400 tracking-widest pl-2">
+                        {resetPinTempPin}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (resetPinTempPin) {
+                            navigator.clipboard.writeText(resetPinTempPin);
+                            setPinCopied(true);
+                            setTimeout(() => setPinCopied(false), 2000);
+                          }
+                        }}
+                        className="py-1.5 px-3 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer"
+                      >
+                        {pinCopied ? (
+                          <>
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>Copied!</span>
+                          </>
+                        ) : (
+                          <span>Copy PIN</span>
+                        )}
+                      </button>
+                    </div>
                   </div>
-                  <div className="text-xs">
-                    <p className="font-bold text-sm text-emerald-200">PIN Reset Complete</p>
-                    <p className="mt-1 text-emerald-300/90">{resetPinSuccess}</p>
-                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setResetPinTarget(null);
+                      setResetPinSuccess(null);
+                      setResetPinError(null);
+                      setResetPinTempPin(null);
+                      setPinCopied(false);
+                    }}
+                    className="w-full py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold transition-all cursor-pointer"
+                  >
+                    Done &amp; Close
+                  </button>
                 </div>
               ) : (
                 <>
@@ -1190,6 +1234,8 @@ export default function StudentDirectory() {
                         setResetPinTarget(null);
                         setResetPinSuccess(null);
                         setResetPinError(null);
+                        setResetPinTempPin(null);
+                        setPinCopied(false);
                       }}
                       className="flex-1 py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition-all cursor-pointer disabled:opacity-50"
                     >

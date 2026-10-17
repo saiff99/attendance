@@ -83,6 +83,7 @@ export default function StudentPortalPage() {
   const [isPinModalOpen, setIsPinModalOpen] = useState(false);
   const [oldPin, setOldPin] = useState("");
   const [newPin, setNewPin] = useState("");
+  const [confirmPin, setConfirmPin] = useState("");
   const [pinLoading, setPinLoading] = useState(false);
   const [pinMessage, setPinMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
@@ -149,8 +150,26 @@ export default function StudentPortalPage() {
     setPinLoading(true);
     setPinMessage(null);
 
+    if (!/^\d{6}$/.test(oldPin.trim())) {
+      setPinMessage({ type: "error", text: "Please enter your current 6-digit PIN." });
+      setPinLoading(false);
+      return;
+    }
+
     if (!/^\d{6}$/.test(newPin.trim())) {
-      setPinMessage({ type: "error", text: "PIN must be exactly 6 digits (e.g. 950426)." });
+      setPinMessage({ type: "error", text: "New PIN must be exactly 6 digits (e.g. 950426)." });
+      setPinLoading(false);
+      return;
+    }
+
+    if (newPin.trim() === oldPin.trim()) {
+      setPinMessage({ type: "error", text: "New PIN must be different from your current PIN." });
+      setPinLoading(false);
+      return;
+    }
+
+    if (newPin.trim() !== confirmPin.trim()) {
+      setPinMessage({ type: "error", text: "New PIN and Confirm PIN do not match." });
       setPinLoading(false);
       return;
     }
@@ -183,6 +202,7 @@ export default function StudentPortalPage() {
         setIsPinModalOpen(false);
         setOldPin("");
         setNewPin("");
+        setConfirmPin("");
         setPinMessage(null);
       }, 700);
     } catch (err: any) {
@@ -755,6 +775,24 @@ export default function StudentPortalPage() {
 
             <form onSubmit={handleUpdatePin} className="space-y-4">
               <div>
+                <label className="block text-xs font-semibold text-slate-400 mb-1">
+                  Current 6-Digit PIN
+                </label>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={6}
+                  required
+                  pattern="[0-9]{6}"
+                  value={oldPin}
+                  onChange={(e) => setOldPin(e.target.value.replace(/\D/g, ""))}
+                  placeholder="••••••"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white font-mono text-center text-lg tracking-widest focus:outline-none focus:border-indigo-500"
+                />
+                <p className="text-[10px] text-slate-500 mt-1">Enter your current PIN or temporary activation PIN.</p>
+              </div>
+
+              <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="block text-xs font-semibold text-slate-400">New 6-Digit PIN</label>
                   <button
@@ -766,13 +804,31 @@ export default function StudentPortalPage() {
                   </button>
                 </div>
                 <input
-                  type="text"
+                  type="password"
+                  inputMode="numeric"
                   maxLength={6}
                   required
                   pattern="[0-9]{6}"
                   value={newPin}
                   onChange={(e) => setNewPin(e.target.value.replace(/\D/g, ""))}
-                  placeholder="e.g. 950426"
+                  placeholder="••••••"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white font-mono text-center text-lg tracking-widest focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 mb-1">
+                  Confirm New PIN
+                </label>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={6}
+                  required
+                  pattern="[0-9]{6}"
+                  value={confirmPin}
+                  onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, ""))}
+                  placeholder="••••••"
                   className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white font-mono text-center text-lg tracking-widest focus:outline-none focus:border-indigo-500"
                 />
               </div>
@@ -780,14 +836,20 @@ export default function StudentPortalPage() {
               <div className="flex items-center gap-2 pt-2">
                 <button
                   type="button"
-                  onClick={() => setIsPinModalOpen(false)}
+                  onClick={() => {
+                    setIsPinModalOpen(false);
+                    setOldPin("");
+                    setNewPin("");
+                    setConfirmPin("");
+                    setPinMessage(null);
+                  }}
                   className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold cursor-pointer transition-all"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={pinLoading || newPin.length !== 6}
+                  disabled={pinLoading || oldPin.length !== 6 || newPin.length !== 6 || confirmPin.length !== 6}
                   className="flex-1 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-bold shadow-lg shadow-indigo-600/30 cursor-pointer transition-all"
                 >
                   {pinLoading ? "Saving..." : "Save PIN"}

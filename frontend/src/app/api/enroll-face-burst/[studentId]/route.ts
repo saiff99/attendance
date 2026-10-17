@@ -30,6 +30,25 @@ export async function POST(
     const { studentId } = await params;
     const formData = await request.formData();
 
+    // Strict DPDP Act 2023 Compliance: Validate affirmative biometric consent
+    const rawConsent = formData.get('consent_granted') || formData.get('consent');
+    const isConsented = typeof rawConsent === 'string' && ['true', '1', 'yes'].includes(rawConsent.trim().toLowerCase());
+
+    if (!isConsented) {
+      return NextResponse.json(
+        { detail: 'Biometric consent is mandatory before enrolling facial template (DPDP Act 2023). Explicit affirmative consent must be confirmed.' },
+        { status: 400 }
+      );
+    }
+
+    // Ensure consent metadata is attached
+    if (!formData.has('consent_version')) {
+      formData.set('consent_version', 'v1.0-dpdp');
+    }
+    if (!formData.has('actor')) {
+      formData.set('actor', session.name || session.username || 'Super Admin');
+    }
+
     const files = formData.getAll('files') as Blob[];
     if (files.length > 10) {
       return NextResponse.json({ detail: 'Maximum 10 angle photos allowed per burst.' }, { status: 400 });
@@ -65,6 +84,9 @@ export async function POST(
         details: {
           student_id: studentId,
           frames_count: files.length,
+          biometric_consent: true,
+          consent_version: 'v1.0-dpdp',
+          compliance: 'DPDP Act 2023 Section 6(1) - Explicit Affirmative Biometric Consent',
           actor_name: session.name,
           actor_role: session.role,
         },

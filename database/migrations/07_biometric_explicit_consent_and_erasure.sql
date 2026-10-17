@@ -9,22 +9,16 @@ ALTER TABLE public.students
 ADD COLUMN IF NOT EXISTS biometric_consent BOOLEAN DEFAULT false,
 ADD COLUMN IF NOT EXISTS biometric_consent_date TIMESTAMPTZ;
 
--- 2. Update default constraint to false
+-- 2. Update default constraint to false (Strict Opt-In)
 ALTER TABLE public.students 
 ALTER COLUMN biometric_consent SET DEFAULT false;
 
--- 3. Synchronize existing records:
--- Only students with enrolled face vectors retain consent=true.
--- Students without face vectors are set to consent=false.
-UPDATE public.students
-SET 
-    biometric_consent = true,
-    biometric_consent_date = COALESCE(biometric_consent_date, created_at, NOW())
-WHERE face_encoding IS NOT NULL 
-  AND (jsonb_typeof(face_encoding) = 'array' OR jsonb_typeof(face_encoding) = 'object');
-
+-- 3. Strict DPDP Act Compliance:
+-- Never assume consent for existing records simply because a face encoding exists.
+-- Biometric consent must be affirmative, informed, and provable.
+-- If no explicit affirmative consent record exists, biometric_consent MUST remain false.
 UPDATE public.students
 SET 
     biometric_consent = false,
     biometric_consent_date = NULL
-WHERE face_encoding IS NULL;
+WHERE biometric_consent IS NULL;

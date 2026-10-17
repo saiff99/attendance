@@ -9,6 +9,8 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 
+const LOGIN_MODE_STORAGE_KEY = "medattend_login_mode";
+
 export default function LoginPage() {
   const [loginMode, setLoginMode] = useState<"admin" | "student">("admin");
   const [username, setUsername] = useState("");
@@ -21,6 +23,30 @@ export default function LoginPage() {
   const inputRef = useRef<HTMLInputElement>(null);
   const { login, logout, isAuthenticated, isLoading, user } = useAuth();
   const router = useRouter();
+
+  // Restore persisted login tab selection from URL parameter or localStorage
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const urlParams = new URLSearchParams(window.location.search);
+      const paramMode = urlParams.get("mode");
+      if (paramMode === "student" || paramMode === "admin") {
+        setLoginMode(paramMode);
+        localStorage.setItem(LOGIN_MODE_STORAGE_KEY, paramMode);
+        return;
+      }
+      const savedMode = localStorage.getItem(LOGIN_MODE_STORAGE_KEY);
+      if (savedMode === "student" || savedMode === "admin") {
+        setLoginMode(savedMode);
+      }
+    }
+  }, []);
+
+  const handleSwitchMode = (mode: "admin" | "student") => {
+    setLoginMode(mode);
+    if (typeof window !== "undefined") {
+      localStorage.setItem(LOGIN_MODE_STORAGE_KEY, mode);
+    }
+  };
 
   useEffect(() => {
     if (!isLoading && isAuthenticated && user) {
@@ -77,6 +103,9 @@ export default function LoginPage() {
       }
 
       setIsSuccess(true);
+      if (typeof window !== "undefined") {
+        localStorage.setItem(LOGIN_MODE_STORAGE_KEY, loginMode);
+      }
       const destination = res.user?.role === "Student" ? "/portal" : "/";
       router.replace(destination);
     } else {
@@ -133,7 +162,7 @@ export default function LoginPage() {
 
           <button
             type="button"
-            onClick={() => setLoginMode("admin")}
+            onClick={() => handleSwitchMode("admin")}
             className={`relative z-10 py-2.5 px-3 rounded-xl text-xs font-bold transition-colors duration-200 flex items-center justify-center gap-1.5 cursor-pointer ${
               loginMode === "admin"
                 ? "text-white"
@@ -146,7 +175,7 @@ export default function LoginPage() {
 
           <button
             type="button"
-            onClick={() => setLoginMode("student")}
+            onClick={() => handleSwitchMode("student")}
             className={`relative z-10 py-2.5 px-3 rounded-xl text-xs font-bold transition-colors duration-200 flex items-center justify-center gap-1.5 cursor-pointer ${
               loginMode === "student"
                 ? "text-white"

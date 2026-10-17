@@ -37,11 +37,24 @@ def get_enrolled_data(session_id: str):
         if session_res.data and session_res.data[0].get("target_academic_year"):
             target_year = session_res.data[0]["target_academic_year"]
 
-        query = supabase.table("students").select("id, full_name, face_encoding, student_roll, academic_year").not_.is_("face_encoding", "null")
-        students_res = query.execute()
-        all_enrolled = students_res.data or []
+        # Strict DPDP Act Compliance: Query ONLY students with non-null face_encoding AND explicit biometric_consent=True
+        try:
+            query = supabase.table("students").select(
+                "id, full_name, face_encoding, student_roll, academic_year, biometric_consent"
+            ).not_.is_("face_encoding", "null").eq("biometric_consent", True)
+            students_res = query.execute()
+            all_enrolled = students_res.data or []
+        except Exception as q_err:
+            print(f"[WARN] Failed to filter by biometric_consent in DB: {q_err}. Falling back to safe in-memory filter.")
+            query = supabase.table("students").select("id, full_name, face_encoding, student_roll, academic_year, biometric_consent").not_.is_("face_encoding", "null")
+            students_res = query.execute()
+            all_enrolled = [s for s in (students_res.data or []) if s.get("biometric_consent") is True]
         
-        enrolled = [s for s in all_enrolled if is_cohort_matching(target_year, s.get("academic_year"))]
+        # Filter enrolled list: must have biometric_consent is True AND match target academic year
+        enrolled = [
+            s for s in all_enrolled 
+            if s.get("biometric_consent") is True and is_cohort_matching(target_year, s.get("academic_year"))
+        ]
 
         matrix = None
         if enrolled:
@@ -72,6 +85,56 @@ import gc
 def get_enrolled_students(session_id: str) -> List[dict]:
     enrolled, _ = get_enrolled_data(session_id)
     return enrolled
+
+
+def invalidate_student_biometrics(student_id: str) -> dict:
+    """
+    DPDP Act 2023 Explicit Biometric Erasure:
+    Immediately purges a student's facial embeddings and recognition state 
+    from all in-memory caches across ALL sessions (including currently active sessions).
+    Ensures zero-latency compliance with biometric consent revocation.
+    """
+    purged_sessions = []
+    student_id_str = str(student_id).strip()
+    
+    try:
+        all_session_keys = set(session_enrolled_cache.keys()) | set(session_matrix_cache.keys())
+        for s_id in list(all_session_keys):
+            # 1. Remove from enrolled student cache
+            current_enrolled = session_enrolled_cache.get(s_id, [])
+            filtered_enrolled = [s for s in current_enrolled if str(s.get("id")) != student_id_str]
+            
+            if len(filtered_enrolled) != len(current_enrolled):
+                session_enrolled_cache[s_id] = filtered_enrolled
+                purged_sessions.append(s_id)
+                
+                # Recompute embedding matrix without this student
+                valid_encodings = []
+                for s in filtered_enrolled:
+                    enc = s.get("face_encoding")
+                    if enc and isinstance(enc, list) and len(enc) == 512:
+                        arr = np.array(enc, dtype=np.float32)
+                        arr_norm = float(norm(arr))
+                        if arr_norm > 1e-6:
+                            valid_encodings.append(arr / arr_norm)
+                if valid_encodings:
+                    session_matrix_cache[s_id] = np.vstack(valid_encodings)
+                else:
+                    session_matrix_cache[s_id] = None
+                    
+            # 2. Reset last fetch timestamp to trigger immediate fresh DB check on next loop
+            session_last_fetch[s_id] = 0
+
+        # 3. Clear spatial tracking caches across all cameras
+        if 'camera_manager' in globals():
+            camera_manager.clear_all_detections()
+
+        gc.collect()
+        print(f"[BIOMETRIC ERASURE] Purged student {student_id_str} from {len(purged_sessions)} in-memory session cache(s).")
+        return {"success": True, "student_id": student_id_str, "purged_from_sessions": purged_sessions}
+    except Exception as e:
+        print(f"[BIOMETRIC ERASURE ERROR] Failed to invalidate student biometrics: {e}")
+        return {"success": False, "error": str(e)}
 
 
 def cleanup_session_state(session_id: Optional[str] = None) -> dict:

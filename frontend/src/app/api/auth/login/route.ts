@@ -4,47 +4,11 @@ import { createSessionToken, SESSION_COOKIE_NAME } from '@/lib/serverAuth';
 import { logAuditEvent } from '@/lib/auditLog';
 import { supabaseServer } from '@/lib/supabaseServer';
 
-// Secure Server-side User Directory with Salted Bcrypt Hashes (Built-in Fallbacks)
-interface UserConfig {
-  plainEnvVar: string;
-  hashEnvVar: string;
-  name: string;
-  role: 'Super Admin' | 'Faculty';
-}
-
-const USER_DIRECTORY: Record<string, UserConfig> = {
-  admin: {
-    plainEnvVar: 'ADMIN_PASSWORD',
-    hashEnvVar: 'ADMIN_PASSWORD_HASH',
-    name: 'Administrator',
-    role: 'Super Admin',
-  },
-  saif: {
-    plainEnvVar: 'SAIF_PASSWORD',
-    hashEnvVar: 'SAIF_PASSWORD_HASH',
-    name: 'SK SAIFUDDIN',
-    role: 'Super Admin',
-  },
-  faculty: {
-    plainEnvVar: 'FACULTY_PASSWORD',
-    hashEnvVar: 'FACULTY_PASSWORD_HASH',
-    name: 'Faculty Member',
-    role: 'Faculty',
-  },
-};
-
-// Default high-entropy salted bcrypt hashes (10 rounds)
-const BUILTIN_USER_HASHES: Record<string, string> = {
-  admin: '$2b$10$ndT3bKNmLRaSxnbrHr/OD.Z3e9MaqMv20Ywa4ZDfNxOV2.Wj6F7RC',
-  saif: '$2b$10$Ij7ikhnwMkponzuv8QcfNeRkQV7LsBy./fkDgx0lxIlAAAS.4.ARG',
-  faculty: '$2b$10$zre7r25egIL9M5o9H5nL4eQZuyzr8kIfK9AjD5jH/7eVtqtbNS25O',
-};
-
 // Dual-Layer Persistent Rate Limiter (Memory Fast-Cache + Persistent Supabase Storage)
 // Survived across server restarts, PM2 recycles, and multi-instance / serverless deployments
 const loginAttemptsCache: Record<string, { count: number; firstAttempt: number; lockedUntil?: number }> = {};
 const MAX_ATTEMPTS = 5;
-const WINDOW_MS = 15 * 60 * 1000; // 15 minutes lockout window
+const WINDOW_MS = 60 * 1000; // 60 seconds (1 minute) lockout window for rapid recovery during 5-minute attendance sessions
 
 async function checkRateLimit(rateKey: string, now: number): Promise<{ locked: boolean; remainingSeconds: number }> {
   // 1. Fast in-memory check
@@ -224,39 +188,7 @@ export async function POST(request: Request) {
           }
         }
       } catch (dbEx) {
-        console.warn('[LOGIN DB CHECK FAILED, FALLING BACK TO BUILT-IN]', dbEx);
-      }
-    }
-
-    // 2. Fallback to built-in user directory (Only for Admin/Faculty mode or unspecified mode)
-    if (!authSuccess && mode !== 'student') {
-      const targetUser = USER_DIRECTORY[username];
-      if (targetUser) {
-        const customPlain = process.env[targetUser.plainEnvVar]?.trim();
-        const customHash = process.env[targetUser.hashEnvVar]?.trim();
-
-        if (customPlain && password === customPlain) {
-          authSuccess = true;
-        } else if (customHash && customHash.startsWith('$2') && (await bcrypt.compare(password, customHash))) {
-          authSuccess = true;
-        } else {
-          const defaultHash = BUILTIN_USER_HASHES[username];
-          if (defaultHash && (await bcrypt.compare(password, defaultHash))) {
-            authSuccess = true;
-          }
-        }
-
-        if (authSuccess) {
-          authUser = {
-            username,
-            name: targetUser.name,
-            role: targetUser.role,
-            department: 'Administration',
-            studentId: undefined,
-            studentRoll: undefined,
-            academicYear: undefined,
-          };
-        }
+        console.warn('[LOGIN DB CHECK FAILED]', dbEx);
       }
     }
 
@@ -277,19 +209,13 @@ export async function POST(request: Request) {
             isStudentMatch = await bcrypt.compare(password, student.portal_password_hash);
           }
 
-          // Check plain portal PIN if set
-          if (!isStudentMatch && student.portal_pin) {
+          // Only allow login if plain portal PIN matches and is not a temporary placeholder
+          if (!isStudentMatch && student.portal_pin && student.portal_pin !== 'TEMP') {
             isStudentMatch = (password === student.portal_pin.trim());
           }
 
-          // Default Initial Fallback if neither hash nor PIN is set yet:
-          // Allow student to log in using their roll number or 123456
-          if (!isStudentMatch && !student.portal_password_hash && !student.portal_pin) {
-            const cleanRoll = (student.student_roll || '').trim().toLowerCase();
-            if (password.toLowerCase() === cleanRoll || password === '123456') {
-              isStudentMatch = true;
-            }
-          }
+          // Strict Zero-Trust: If no valid PIN or hash exists, login fails immediately.
+          // No Roll Number, empty string, or default 123456 fallback is ever permitted.
 
           if (isStudentMatch) {
             authSuccess = true;
@@ -341,18 +267,13 @@ export async function POST(request: Request) {
 
       if (mode === 'student') {
         try {
-          const isBuiltin = Boolean(USER_DIRECTORY[username]);
-          let isDbStaff = false;
-          if (!isBuiltin) {
-            const { data: dbUser } = await supabaseServer
-              .from('app_users')
-              .select('id')
-              .ilike('username', username)
-              .maybeSingle();
-            isDbStaff = Boolean(dbUser);
-          }
+          const { data: dbUser } = await supabaseServer
+            .from('app_users')
+            .select('id')
+            .ilike('username', username)
+            .maybeSingle();
 
-          if (isBuiltin || isDbStaff) {
+          if (dbUser) {
             return NextResponse.json(
               {
                 success: false,
