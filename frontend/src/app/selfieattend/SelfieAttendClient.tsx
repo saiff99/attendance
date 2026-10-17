@@ -1665,17 +1665,17 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                       )}
                     </>
                   ) : (
-                    <div className="relative w-full h-full">
+                    <>
                       <img
                         src={capturedImage}
                         alt="Captured Selfie"
                         className="w-full h-full object-cover"
                       />
-                      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-black/80 backdrop-blur-md px-3.5 py-1 rounded-full border border-emerald-500/40 text-xs text-emerald-300 font-bold flex items-center gap-1.5 shadow-lg">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                      <div className="absolute bottom-4 sm:bottom-5 left-1/2 -translate-x-1/2 bg-black/80 backdrop-blur-md px-3.5 py-1.5 rounded-full border border-emerald-500/40 text-xs text-emerald-300 font-bold flex items-center gap-1.5 shadow-xl z-20 whitespace-nowrap pointer-events-none select-none">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
                         <span>{blinkDetected ? "Live Blink Verified" : "Photo Captured"}</span>
                       </div>
-                    </div>
+                    </>
                   )}
                 </div>
 
