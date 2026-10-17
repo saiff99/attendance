@@ -6,10 +6,17 @@ import threading
 import numpy as np
 from numpy.linalg import norm
 from typing import Dict, List, Optional, Set
-from app.config import supabase, get_camera_urls, get_cctv_ai_urls, get_camera_details, get_ptz_urls, is_cohort_matching
-from app.ai import app_fa, AI_ENABLED, AI_DET_THRESH, AI_DET_SIZE, calculate_confidence_score
-
 from starlette.requests import Request
+from app.config import (
+    supabase,
+    get_camera_urls,
+    get_cctv_ai_urls,
+    get_camera_details,
+    get_ptz_urls,
+    is_cohort_matching,
+    redact_stream_url,
+)
+from app.ai import app_fa, AI_ENABLED, AI_DET_THRESH, AI_DET_SIZE, calculate_confidence_score
 
 # High-Performance Robust FFmpeg RTSP Flags (stable over Tailscale VPN without dropped frames or freezes)
 os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = (
@@ -1057,8 +1064,8 @@ def get_performance_diagnostics() -> dict:
             cameras_status.append({
                 "camera_id": cam_id,
                 "name": stream.name,
-                "url": stream.url,
-                "ai_url": stream.ai_url,
+                "url": redact_stream_url(stream.url),
+                "ai_url": redact_stream_url(stream.ai_url),
                 "has_dedicated_ai_stream": stream.has_dedicated_ai_stream,
                 "ai_resolution": f"{AI_FRAME_WIDTH}x{AI_FRAME_HEIGHT}",
                 "target_scan_interval_sec": AI_SCAN_INTERVAL,

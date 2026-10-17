@@ -13,9 +13,29 @@
  */
 
 const BASE_URL = process.env.TEST_BASE_URL || 'http://localhost:3000';
+const BACKEND_URL = process.env.TEST_BACKEND_URL || 'http://127.0.0.1:8000';
+const INTERNAL_API_KEY = process.env.INTERNAL_API_KEY || 'f49c83a8f77acd625223d740ae06db19a679df1904aa1b4df924c24e0c234573';
 
 async function request(path, options = {}) {
   const url = `${BASE_URL}${path}`;
+  const res = await fetch(url, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(options.headers || {}),
+    },
+  });
+  let data;
+  try {
+    data = await res.json();
+  } catch {
+    data = null;
+  }
+  return { status: res.status, headers: res.headers, data };
+}
+
+async function backendRequest(path, options = {}) {
+  const url = `${BACKEND_URL}${path}`;
   const res = await fetch(url, {
     ...options,
     headers: {
@@ -335,8 +355,21 @@ async function runTests() {
   {
     const { execSync } = await import('child_process');
     const path = await import('path');
-    const backendTestPath = path.resolve('../backend/test_antispoof.py');
-    const pythonBin = path.resolve('../backend/.venv/bin/python');
+    const fs = await import('fs');
+
+    const pythonCandidates = [
+      path.resolve(process.cwd(), 'backend/.venv/bin/python'),
+      path.resolve(process.cwd(), '../backend/.venv/bin/python'),
+      '/Users/saif/Desktop/Attendance/Attendance-app/backend/.venv/bin/python',
+    ];
+    const pythonBin = pythonCandidates.find(p => fs.existsSync(p)) || pythonCandidates[0];
+
+    const scriptCandidates = [
+      path.resolve(process.cwd(), 'backend/test_antispoof.py'),
+      path.resolve(process.cwd(), '../backend/test_antispoof.py'),
+      '/Users/saif/Desktop/Attendance/Attendance-app/backend/test_antispoof.py',
+    ];
+    const backendTestPath = scriptCandidates.find(p => fs.existsSync(p)) || scriptCandidates[0];
 
     try {
       const output = execSync(`"${pythonBin}" "${backendTestPath}"`, { encoding: 'utf-8' });
@@ -775,6 +808,84 @@ async function runTests() {
       body: JSON.stringify({ username: 'saif', password: 'saif123', mode: 'admin' }),
     });
     assert(adminLogin.status === 200, 'Admin login succeeded and cleared rate limit');
+  }
+
+  // =========================================================================
+  // Test Suite 14: API Key & Health Endpoint Security Verification
+  // =========================================================================
+  console.log('--- Suite 14: API Key & Health Endpoint Security Verification ---');
+  {
+    const externalProxyHeader = { 'x-forwarded-for': '203.0.113.195' };
+
+    // 1. Public /health is accessible without API key
+    const pubHealth = await backendRequest('/health');
+    assert(pubHealth.status === 200, 'Public /health is accessible without API key (HTTP 200)');
+    assert(pubHealth.data && pubHealth.data.status === 'ok', 'Public /health returns minimal status "ok"');
+    
+    // Ensure no sensitive credentials, camera passwords, or operational secrets are leaked in public /health
+    const pubHealthStr = JSON.stringify(pubHealth.data || {});
+    assert(!pubHealthStr.includes('password') && !pubHealthStr.includes('rtsp://') && !pubHealthStr.includes('Tech_1234'),
+      'Public /health contains NO passwords, RTSP URLs, or internal secrets');
+
+    // 2. Unauthenticated access to protected diagnostics (/health/performance) is blocked (HTTP 403)
+    const unauthPerf = await backendRequest('/health/performance', {
+      headers: { ...externalProxyHeader }
+    });
+    assert(unauthPerf.status === 403, 'Unauthenticated /health/performance via proxy is rejected (HTTP 403)');
+
+    // 3. Unauthenticated access to camera management (/api/cameras) is blocked (HTTP 403)
+    const unauthCameras = await backendRequest('/api/cameras', {
+      headers: { ...externalProxyHeader }
+    });
+    assert(unauthCameras.status === 403, 'Unauthenticated /api/cameras via proxy is rejected (HTTP 403)');
+
+    // 4. Path traversal attempt to bypass middleware (/health/../api/cameras) is blocked (HTTP 403)
+    const traversalRes = await backendRequest('/health/../api/cameras', {
+      headers: { ...externalProxyHeader }
+    });
+    assert(traversalRes.status === 403, 'Path traversal /health/../api/cameras is rejected (HTTP 403)');
+
+    // 5. Query parameter API key (?key=... / ?token=...) is strictly rejected (HTTP 403)
+    const queryParamRes = await backendRequest(`/health/performance?key=${INTERNAL_API_KEY}`, {
+      headers: { ...externalProxyHeader }
+    });
+    assert(queryParamRes.status === 403, 'Query parameter API key (?key=...) is strictly rejected (HTTP 403)');
+
+    const queryTokenRes = await backendRequest(`/health/performance?token=${INTERNAL_API_KEY}`, {
+      headers: { ...externalProxyHeader }
+    });
+    assert(queryTokenRes.status === 403, 'Query parameter token (?token=...) is strictly rejected (HTTP 403)');
+
+    // 6. Invalid header API key is rejected (HTTP 403)
+    const invalidHeaderRes = await backendRequest('/health/performance', {
+      headers: { ...externalProxyHeader, 'X-Internal-API-Key': 'invalid_secret_key_12345' }
+    });
+    assert(invalidHeaderRes.status === 403, 'Invalid X-Internal-API-Key header is rejected (HTTP 403)');
+
+    // 7. Legitimate header API key (X-Internal-API-Key) succeeds (HTTP 200)
+    const validHeaderRes = await backendRequest('/health/performance', {
+      headers: { ...externalProxyHeader, 'X-Internal-API-Key': INTERNAL_API_KEY }
+    });
+    assert(validHeaderRes.status === 200, 'Valid X-Internal-API-Key header grants access (HTTP 200)');
+
+    // 8. Authorization Bearer token header also succeeds (HTTP 200)
+    const validBearerRes = await backendRequest('/health/performance', {
+      headers: { ...externalProxyHeader, 'Authorization': `Bearer ${INTERNAL_API_KEY}` }
+    });
+    assert(validBearerRes.status === 200, 'Valid Authorization Bearer token grants access (HTTP 200)');
+
+    // 9. Camera passwords in diagnostic and camera responses are redacted (no plaintext passwords)
+    const authCamerasRes = await backendRequest('/api/cameras', {
+      headers: { ...externalProxyHeader, 'X-Internal-API-Key': INTERNAL_API_KEY }
+    });
+    const camerasDataStr = JSON.stringify(authCamerasRes.data || {});
+    assert(!camerasDataStr.includes('Tech_1234'), 'Plaintext camera password "Tech_1234" is NEVER exposed in /api/cameras');
+    if (camerasDataStr.includes('rtsp://admin:')) {
+      assert(camerasDataStr.includes('rtsp://admin:***@'), 'RTSP credentials in /api/cameras are masked with ***');
+    }
+
+    const perfDataStr = JSON.stringify(validHeaderRes.data || {});
+    assert(!perfDataStr.includes('Tech_1234'), 'Plaintext camera password "Tech_1234" is NEVER exposed in /health/performance');
   }
 
   // Summary

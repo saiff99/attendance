@@ -49,7 +49,20 @@ CAMERA_PRESETS = [
     {"name": "2R", "row": "2nd Row (Back)", "position": "Right", "ip": "172.16.7.9"},
 ]
 
-def get_camera_details():
+import re
+from typing import Optional
+
+def redact_stream_url(url: Optional[str]) -> str:
+    """
+    Safely redacts passwords and credentials from stream URLs (RTSP, HTTP, etc.).
+    Example:
+        'rtsp://admin:Tech_1234@172.16.7.5:554/live' -> 'rtsp://admin:***@172.16.7.5:554/live'
+    """
+    if not url or not isinstance(url, str):
+        return str(url) if url is not None else ""
+    return re.sub(r'(://[^:]+):([^@]+)@', r'\1:***@', url)
+
+def get_camera_details(redact_credentials: bool = False):
     """Returns detailed metadata for all configured CCTV cameras including main and AI sub-streams."""
     urls = get_camera_urls()
     ai_urls = get_cctv_ai_urls()
@@ -63,6 +76,8 @@ def get_camera_details():
         }
         # Fallback: If no dedicated AI sub-stream is defined, use the primary stream URL
         ai_url = ai_urls[idx] if idx < len(ai_urls) and ai_urls[idx] else url
+        display_url = redact_stream_url(url) if redact_credentials else url
+        display_ai_url = redact_stream_url(ai_url) if redact_credentials else ai_url
         details.append({
             "index": idx,
             "id": f"cam-{idx + 1}",
@@ -70,8 +85,8 @@ def get_camera_details():
             "row": preset["row"],
             "position": preset["position"],
             "ip": preset["ip"],
-            "url": url,
-            "ai_url": ai_url
+            "url": display_url,
+            "ai_url": display_ai_url
         })
     return details
 
@@ -80,9 +95,6 @@ def get_ptz_urls():
     urls_str = os.getenv("PTZ_URLS", "0")
     return [url.strip() for url in urls_str.split(",") if url.strip()]
 
-
-import re
-from typing import Optional
 
 def is_cohort_matching(target_cohort: Optional[str], student_year: Optional[str]) -> bool:
     """

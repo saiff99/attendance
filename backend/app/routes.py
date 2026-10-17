@@ -580,7 +580,7 @@ async def upload_photo(file: UploadFile = File(...)):
 
 @router.get("/api/cameras")
 async def get_cameras():
-    cameras = get_camera_details()
+    cameras = get_camera_details(redact_credentials=True)
     return {"count": len(cameras), "cameras": cameras}
 
 @router.get("/api/video-feed/{session_id}")
