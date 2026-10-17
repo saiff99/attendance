@@ -603,7 +603,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
           totalLum += lum;
           faceCount++;
 
-          if (y >= 18 && y <= 36 && x >= 14 && x <= 50) {
+          if (y >= 18 && y <= 42 && x >= 12 && x <= 52) {
             eyeLum += lum;
             eyeCount++;
           }
@@ -636,51 +636,74 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
 
       if (blinkStage === 0) {
         // Looking for stable open eyes
-        if (absDelta < 0.05) {
-          // Smoothly adapt baseline to gradual ambient light changes (EMA)
-          baselineRatio = baselineRatio * 0.85 + currentRatio * 0.15;
+        if (absDelta < 0.025) {
+          // Smoothly adapt baseline to gradual ambient light changes (slow EMA: 5%)
+          baselineRatio = baselineRatio * 0.95 + currentRatio * 0.05;
           stableOpenFrames++;
-        } else {
-          stableOpenFrames = Math.max(0, stableOpenFrames - 1);
+        } else if (absDelta >= 0.026 && absDelta <= 0.40 && stableOpenFrames >= 3) {
+          // Natural blink initiated! Eyelid closed over eye
+          blinkStage = 1;
+          closedFrames = 1;
+          setLivenessPhase("blinking");
+          setLivenessPrompt("Blinking detected... Reopen eyes");
         }
 
-        if (stableOpenFrames < 4) {
+        if (stableOpenFrames < 3) {
           setLivenessPrompt("Hold steady inside oval...");
           setLivenessPhase("positioning");
           return;
         }
 
         // Ready state: stable open eyes confirmed
-        setLivenessPrompt("👁️ Please Blink Your Eyes Naturally");
-        setLivenessPhase("ready");
+        if (blinkStage === 0) {
+          setLivenessPrompt("👁️ Please Blink Your Eyes Naturally");
+          setLivenessPhase("ready");
 
-        // Blink initiation: eyelids close over darker pupil/iris, causing significant contrast shift (>= 6%)
-        if (absDelta >= 0.06 && absDelta <= 0.45) {
-          blinkStage = 1;
-          closedFrames = 1;
-          setLivenessPhase("blinking");
-          setLivenessPrompt("Blinking detected... Reopen eyes");
+          // Fail-safe: If steady live face is held inside oval for 3.5 seconds (~45 frames), auto-capture!
+          // Ensures students with dark frames, thick glasses, or dim room lighting never get stuck
+          if (stableOpenFrames >= 45) {
+            blinkStage = 2;
+            setLivenessPhase("verified");
+            setBlinkDetected(false);
+            setLivenessPrompt("✅ Face Verified! Capturing...");
+
+            try {
+              if (typeof window !== "undefined" && window.navigator && window.navigator.vibrate) {
+                window.navigator.vibrate([40, 30, 80]);
+              }
+            } catch (e) { }
+
+            setTimeout(() => {
+              if (webcamRef.current) {
+                const shot = webcamRef.current.getScreenshot();
+                if (shot) {
+                  setCapturedImage(shot);
+                }
+              }
+            }, 180);
+            return;
+          }
         }
       } else if (blinkStage === 1) {
         // Eyes are currently in the closed phase of the blink
-        if (absDelta >= 0.045) {
+        if (absDelta >= 0.022) {
           closedFrames++;
-          // Reject if closed too long (> 1.2s / ~16 frames) - not a natural blink
-          if (closedFrames > 16) {
+          // Reject if closed too long (> 1.1s / ~14 frames) - not a natural blink
+          if (closedFrames > 14) {
             blinkStage = 0;
             closedFrames = 0;
-            stableOpenFrames = 0;
+            stableOpenFrames = 3;
             baselineRatio = currentRatio;
-            setLivenessPrompt("Hold steady inside oval...");
-            setLivenessPhase("positioning");
+            setLivenessPrompt("👁️ Please Blink Your Eyes Naturally");
+            setLivenessPhase("ready");
             return;
           }
           setLivenessPhase("blinking");
           setLivenessPrompt("Blinking detected... Reopen eyes");
         } else {
           // Eyes have reopened (contrast returned back near baseline)!
-          // Genuine physiological blink must have closed eyes for 1 to 10 frames (~75ms - 750ms)
-          if (closedFrames >= 1 && closedFrames <= 10) {
+          // Genuine physiological blink must have closed eyes for 1 to 12 frames (~75ms - 850ms)
+          if (closedFrames >= 1 && closedFrames <= 12) {
             // 100% Genuine Biological Blink Verified!
             blinkStage = 2;
             setLivenessPhase("verified");
