@@ -3,134 +3,51 @@ import bcrypt from 'bcryptjs';
 import { createSessionToken, SESSION_COOKIE_NAME } from '@/lib/serverAuth';
 import { logAuditEvent } from '@/lib/auditLog';
 import { supabaseServer } from '@/lib/supabaseServer';
-
-// Dual-Layer Persistent Rate Limiter (Memory Fast-Cache + Persistent Supabase Storage)
-// Survived across server restarts, PM2 recycles, and multi-instance / serverless deployments
-const loginAttemptsCache: Record<string, { count: number; firstAttempt: number; lockedUntil?: number }> = {};
-const MAX_ATTEMPTS = 5;
-const WINDOW_MS = 60 * 1000; // 60 seconds (1 minute) lockout window for rapid recovery during 5-minute attendance sessions
-
-async function checkRateLimit(rateKey: string, now: number): Promise<{ locked: boolean; remainingSeconds: number }> {
-  // 1. Fast in-memory check
-  const cached = loginAttemptsCache[rateKey];
-  if (cached) {
-    if (cached.lockedUntil && now < cached.lockedUntil) {
-      const remainingSeconds = Math.ceil((cached.lockedUntil - now) / 1000);
-      return { locked: true, remainingSeconds };
-    }
-    if (now - cached.firstAttempt > WINDOW_MS) {
-      delete loginAttemptsCache[rateKey];
-    } else if (cached.count >= MAX_ATTEMPTS) {
-      const remainingSeconds = Math.ceil((cached.firstAttempt + WINDOW_MS - now) / 1000);
-      return { locked: true, remainingSeconds };
-    }
-  }
-
-  // 2. Persistent Supabase settings check (survives server restart & serverless scaling)
-  try {
-    const dbKey = `rl_login:${rateKey}`;
-    const { data, error } = await supabaseServer
-      .from('settings')
-      .select('value')
-      .eq('key', dbKey)
-      .maybeSingle();
-
-    if (!error && data?.value) {
-      const val = data.value;
-      const firstAttempt = Number(val.firstAttempt) || now;
-      const count = Number(val.count) || 0;
-      const lockedUntil = Number(val.lockedUntil) || 0;
-
-      // Sync into memory cache
-      loginAttemptsCache[rateKey] = { count, firstAttempt, lockedUntil };
-
-      if (lockedUntil && now < lockedUntil) {
-        const remainingSeconds = Math.ceil((lockedUntil - now) / 1000);
-        return { locked: true, remainingSeconds };
-      }
-      if (now - firstAttempt > WINDOW_MS) {
-        Promise.resolve(supabaseServer.from('settings').delete().eq('key', dbKey)).catch(() => {});
-        delete loginAttemptsCache[rateKey];
-      } else if (count >= MAX_ATTEMPTS) {
-        const remainingSeconds = Math.ceil((firstAttempt + WINDOW_MS - now) / 1000);
-        return { locked: true, remainingSeconds };
-      }
-    }
-  } catch (e) {
-    // Fail-open on database glitch to ensure legitimate users are never locked out
-  }
-
-  return { locked: false, remainingSeconds: 0 };
-}
-
-async function recordFailedAttempt(rateKey: string, now: number): Promise<number> {
-  const cached = loginAttemptsCache[rateKey] || { count: 0, firstAttempt: now };
-  cached.count += 1;
-  if (cached.count >= MAX_ATTEMPTS && !cached.lockedUntil) {
-    cached.lockedUntil = now + WINDOW_MS;
-  }
-  loginAttemptsCache[rateKey] = cached;
-
-  // Persist to Supabase settings
-  try {
-    const dbKey = `rl_login:${rateKey}`;
-    await supabaseServer
-      .from('settings')
-      .upsert({
-        key: dbKey,
-        value: {
-          count: cached.count,
-          firstAttempt: cached.firstAttempt,
-          lockedUntil: cached.lockedUntil || (cached.count >= MAX_ATTEMPTS ? now + WINDOW_MS : 0),
-          lastAttempt: now,
-        },
-      });
-  } catch (e) {
-    console.warn('[RATE LIMIT DB SYNC WARNING]', e);
-  }
-
-  return cached.count;
-}
-
-async function resetRateLimit(rateKey: string): Promise<void> {
-  delete loginAttemptsCache[rateKey];
-  try {
-    const dbKey = `rl_login:${rateKey}`;
-    await supabaseServer.from('settings').delete().eq('key', dbKey);
-  } catch (e) {
-    // Graceful catch
-  }
-}
+import {
+  acquireLoginSlot,
+  getTrustedClientIp,
+} from '@/lib/rateLimiter';
 
 export async function POST(request: Request) {
+  let slot: { allowed: boolean; remainingSeconds: number; reason?: 'account' | 'ip'; release: (success: boolean) => Promise<void> } | null = null;
   try {
-    const forwarded = request.headers.get('x-forwarded-for') || request.headers.get('cf-connecting-ip') || '127.0.0.1';
-    const clientIp = forwarded.split(',')[0].trim();
+    const simulateStorageFailure = request.headers.get('x-test-simulate-storage-failure') === '1';
+    const clientIp = getTrustedClientIp(request);
 
-    const body = await request.json();
+    let body: any;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ success: false, error: 'Invalid JSON body.' }, { status: 400 });
+    }
+
     const username = (body.username || '').trim().toLowerCase();
     const password = (body.password || '').trim();
     const mode = (body.mode || '').trim().toLowerCase(); // 'admin' | 'student' | ''
 
-    const rateKey = `${clientIp}:${username || 'unknown'}`;
     const now = Date.now();
 
-    // Check shared & persistent rate limiter
-    const rateStatus = await checkRateLimit(rateKey, now);
-    if (rateStatus.locked) {
+    // Concurrency-safe atomic attempt slot reservation (eliminates parallel race condition)
+    slot = await acquireLoginSlot(username, clientIp, now, simulateStorageFailure);
+    if (!slot.allowed) {
+      const lockMsg = slot.reason === 'ip'
+        ? `Too many failed login attempts from this network. Temporarily throttled. Please try again in ${slot.remainingSeconds}s.`
+        : `Too many failed login attempts. Account locked for security. Please try again in ${slot.remainingSeconds}s.`;
+
       return NextResponse.json(
         {
           success: false,
-          error: `Too many failed login attempts. Account locked for security. Please try again in ${rateStatus.remainingSeconds}s.`,
+          error: lockMsg,
         },
         {
           status: 429,
-          headers: { 'Retry-After': rateStatus.remainingSeconds.toString() },
+          headers: { 'Retry-After': slot.remainingSeconds.toString() },
         }
       );
     }
 
     if (!username || !password) {
+      await slot.release(false);
       return NextResponse.json(
         { success: false, error: 'Username and password are required.' },
         { status: 400 }
@@ -159,6 +76,7 @@ export async function POST(request: Request) {
 
         if (!dbErr && dbUser) {
           if (!dbUser.is_active) {
+            await slot.release(false);
             return NextResponse.json(
               { success: false, error: 'Your account has been deactivated. Please contact the administrator.' },
               { status: 403 }
@@ -192,7 +110,7 @@ export async function POST(request: Request) {
       }
     }
 
-    // 3. Fallback to Supabase students table for Student Portal Login (Only for Student mode or unspecified mode)
+    // 2. Fallback to Supabase students table for Student Portal Login (Only for Student mode or unspecified mode)
     if (!authSuccess && mode !== 'admin') {
       try {
         const { data: student, error: stuErr } = await supabaseServer
@@ -254,6 +172,7 @@ export async function POST(request: Request) {
             .maybeSingle();
 
           if (studentMatch) {
+            await slot.release(false);
             return NextResponse.json(
               {
                 success: false,
@@ -274,6 +193,7 @@ export async function POST(request: Request) {
             .maybeSingle();
 
           if (dbUser) {
+            await slot.release(false);
             return NextResponse.json(
               {
                 success: false,
@@ -285,13 +205,14 @@ export async function POST(request: Request) {
         } catch {}
       }
 
-      const attemptCount = await recordFailedAttempt(rateKey, now);
+      // Record failed attempt and release concurrency slot
+      await slot.release(false);
 
       logAuditEvent({
         action: 'FAILED_LOGIN_ATTEMPT',
         targetType: 'system',
         actorId: username,
-        details: { reason: 'Incorrect credentials', ip: clientIp, attemptCount, mode },
+        details: { reason: 'Incorrect credentials', ip: clientIp, mode },
       });
 
       const genericError = mode === 'student'
@@ -306,8 +227,8 @@ export async function POST(request: Request) {
       );
     }
 
-    // Reset shared persistent and in-memory rate limiter on successful authentication
-    await resetRateLimit(rateKey);
+    // Authentication succeeded: clear rate limiter and release concurrency slot
+    await slot.release(true);
 
     // Log successful login audit entry
     logAuditEvent({
@@ -333,8 +254,6 @@ export async function POST(request: Request) {
       user: authUser,
     });
 
-
-
     // Set secure HttpOnly cookie (10 hours = 36000s)
     response.cookies.set({
       name: SESSION_COOKIE_NAME,
@@ -359,6 +278,11 @@ export async function POST(request: Request) {
 
     return response;
   } catch (error: any) {
+    if (slot) {
+      try {
+        await slot.release(false);
+      } catch {}
+    }
     console.error('[AUTH ERROR]', error);
     return NextResponse.json(
       { success: false, error: 'Internal authentication error.' },

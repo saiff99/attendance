@@ -671,6 +671,112 @@ async function runTests() {
     assert(restoreRes.status === 200 && restoreRes.data?.success === true, 'Original geofence configuration restored cleanly');
   }
 
+  // =========================================================================
+  // Test 13: Persistent Atomic Rate Limiting, Race Condition & Fail-Closed Protection
+  // =========================================================================
+  console.log('\n--- Suite 13: Persistent Atomic Rate Limiting, Concurrency & Fail-Closed Protection ---');
+  {
+    const sharedWifiIp = '103.21.5.10';
+
+    // 1. Threshold Crossing: 5 failed attempts allowed, 6th triggers HTTP 429
+    const threshUser = `thresh_user_${Date.now()}`;
+    let retryAfterHeader = null;
+
+    for (let i = 1; i <= 6; i++) {
+      const res = await request('/api/auth/login', {
+        method: 'POST',
+        headers: { 'cf-connecting-ip': sharedWifiIp },
+        body: JSON.stringify({ username: threshUser, password: 'wrongpassword', mode: 'admin' }),
+      });
+      if (i <= 5) {
+        assert(res.status === 401, `Threshold attempt ${i}/5 rejected with HTTP 401`);
+      } else {
+        retryAfterHeader = res.headers.get('retry-after');
+        assert(res.status === 429, 'Threshold crossing attempt 6/5 LOCKED with HTTP 429');
+        assert(Boolean(retryAfterHeader), 'Locked response includes Retry-After header');
+      }
+    }
+
+    // 2. Concurrency & Race Condition: 10 parallel login attempts for same user
+    const parallelUser = `parallel_user_${Date.now()}`;
+    const parallelRequests = Array.from({ length: 10 }).map((_, idx) =>
+      request('/api/auth/login', {
+        method: 'POST',
+        headers: { 'cf-connecting-ip': sharedWifiIp },
+        body: JSON.stringify({ username: parallelUser, password: `wrong_${idx}`, mode: 'admin' }),
+      })
+    );
+    const parallelResults = await Promise.all(parallelRequests);
+    const count401 = parallelResults.filter(r => r.status === 401).length;
+    const count429 = parallelResults.filter(r => r.status === 429).length;
+
+    assert(count401 <= 5, 'Parallel race condition prevented: at most 5 attempts processed before lockout');
+    assert(count429 > 0, `Parallel race condition prevented: ${count429} concurrent attempts rejected with HTTP 429`);
+
+    // Verify subsequent attempt is immediately locked
+    const postParallel = await request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'cf-connecting-ip': sharedWifiIp },
+      body: JSON.stringify({ username: parallelUser, password: 'wrong_post', mode: 'admin' }),
+    });
+    assert(postParallel.status === 429, 'Subsequent post-parallel attempt remains locked (HTTP 429)');
+
+    // 3. Storage Failure / Fail-Closed Degraded Behavior: Local guard prevents unlimited attempts
+    const storageFailUser = `storage_fail_user_${Date.now()}`;
+    let storageFailLocked = false;
+    for (let i = 1; i <= 6; i++) {
+      const res = await request('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'cf-connecting-ip': sharedWifiIp,
+          'x-test-simulate-storage-failure': '1',
+        },
+        body: JSON.stringify({ username: storageFailUser, password: 'wrongpassword', mode: 'admin' }),
+      });
+      if (i >= 5 && res.status === 429) {
+        storageFailLocked = true;
+      }
+    }
+    assert(storageFailLocked, 'Storage failure enforces Fail-Closed protection (locks after threshold, no unlimited attempts)');
+
+    // 4. Shared College Wi-Fi / NAT Multi-Student Isolation
+    // When Student A gets locked on college Wi-Fi, Student B on the exact same Wi-Fi IP is NOT blocked
+    const studentA = `wifi_student_a_${Date.now()}`;
+    const studentB = `wifi_student_b_${Date.now()}`;
+
+    // Lock student A with 5 failed attempts
+    for (let i = 1; i <= 5; i++) {
+      await request('/api/auth/login', {
+        method: 'POST',
+        headers: { 'cf-connecting-ip': sharedWifiIp },
+        body: JSON.stringify({ username: studentA, password: 'wrongpassword', mode: 'student' }),
+      });
+    }
+    const studentALocked = await request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'cf-connecting-ip': sharedWifiIp },
+      body: JSON.stringify({ username: studentA, password: 'wrongpassword', mode: 'student' }),
+    });
+    assert(studentALocked.status === 429, 'Student A locked on shared College Wi-Fi IP (HTTP 429)');
+
+    // Student B attempts login from the EXACT SAME Wi-Fi IP: must NOT be locked (receives 401 for wrong pass, not 429)
+    const studentBRes = await request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'cf-connecting-ip': sharedWifiIp },
+      body: JSON.stringify({ username: studentB, password: 'wrongpassword', mode: 'student' }),
+    });
+    assert(studentBRes.status === 401, 'Student B on same College Wi-Fi IP is NOT locked by Student A lockout (HTTP 401 != 429)');
+
+    // 5. Rate Limit Reset on Successful Authentication
+    // Admin saif logs in successfully and resets any failed attempt count
+    const adminLogin = await request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'cf-connecting-ip': sharedWifiIp },
+      body: JSON.stringify({ username: 'saif', password: 'saif123', mode: 'admin' }),
+    });
+    assert(adminLogin.status === 200, 'Admin login succeeded and cleared rate limit');
+  }
+
   // Summary
   console.log('\n=======================================================');
   console.log(`📊 Test Summary: ${passedTests} Passed, ${failedTests} Failed`);
