@@ -8,6 +8,25 @@ export const dynamic = 'force-dynamic';
 // Rate Limiter for active sessions list: {clientIp: [timestamp, ...]}
 const activeSessionsRateLimits: Record<string, number[]> = {};
 
+/**
+ * Checks whether a given session object is an internal system/configuration row.
+ * System configuration rows must NEVER be exposed to students or faculty as active sessions.
+ */
+export function isInternalSession(s: any): boolean {
+  if (!s || typeof s !== 'object') return true;
+  const name = String(s.class_name || '').trim();
+  const year = String(s.target_academic_year || '').trim();
+  const id = String(s.id || '').trim();
+  return (
+    name.startsWith('__') ||
+    name === '__SYSTEM_CONFIG__' ||
+    name === '__GEOFENCE_CONFIG__' ||
+    year.toLowerCase() === 'system' ||
+    id === '00000000-0000-0000-0000-000000000001' ||
+    id === '00000000-0000-0000-0000-000000000000'
+  );
+}
+
 export async function GET(request: Request) {
   try {
     // 1. IP Rate Limiting (Max 30 requests per minute per IP)
@@ -35,14 +54,16 @@ export async function GET(request: Request) {
       if (res.ok) {
         const data = await res.json();
         if (data && data.sessions && Array.isArray(data.sessions)) {
-          return NextResponse.json(data);
+          // Strict filtering of any internal/configuration rows
+          const cleanSessions = data.sessions.filter((s: any) => !isInternalSession(s));
+          return NextResponse.json({ ...data, sessions: cleanSessions });
         }
       }
     } catch (e) {
       // Backend offline or unreachable, fall back to Supabase
     }
 
-    // 2. Query Supabase directly
+    // 3. Query Supabase directly with strict exclusion of internal system rows
     const todayStr = getTodayDateStr();
     const startOfTodayIso = getStartOfTodayISO();
 
@@ -50,6 +71,11 @@ export async function GET(request: Request) {
       .from('sessions')
       .select('id, class_name, date, start_time, end_time, instructor_name, target_academic_year, created_at')
       .neq('class_name', '__SYSTEM_CONFIG__')
+      .neq('class_name', '__GEOFENCE_CONFIG__')
+      .not('class_name', 'like', '__%')
+      .neq('id', '00000000-0000-0000-0000-000000000001')
+      .neq('id', '00000000-0000-0000-0000-000000000000')
+      .neq('target_academic_year', 'System')
       .order('created_at', { ascending: false })
       .limit(50);
 
@@ -57,8 +83,9 @@ export async function GET(request: Request) {
       return NextResponse.json({ success: false, error: error.message, sessions: [] }, { status: 500 });
     }
 
-    // Filter strictly for today's sessions
+    // Filter strictly for today's non-internal sessions
     const todaySessions = (sessionData || []).filter((s: any) => {
+      if (isInternalSession(s)) return false;
       const dateVal = s.date || '';
       const createdVal = s.created_at || '';
       return dateVal === todayStr || createdVal.startsWith(todayStr) || createdVal >= startOfTodayIso;

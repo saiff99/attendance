@@ -514,6 +514,163 @@ async function runTests() {
     assert(adminDel.status === 200 && adminDel.data?.success === true, 'Authorized Super Admin attendance deletion succeeded (HTTP 200)');
   }
 
+  // =========================================================================
+  // Test 12: Geofence Strict Numeric Validation, Fail-Closed Persistence & Active-Session Filtering
+  // =========================================================================
+  console.log('\n--- Suite 12: Geofence Validation, Fail-Closed Persistence & Active Sessions Isolation ---');
+  {
+    // 1. Unauthenticated and Student role rejection for Geofence POST
+    const unauthGeofence = await request('/api/geofence', {
+      method: 'POST',
+      body: JSON.stringify({ latitude: 22.45, longitude: 88.17, radiusMeters: 50 }),
+    });
+    assert(unauthGeofence.status === 401, 'Unauthenticated POST /api/geofence REJECTED (HTTP 401)', `Got ${unauthGeofence.status}`);
+
+    const studentGeofence = await request('/api/geofence', {
+      method: 'POST',
+      headers: { Cookie: studentCookie },
+      body: JSON.stringify({ latitude: 22.45, longitude: 88.17, radiusMeters: 50 }),
+    });
+    assert(studentGeofence.status === 403, 'Student role calling POST /api/geofence REJECTED (HTTP 403)', `Got ${studentGeofence.status}`);
+
+    // 2. Fetch initial valid geofence so we can safely restore it later
+    const initialGet = await request('/api/geofence');
+    const originalConfig = initialGet.data?.config || {
+      enabled: false,
+      latitude: 22.450026,
+      longitude: 88.170683,
+      radiusMeters: 30,
+      campusName: 'JIMSH Medical College Campus & Lecture Halls',
+    };
+
+    // 3. Strict Numeric Validation: Invalid Latitude (must be between -90 and 90)
+    const latOverRes = await request('/api/geofence', {
+      method: 'POST',
+      headers: { Cookie: adminSessionCookie },
+      body: JSON.stringify({ latitude: 95.5 }),
+    });
+    assert(latOverRes.status === 400, 'Latitude > 90 REJECTED (HTTP 400)', `Got ${latOverRes.status}`);
+
+    const latUnderRes = await request('/api/geofence', {
+      method: 'POST',
+      headers: { Cookie: adminSessionCookie },
+      body: JSON.stringify({ latitude: -90.5 }),
+    });
+    assert(latUnderRes.status === 400, 'Latitude < -90 REJECTED (HTTP 400)', `Got ${latUnderRes.status}`);
+
+    const latNanRes = await request('/api/geofence', {
+      method: 'POST',
+      headers: { Cookie: adminSessionCookie },
+      body: JSON.stringify({ latitude: 'not-a-number' }),
+    });
+    assert(latNanRes.status === 400, 'Non-numeric Latitude string REJECTED (HTTP 400)', `Got ${latNanRes.status}`);
+
+    // 4. Strict Numeric Validation: Invalid Longitude (must be between -180 and 180)
+    const lngOverRes = await request('/api/geofence', {
+      method: 'POST',
+      headers: { Cookie: adminSessionCookie },
+      body: JSON.stringify({ longitude: 185 }),
+    });
+    assert(lngOverRes.status === 400, 'Longitude > 180 REJECTED (HTTP 400)', `Got ${lngOverRes.status}`);
+
+    const lngUnderRes = await request('/api/geofence', {
+      method: 'POST',
+      headers: { Cookie: adminSessionCookie },
+      body: JSON.stringify({ longitude: -185 }),
+    });
+    assert(lngUnderRes.status === 400, 'Longitude < -180 REJECTED (HTTP 400)', `Got ${lngUnderRes.status}`);
+
+    // 5. Strict Numeric Validation: Radius (must be positive, between 10m and 5000m)
+    const radZeroRes = await request('/api/geofence', {
+      method: 'POST',
+      headers: { Cookie: adminSessionCookie },
+      body: JSON.stringify({ radiusMeters: 0 }),
+    });
+    assert(radZeroRes.status === 400, 'Zero radius REJECTED (HTTP 400)', `Got ${radZeroRes.status}`);
+
+    const radNegRes = await request('/api/geofence', {
+      method: 'POST',
+      headers: { Cookie: adminSessionCookie },
+      body: JSON.stringify({ radiusMeters: -25 }),
+    });
+    assert(radNegRes.status === 400, 'Negative radius REJECTED (HTTP 400)', `Got ${radNegRes.status}`);
+
+    const radHugeRes = await request('/api/geofence', {
+      method: 'POST',
+      headers: { Cookie: adminSessionCookie },
+      body: JSON.stringify({ radiusMeters: 10000 }),
+    });
+    assert(radHugeRes.status === 400, 'Excessive radius (>5000m) REJECTED (HTTP 400)', `Got ${radHugeRes.status}`);
+
+    // 6. Zero-Valued Input Protection: latitude: 0 and longitude: 0 must NOT be treated as falsy/missing
+    const zeroValRes = await request('/api/geofence', {
+      method: 'POST',
+      headers: { Cookie: adminSessionCookie },
+      body: JSON.stringify({
+        latitude: 0,
+        longitude: 0,
+        radiusMeters: 45,
+        campusName: 'Equator Prime Meridian Test Campus',
+        enabled: true,
+      }),
+    });
+    assert(zeroValRes.status === 200 && zeroValRes.data?.success === true, 'Valid 0-valued coordinate input ACCEPTED (HTTP 200)');
+    assert(zeroValRes.data?.config?.latitude === 0, 'Zero latitude preserved (not discarded by falsy || check)');
+    assert(zeroValRes.data?.config?.longitude === 0, 'Zero longitude preserved (not discarded by falsy || check)');
+
+    // 7. Verify GET returns persisted zero-valued coordinates
+    const verifyGet = await request('/api/geofence');
+    assert(verifyGet.data?.config?.latitude === 0 && verifyGet.data?.config?.longitude === 0, 'GET /api/geofence confirms zero coordinates persisted correctly');
+
+    // 8. Fail-Closed Persistence & In-Memory State Protection during Database Failure
+    const dbFailRes = await request('/api/geofence', {
+      method: 'POST',
+      headers: {
+        Cookie: adminSessionCookie,
+        'x-test-simulate-db-failure': '1',
+      },
+      body: JSON.stringify({
+        latitude: 45.0,
+        longitude: 45.0,
+        radiusMeters: 100,
+        campusName: 'Temporary Failed Attempt',
+      }),
+    });
+    assert(dbFailRes.status === 500 && dbFailRes.data?.success === false, 'Database persistence failure returns HTTP 500 (Fail-Closed)');
+    assert(Boolean(dbFailRes.data?.error?.includes('Database persistence failed')), 'Error details mention persistence failure');
+
+    // Verify cache was NOT altered by the failed request
+    const afterFailGet = await request('/api/geofence');
+    assert(afterFailGet.data?.config?.latitude === 0, 'In-memory cache protected: latitude not corrupted by failed request');
+    assert(afterFailGet.data?.config?.campusName !== 'Temporary Failed Attempt', 'In-memory cache protected: unpersisted config not made authoritative');
+
+    // 9. Active Sessions Listing: Exclusion of internal and system configuration rows
+    const activeSessionsRes = await request('/api/active-sessions');
+    assert(activeSessionsRes.status === 200 && activeSessionsRes.data?.success === true, 'GET /api/active-sessions succeeded (HTTP 200)');
+    const returnedSessions = activeSessionsRes.data?.sessions || [];
+    const hasInternalRow = returnedSessions.some(s => {
+      const name = String(s.class_name || '');
+      const year = String(s.target_academic_year || '');
+      const id = String(s.id || '');
+      return (
+        name.startsWith('__') ||
+        name === '__GEOFENCE_CONFIG__' ||
+        name === '__SYSTEM_CONFIG__' ||
+        year.toLowerCase() === 'system' ||
+        id === '00000000-0000-0000-0000-000000000001'
+      );
+    });
+    assert(!hasInternalRow, 'Active sessions list strictly excludes all internal/system configuration rows');
+
+    // 10. Clean Restoration of Original Geofence Config
+    const restoreRes = await request('/api/geofence', {
+      method: 'POST',
+      headers: { Cookie: adminSessionCookie },
+      body: JSON.stringify(originalConfig),
+    });
+    assert(restoreRes.status === 200 && restoreRes.data?.success === true, 'Original geofence configuration restored cleanly');
+  }
+
   // Summary
   console.log('\n=======================================================');
   console.log(`📊 Test Summary: ${passedTests} Passed, ${failedTests} Failed`);
