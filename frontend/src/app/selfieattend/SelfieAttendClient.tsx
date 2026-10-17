@@ -675,15 +675,6 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
     };
   }, [step, capturedImage, cameraError]);
 
-  // Capture frame from webcam
-  const capturePhoto = useCallback(() => {
-    if (webcamRef.current) {
-      const imageSrc = webcamRef.current.getScreenshot();
-      if (imageSrc) {
-        setCapturedImage(imageSrc);
-      }
-    }
-  }, [webcamRef]);
 
   // Resize and compress base64 data URL to optimized Blob (Crisp 960px @ 0.88 quality, ~60-80KB)
   const compressImage = async (dataurl: string, maxWidth = 960, maxHeight = 960, quality = 0.88): Promise<Blob> => {
@@ -1679,24 +1670,25 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                   )}
                 </div>
 
-                <div className="flex flex-col gap-2 mt-1">
+                <div className="flex flex-col gap-2.5 mt-2">
                   {!capturedImage ? (
-                    <div className="flex flex-col gap-2">
-                      <button
-                        onClick={capturePhoto}
-                        className="w-full py-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-base transition-all shadow-xl shadow-indigo-600/30 flex items-center justify-center gap-2 cursor-pointer active:scale-98"
-                      >
-                        <Camera className="w-5 h-5" />
-                        <span>Capture Photo</span>
-                      </button>
-                      <p className="text-[11px] text-center text-amber-300/80 font-medium">
-                        💡 Tip: Simply blink naturally and the camera will auto-capture your live selfie!
+                    <div className="py-3 px-4 rounded-2xl bg-slate-900/70 border border-slate-800 backdrop-blur-md flex flex-col items-center justify-center gap-1 shadow-lg">
+                      <div className="flex items-center gap-2 text-xs font-semibold text-indigo-300">
+                        <Sparkles className="w-3.5 h-3.5 text-indigo-400 animate-pulse shrink-0" />
+                        <span>AI Biometric Auto-Capture Active</span>
+                      </div>
+                      <p className="text-[11px] text-center text-slate-400">
+                        Position face inside the oval and <span className="text-amber-300 font-semibold">blink your eyes naturally</span>.
                       </p>
                     </div>
                   ) : (
                     <div className="grid grid-cols-2 gap-2.5">
                       <button
-                        onClick={() => setCapturedImage(null)}
+                        onClick={() => {
+                          setCapturedImage(null);
+                          setBlinkDetected(false);
+                          setLivenessPhase("positioning");
+                        }}
                         disabled={submittingAttendance}
                         className="py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs transition-all border border-slate-700/80 flex items-center justify-center gap-1.5 cursor-pointer"
                       >
