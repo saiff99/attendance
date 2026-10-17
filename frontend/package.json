@@ -8,6 +8,8 @@
     "build": "next build",
     "start": "next start -H 0.0.0.0",
     "lint": "eslint",
+    "test": "node scripts/test-offline.mjs",
+    "test:offline": "node scripts/test-offline.mjs",
     "test:security": "node scripts/test-auth-security.mjs"
   },
   "dependencies": {

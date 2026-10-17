@@ -55,12 +55,13 @@ from typing import Optional
 def redact_stream_url(url: Optional[str]) -> str:
     """
     Safely redacts passwords and credentials from stream URLs (RTSP, HTTP, etc.).
+    Handles special characters in passwords and ensures sensitive credentials are masked.
     Example:
         'rtsp://admin:Tech_1234@172.16.7.5:554/live' -> 'rtsp://admin:***@172.16.7.5:554/live'
     """
     if not url or not isinstance(url, str):
         return str(url) if url is not None else ""
-    return re.sub(r'(://[^:]+):([^@]+)@', r'\1:***@', url)
+    return re.sub(r'(://[^/@:]+):(.*)@([^/@]+(?:/.*)?)$', r'\1:***@\3', url)
 
 def get_camera_details(redact_credentials: bool = False):
     """Returns detailed metadata for all configured CCTV cameras including main and AI sub-streams."""

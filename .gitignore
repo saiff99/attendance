@@ -1,5 +1,8 @@
 # Environments
 .env
+.env.test
+.env.local
+.env.*.local
 .venv
 env/
 venv/
