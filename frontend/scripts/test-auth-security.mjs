@@ -330,6 +330,22 @@ async function runTests() {
     assert(Boolean(validRevoke.data?.message?.includes('permanently erased')), 'Confirmation confirms permanent erasure');
   }
 
+  // --- Suite 10: Anti-Spoofing & Liveness Fail-Closed Verification ---
+  console.log('\n--- Suite 10: Anti-Spoofing & Liveness Fail-Closed Verification ---');
+  {
+    const { execSync } = await import('child_process');
+    const path = await import('path');
+    const backendTestPath = path.resolve('../backend/test_antispoof.py');
+    const pythonBin = path.resolve('../backend/.venv/bin/python');
+
+    try {
+      const output = execSync(`"${pythonBin}" "${backendTestPath}"`, { encoding: 'utf-8' });
+      assert(output.includes('12/12 Passed'), 'All 12 Anti-Spoofing & Liveness Fail-Closed Security Tests Passed');
+    } catch (err) {
+      assert(false, 'Anti-Spoofing test execution failed', err.message);
+    }
+  }
+
   // Summary
   console.log('\n=======================================================');
   console.log(`📊 Test Summary: ${passedTests} Passed, ${failedTests} Failed`);

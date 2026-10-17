@@ -6,7 +6,7 @@ import { useSearchParams } from "next/navigation";
 import {
   Camera, CheckCircle2, ShieldCheck, AlertCircle, RefreshCw,
   UserCheck, ArrowRight, ArrowLeft, Clock, MapPin, BookOpen,
-  Sparkles, SwitchCamera, Check, X, ShieldAlert, GraduationCap,
+  Sparkles, Check, X, ShieldAlert, GraduationCap,
   Building2, HelpCircle, Lock, Timer, Hourglass, Navigation, Loader2,
   Eye, EyeOff, Smile, Activity
 } from "lucide-react";
@@ -132,9 +132,9 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
   const [lookingUpStudent, setLookingUpStudent] = useState(false);
   const [lookupError, setLookupError] = useState<string | null>(null);
 
-  // Camera & Capture States
+  // Camera & Capture States (Locked to front camera only for mobile verification integrity)
   const webcamRef = useRef<Webcam>(null);
-  const [facingMode, setFacingMode] = useState<"user" | "environment">("user");
+  const facingMode = "user" as const;
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [submittingAttendance, setSubmittingAttendance] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
@@ -1604,8 +1604,9 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                             screenshotFormat="image/jpeg"
                             screenshotQuality={0.88}
                             minScreenshotWidth={640}
+                            mirrored={true}
                             videoConstraints={{
-                              facingMode: facingMode,
+                              facingMode: "user",
                               width: { ideal: 1280 },
                               height: { ideal: 720 },
                             }}
@@ -1661,13 +1662,10 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                             </div>
                           </div>
 
-                          <button
-                            onClick={() => setFacingMode(prev => (prev === "user" ? "environment" : "user"))}
-                            className="absolute top-3 right-3 p-2.5 rounded-full bg-black/60 hover:bg-black/80 backdrop-blur-md text-white border border-white/20 transition-all cursor-pointer"
-                            title="Switch Camera"
-                          >
-                            <SwitchCamera className="w-4 h-4" />
-                          </button>
+                          <div className="absolute top-3 right-3 px-2.5 py-1.5 rounded-full bg-black/60 backdrop-blur-md text-emerald-400 border border-emerald-500/30 text-[11px] font-semibold flex items-center gap-1.5 shadow-sm pointer-events-none select-none">
+                            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                            <span>Front Camera Only</span>
+                          </div>
                         </>
                       )}
                     </>
