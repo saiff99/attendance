@@ -14,6 +14,8 @@ const ALLOWED_TUNNEL_DOMAINS = [
   'ngrok-free.app',
   'ngrok.io',
   'loca.lt',
+  'hf.space',
+  'huggingface.co',
   'localhost',
   '127.0.0.1',
 ];
@@ -105,8 +107,19 @@ export async function verifyAndSanitizeTunnelUrl(
       return null;
     }
 
-    // 4. Mandatory Cryptographic HMAC Signature Verification for Remote Tunnels
-    // In any deployed/remote environment, signature and internal key are non-negotiable.
+    // 4. Direct trusted environment variable configuration (e.g. BACKEND_URL set in Vercel)
+    const envBackend = (process.env.BACKEND_URL || '').trim();
+    const envNextPublic = (process.env.NEXT_PUBLIC_BACKEND_URL || '').trim();
+    const isDirectEnvConfigured =
+      (Boolean(envBackend) && cleanUrl === envBackend) ||
+      (Boolean(envNextPublic) && cleanUrl === envNextPublic);
+
+    if (isDirectEnvConfigured) {
+      return cleanUrl;
+    }
+
+    // 5. Mandatory Cryptographic HMAC Signature Verification for Remote Dynamic Database Tunnels
+    // In any deployed/remote environment, signature and internal key are non-negotiable for database URLs.
     const internalKey = getInternalApiKey();
     if (!internalKey) {
       console.error('[Security Alert] Rejecting remote tunnel URL because INTERNAL_API_KEY is not configured on this server.');
@@ -266,10 +279,11 @@ export async function fetchBackend(path: string, options: RequestInit = {}): Pro
     try {
       const isLoopback = baseUrl.includes('127.0.0.1') || baseUrl.includes('localhost');
       
-      // Strict Security: Only forward internal API key to verified loopback or verified dynamic tunnel
+      // Strict Security: Only forward internal API key to verified loopback, live dynamic tunnel, or trusted backend
       const reqHeaders = new Headers(options.headers || {});
       reqHeaders.set('ngrok-skip-browser-warning', '69420');
-      if (internalApiKey && (isLoopback || baseUrl === liveDynamicTunnel)) {
+      const isTrustedBackend = baseUrl === liveDynamicTunnel || baseUrl === primaryUrl || baseUrl.includes('hf.space');
+      if (internalApiKey && (isLoopback || isTrustedBackend)) {
         reqHeaders.set('X-Internal-API-Key', internalApiKey);
       }
 

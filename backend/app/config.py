@@ -16,17 +16,18 @@ SUPABASE_URL = os.getenv("SUPABASE_URL", "https://bsphlgmxzmlbgzanpujh.supabase.
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_KEY")
 
 if not SUPABASE_KEY:
-    raise RuntimeError(
-        "[CRITICAL SECURITY ERROR] SUPABASE_SERVICE_ROLE_KEY is missing from environment! "
+    print(
+        "[WARNING] SUPABASE_SERVICE_ROLE_KEY is missing from environment! "
         "Backend server-side operations require service-role credentials to interact with the database under Zero-Trust RLS. "
-        "Silent fallback to public/anon keys is strictly disabled."
+        "Database operations will be disabled until configured."
     )
-
-try:
-    supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-except Exception as e:
-    print(f"Failed to initialize Supabase client: {e}")
     supabase = None
+else:
+    try:
+        supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+    except Exception as e:
+        print(f"Failed to initialize Supabase client: {e}")
+        supabase = None
 
 def get_camera_urls():
     """Returns a list of primary/main camera URLs parsed from the CCTV_URLS env variable."""

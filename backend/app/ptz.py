@@ -1,5 +1,8 @@
 import os
-from onvif import ONVIFCamera
+try:
+    from onvif import ONVIFCamera
+except ImportError:
+    ONVIFCamera = None
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -16,7 +19,7 @@ profile_token = None
 
 def init_ptz():
     global mycam, ptz_service, media_service, profile_token
-    if not PTZ_IP or not PTZ_USER or not PTZ_PASSWORD:
+    if not ONVIFCamera or not PTZ_IP or not PTZ_USER or not PTZ_PASSWORD:
         return False
         
     try:
