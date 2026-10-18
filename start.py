@@ -120,7 +120,13 @@ def cleanup(signum=None, frame=None):
         for name, proc in managed_procs.items():
             if proc:
                 terminate_process(proc, name)
-    print(f"{GREEN}All MedAttend services stopped cleanly. Goodbye!{RESET}\n")
+    # Automatically restore 24/7 Cloud Backend so Vercel never goes offline
+    cloud_backend_url = os.getenv("BACKEND_URL", "https://saiwebss-medattend-backend.hf.space").strip()
+    try:
+        update_supabase_tunnel_url(cloud_backend_url)
+    except Exception:
+        pass
+    print(f"{GREEN}All MedAttend services stopped cleanly. 24/7 Cloud Backend restored. Goodbye!{RESET}\n")
     sys.exit(0)
 
 

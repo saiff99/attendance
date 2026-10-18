@@ -278,7 +278,7 @@ export async function fetchBackend(path: string, options: RequestInit = {}): Pro
   for (const baseUrl of verifiedTargets) {
     try {
       const isLoopback = baseUrl.includes('127.0.0.1') || baseUrl.includes('localhost');
-      
+
       // Strict Security: Only forward internal API key to verified loopback, live dynamic tunnel, or trusted backend
       const reqHeaders = new Headers(options.headers || {});
       reqHeaders.set('ngrok-skip-browser-warning', '69420');
@@ -287,21 +287,44 @@ export async function fetchBackend(path: string, options: RequestInit = {}): Pro
         reqHeaders.set('X-Internal-API-Key', internalApiKey);
       }
 
-      const timeoutMs = isHealthCheck ? (isLoopback ? 4000 : 6000) : 45000;
+      const timeoutMs = isHealthCheck ? (isLoopback ? 2000 : 3500) : 45000;
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+      let targetSignal: AbortSignal = controller.signal;
+      if (options.signal) {
+        if (typeof (AbortSignal as any).any === 'function') {
+          targetSignal = (AbortSignal as any).any([options.signal, controller.signal]);
+        } else if (options.signal.aborted) {
+          throw new Error('Request aborted');
+        }
+      }
 
       const res = await fetch(`${baseUrl}${normalizedPath}`, {
         ...options,
         headers: reqHeaders,
-        signal: options.signal || controller.signal,
+        signal: targetSignal,
       });
       clearTimeout(timeout);
 
-      // If response is good or valid application error (400, 401, 403, 404, 422, 500), return it
-      if (res.ok || res.status >= 400) {
+      // If response is good (2xx, 3xx), return it
+      if (res.ok) {
         return res;
       }
+
+      // If health check endpoint failed on this target, do not abort; fall through to next candidate!
+      if (isHealthCheck) {
+        continue;
+      }
+
+      // Tunnel gateway or Cloudflare connection error codes (tunnel dead/expired)
+      const isGatewayFailure = [502, 503, 504, 520, 521, 522, 523, 524, 530].includes(res.status);
+      if (isGatewayFailure) {
+        continue;
+      }
+
+      // Legitimate application level response (400 Bad Request, 401 Unauthorized, 404 Not Found, 422, etc.)
+      return res;
     } catch (err: any) {
       lastError = err;
       if (!isHealthCheck) {
