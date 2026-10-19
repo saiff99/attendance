@@ -57,7 +57,7 @@ jobs:
       - name: Install Minimal Test Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install numpy opencv-python-headless Pillow python-dotenv fastapi starlette pydantic
+          pip install numpy opencv-python-headless Pillow python-dotenv fastapi starlette pydantic supabase
 
       - name: Run Backend Offline Unit Tests
         run: python -m unittest discover backend/tests

@@ -2,7 +2,11 @@ import os
 import json
 import math
 from dotenv import load_dotenv
-from supabase import create_client, Client
+try:
+    from supabase import create_client, Client
+except ImportError:
+    create_client = None
+    Client = None
 
 # Load environment variables explicitly from backend/.env or parent
 _backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -24,7 +28,7 @@ if not SUPABASE_KEY:
     supabase = None
 else:
     try:
-        supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+        supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY) if create_client else None
     except Exception as e:
         print(f"Failed to initialize Supabase client: {e}")
         supabase = None
