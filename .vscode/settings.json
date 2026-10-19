@@ -13,6 +13,7 @@
   "css.lint.unknownAtRules": "ignore",
   "scss.lint.unknownAtRules": "ignore",
   "less.lint.unknownAtRules": "ignore",
+  "github-actions.workflows.pinnedVersionWarning": "off",
   "files.associations": {
     ".github/workflows/*.yml": "yaml",
     ".github/workflows/*.yaml": "yaml"
