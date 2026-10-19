@@ -1,0 +1,58 @@
+name: Sync Backend to Hugging Face Spaces
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/sync-to-hf.yml'
+
+jobs:
+  sync-to-hf:
+    name: Sync Backend to Hugging Face Space
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Deploy to Hugging Face Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          if [ -z "$HF_TOKEN" ]; then
+            echo "::error::HF_TOKEN secret is not set in GitHub repository settings!"
+            echo "Please add HF_TOKEN under GitHub -> Settings -> Secrets and variables -> Actions."
+            exit 1
+          fi
+
+          git config --global user.email "saiwebss@gmail.com"
+          git config --global user.name "Sk Saifuddin"
+
+          echo "Cloning Hugging Face Space repository..."
+          git clone "https://saiwebss:${HF_TOKEN}@huggingface.co/spaces/saiwebss/medattend-backend" hf_repo
+
+          echo "Copying backend code and configuration to Space..."
+          # Copy all backend files to root of the Space
+          cp -r backend/* hf_repo/
+
+          # Use Hugging Face metadata README if present
+          if [ -f backend/HF_README.md ]; then
+            cp backend/HF_README.md hf_repo/README.md
+          fi
+
+          # Clean up any non-needed local files in target
+          rm -rf hf_repo/HF_README.md hf_repo/__pycache__ hf_repo/.venv hf_repo/.env 2>/dev/null || true
+
+          cd hf_repo
+          git add -A
+
+          if git diff --staged --quiet; then
+            echo "✓ Backend files in Hugging Face Space are already up-to-date. No new changes."
+          else
+            TIMESTAMP=$(date -u +'%Y-%m-%d %H:%M:%S UTC')
+            git commit -m "sync(backend): automated push from GitHub [$TIMESTAMP]"
+            git push origin main
+            echo "🎉 Successfully synced backend to Hugging Face Spaces!"
+          fi
