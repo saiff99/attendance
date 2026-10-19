@@ -13,7 +13,7 @@ const navigation = [
   { name: "Live Scan", href: "/live-scan", icon: ScanLine },
   { name: "Ongoing", href: "/ongoing", icon: Radio },
   { name: "Student Directory", href: "/students", icon: Users },
-  { name: "Selfie Portal", href: "/selfieattend", icon: Smartphone },
+  { name: "All Sessions", href: "/selfieattend", icon: Smartphone },
   { name: "Reports", href: "/reports", icon: FileBarChart },
   { name: "Faculty & Staff", href: "/users", icon: UserCog, superAdminOnly: true },
   { name: "Audit Trail", href: "/audit-logs", icon: ShieldCheck, superAdminOnly: true },
