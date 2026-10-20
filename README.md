@@ -4,42 +4,50 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688?style=for-the-badge&logo=fastapi)](https://fastapi.tiangolo.com/)
 [![InsightFace](https://img.shields.io/badge/InsightFace-ArcFace_512D-ff6f00?style=for-the-badge&logo=ai)](https://github.com/deepinsight/insightface)
 [![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL_Database-3ECF8E?style=for-the-badge&logo=supabase)](https://supabase.com/)
+[![Hugging Face](https://img.shields.io/badge/Hugging_Face-Spaces_24%2F7_Failover-ffd21e?style=for-the-badge&logo=huggingface)](https://huggingface.co/)
 [![Meta WhatsApp](https://img.shields.io/badge/WhatsApp-Cloud_API_v21.0-25D366?style=for-the-badge&logo=whatsapp)](https://developers.facebook.com/)
 [![Cloudflare](https://img.shields.io/badge/Cloudflare-Unlimited_Tunnels-F38020?style=for-the-badge&logo=cloudflare)](https://cloudflare.com/)
 [![TailwindCSS](https://img.shields.io/badge/Tailwind_CSS-v4-38B2AC?style=for-the-badge&logo=tailwind-css)](https://tailwindcss.com/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-3178C6?style=for-the-badge&logo=typescript)](https://www.typescriptlang.org/)
 
-> **MedAttend AI** is an enterprise-grade, end-to-end automated academic attendance and classroom surveillance system designed for large educational auditoriums, medical colleges, and institutions (**tested for 300+ students across 6 simultaneous CCTV streams**).
+> **MedAttend AI** is an enterprise-grade, end-to-end automated academic attendance and classroom surveillance system designed for large educational auditoriums, medical colleges, and institutions (**stress-tested for 300+ students across 6 simultaneous CCTV streams**).
 > 
-> It pairs ultra-fast biometric facial recognition (InsightFace ArcFace 512D) with dual-stream RTSP camera pipelines, ONVIF PTZ controls, isolated WhatsApp parent notifications, a dedicated **Medical Student Portal** (with 7-day attendance logs & curriculum eligibility), **GPS Selfie Check-In**, **Enterprise Audit Logging**, and macOS 1-click desktop launchers.
+> It pairs ultra-fast biometric facial recognition (InsightFace ArcFace 512D) with dual-stream RTSP camera pipelines, ONVIF PTZ controls, isolated WhatsApp parent notifications, a dedicated **Medical Student Portal** (with 7-day attendance logs & curriculum eligibility), **3-Tier Role-Based Access Control (Super Admin / Admin / Faculty)**, **Dynamic Academic Curriculum Configuration**, **Geofenced GPS Selfie Check-In** with multi-tier hardware fallback, **24/7 Cloud Failover via Hugging Face Spaces**, and **Enterprise Audit Logging**.
 
 ---
 
 ## 📑 Table of Contents
 
 - [✨ Core Enterprise Features](#-core-enterprise-features)
-- [🏛️ System Architecture](#️-system-architecture)
+- [👥 3-Tier Role-Based Access Control (RBAC)](#-3-tier-role-based-access-control-rbac)
+  - [Role Hierarchy Overview](#role-hierarchy-overview)
+  - [Role Permission Matrix](#role-permission-matrix)
+- [🏛️ System Architecture & 24/7 Resilience](#️-system-architecture--247-resilience)
+  - [Dual Backend & Cloud Failover Workflow](#dual-backend--cloud-failover-workflow)
 - [🎯 Application Modules & Portals](#-application-modules--portals)
   - [1. Student Medical Portal (`/portal`)](#1-student-medical-portal-portal)
   - [2. GPS Selfie Attendance Portal (`/selfieattend`)](#2-gps-selfie-attendance-portal-selfieattend)
-  - [3. Dual-Tab Role Authentication (`/login`)](#3-dual-tab-role-authentication-login)
-  - [4. Enterprise Audit Logs (`/audit-logs`)](#4-enterprise-audit-logs-audit-logs)
-  - [5. Live Multi-Camera Surveillance (`/live-scan`)](#5-live-multi-camera-surveillance-live-scan)
-  - [6. Academic Reports & Excel Export (`/reports`)](#6-academic-reports--excel-export-reports)
+  - [3. User Management & Curriculum Configuration (`/users`)](#3-user-management--curriculum-configuration-users)
+  - [4. Faculty Session Isolation & Ongoing Classes (`/ongoing`)](#4-faculty-session-isolation--ongoing-classes-ongoing)
+  - [5. Dual-Tab Role Authentication (`/login`)](#5-dual-tab-role-authentication-login)
+  - [6. Enterprise Audit Logs (`/audit-logs`)](#6-enterprise-audit-logs-audit-logs)
+  - [7. Live Multi-Camera Surveillance (`/live-scan`)](#7-live-multi-camera-surveillance-live-scan)
+  - [8. Academic Reports & Excel Export (`/reports`)](#8-academic-reports--excel-export-reports)
 - [⚙️ Classroom & Hardware Optimization (300+ Students)](#️-classroom--hardware-optimization-300-students)
 - [💻 Tech Stack](#-tech-stack)
 - [⚙️ Prerequisites](#️-prerequisites)
 - [🚀 Quick Start (1-Click Production Launch)](#-quick-start-1-click-production-launch)
 - [🛠️ Detailed Step-by-Step Installation](#️-detailed-step-by-step-installation)
   - [1. Clone Repository](#1-clone-repository)
-  - [2. Database Setup (Supabase PostgreSQL)](#2-database-setup-supabase-postgresql)
+  - [2. Database Setup & Migrations (Supabase PostgreSQL)](#2-database-setup--migrations-supabase-postgresql)
   - [3. Backend Setup (FastAPI + InsightFace)](#3-backend-setup-fastapi--insightface)
   - [4. Frontend Setup (Next.js 16 Production)](#4-frontend-setup-nextjs-16-production)
   - [5. Environment Configuration](#5-environment-configuration)
   - [6. Biometric Consent & Privacy Architecture (DPDP Act 2023)](#6-biometric-consent--privacy-architecture-dpdp-act-2023)
   - [7. Automated Testing, QA & Continuous Integration](#7--automated-testing-qa--continuous-integration)
-  - [8. Meta WhatsApp Cloud API Setup](#8-meta-whatsapp-cloud-api-setup)
-  - [9. Multi-Camera RTSP Grid Configuration](#9-multi-camera-rtsp-grid-configuration)
+  - [8. 24/7 Cloud Backend Sync (Hugging Face Spaces)](#8-247-cloud-backend-sync-hugging-face-spaces)
+  - [9. Meta WhatsApp Cloud API Setup](#9-meta-whatsapp-cloud-api-setup)
+  - [10. Multi-Camera RTSP Grid Configuration](#10-multi-camera-rtsp-grid-configuration)
 - [🖥️ Production Watchdogs & Desktop Launchers](#️-production-watchdogs--desktop-launchers)
 - [📁 Project Directory Structure](#-project-directory-structure)
 - [🔌 API Endpoints Reference](#-api-endpoints-reference)
@@ -51,34 +59,129 @@
 ## ✨ Core Enterprise Features
 
 ### 👁️ 1. Ultra-Fast Biometric AI Engine (ArcFace 512D)
-- **InsightFace Buffalo_SC (MobileFaceNet + RetinaFace)**: High-dimensional 512D face embeddings with CoreML / GPU acceleration.
-- **High-Recall Distant Detection (`det_thresh=0.15`, `det_size=(640, 640)`)**: Reliably detects seated students in the farthest rows of massive 300+ student lecture halls.
-- **Zero-Backlog Timestamp Scheduling**: Always processes only the latest video frame per camera with zero buffer lag.
-- **Clean Match Feedback**: User-friendly UI displaying intuitive verified states without confusing raw percentage numbers.
-- **Auto-Sleep on 100% Attendance**: Switches to low-power standby when all students in a cohort have been marked present.
+- **InsightFace Buffalo_SC (MobileFaceNet + RetinaFace)**: High-dimensional 512D facial feature vectors with CoreML and ONNX Runtime GPU acceleration.
+- **High-Recall Distant Face Detection (`det_thresh=0.15`, `det_size=(640, 640)`)**: Reliably captures seated students in the back rows of massive tiered lecture halls.
+- **Spatial Tracking Cache (`60.0s`, `80px`)**: Prevents repetitive, wasteful re-inference on stationary seated students.
+- **Zero-Backlog Timestamp Scheduling**: Always grabs and evaluates strictly the newest decoded video frame per RTSP camera.
+- **Auto-Sleep on 100% Attendance**: Switches AI inference to low-power standby when all students in a scheduled cohort are marked present.
 
-### 🌡️ 2. Adaptive Thermal Load Controller & Eco-Power Engine
-- **Rolling Average Load Balancing**: Balances AI scan intervals between **0.8s and 2.0s** based on inference latency (EMA). Keeps hardware cool during long multi-hour lectures.
-- **Eco-Power Idle Sleep**: When no session is active and no cameras are previewed, grabbers sleep (`0.5s`), cutting idle CPU consumption by >70%.
-- **Instant On-Demand Wakeup (<0.05s)**: Resumes full 20–25 FPS playback instantly when an operator views cameras or starts a session.
+### 🌐 2. 24/7 Cloud Failover & Hybrid Resilience
+- **Dual-Layer Backend Engine**: Automatically routes requests to the local high-performance hardware backend when online, and transparently fails over to a 24/7 cloud instance hosted on **Hugging Face Spaces** when the local server is asleep or offline.
+- **Cryptographic Tunnel Verification**: Dynamic Cloudflare tunnels are signed with HMAC-SHA256 tokens and synchronized to Supabase in real-time, preventing DNS or tunnel hijacking.
+- **Automated GitHub Actions CI/CD**: Pushing changes to `backend/**` automatically syncs and deploys containerized updates to Hugging Face Spaces.
 
-### 📹 3. Dual-Stream Multi-Camera Grid & PTZ Hardware Controls
+### 👥 3. Three-Tier Role-Based Access Control (RBAC) & Faculty Privacy
+- **Super Admin vs. Admin vs. Faculty**: Strict separation of administrative responsibilities.
+- **Zero-Trust Super Admin Isolation**: Admins can manage faculty members, sessions, and attendance, but cannot view, edit, or tamper with Super Administrator accounts.
+- **Faculty Session Privacy**: Faculty members can strictly see, edit, and export attendance for the subjects and sessions they personally instruct.
+
+### 📍 4. Multi-Tier Geofencing & Centered GPS Radar Modal
+- **High-Accuracy Geolocation**: Haversine distance calculations ensure students are physically inside the designated lecture hall radius.
+- **Modern Centered GPS Radar Calibration Modal**: Replaced intrusive native browser dialogs with a centered radar-pulse modal showing live coordinates and accuracy radii.
+- **Multi-Tier Hardware Fallback**: Gracefully falls back from satellite GPS to network Wi-Fi positioning on macOS and laptops, with diagnostic guidance to eliminate `POSITION_UNAVAILABLE` errors.
+
+### 📚 5. Dynamic Academic Curriculum & Subject Management
+- **Year-by-Year MBBS Subject Configuration**: Full interactive interface to configure and update academic subjects for 1st Year, 2nd Year, 3rd Year Part 1, and 3rd Year Part 2.
+- **Instant Database Synchronization**: Configured subjects are dynamically available in session creation drop-downs and student medical portal calculations.
+
+### 🌡️ 6. Adaptive Thermal Load Controller & Eco-Power Engine
+- **Rolling Average Load Balancing**: Dynamically balances AI scan intervals between **0.8s and 2.0s** based on inference latency (EMA). Keeps institutional hardware cool during multi-hour lecture blocks.
+- **Eco-Power Idle Sleep**: When no session is running and no cameras are previewed, stream decoders sleep (`0.5s`), slashing idle CPU consumption by >70%.
+- **Instant On-Demand Wakeup (<0.05s)**: Resumes full 20–25 FPS stream playback the moment an operator views cameras or begins a lecture.
+
+### 📹 7. Dual-Stream Multi-Camera Grid & PTZ Hardware Controls
 - **6-Camera Simultaneous Grid**: Native RTSP feeds covering 1st Row, 2nd Row, and Left/Middle/Right auditorium wings.
 - **Dual Stream Topology**: High-res Main Stream for operators + 960×540 Sub-Stream for ultra-fast AI inference.
 - **ONVIF PTZ Motor Controls**: Real-time Pan, Tilt, and Zoom hardware control from the web dashboard.
 
-### 💬 4. Isolated Non-Blocking WhatsApp Parent Notifier
-- **Dedicated Queue Worker**: Runs in an isolated queue (`whatsapp_event_queue`), preventing WhatsApp notification bursts from blocking camera streaming or AI scans.
-- **Meta Official Cloud API (Graph v21.0)**: Sends official absentee notices with student name, roll number, subject, and timestamp.
+### 💬 8. Isolated Non-Blocking WhatsApp Parent Notifier
+- **Dedicated Queue Worker**: Runs in an isolated queue (`whatsapp_event_queue`), preventing notification spikes from slowing video streaming or AI processing.
+- **Meta Official Cloud API (Graph v21.0)**: Automatically dispatches official absentee notices with student name, roll number, subject, and timestamp.
 - **Live In-Modal Token Updater**: Update expired tokens and retry failed alerts on-the-fly without server restarts.
 
-### 🔒 5. Enterprise Security & Audit Log Ledger
-- **Tamper-Evident Audit Trails**: Every manual attendance override, PIN reset, and security event is permanently logged with IP address, user agent, actor details, and timestamps.
-- **Role Safeguards**: Strict separation prevents students from accessing faculty hubs and staff from logging into student portal views.
+### 🔒 9. Enterprise Security & Audit Log Ledger
+- **Tamper-Evident Audit Trails**: Every manual attendance override, PIN reset, and administrative action is permanently logged with IP address, user agent, actor details, and timestamps.
+- **India DPDP Act 2023 Compliance**: Explicit biometric opt-in consent recording and instantaneous permanent vector erasure upon revocation.
 
 ---
 
-## 🏛️ System Architecture
+## 👥 3-Tier Role-Based Access Control (RBAC)
+
+MedAttend features a comprehensive three-tier hierarchy for institutional staff, plus a dedicated portal for students:
+
+```
+                            ┌───────────────────────────────────────────┐
+                            │               Super Admin                 │
+                            │  - Full Institution Governance            │
+                            │  - Manage Admins, Faculty & Settings      │
+                            │  - Security Audit Logs Ledger             │
+                            └─────────────────────┬─────────────────────┘
+                                                  │
+                                                  ▼
+                            ┌───────────────────────────────────────────┐
+                            │                  Admin                    │
+                            │  - Faculty Management (Super Admin Hidden)│
+                            │  - Academic Subjects & Curriculum Config  │
+                            │  - Cross-Cohort Attendance & Sessions     │
+                            │  - Student Enrollment & Biometrics        │
+                            └─────────────────────┬─────────────────────┘
+                                                  │
+                                                  ▼
+                            ┌───────────────────────────────────────────┐
+                            │                 Faculty                   │
+                            │  - Isolated Session Management            │
+                            │  - Attendance for Own Subjects Only       │
+                            │  - Student Search & Cohort Reports        │
+                            └───────────────────────────────────────────┘
+```
+
+### Role Hierarchy Overview
+
+1. **Super Administrator**:
+   - Holds global oversight over all institutional data, database configurations, and audit trails.
+   - The only role empowered to create, edit, or remove other Super Admins and Admins.
+   - Full visibility into the complete security audit log ledger.
+
+2. **Administrator**:
+   - Designed for academic department heads, registrars, and operational managers.
+   - Manages faculty accounts, configures academic curriculum subjects, and creates class sessions across all years.
+   - Can manually adjust and delete attendance records (all logged to audit trails).
+   - **Zero-Trust Protected**: Cannot view or modify Super Admin accounts in the Users directory.
+
+3. **Faculty**:
+   - Designed for professors, lecturers, and teaching assistants.
+   - **Strict Session Isolation**: On the Dashboard and Ongoing Sessions page, faculty only see and control classes corresponding to their instructed subjects.
+   - Cannot access the administrative Users portal (`/users`) or alter institutional system configurations.
+
+4. **Medical Student**:
+   - Accesses the dedicated Student Medical Portal (`/portal`) using their Roll Number and 6-digit Security PIN.
+   - Accesses GPS Selfie Check-In (`/selfieattend`) during active class sessions.
+   - Strictly isolated to their own attendance records and curriculum progress.
+
+---
+
+### Role Permission Matrix
+
+| Capability / Resource | Super Admin | Admin | Faculty | Student |
+| :--- | :---: | :---: | :---: | :---: |
+| **Manage Super Admin Accounts** | ✅ | ❌ | ❌ | ❌ |
+| **Manage Admin & Faculty Accounts** | ✅ | ✅ (Faculty only) | ❌ | ❌ |
+| **Academic Curriculum Configuration (`/users`)** | ✅ | ✅ | ❌ | ❌ |
+| **View All Ongoing / Past Class Sessions** | ✅ | ✅ | ❌ (Own only) | ❌ |
+| **Create & Start New Class Sessions** | ✅ | ✅ | ✅ | ❌ |
+| **Calibrate Classroom GPS Coordinates** | ✅ | ✅ | ✅ | ❌ |
+| **Live Multi-Camera Surveillance & PTZ** | ✅ | ✅ | ✅ | ❌ |
+| **Manual Attendance Marking & Deletion** | ✅ | ✅ | ❌ | ❌ |
+| **Student Enrollment & Biometric Registration** | ✅ | ✅ | ✅ | ❌ |
+| **Security Audit Logs Ledger (`/audit-logs`)** | ✅ | ❌ | ❌ | ❌ |
+| **WhatsApp Absentee Parent Alerts** | ✅ | ✅ | ✅ | ❌ |
+| **Export Academic Attendance Reports (Excel)** | ✅ | ✅ | ✅ (Own classes) | ❌ |
+| **Mobile Geofenced Selfie Check-In** | ❌ | ❌ | ❌ | ✅ |
+| **Personal 7-Day Log & Curriculum Eligibility**| ❌ | ❌ | ❌ | ✅ |
+
+---
+
+## 🏛️ System Architecture & 24/7 Resilience
 
 ```
                                       ┌─────────────────────────────────┐
@@ -87,33 +190,48 @@
                                       │  - Student Portal (/portal)     │
                                       │  - GPS Selfie (/selfieattend)   │
                                       │  - Admin Hub & CCTV Grid        │
+                                      │  - Users & Curriculum (/users)  │
                                       └────────────────┬────────────────┘
                                                        │
                                       HTTPS / WebSocket / Next.js API Proxy
                                                        │
+                           ┌───────────────────────────┴───────────────────────────┐
+                           │                                                       │
+               [Priority 1: Local Server]                              [Priority 2: Cloud Failover]
+                           │                                                       │
+                           ▼                                                       ▼
+        ┌──────────────────────────────────────┐                ┌──────────────────────────────────────┐
+        │   FastAPI Local Core (Port 8000)     │                │   Hugging Face Spaces (24/7 Cloud)   │
+        │                                      │                │                                      │
+        │  ┌────────────────────────────────┐  │                │  ┌────────────────────────────────┐  │
+        │  │ 6x RTSP Dual-Stream AI Grabbers│  │                │  │ Serverless AI Fallback Core    │  │
+        │  │ ArcFace 512D CoreML / GPU      │  │                │  │ Student Face Vector Verifier   │  │
+        │  │ ONVIF PTZ Hardware Controller  │  │                │  │ Health & Status Endpoints      │  │
+        │  │ WhatsApp Dedicated Worker      │  │                │  └────────────────────────────────┘  │
+        │  │ Cloudflare Dynamic HMAC Tunnel │  │                │                                      │
+        │  └────────────────────────────────┘  │                │  Automatic failover if local machine │
+        │                                      │                │  is shut down, sleeping, or offline. │
+        └──────────────────┬───────────────────┘                └──────────────────┬───────────────────┘
+                           │                                                       │
+                           └───────────────────────────┬───────────────────────────┘
+                                                       │
                                                        ▼
-       ┌────────────────────────────────────────────────────────────────────────────────────────┐
-       │                          FastAPI Backend Core (Port 8000)                              │
-       │                                                                                        │
-       │  ┌─────────────────────────┐  ┌───────────────────────────┐  ┌──────────────────────┐  │
-       │  │  Adaptive Load Control  │  │   Multi-Camera RTSP Grid  │  │ Dedicated WhatsApp   │  │
-       │  │  (0.8s - 2.0s Interval) │  │  (Dual Main / Sub Stream) │  │ Background Worker    │  │
-       │  └────────────┬────────────┘  └─────────────┬─────────────┘  └──────────┬───────────┘  │
-       │               │                             │                           │              │
-       │  ┌────────────▼────────────┐  ┌─────────────▼─────────────┐  ┌──────────▼───────────┐  │
-       │  │  InsightFace ArcFace    │  │   Session State & Spatial │  │ ONVIF PTZ Hardware   │  │
-       │  │   512D CoreML / ONNX    │  │     Cache Garbage Purge   │  │   Motor Controller   │  │
-       │  └────────────┬────────────┘  └─────────────┬─────────────┘  └──────────┬───────────┘  │
-       └───────────────┼─────────────────────────────┼───────────────────────────┼──────────────┘
-                       │                             │                           │
-                       ▼                             ▼                           ▼
-        ┌────────────────────────────┐  ┌───────────────────────────┐  ┌────────────────────────┐
-        │   Supabase (PostgreSQL)    │  │     6x IP CCTV Cameras    │  │  Meta WhatsApp Cloud   │
-        │    - Students & 512D Vector│  │   - RTSP 4K Mainstream    │  │        API v21.0       │
-        │    - Attendance Ledger     │  │   - 960x540 AI Sub-Stream │  │   (Parent Absentee)    │
-        │    - Enterprise Audit Logs │  │   - ONVIF PTZ Controller  │  │                        │
-        └────────────────────────────┘  └───────────────────────────┘  └────────────────────────┘
+                                        ┌────────────────────────────┐
+                                        │   Supabase (PostgreSQL)    │
+                                        │    - Students & 512D Vector│
+                                        │    - 3-Tier App Users RBAC │
+                                        │    - Academic Subjects     │
+                                        │    - Attendance Ledger     │
+                                        │    - Enterprise Audit Logs │
+                                        │    - Settings & HMAC Tunnel│
+                                        └────────────────────────────┘
 ```
+
+### Dual Backend & Cloud Failover Workflow
+
+1. **Local High-Performance Engine**: When the local Mac/PC is running (`./start.sh`), local cameras stream at 25 FPS, AI scans execute with hardware acceleration, and the Cloudflare Tunnel securely synchronizes its HMAC-signed URL with Supabase.
+2. **24/7 Cloud Resilience**: If the local workstation is turned off after classes, the server proxy (`serverBackend.ts`) automatically falls back to the **Hugging Face Spaces** cloud backend. Students can continue checking in via mobile GPS selfie, viewing 7-day logs, and resetting security PINs without server downtime.
+3. **Automated Clean Exit Sync**: When terminating services (`Ctrl+C` or `Stop_Attendance.command`), `start.py` instantly updates Supabase to point back to the 24/7 Hugging Face backend.
 
 ---
 
@@ -121,36 +239,53 @@
 
 ### 1. Student Medical Portal (`/portal`)
 Designed specifically for MBBS and academic curriculum tracking:
-- **7-Day Recent Class Attendance Log**: Strictly lists verified sessions from the last 7 days with live scan/selfie timestamps and a **`Last 7 Days`** badge.
-- **Curriculum Performance Breakdown**: Comprehensive subject-wise breakdown (Total Classes, Present, Absent, Attendance Percentage, and Health Status: Good / Borderline / Low).
-- **Eligibility Badging**: Immediate feedback on examination eligibility (Eligible $\ge 75\%$, Borderline $65\%\text{--}74\%$, At Risk $< 65\%$).
-- **Centered Security PIN Modal**: Self-service 6-digit PIN reset dialog with validation and random generator.
+- **7-Day Recent Class Attendance Log**: Displays verified sessions from the last 7 calendar days with verification mode badges (`Live CCTV AI Scan` or `GPS Mobile Selfie`).
+- **Curriculum Performance Breakdown**: Subject-wise statistics (Total Classes, Present, Absent, Attendance Percentage, and Health Status: Good / Borderline / Low).
+- **NMC Examination Eligibility**: Real-time feedback on examination eligibility (Eligible $\ge 75\%$, Borderline $65\%\text{--}74\%$, At Risk $< 65\%$).
+- **Centered Security PIN Modal**: Self-service 6-digit PIN reset dialog with instant validation and secure random generation.
 - **Biometric Enrolled Status**: Real-time indicator displaying registered facial vector readiness.
-- **Elevated Faculty Viewer**: Super Admins and Faculty can search and inspect individual student profiles with full privacy controls.
+- **Elevated Faculty Viewer**: Administrators and Faculty can search and inspect student profiles with strict privacy compliance.
 
 ### 2. GPS Selfie Attendance Portal (`/selfieattend`)
 Mobile-friendly student self-check-in:
-- **Haversine GPS Geofencing**: Validates that student is physically inside the designated lecture hall radius.
-- **Anti-Spoof Biometric Matching**: Front-facing selfie capture with instant ArcFace 512D vector matching.
-- **Polished Navigation**: Clear "Back to Portal" action and responsive mobile layout.
+- **Haversine GPS Geofencing**: Compares device GPS against lecture hall coordinates calibrated in the session.
+- **Centered Radar Calibration Modal**: Modern UI with a radar pulse animation allowing faculty to calibrate classroom coordinates with a single click.
+- **Multi-Tier Accuracy Fallback**: Prevents `POSITION_UNAVAILABLE` errors on macOS and laptops by seamlessly attempting high-precision satellite GPS before falling back to network positioning.
+- **Anti-Spoof Biometric Verification**: Front-facing selfie capture with instant ArcFace 512D facial embedding verification.
 
-### 3. Dual-Tab Role Authentication (`/login`)
-- **Staff & Admin Tab**: Access for Faculty and Super Administrators.
-- **Student Portal Tab**: Dedicated entry for students using Roll Number and 6-digit Security PIN.
-- **Strict Role Enforcement**: Prevents accidental cross-portal logins and redirects users to their appropriate interfaces.
+### 3. User Management & Curriculum Configuration (`/users`)
+Accessible to Super Administrators and Administrators:
+- **Tab 1: Staff & Faculty Directory**:
+  - Provision, search, and manage user accounts with role assignments (`Admin` or `Faculty`).
+  - Super Admin accounts are masked from Admins under Zero-Trust role scoping.
+  - Reset faculty credentials and manage account statuses.
+- **Tab 2: Academic Subjects & Curriculum**:
+  - Configure subjects per academic year (1st Year, 2nd Year, 3rd Year Part 1, 3rd Year Part 2).
+  - Add, delete, and search subjects with instant database updates.
 
-### 4. Enterprise Audit Logs (`/audit-logs`)
-Full compliance and governance for sensitive institutional operations:
-- Records manual attendance insertions and deletions (`attendance/mark`).
-- Tracks student PIN changes, credential resets, and administrative overrides.
-- Searchable by action, severity (INFO / WARN / CRITICAL), actor, and date.
+### 4. Faculty Session Isolation & Ongoing Classes (`/ongoing`)
+- **Faculty Scoping**: Faculty members see only the active sessions for subjects they instruct.
+- **Administrative Oversight**: Super Admins and Admins view all active sessions across the institution.
+- **Dynamic Header Badges**: Displays faculty name and initials (`profile-initials-badge`) dynamically.
+- **Live Attendance Tally**: Real-time counter of present students, absent students, and session elapsed time.
 
-### 5. Live Multi-Camera Surveillance (`/live-scan`)
+### 5. Dual-Tab Role Authentication (`/login`)
+- **Staff & Admin Tab**: Single unified portal for Super Admins, Admins, and Faculty with bcrypt verification.
+- **Student Portal Tab**: Secure student entry requiring Roll Number and 6-digit PIN.
+- **Strict Role Enforcement**: Prevents unauthorized cross-portal access and routes users to their authorized interfaces.
+
+### 6. Enterprise Audit Logs (`/audit-logs`)
+Full compliance and governance for institutional accountability:
+- Tracks manual attendance insertions, deletions, and overrides (`attendance/mark`).
+- Records student PIN resets, user account creation, and credential modifications.
+- Searchable and filterable by action, severity (`INFO`, `WARN`, `CRITICAL`), actor, and date range.
+
+### 7. Live Multi-Camera Surveillance (`/live-scan`)
 - 6-Camera simultaneous grid with real-time bounding boxes and student identification overlays.
 - ONVIF PTZ control pad with pan/tilt/zoom speeds and preset recall.
 - Real-time present student counter and cohort attendance statistics.
 
-### 6. Academic Reports & Excel Export (`/reports`)
+### 8. Academic Reports & Excel Export (`/reports`)
 - Comprehensive cohort and subject attendance logs.
 - Export to formatted Microsoft Excel (`.xlsx`) and CSV files.
 - Visual attendance distributions, deficit warnings, and parent communication records.
@@ -184,8 +319,9 @@ Full compliance and governance for sensitive institutional operations:
 | **Computer Vision** | [InsightFace](https://github.com/deepinsight/insightface) (`buffalo_sc`), [ONNX Runtime](https://onnxruntime.ai/) (CoreML / CUDA), [OpenCV](https://opencv.org/) |
 | **Camera Protocols** | RTSP (H.264 / H.265), ONVIF (`onvif-zeep`) |
 | **Database & Auth** | [Supabase](https://supabase.com/) (PostgreSQL with JSONB Vector Encodings, Row-Level Security & Audit Tables) |
+| **Cloud Failover** | [Hugging Face Spaces](https://huggingface.co/) (24/7 Serverless Containerized AI Fallback) |
 | **Notifications** | [Meta WhatsApp Cloud API](https://developers.facebook.com/) (Graph v21.0) |
-| **Tunnels & Networking** | [Cloudflare Tunnels](https://cloudflare.com/) (Secure zero-config remote student check-in) |
+| **Tunnels & Networking** | [Cloudflare Tunnels](https://cloudflare.com/) (Secure HMAC-authenticated zero-config remote check-in) |
 
 ---
 
@@ -214,7 +350,8 @@ MedAttend includes an automated production process manager (`start.py` / `start.
 2. **Next.js Production Builder**: Automatically builds and runs the optimized production bundle (`npm start`).
 3. **FastAPI Production Engine**: Runs Uvicorn in production mode without dev hot-reload overhead.
 4. **Dual Watchdogs**: Continuous background health checks with automatic sub-second recovery.
-5. **Cloudflare Tunnel Auto-Sync**: Automatically syncs public mobile check-in URL to Supabase.
+5. **Cloudflare Tunnel Auto-Sync**: Automatically syncs public mobile check-in URL with HMAC signature to Supabase.
+6. **24/7 Cloud Fallback Restore**: Automatically restores the cloud failover URL on graceful shutdown.
 
 ```bash
 # 1. Clone the project
@@ -242,13 +379,13 @@ cd attendance
 
 ---
 
-### 2. Database Setup (Supabase PostgreSQL)
+### 2. Database Setup & Migrations (Supabase PostgreSQL)
 
 #### Option A: Fresh Database Setup
 1. Create a project at [Supabase](https://supabase.com/).
 2. In the **SQL Editor**, run the complete unified production schema located in [`database/schema.sql`](database/schema.sql). 
 
-This initializes all 7 tables, performance indexes, seed curriculum subjects, and Zero-Trust RLS policies with automatic purge of legacy policies.
+This initializes all tables, performance indexes, seed curriculum subjects, and Zero-Trust RLS policies with automatic purge of legacy policies.
 
 #### Option B: Incremental & Production Database Migrations
 All migrations in [`database/migrations/`](database/migrations/) are **strictly additive, idempotent, and non-destructive**. They do **not** drop existing student tables or wipe historical attendance records.
@@ -262,23 +399,13 @@ All migrations in [`database/migrations/`](database/migrations/) are **strictly 
 | [`05_create_settings_and_rate_limit.sql`](database/migrations/05_create_settings_and_rate_limit.sql) | Persistent key-value table for rate limits & system configurations | Additive `CREATE TABLE IF NOT EXISTS` |
 | [`06_zero_trust_rls_lockdown.sql`](database/migrations/06_zero_trust_rls_lockdown.sql) | Enables Row Level Security (RLS) across all core database tables | Locks public write access; grants `service_role` full access |
 | [`07_biometric_explicit_consent_and_erasure.sql`](database/migrations/07_biometric_explicit_consent_and_erasure.sql) | DPDP Act 2023 opt-in default (`biometric_consent = false`) | Safe migration of existing consent states |
-| [`08_dedicated_tunnel_security_settings.sql`](database/migrations/08_dedicated_tunnel_security_settings.sql) | Migrates Cloudflare tunnel config to dedicated settings store | Eliminates reliance on special dummy session rows |
+| [`08_dedicated_tunnel_security_settings.sql`](database/migrations/08_dedicated_tunnel_security_settings.sql) | Migrates Cloudflare tunnel config to dedicated settings store | Eliminates reliance on dummy session rows |
 | [`09_zero_trust_rls_purge_and_verification.sql`](database/migrations/09_zero_trust_rls_purge_and_verification.sql) | Purges legacy permissive policies and verifies Zero-Trust lockdown | Automated assertion checks for 0 public policy leaks |
 | [`10_zero_trust_credentials_and_pins.sql`](database/migrations/10_zero_trust_credentials_and_pins.sql) | Eliminates default passwords and provisions bcrypt hashed admin logins | Prevents default `123456` or roll number login fallback |
 | [`11_biometric_explicit_consent_audit_and_erasure.sql`](database/migrations/11_biometric_explicit_consent_audit_and_erasure.sql) | Adds consent versioning, actor tracking, and revocation audit fields | Additive compliance audit fields under DPDP Act 2023 |
+| [`12_add_admin_role.sql`](database/migrations/12_add_admin_role.sql) | Updates `app_users_role_check` constraint to support `'Admin'` role | Expands RBAC hierarchy to Super Admin, Admin, and Faculty |
 
-> **⚠️ Safe Execution Policy:** Migrations are **never executed automatically** against your live production database. If upgrading an existing installation, review each file and run it manually in sequence (01 to 11) using the **Supabase Dashboard > SQL Editor**.
-
-#### Tables & Security Architecture:
-- **`students`**: Student demographics, 512D ArcFace encodings, portal credentials (`portal_pin`, `portal_password_hash`, `last_portal_login`), and DPDP consent flags.
-- **`sessions`**: Class sessions, dates, schedules, and target batches.
-- **`attendance`**: Biometric and manual attendance logs with hardware-level unique constraint `(session_id, student_id)`.
-- **`audit_logs`**: Immutable security audit trail (`actor_id`, `action`, `target_type`, `target_id`, `details`, `ip_address`).
-- **`app_users`**: Role-based access control (Super Admin & Faculty credentials with bcrypt hashes).
-- **`academic_subjects`**: Dynamic curriculum subjects configured per academic year with default MBBS curriculum seed data.
-- **`settings`**: Shared persistent storage for multi-instance login rate limiting, system configuration, and Cloudflare tunnel synchronizations.
-
-3. Copy your **Project URL**, **Anon Key**, and **Service Role Key** from **Project Settings > API**.
+> **⚠️ Safe Execution Policy:** Migrations are **never executed automatically** against your live production database. If upgrading an existing installation, review each file and run it manually in sequence (01 to 12) using the **Supabase Dashboard > SQL Editor**.
 
 ---
 
@@ -342,6 +469,9 @@ AI_SCAN_INTERVAL_SEC=1.0
 AI_ADAPTIVE_LOAD_CONTROL=True
 AI_FRAME_WIDTH=960
 AI_FRAME_HEIGHT=540
+
+# Cryptographic Internal API Key for Dynamic Tunnel Verification
+INTERNAL_API_KEY="your-random-cryptographic-secret"
 ```
 
 #### B. Frontend (`frontend/.env.local`)
@@ -352,10 +482,12 @@ NEXT_PUBLIC_SUPABASE_URL="https://your-project.supabase.co"
 NEXT_PUBLIC_SUPABASE_ANON_KEY="your-supabase-anon-key"
 SUPABASE_SERVICE_ROLE_KEY="your-supabase-service-role-key"
 NEXT_PUBLIC_BACKEND_URL="http://localhost:8000"
+BACKEND_URL="https://saiwebss-medattend-backend.hf.space"
+INTERNAL_API_KEY="your-random-cryptographic-secret"
 ```
 
 > **🔒 Critical Secret Storage Policy:**
-> - `SUPABASE_SERVICE_ROLE_KEY` and `INTERNAL_API_KEY` bypass all Row Level Security and grant administrative database privileges.
+> - `SUPABASE_SERVICE_ROLE_KEY` and `INTERNAL_API_KEY` bypass Row Level Security and sign live tunnel entries.
 > - They **must NEVER** be prefixed with `NEXT_PUBLIC_`, committed to git, or sent to client browsers.
 > - All client-side requests must communicate exclusively through Next.js server-side API routes (`/api/...`), which securely inject credentials.
 
@@ -365,7 +497,7 @@ NEXT_PUBLIC_BACKEND_URL="http://localhost:8000"
 
 MedAttend AI is architected from the ground up to comply with India's **Digital Personal Data Protection (DPDP) Act 2023**:
 1. **Strict Opt-In Default:** All students have `biometric_consent = false` by default. No facial vectors are scanned or compared without affirmative, informed consent.
-2. **Explicit Consent Recording:** Admin face registration requires checking the affirmative DPDP consent box, recording `biometric_consent_date`, `biometric_consent_version`, and `biometric_consent_actor`.
+2. **Explicit Consent Recording:** Face enrollment requires checking the affirmative DPDP consent box, recording `biometric_consent_date`, `biometric_consent_version`, and `biometric_consent_actor`.
 3. **Legal Right to Revoke & Erase:** Students or administrators can revoke consent at any time (`POST /api/students/{id}/revoke-biometrics`). This permanently sets `biometric_consent = false` and irreversibly overwrites facial vector embeddings with `NULL`.
 
 ---
@@ -398,7 +530,18 @@ npm --prefix frontend run test:security
 #### GitHub Actions CI
 Automated validation runs on every push and PR via [`.github/workflows/ci.yml`](.github/workflows/ci.yml) covering Next.js compilation, TypeScript type checking, ESLint verification, and offline test execution.
 
-### 8. Meta WhatsApp Cloud API Setup
+---
+
+### 8. 24/7 Cloud Backend Sync (Hugging Face Spaces)
+
+The system automatically synchronizes backend updates to Hugging Face Spaces via GitHub Actions:
+1. Create a Docker Space on [Hugging Face](https://huggingface.co/spaces) (e.g., `saiwebss/medattend-backend`).
+2. Add your Hugging Face write token to GitHub repository secrets as `HF_TOKEN`.
+3. Pushes to `backend/**` trigger [`.github/workflows/sync-to-hf.yml`](.github/workflows/sync-to-hf.yml), automatically packaging the Docker container, syncing dependencies, and deploying the cloud AI fallback.
+
+---
+
+### 9. Meta WhatsApp Cloud API Setup
 
 1. Create a Meta Business app at [Meta Developer Portal](https://developers.facebook.com/).
 2. Add the **WhatsApp** product.
@@ -409,7 +552,7 @@ Automated validation runs on every push and PR via [`.github/workflows/ci.yml`](
 
 ---
 
-### 9. Multi-Camera RTSP Grid Configuration
+### 10. Multi-Camera RTSP Grid Configuration
 
 MedAttend supports any standard RTSP IP camera (Dahua, Hikvision, CP Plus, Uniview, Axis):
 
@@ -447,37 +590,47 @@ attendance/
 ├── Stop_Attendance.command        # macOS Desktop Stop Shortcut
 ├── Attendance.app/                # macOS Native Application Bundle
 │
+├── .github/workflows/
+│   ├── ci.yml                     # Continuous Integration (Next.js, Python tests, ESLint)
+│   └── sync-to-hf.yml             # Automated Backend Mirroring to Hugging Face Spaces
+│
 ├── database/
-│   └── schema.sql                 # PostgreSQL / Supabase Schema & Performance Indexes
+│   ├── schema.sql                 # Complete PostgreSQL / Supabase Unified Production Schema
+│   └── migrations/                # Additive, Idempotent Database Migrations (01 to 12)
 │
 ├── backend/                       # FastAPI AI Core & Stream Engine
-│   ├── .env.example               # Backend Environment Template
+│   ├── Dockerfile                 # Container Definition for Hugging Face Spaces
 │   ├── requirements.txt           # Python Package Dependencies
 │   ├── main.py                    # FastAPI Entrypoint & Lifecycle
-│   └── app/
-│       ├── ai.py                  # InsightFace ArcFace 512D Biometric Matcher
-│       ├── config.py              # Supabase Client & Multi-Camera Config
-│       ├── stream.py              # Dual-Stream RTSP Grabbers & Adaptive Load Control
-│       ├── ptz.py                 # ONVIF PTZ Hardware Motor Controller
-│       ├── routes.py              # RESTful APIs (Attendance, Memory Purge, WhatsApp)
-│       └── whatsapp.py            # Dedicated Non-Blocking WhatsApp Worker
+│   ├── app/
+│   │   ├── ai.py                  # InsightFace ArcFace 512D Biometric Matcher
+│   │   ├── config.py              # Supabase Client & Multi-Camera Config
+│   │   ├── stream.py              # Dual-Stream RTSP Grabbers & Adaptive Load Control
+│   │   ├── ptz.py                 # ONVIF PTZ Hardware Motor Controller
+│   │   ├── routes.py              # RESTful APIs (Attendance, Memory Purge, WhatsApp)
+│   │   └── whatsapp.py            # Dedicated Non-Blocking WhatsApp Worker
+│   └── tests/                     # Unit Tests for AI, Anti-Spoofing & Business Logic
 │
 └── frontend/                      # Next.js 16 Web Application (App Router)
-    ├── .env.example               # Frontend Environment Template
     ├── package.json               # Node Dependencies
     ├── src/
     │   ├── app/
-    │   │   ├── page.tsx           # Main Analytics & Ongoing Session Dashboard
+    │   │   ├── page.tsx           # Main Analytics & Recent Classes Dashboard
+    │   │   ├── ongoing/           # Live Ongoing Sessions (Faculty-Isolated)
+    │   │   ├── users/             # User Management (RBAC) & Academic Subjects Curriculum
     │   │   ├── portal/            # Medical Student Portal (7-Day Log & Curriculum)
     │   │   ├── selfieattend/      # GPS Geofenced Selfie Check-in Portal
-    │   │   ├── audit-logs/        # Enterprise Security & Audit Log Ledger
+    │   │   ├── audit-logs/        # Enterprise Security & Audit Log Ledger (Super Admin)
     │   │   ├── reports/           # Academic Reports & Excel (.xlsx) Exporter
     │   │   ├── live-scan/         # 6-Camera Live Surveillance & Biometric Overlay Grid
     │   │   ├── students/          # Student Biometric Directory & Face Enrollment
     │   │   ├── login/             # Dual-Tab (Staff/Admin vs Student) Authentication
     │   │   └── api/               # Server-Side API Proxies & Session Guards
     │   ├── components/            # Reusable UI Components, Modals & Video Players
-    │   └── lib/                   # Auth Helpers, Supabase Client & Audit Logger
+    │   │   ├── ClassroomGpsModal.tsx # Modern Centered Radar GPS Calibration Modal
+    │   │   ├── RecentClassSessionsTable.tsx # Role-Scoped Recent Classes Table
+    │   │   └── Sidebar.tsx        # Dynamic RBAC Navigation & Faculty Profile Badges
+    │   └── lib/                   # Auth Helpers, Geofence Math & Cloud Failover Client
 ```
 
 ---
@@ -487,20 +640,31 @@ attendance/
 ### 🎓 Student Portal & Self-Attendance
 | Endpoint | Method | Description |
 | :--- | :--- | :--- |
-| `/api/student/portal-data` | `GET` | Returns 7-day attendance logs, subject breakdown, and eligibility status |
-| `/api/students/{id}/reset-pin` | `POST` | Admin endpoint to generate a cryptographically random 6-digit temporary activation PIN |
-| `/api/selfie-attendance` | `POST` | Processes mobile selfie image with GPS coordinate geofence check |
+| `/api/student/portal-data` | `GET` | Returns 7-day attendance logs, subject breakdown, and examination eligibility |
+| `/api/students/{id}/reset-pin` | `POST` | Admin/Faculty endpoint to generate a secure 6-digit temporary activation PIN |
+| `/api/selfie-attendance` | `POST` | Validates mobile selfie image with Haversine GPS coordinate geofencing |
 
-> **Automated Security Tests**: Run `npm --prefix frontend run test:security` to execute the full 23-test Zero-Trust authentication and PIN verification suite.
-
-### 🔒 Authentication & Audit Logs
+### 🔒 Authentication & RBAC User Management
 | Endpoint | Method | Description |
 | :--- | :--- | :--- |
-| `/api/auth/login` | `POST` | Dual-mode login for Staff/Admin or Student with role protection |
-| `/api/auth/me` | `GET` | Retrieves current session user info and role |
-| `/api/auth/logout` | `POST` | Invalidates session and clears authentication cookies |
+| `/api/auth/login` | `POST` | Dual-mode login for Staff/Admin or Student with bcrypt role protection |
+| `/api/auth/me` | `GET` | Retrieves current session user info and role (`Super Admin`, `Admin`, `Faculty`, `Student`) |
+| `/api/auth/logout` | `POST` | Invalidates session and clears secure HTTP-only cookies |
+| `/api/users` | `GET`, `POST` | User account directory & creation with Zero-Trust Super Admin isolation |
+| `/api/users/{id}` | `PUT`, `DELETE`| Update role, reset credentials, or deactivate user account |
+
+### 📚 Academic Curriculum & Sessions
+| Endpoint | Method | Description |
+| :--- | :--- | :--- |
+| `/api/subjects` | `GET`, `POST`, `DELETE` | Manage dynamic academic curriculum subjects configured per MBBS year |
+| `/api/sessions` | `GET`, `POST` | List and create class sessions (faculty-isolated or institution-wide) |
+| `/api/sessions/{id}` | `GET`, `PATCH`, `DELETE` | Retrieve session details, calibrate classroom GPS coordinates, or end session |
+
+### 🛡️ Enterprise Audit Logs & Attendance
+| Endpoint | Method | Description |
+| :--- | :--- | :--- |
 | `/api/audit-logs` | `GET` | Fetches filtered administrative and security audit trail records |
-| `/api/attendance/mark` | `POST` | Manually mark/delete attendance records (with mandatory audit logging) |
+| `/api/attendance/mark` | `POST` | Manually mark or delete attendance records (with mandatory audit logging) |
 
 ### 📹 Live Video & Camera Management
 | Endpoint | Method | Description |
@@ -513,9 +677,10 @@ attendance/
 ### 🧬 Biometric Enrollment & AI Processing
 | Endpoint | Method | Description |
 | :--- | :--- | :--- |
-| `/api/enroll-face/{student_id}` | `POST` | Stores 512D ArcFace embeddings from snapshot |
+| `/api/enroll-face/{student_id}` | `POST` | Stores 512D ArcFace embeddings from camera snapshot |
 | `/api/enroll-face-burst/{student_id}` | `POST` | Multi-shot burst enrollment for multi-angle robustness |
 | `/api/upload-photo` | `POST` | Processes batch photo for server-side face enrollment |
+| `/api/students/{id}/revoke-biometrics` | `POST` | Irreversibly purges biometric face vectors under DPDP Act 2023 |
 
 ### 💬 WhatsApp Dispatcher & Queue
 | Endpoint | Method | Description |
@@ -529,24 +694,33 @@ attendance/
 
 ## ❓ Troubleshooting & FAQs
 
-### Q1: Why does the system stay cool even during 300-student classes?
+### Q1: What is the difference between Super Admin, Admin, and Faculty?
+> **Answer**: 
+> - **Super Admin** has full institution governance, user provisioning (including creating/editing other Super Admins), and access to the complete security audit log ledger.
+> - **Admin** manages day-to-day operations, creates sessions, configures curriculum subjects, and manages faculty accounts (Super Admin accounts are hidden from Admins under Zero-Trust scoping).
+> - **Faculty** can only view and manage class sessions for the subjects they personally teach. They cannot access `/users` or tamper with other instructors' classes.
+
+### Q2: Why does GPS check-in fail on Mac or laptop browsers?
+> **Answer**: Laptop browsers and macOS Safari/Chrome sometimes fail high-accuracy satellite GPS requests (`POSITION_UNAVAILABLE`) when satellite lock is unavailable indoors. MedAttend's `geofence.ts` implements a multi-tier fallback that automatically retries using standard Wi-Fi network positioning with a generous accuracy tolerance, alongside tips to enable macOS System Location Services.
+
+### Q3: How does the system remain accessible 24/7 if the classroom PC is turned off?
+> **Answer**: MedAttend implements a **Dual Backend Architecture**. When your local high-power workstation is active, it handles heavy CCTV RTSP streaming. When shut down, the system transparently fails over to a 24/7 containerized instance on **Hugging Face Spaces**, allowing students to continue checking in via mobile GPS selfie and accessing their attendance records anytime.
+
+### Q4: Why does the system stay cool even during 300-student classes?
 > **Answer**: MedAttend uses an **Adaptive Thermal Load Controller** (`stream.py`) that monitors rolling AI inference latency. When inference load increases, it automatically adjusts scan intervals within safe bounds (0.8s–2.0s), preventing thermal throttling. Additionally, seated students are tracked via a 60-second spatial cache to eliminate redundant ArcFace calculations.
 
-### Q2: How does the Student Portal protect student attendance privacy?
-> **Answer**: The portal features **Role-Based Isolation**. Students can only log in with their assigned Roll Number and personal 6-digit PIN, giving them access exclusively to their own curriculum stats and past 7 days of verified attendance. Faculty and Super Admins have elevated viewing controls to monitor entire cohorts.
+### Q5: How does the Student Portal protect student attendance privacy?
+> **Answer**: The portal features **Role-Based Isolation**. Students can only log in with their assigned Roll Number and personal 6-digit PIN, giving them access exclusively to their own curriculum stats and past 7 days of verified attendance. Faculty and Admins cannot tamper with student records without creating an immutable audit trail.
 
-### Q3: What happens when no attendance session is running?
-> **Answer**: The system enters **Eco-Power Idle Mode**. Camera grabbing loops pause active decoding (`time.sleep(0.5)`), reducing idle CPU usage by over 70%. When a user opens the live preview or starts a class, streams instantly resume full 20–25 FPS playback in under 0.05 seconds.
-
-### Q4: `Meta Access Token expired (OAuth 190)` error?
+### Q6: `Meta Access Token expired (OAuth 190)` error?
 > **Answer**: Meta developer tokens expire every 24 hours. Simply paste your new token directly into the **WhatsApp Alert Modal** in the web dashboard and click **"Save & Retry"**. It updates in memory and in `.env` automatically without restarting the server.
 
-### Q5: Port 3000 or 8000 already in use?
+### Q7: Port 3000 or 8000 already in use?
 > **Answer**: Simply launch the app using `./start.sh`. The built-in process manager identifies and cleans only conflicting local processes before starting the production services.
 
 ---
 
 ## 📄 License & Credits
 
-- Developed for high-precision institutional, academic, and enterprise attendance tracking.
-- Built with ❤️ using [Next.js](https://nextjs.org/), [FastAPI](https://fastapi.tiangolo.com/), [InsightFace](https://github.com/deepinsight/insightface), and [Supabase](https://supabase.com/).
+- Developed for high-precision institutional, academic, and medical college attendance tracking.
+- Built with ❤️ using [Next.js](https://nextjs.org/), [FastAPI](https://fastapi.tiangolo.com/), [InsightFace](https://github.com/deepinsight/insightface), [Supabase](https://supabase.com/), and [Hugging Face](https://huggingface.co/).
