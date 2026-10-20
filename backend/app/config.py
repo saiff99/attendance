@@ -33,6 +33,105 @@ else:
         print(f"Failed to initialize Supabase client: {e}")
         supabase = None
 
+def attach_supabase_resilience(client):
+    """
+    Patches the postgrest httpx.Client session to automatically heal and reconnect
+    when Supabase/Cloudflare severs idle keep-alive TCP sockets (e.g. RemoteProtocolError: Server disconnected).
+    """
+    if not client or not hasattr(client, "postgrest") or not hasattr(client.postgrest, "session"):
+        return client
+
+    session = client.postgrest.session
+    if getattr(session, "_is_resilient_patched", False):
+        return client
+
+    orig_send = session.send
+
+    def resilient_send(request, *args, **kwargs):
+        # Buffer request content in memory so it can be replayed on retry
+        try:
+            if hasattr(request, "read"):
+                request.read()
+        except Exception:
+            pass
+
+        max_retries = 2
+        for attempt in range(max_retries + 1):
+            try:
+                return orig_send(request, *args, **kwargs)
+            except Exception as exc:
+                err_str = str(exc).lower()
+                transient_signals = [
+                    "server disconnected",
+                    "remoteprotocolerror",
+                    "connection reset",
+                    "connection closed",
+                    "broken pipe",
+                    "eof occurred",
+                    "transport",
+                ]
+                is_transient = any(sig in err_str for sig in transient_signals)
+                if is_transient and attempt < max_retries:
+                    import time
+                    import httpx
+                    print(f"[Supabase Auto-Healing] Idle socket disconnected ('{exc}'). Refreshing connection pool ({attempt + 1}/{max_retries})...")
+                    try:
+                        session.close()
+                    except Exception:
+                        pass
+                    fresh_session = httpx.Client(
+                        base_url=session.base_url,
+                        headers=session.headers,
+                        timeout=session.timeout,
+                    )
+                    client.postgrest.session = fresh_session
+                    attach_supabase_resilience(client)
+                    time.sleep(0.15)
+                    return client.postgrest.session.send(request, *args, **kwargs)
+                raise exc
+
+    session.send = resilient_send
+    session._is_resilient_patched = True
+    return client
+
+# Automatically attach resilience to the default client
+if supabase:
+    attach_supabase_resilience(supabase)
+
+def get_supabase_client(force_new: bool = False):
+    """Returns the resilient Supabase client instance, recreating if requested."""
+    global supabase
+    if not SUPABASE_KEY or not create_client:
+        return None
+    if supabase is None or force_new:
+        try:
+            supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+            attach_supabase_resilience(supabase)
+        except Exception as e:
+            print(f"Failed to initialize Supabase client: {e}")
+            supabase = None
+    return supabase
+
+def safe_db_execute(query_builder, max_retries: int = 2):
+    """
+    Executes a Supabase query builder with secondary retry protection in case
+    underlying socket transport raises an unhandled connection drop.
+    """
+    last_err = None
+    for attempt in range(max_retries + 1):
+        try:
+            return query_builder.execute()
+        except Exception as exc:
+            last_err = exc
+            err_msg = str(exc).lower()
+            if any(s in err_msg for s in ["server disconnected", "remoteprotocolerror", "connection reset", "broken pipe"]) and attempt < max_retries:
+                import time
+                print(f"[safe_db_execute] Transient socket disconnect caught ('{exc}'), retrying execution ({attempt + 1}/{max_retries})...")
+                time.sleep(0.2)
+                continue
+            raise
+    raise last_err
+
 def get_camera_urls():
     """Returns a list of primary/main camera URLs parsed from the CCTV_URLS env variable."""
     urls_str = os.getenv("CCTV_URLS", "0")

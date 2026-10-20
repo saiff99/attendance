@@ -43,7 +43,7 @@ export async function POST(request: Request) {
       return fd;
     };
 
-    const res = await fetchBackend('/api/selfie-attendance', {
+    let res = await fetchBackend('/api/selfie-attendance', {
       method: 'POST',
       body: createFormData(),
     });
@@ -63,6 +63,36 @@ export async function POST(request: Request) {
       }
       data = { detail: fallbackDetail };
     }
+
+    // Auto-retry once on transient 500/502/503/504 errors or idle socket drops
+    const detailLower = typeof data?.detail === 'string' ? data.detail.toLowerCase() : '';
+    const isTransientDisconnect =
+      res.status >= 500 && (
+        res.status === 502 ||
+        res.status === 503 ||
+        res.status === 504 ||
+        detailLower.includes('server disconnected') ||
+        detailLower.includes('remoteprotocolerror') ||
+        detailLower.includes('connection reset') ||
+        detailLower.includes('connection closed') ||
+        detailLower.includes('broken pipe')
+      );
+
+    if (isTransientDisconnect) {
+      console.warn(`[Proxy Auto-Retry] Transient error (${res.status} - ${data?.detail}). Re-submitting attendance with fresh connection after 300ms...`);
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      res = await fetchBackend('/api/selfie-attendance', {
+        method: 'POST',
+        body: createFormData(),
+      });
+      try {
+        data = await res.json();
+      } catch {
+        const text = await res.text().catch(() => '');
+        data = { detail: text || `Server returned status ${res.status}` };
+      }
+    }
+
     return NextResponse.json(data, { status: res.status });
   } catch (err: any) {
     console.error('Selfie attendance error:', err);

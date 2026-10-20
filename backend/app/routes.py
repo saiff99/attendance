@@ -18,6 +18,7 @@ from pydantic import BaseModel
 
 from app.config import (
     supabase,
+    safe_db_execute,
     get_camera_urls,
     get_camera_details,
     get_ptz_urls,
@@ -728,7 +729,7 @@ async def student_lookup(request: Request, student_roll: str, session_id: Option
         )
 
     clean_sess_id = session_id.strip()
-    sess_res = supabase.table("sessions").select("id, class_name, start_time, created_at, target_academic_year").eq("id", clean_sess_id).execute()
+    sess_res = safe_db_execute(supabase.table("sessions").select("id, class_name, start_time, created_at, target_academic_year").eq("id", clean_sess_id))
     if not sess_res.data:
         raise HTTPException(status_code=404, detail="Lecture session not found.")
         
@@ -751,14 +752,14 @@ async def student_lookup(request: Request, student_roll: str, session_id: Option
     try:
         clean_roll = student_roll.strip()
         # Query only necessary non-sensitive fields (omitting email)
-        res = supabase.table("students").select(
+        res = safe_db_execute(supabase.table("students").select(
             "id, student_roll, full_name, academic_year, face_encoding"
-        ).ilike("student_roll", clean_roll).execute()
+        ).ilike("student_roll", clean_roll))
         
         if not res.data:
-            res = supabase.table("students").select(
+            res = safe_db_execute(supabase.table("students").select(
                 "id, student_roll, full_name, academic_year, face_encoding"
-            ).eq("student_roll", clean_roll).execute()
+            ).eq("student_roll", clean_roll))
             
         if not res.data:
             raise HTTPException(status_code=404, detail=f"No student found with Roll Number '{clean_roll}'. Please check and try again.")
@@ -775,9 +776,9 @@ async def student_lookup(request: Request, student_roll: str, session_id: Option
         is_already_present = False
         attendance_info = None
 
-        att_res = supabase.table("attendance").select(
+        att_res = safe_db_execute(supabase.table("attendance").select(
             "id, status, capture_mode, confidence_score, recorded_at"
-        ).eq("session_id", clean_sess_id).eq("student_id", student["id"]).execute()
+        ).eq("session_id", clean_sess_id).eq("student_id", student["id"]))
         
         if att_res.data:
             is_already_present = True
@@ -865,7 +866,7 @@ async def selfie_attendance(
             )
 
     # 3. Check Session Expiration & Load Metadata
-    session_res = supabase.table("sessions").select("id, start_time, created_at, class_name, target_academic_year, instructor_name").eq("id", session_id).execute()
+    session_res = safe_db_execute(supabase.table("sessions").select("id, start_time, created_at, class_name, target_academic_year, instructor_name").eq("id", session_id))
     if not session_res.data:
         raise HTTPException(status_code=404, detail="Lecture session not found.")
         
@@ -972,14 +973,14 @@ async def selfie_attendance(
     contents = await safe_read_image_file(file, MAX_SELFIE_IMAGE_SIZE)
 
     # 5. Fetch Student from DB
-    res = supabase.table("students").select(
+    res = safe_db_execute(supabase.table("students").select(
         "id, student_roll, full_name, academic_year, face_encoding"
-    ).ilike("student_roll", clean_roll).execute()
+    ).ilike("student_roll", clean_roll))
     
     if not res.data:
-        res = supabase.table("students").select(
+        res = safe_db_execute(supabase.table("students").select(
             "id, student_roll, full_name, academic_year, face_encoding"
-        ).eq("student_roll", clean_roll).execute()
+        ).eq("student_roll", clean_roll))
         
     if not res.data:
         raise HTTPException(status_code=404, detail=f"Student with Roll '{clean_roll}' not found.")
@@ -1065,7 +1066,7 @@ async def selfie_attendance(
         first_emb = valid_faces[0].embedding
         if current_known.shape != first_emb.shape:
             if len(first_emb) == 512:
-                supabase.table("students").update({"face_encoding": first_emb.tolist()}).eq("id", student["id"]).execute()
+                safe_db_execute(supabase.table("students").update({"face_encoding": first_emb.tolist()}).eq("id", student["id"]))
                 current_known = first_emb
             else:
                 raise HTTPException(status_code=500, detail="Face encoding dimension mismatch.")
@@ -1114,7 +1115,7 @@ async def selfie_attendance(
         raise HTTPException(status_code=500, detail="AI face analysis failed. Please try again.")
 
     # 8. Check if already marked present in this session (Verified strictly AFTER authentic biometric face match)
-    existing_att = supabase.table("attendance").select("id, recorded_at, confidence_score").eq("session_id", session_id).eq("student_id", student["id"]).execute()
+    existing_att = safe_db_execute(supabase.table("attendance").select("id, recorded_at, confidence_score").eq("session_id", session_id).eq("student_id", student["id"]))
     if existing_att.data:
         rec_time = existing_att.data[0].get("recorded_at", "Earlier Today")
         # Ensure device lock is registered even if already present
@@ -1134,23 +1135,23 @@ async def selfie_attendance(
     # 9. Record Attendance in Supabase
     try:
         try:
-            supabase.table("attendance").upsert({
+            safe_db_execute(supabase.table("attendance").upsert({
                 "session_id": session_id,
                 "student_id": student["id"],
                 "status": "Present",
                 "capture_mode": "Selfie Scan",
                 "confidence_score": confidence_score
-            }, on_conflict="session_id,student_id").execute()
+            }, on_conflict="session_id,student_id"))
         except Exception as insert_err:
             # Fallback if DB check constraint only permits legacy 'Live Scan' / 'Manual Upload'
             print("Retrying attendance insert with compatible capture_mode:", insert_err)
-            supabase.table("attendance").upsert({
+            safe_db_execute(supabase.table("attendance").upsert({
                 "session_id": session_id,
                 "student_id": student["id"],
                 "status": "Present",
                 "capture_mode": "Live Scan",
                 "confidence_score": confidence_score
-            }, on_conflict="session_id,student_id").execute()
+            }, on_conflict="session_id,student_id"))
         
         # 10. Lock Device for this Student & Session
         if device_id and device_id.strip():
@@ -1177,7 +1178,7 @@ async def selfie_attendance(
     except Exception as e:
         print("Database insert error:", e)
         # Check if inserted concurrently
-        existing = supabase.table("attendance").select("id, recorded_at, confidence_score").eq("session_id", session_id).eq("student_id", student["id"]).execute()
+        existing = safe_db_execute(supabase.table("attendance").select("id, recorded_at, confidence_score").eq("session_id", session_id).eq("student_id", student["id"]))
         if existing.data:
             if device_id and device_id.strip():
                 session_device_locks.setdefault(session_id, {})[device_id.strip()] = clean_roll.upper()

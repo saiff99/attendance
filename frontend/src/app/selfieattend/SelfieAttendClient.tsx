@@ -848,6 +848,49 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
       }
 
       if (!response.ok) {
+        const errorDetail = (data?.detail || "").toLowerCase();
+        const isTransientErr =
+          response.status >= 500 && (
+            errorDetail.includes("server disconnected") ||
+            errorDetail.includes("reconnecting") ||
+            errorDetail.includes("busy") ||
+            response.status === 502 ||
+            response.status === 503 ||
+            response.status === 504
+          );
+
+        if (isTransientErr) {
+          console.warn("[Selfie Client Auto-Retry] Transient error detected, attempting silent retry...");
+          await new Promise((r) => setTimeout(r, 600));
+          const retryRes = await fetch("/api/selfie-attendance", {
+            method: "POST",
+            headers: {
+              "ngrok-skip-browser-warning": "69420",
+            },
+            body: formData,
+          }).catch(() => null);
+
+          if (retryRes && retryRes.ok) {
+            try {
+              const retryData = await retryRes.json();
+              setResultData({
+                success: true,
+                already_marked: retryData.already_marked,
+                student_name: retryData.student_name,
+                student_roll: retryData.student_roll,
+                academic_year: retryData.academic_year,
+                confidence: retryData.confidence,
+                message: retryData.message,
+                recorded_at: retryData.recorded_at,
+              });
+              setStep("result");
+              return;
+            } catch {
+              // Fallback to error throwing below
+            }
+          }
+        }
+
         throw new Error(data.detail || "Face verification failed.");
       }
 
