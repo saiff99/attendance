@@ -18,6 +18,7 @@ import { getBackendUrl, getVideoBackendUrl } from "@/lib/api";
 import Webcam from "react-webcam";
 import { MjpegPlayer } from "@/components/MjpegPlayer";
 import { GeofenceModal } from "@/components/GeofenceModal";
+import { ClassroomGpsModal } from "@/components/ClassroomGpsModal";
 import { WhatsAppAlertModal } from "@/components/WhatsAppAlertModal";
 import {
   CampusGeofenceConfig,
@@ -180,6 +181,72 @@ export default function LiveScan() {
   const [showGeofenceModal, setShowGeofenceModal] = useState(false);
   const [sessionGeofence, setSessionGeofence] = useState<CampusGeofenceConfig>(() => getLocalGeofence());
   const [capturingSessionGPS, setCapturingSessionGPS] = useState(false);
+  const [gpsCalibrateModal, setGpsCalibrateModal] = useState<{
+    isOpen: boolean;
+    status: "calibrating" | "success" | "error";
+    progressText?: string;
+    latitude?: number;
+    longitude?: number;
+    accuracy?: number;
+    campusName?: string;
+    radiusMeters?: number;
+    errorMessage?: string;
+  }>({
+    isOpen: false,
+    status: "calibrating",
+  });
+
+  const handleStartClassroomGPSCalibration = useCallback(async () => {
+    const currentHall =
+      setupData.hall === "custom"
+        ? customHallName || "Custom Classroom"
+        : setupData.hall || "Lecture Hall 1";
+    setCapturingSessionGPS(true);
+    setGpsCalibrateModal({
+      isOpen: true,
+      status: "calibrating",
+      progressText: "Initializing satellite lock and high-precision sensor...",
+      campusName: currentHall,
+      radiusMeters: sessionGeofence.radiusMeters,
+    });
+
+    try {
+      const coords = await getCalibratedHighPrecisionGPS((progress) => {
+        setGpsCalibrateModal((prev) => ({
+          ...prev,
+          progressText: `Locking GPS satellites (Sample ${progress.sampleCount}, ±${progress.bestAccuracy}m accuracy)...`,
+        }));
+      }, 3500);
+
+      const updated: CampusGeofenceConfig = {
+        ...sessionGeofence,
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+      };
+      setSessionGeofence(updated);
+      saveLocalGeofence(updated);
+
+      setGpsCalibrateModal({
+        isOpen: true,
+        status: "success",
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+        accuracy: coords.accuracy,
+        campusName: currentHall,
+        radiusMeters: sessionGeofence.radiusMeters,
+      });
+    } catch (err: any) {
+      setGpsCalibrateModal({
+        isOpen: true,
+        status: "error",
+        errorMessage: err.message || "Failed to capture current location. Please verify browser location permissions.",
+        campusName: currentHall,
+        radiusMeters: sessionGeofence.radiusMeters,
+      });
+    } finally {
+      setCapturingSessionGPS(false);
+    }
+  }, [setupData.hall, customHallName, sessionGeofence]);
   const [copiedLink, setCopiedLink] = useState(false);
   const [ptzCameraCount, setPtzCameraCount] = useState(1);
   const [selectedPtzIndex, setSelectedPtzIndex] = useState(0);
@@ -922,24 +989,7 @@ export default function LiveScan() {
                 <div className="flex items-center justify-between pt-1.5 border-t border-gray-200/60 dark:border-slate-800/80">
                   <button
                     type="button"
-                    onClick={async () => {
-                      setCapturingSessionGPS(true);
-                      try {
-                        const coords = await getCalibratedHighPrecisionGPS(undefined, 3500);
-                        const updated = {
-                          ...sessionGeofence,
-                          latitude: coords.latitude,
-                          longitude: coords.longitude,
-                        };
-                        setSessionGeofence(updated);
-                        saveLocalGeofence(updated);
-                        alert(`Classroom GPS set to calibrated location (Accuracy: ±${coords.accuracy}m)!\nLat: ${updated.latitude}, Lon: ${updated.longitude}`);
-                      } catch (err: any) {
-                        alert(err.message || "Failed to capture current location");
-                      } finally {
-                        setCapturingSessionGPS(false);
-                      }
-                    }}
+                    onClick={handleStartClassroomGPSCalibration}
                     disabled={capturingSessionGPS}
                     className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 cursor-pointer"
                   >
@@ -980,6 +1030,21 @@ export default function LiveScan() {
           onClose={() => setShowGeofenceModal(false)}
           initialConfig={activeGeofenceConfig}
           onConfigSaved={handleGeofenceSaved}
+        />
+
+        {/* Modern Centered Classroom GPS Calibration Modal */}
+        <ClassroomGpsModal
+          isOpen={gpsCalibrateModal.isOpen}
+          status={gpsCalibrateModal.status}
+          progressText={gpsCalibrateModal.progressText}
+          latitude={gpsCalibrateModal.latitude}
+          longitude={gpsCalibrateModal.longitude}
+          accuracy={gpsCalibrateModal.accuracy}
+          campusName={gpsCalibrateModal.campusName}
+          radiusMeters={gpsCalibrateModal.radiusMeters}
+          errorMessage={gpsCalibrateModal.errorMessage}
+          onClose={() => setGpsCalibrateModal((prev) => ({ ...prev, isOpen: false }))}
+          onRetry={handleStartClassroomGPSCalibration}
         />
       </div>
     );
@@ -2054,6 +2119,21 @@ export default function LiveScan() {
           onClose={() => setShowGeofenceModal(false)}
           initialConfig={activeGeofenceConfig}
           onConfigSaved={handleGeofenceSaved}
+        />
+
+        {/* Modern Centered Classroom GPS Calibration Modal */}
+        <ClassroomGpsModal
+          isOpen={gpsCalibrateModal.isOpen}
+          status={gpsCalibrateModal.status}
+          progressText={gpsCalibrateModal.progressText}
+          latitude={gpsCalibrateModal.latitude}
+          longitude={gpsCalibrateModal.longitude}
+          accuracy={gpsCalibrateModal.accuracy}
+          campusName={gpsCalibrateModal.campusName}
+          radiusMeters={gpsCalibrateModal.radiusMeters}
+          errorMessage={gpsCalibrateModal.errorMessage}
+          onClose={() => setGpsCalibrateModal((prev) => ({ ...prev, isOpen: false }))}
+          onRetry={handleStartClassroomGPSCalibration}
         />
 
         {/* Centered Animated Modal for Manual Photo Upload Attendance Result */}
