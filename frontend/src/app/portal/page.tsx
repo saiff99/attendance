@@ -6,9 +6,10 @@ import Link from "next/link";
 import {
   GraduationCap, BookOpen, CheckCircle2, AlertTriangle, XCircle,
   Calendar, Clock, MapPin, Smartphone, Shield, LogOut, KeyRound,
-  RefreshCw, ChevronRight, User, Sparkles, Check, ArrowUpRight
+  RefreshCw, ChevronRight, User, Sparkles, Check, ArrowUpRight, Camera
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
+import { FaceRegistrationModal } from "@/components/FaceRegistrationModal";
 
 interface SubjectRow {
   subject: string;
@@ -86,6 +87,9 @@ export default function StudentPortalPage() {
   const [confirmPin, setConfirmPin] = useState("");
   const [pinLoading, setPinLoading] = useState(false);
   const [pinMessage, setPinMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  // Face ID Biometric Registration modal state
+  const [isFaceModalOpen, setIsFaceModalOpen] = useState(false);
 
   const fetchPortalData = useCallback(async (rollQuery?: string) => {
     setLoading(true);
@@ -391,6 +395,35 @@ export default function StudentPortalPage() {
           </div>
         )}
 
+        {/* First Time Face ID Setup Banner if face is not yet enrolled */}
+        {!student.hasFaceEnrolled && (
+          <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-emerald-500/10 via-teal-600/10 to-indigo-500/10 border border-emerald-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xl">
+            <div className="flex items-start sm:items-center gap-3.5">
+              <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 shadow-md">
+                <Camera className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-bold text-emerald-300">Biometric Onboarding: Register Your Face ID</h3>
+                  <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                    1st Time Setup
+                  </span>
+                </div>
+                <p className="text-xs text-slate-300 mt-0.5">
+                  Your Face ID is not yet enrolled. Register your face using our 5-angle camera scan to enable automated classroom attendance and mobile selfie check-in. (One-time registration).
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setIsFaceModalOpen(true)}
+              className="w-full sm:w-auto py-2.5 px-5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 font-black text-xs shadow-lg shadow-emerald-500/20 transition-all shrink-0 cursor-pointer text-center flex items-center justify-center gap-2"
+            >
+              <Camera className="w-4 h-4" />
+              Register Face ID Now
+            </button>
+          </div>
+        )}
+
         {/* Student Identity Hero Card */}
         <div className="bg-gradient-to-br from-slate-900/90 via-slate-900/80 to-slate-950 border border-slate-800 rounded-3xl p-5 sm:p-7 shadow-2xl relative overflow-hidden backdrop-blur-xl">
           <div className="absolute top-0 right-0 w-80 h-80 bg-indigo-500/10 blur-[100px] rounded-full pointer-events-none" />
@@ -415,14 +448,21 @@ export default function StudentPortalPage() {
                   <span className="text-slate-300 font-semibold">{student.academicYear} MBBS</span>
                 </p>
                 <div className="flex items-center gap-2 mt-2">
-                  <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${
-                    student.hasFaceEnrolled
-                      ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                      : "bg-amber-500/10 text-amber-400 border border-amber-500/20"
-                  }`}>
-                    {student.hasFaceEnrolled ? <Check className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />}
-                    {student.hasFaceEnrolled ? "Biometrics Registered" : "Biometrics Pending"}
-                  </span>
+                  {student.hasFaceEnrolled ? (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-sm">
+                      <Check className="w-3.5 h-3.5 text-emerald-400" />
+                      Biometrics Registered (Locked)
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setIsFaceModalOpen(true)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30 hover:bg-amber-500/25 transition-all cursor-pointer shadow-sm group"
+                    >
+                      <AlertTriangle className="w-3.5 h-3.5 text-amber-400 animate-pulse group-hover:scale-110 transition-transform" />
+                      Biometrics Pending • Click to Register
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -858,6 +898,20 @@ export default function StudentPortalPage() {
             </form>
           </div>
         </div>
+      )}
+
+      {/* 5-Angle Face ID Biometric Registration Modal */}
+      {student && (
+        <FaceRegistrationModal
+          isOpen={isFaceModalOpen}
+          onClose={() => setIsFaceModalOpen(false)}
+          studentId={student.id}
+          studentName={student.fullName}
+          isSelfEnrollment={true}
+          onSuccess={() => {
+            fetchPortalData(selectedRoll || undefined);
+          }}
+        />
       )}
     </div>
   );

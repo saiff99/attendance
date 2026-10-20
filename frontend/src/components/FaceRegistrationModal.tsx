@@ -12,6 +12,7 @@ interface FaceRegistrationModalProps {
   studentId: string;
   studentName: string;
   onSuccess: () => void;
+  isSelfEnrollment?: boolean;
 }
 
 type ScanStatus = 'idle' | 'scanning' | 'processing' | 'success' | 'error';
@@ -24,9 +25,12 @@ const INSTRUCTIONS = [
   "Tilt your head slightly down",
 ];
 
-export function FaceRegistrationModal({ isOpen, onClose, studentId, studentName, onSuccess }: FaceRegistrationModalProps) {
+export function FaceRegistrationModal({ isOpen, onClose, studentId, studentName, onSuccess, isSelfEnrollment }: FaceRegistrationModalProps) {
   const { user } = useAuth();
   const isSuperAdmin = user?.role === 'Super Admin';
+  const isAdmin = user?.role === 'Admin';
+  const isStudent = user?.role === 'Student' || Boolean(isSelfEnrollment);
+  const canEnroll = isSuperAdmin || isAdmin || isStudent;
 
   const [status, setStatus] = useState<ScanStatus>('idle');
   const [instructionIndex, setInstructionIndex] = useState(0);
@@ -52,9 +56,9 @@ export function FaceRegistrationModal({ isOpen, onClose, studentId, studentName,
   }, [isOpen]);
 
   const startScanning = () => {
-    if (!isSuperAdmin) {
+    if (!canEnroll) {
       setStatus('error');
-      setErrorMessage("Access Denied: Only Super Admin can register or update student Face ID biometrics.");
+      setErrorMessage("Access Denied: You are not authorized to register Face ID biometrics.");
       return;
     }
     if (!consentConfirmed) {
@@ -139,39 +143,25 @@ export function FaceRegistrationModal({ isOpen, onClose, studentId, studentName,
       // Explicit Affirmative Biometric Consent (DPDP Act 2023)
       formData.append('consent_granted', 'true');
       formData.append('consent_version', 'v1.0-dpdp');
-      formData.append('actor', 'Super Admin');
+      formData.append('actor', isStudent ? `Student (${studentName})` : (user?.name || user?.username || (isSuperAdmin ? 'Super Admin' : 'Admin')));
 
-      // 1. Try Same-Origin Next.js API route first
+      // Use dedicated student self-enrollment endpoint if role is Student, else admin burst endpoint
+      const targetApi = isStudent
+        ? '/api/student/self-enroll-face'
+        : `/api/enroll-face-burst/${studentId}`;
+
       let response: Response | null = null;
       try {
-        response = await fetch(`/api/enroll-face-burst/${studentId}`, {
+        response = await fetch(targetApi, {
           method: 'POST',
           body: formData,
         });
       } catch (proxyErr) {
-        console.warn('Same-origin proxy fetch failed, attempting tunnel fallback...', proxyErr);
-      }
-
-      // 2. Fallback to active Ngrok tunnel if proxy failed or returned 502/504
-      if (!response || (!response.ok && response.status >= 500)) {
-        try {
-          const directRes = await fetch(`https://silly-unframed-extortion.ngrok-free.dev/api/enroll-face-burst/${studentId}`, {
-            method: 'POST',
-            body: formData,
-            headers: {
-              "ngrok-skip-browser-warning": "69420"
-            }
-          });
-          if (directRes.ok || directRes.status < 500) {
-            response = directRes;
-          }
-        } catch (directErr) {
-          console.warn('Direct tunnel fetch failed:', directErr);
-        }
+        console.warn('Same-origin API fetch failed:', proxyErr);
       }
 
       if (!response) {
-        throw new Error("Unable to connect to AI vision engine. Please ensure your backend terminal is running.");
+        throw new Error("Unable to connect to AI vision engine. Please ensure the backend server is running.");
       }
 
       if (!response.ok) {
@@ -374,42 +364,44 @@ export function FaceRegistrationModal({ isOpen, onClose, studentId, studentName,
           {/* Instructions / Actions */}
           <div className="min-h-[6rem] flex items-center justify-center text-center w-full">
             {status === 'idle' && (
-              isSuperAdmin ? (
+              canEnroll ? (
                 <div className="flex flex-col items-center space-y-3 w-full">
-                  <label className="flex items-start gap-2.5 max-w-sm text-left p-2 rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 cursor-pointer transition-colors hover:bg-gray-100 dark:hover:bg-gray-800">
+                  <label className="flex items-start gap-2.5 max-w-sm text-left p-2.5 rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 cursor-pointer transition-colors hover:bg-gray-100 dark:hover:bg-gray-800">
                     <input
                       type="checkbox"
                       id="biometric-consent-checkbox"
                       checked={consentConfirmed}
                       onChange={(e) => setConsentConfirmed(e.target.checked)}
-                      className="mt-0.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer w-4 h-4"
+                      className="mt-0.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer w-4 h-4 shrink-0"
                     />
                     <span className="text-xs text-gray-600 dark:text-gray-300 leading-snug">
-                      I confirm affirmative biometric consent has been obtained from the student for facial attendance recognition (DPDP Act 2023).
+                      {isStudent
+                        ? "I explicitly give my affirmative consent to capture and register my 3D facial biometric embedding for academic attendance and selfie check-in (DPDP Act 2023)."
+                        : "I confirm affirmative biometric consent has been obtained from the student for facial attendance recognition (DPDP Act 2023)."}
                     </span>
                   </label>
                   <button 
                     id="btn-start-scanning"
                     onClick={startScanning}
                     disabled={!consentConfirmed}
-                    className={`w-full max-w-[200px] py-2.5 rounded-xl font-semibold transition-all flex items-center justify-center cursor-pointer shadow-md ${
+                    className={`w-full max-w-[220px] py-2.5 rounded-xl font-semibold transition-all flex items-center justify-center cursor-pointer shadow-md ${
                       consentConfirmed 
                         ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/20' 
                         : 'bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed opacity-60 shadow-none'
                     }`}
                   >
                     <Camera className="w-5 h-5 mr-2" />
-                    Get Started
+                    {isStudent ? 'Start 5-Angle Scan' : 'Get Started'}
                   </button>
                 </div>
               ) : (
                 <div className="flex flex-col items-center space-y-2 w-full text-center p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800">
                   <div className="flex items-center gap-1.5 text-amber-700 dark:text-amber-300 font-semibold text-xs">
                     <ShieldAlert className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-                    Super Admin Access Required
+                    Administrative Privileges Required
                   </div>
                   <p className="text-xs text-amber-600 dark:text-amber-400">
-                    Facial biometrics can only be registered or updated by a Super Admin.
+                    Facial biometrics can only be registered or updated by an authorized Administrator or the student themselves upon initial setup.
                   </p>
                 </div>
               )

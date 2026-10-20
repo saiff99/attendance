@@ -20,9 +20,9 @@ export async function POST(
     }
 
     const session = await verifySessionToken(sessionCookie);
-    if (!session || session.role !== 'Super Admin') {
+    if (!session || (session.role !== 'Super Admin' && session.role !== 'Admin')) {
       return NextResponse.json(
-        { detail: 'Access denied: Only Super Admin is authorized to register or modify student Face ID biometrics.' },
+        { detail: 'Access denied: Only Super Admin or Admin is authorized to register or modify student Face ID biometrics.' },
         { status: 403 }
       );
     }
