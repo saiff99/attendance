@@ -451,7 +451,7 @@ export default function StudentPortalPage() {
                   {student.hasFaceEnrolled ? (
                     <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-sm">
                       <Check className="w-3.5 h-3.5 text-emerald-400" />
-                      Biometrics Registered (Locked)
+                      Biometrics Registered
                     </span>
                   ) : (
                     <button
