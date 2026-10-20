@@ -206,7 +206,7 @@ export default function OngoingSessionsPage() {
                 {user?.role === "Faculty" && (
                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
                     <Users className="w-3 h-3" />
-                    Faculty View ({user.name || user.username})
+                    Faculty View (@{user.username || (user.name && user.name.toLowerCase() !== "faculty member" ? user.name : "faculty")})
                   </span>
                 )}
               </h1>
@@ -336,7 +336,10 @@ export default function OngoingSessionsPage() {
                             <ShieldCheck className="w-3.5 h-3.5 text-indigo-500" /> Host Faculty:
                           </span>
                           <span className="font-semibold text-indigo-600 dark:text-indigo-400 truncate max-w-[170px]">
-                            {(session as any).created_by || decoded.facultyUsername || "Faculty"}
+                            {(() => {
+                              const rawHost = (session as any).created_by || decoded.facultyUsername;
+                              return rawHost ? (rawHost.startsWith("@") ? rawHost : `@${rawHost}`) : "Faculty";
+                            })()}
                           </span>
                         </div>
                       )}

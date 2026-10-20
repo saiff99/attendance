@@ -239,16 +239,30 @@ export default function Sidebar() {
             )}>
               <span className="text-xs font-bold leading-none tracking-wider">
                 {(() => {
-                  const displayName = user?.name || "Admin";
-                  const parts = displayName.trim().split(/\s+/);
-                  return parts.length >= 2 
-                    ? `${parts[0][0]}${parts[1][0]}`.toUpperCase() 
-                    : displayName.substring(0, 2).toUpperCase();
+                  let identifier = user?.username || user?.name || "Faculty";
+                  if (user?.role === "Faculty" && user?.username) {
+                    identifier = user.username;
+                  } else if (user?.name && user.name.toLowerCase() !== "faculty member") {
+                    identifier = user.name;
+                  }
+                  identifier = identifier.trim().replace(/^@/, "");
+                  const parts = identifier.split(/[\s._-]+/);
+                  if (parts.length >= 2 && parts[0][0] && parts[1][0]) {
+                    return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+                  }
+                  return identifier.substring(0, 2).toUpperCase();
                 })()}
               </span>
             </div>
             <div className="ml-3 min-w-0">
-              <p className="text-sm font-bold text-gray-800 dark:text-gray-100 truncate">{user?.name || "User"}</p>
+              <p 
+                className="text-sm font-bold text-gray-800 dark:text-gray-100 truncate"
+                title={user?.name && user.name.toLowerCase() !== "faculty member" ? `${user.name} (@${user?.username})` : (user?.username ? `@${user.username}` : user?.name || "Faculty")}
+              >
+                {user?.role === "Faculty"
+                  ? (user?.username ? `@${user.username}` : (user?.name || "Faculty"))
+                  : (user?.name || user?.username || "Admin")}
+              </p>
               <span className={classNames(
                 "inline-block text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded-md mt-0.5",
                 user?.role === "Faculty"
