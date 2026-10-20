@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -91,8 +91,11 @@ export default function StudentPortalPage() {
   // Face ID Biometric Registration modal state
   const [isFaceModalOpen, setIsFaceModalOpen] = useState(false);
 
-  const fetchPortalData = useCallback(async (rollQuery?: string) => {
-    setLoading(true);
+  const fetchPortalData = useCallback(async (rollQuery?: string, isSilent = false) => {
+    // Only show full-screen loader on initial fetch when there is no data
+    if (!isSilent) {
+      setLoading(true);
+    }
     setError(null);
     try {
       const url = rollQuery ? `/api/student/portal-data?roll=${encodeURIComponent(rollQuery)}` : "/api/student/portal-data";
@@ -103,25 +106,36 @@ export default function StudentPortalPage() {
       }
       setData(json);
       if (json.student?.studentRoll) {
-        setSelectedRoll(json.student.studentRoll);
+        setSelectedRoll((prev) => prev || json.student.studentRoll);
       }
     } catch (err: any) {
-      setError(err.message || "Failed to load attendance portal.");
+      if (!isSilent) {
+        setError(err.message || "Failed to load attendance portal.");
+      }
     } finally {
       setLoading(false);
     }
   }, []);
 
+  // 1. Initial mount fetch: executes strictly once without re-triggering on roll state change
   useEffect(() => {
     fetchPortalData();
+  }, [fetchPortalData]);
 
-    // Auto re-fetch latest attendance data when user switches back to this tab
+  // Keep a stable ref of selectedRoll for window focus events without causing re-renders
+  const selectedRollRef = useRef(selectedRoll);
+  useEffect(() => {
+    selectedRollRef.current = selectedRoll;
+  }, [selectedRoll]);
+
+  // 2. Window focus listener: silently refreshes in the background without unmounting the UI
+  useEffect(() => {
     const handleFocus = () => {
-      fetchPortalData(selectedRoll || undefined);
+      fetchPortalData(selectedRollRef.current || undefined, true);
     };
     window.addEventListener("focus", handleFocus);
     return () => window.removeEventListener("focus", handleFocus);
-  }, [fetchPortalData, selectedRoll]);
+  }, [fetchPortalData]);
 
   // Strictly filter Recent Class Attendance to the last 7 days (Top-level hook complying with React Rules of Hooks)
   const last7DaysSessions = useMemo(() => {
@@ -221,7 +235,7 @@ export default function StudentPortalPage() {
     setNewPin(random);
   };
 
-  if (loading) {
+  if (loading && !data) {
     return (
       <div className="min-h-screen bg-[#070B12] text-slate-100 flex flex-col items-center justify-center p-4">
         <div className="w-16 h-16 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 mb-4 animate-pulse shadow-xl shadow-indigo-500/10">
@@ -905,7 +919,7 @@ export default function StudentPortalPage() {
           studentName={student.fullName}
           isSelfEnrollment={true}
           onSuccess={() => {
-            fetchPortalData(selectedRoll || undefined);
+            fetchPortalData(selectedRoll || undefined, true);
           }}
         />
       )}
