@@ -177,3 +177,88 @@ export async function isFacultyAuthorizedForSession(
 
   return false;
 }
+
+/**
+ * Efficiently filters a list of sessions for a faculty user.
+ * If user is Super Admin or no user session provided, returns all sessions.
+ * For Faculty:
+ * 1. Fast in-memory check for [BY:username] tag and topic matches
+ * 2. Single batch audit log query for any candidate sessions lacking [BY:...]
+ */
+export async function filterSessionsForFaculty<
+  T extends { id: string; instructor_name?: string | null; class_name?: string }
+>(
+  sessionUser: { role: string; username: string; name?: string } | null,
+  sessions: T[]
+): Promise<T[]> {
+  if (!sessionUser || sessionUser.role === 'Super Admin') {
+    return sessions;
+  }
+  if (sessionUser.role !== 'Faculty') {
+    return [];
+  }
+
+  const u = (sessionUser.username || '').toLowerCase();
+  const n = (sessionUser.name || '').toLowerCase();
+
+  const matched: T[] = [];
+  const needsAuditCheck: T[] = [];
+
+  for (const s of sessions) {
+    const raw = (s.instructor_name || '').trim();
+    if (raw) {
+      const { topic, facultyUsername } = decodeSessionMetadata(raw);
+      const by = (facultyUsername || '').toLowerCase();
+      const top = (topic || '').toLowerCase();
+
+      if (by && (by === u || by === n)) {
+        matched.push(s);
+        continue;
+      }
+      if (top && (top === u || top === n)) {
+        matched.push(s);
+        continue;
+      }
+    }
+    needsAuditCheck.push(s);
+  }
+
+  if (needsAuditCheck.length > 0) {
+    const candidateIds = needsAuditCheck.map((s) => s.id);
+    const { data: auditRecords } = await supabaseServer
+      .from('audit_logs')
+      .select('target_id, actor_id, details')
+      .eq('target_type', 'session')
+      .eq('action', 'START_SESSION')
+      .in('target_id', candidateIds);
+
+    if (auditRecords && auditRecords.length > 0) {
+      const allowedTargetIds = new Set<string>();
+      for (const rec of auditRecords) {
+        const actor = (rec.actor_id || '').toLowerCase();
+        const details = (rec.details || {}) as Record<string, any>;
+        const actorName = (details.actor_name || details.instructor || '').toLowerCase();
+
+        if (
+          (u && actor === u) ||
+          (n && actor === n) ||
+          (u && actorName === u) ||
+          (n && actorName === n)
+        ) {
+          allowedTargetIds.add(rec.target_id);
+        }
+      }
+
+      for (const s of needsAuditCheck) {
+        if (allowedTargetIds.has(s.id)) {
+          matched.push(s);
+        }
+      }
+    }
+  }
+
+  // Preserve the original descending order of sessions
+  const matchedIdSet = new Set(matched.map((s) => s.id));
+  return sessions.filter((s) => matchedIdSet.has(s.id));
+}
+
