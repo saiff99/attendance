@@ -130,7 +130,9 @@ def safe_db_execute(query_builder, max_retries: int = 2):
                 time.sleep(0.2)
                 continue
             raise
-    raise last_err
+    if last_err is not None:
+        raise last_err
+    raise RuntimeError("Supabase query execution failed.")
 
 def get_camera_urls():
     """Returns a list of primary/main camera URLs parsed from the CCTV_URLS env variable."""
