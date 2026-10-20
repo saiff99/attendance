@@ -6,7 +6,7 @@ import Link from "next/link";
 import {
   GraduationCap, BookOpen, CheckCircle2, AlertTriangle, XCircle,
   Calendar, Clock, MapPin, Smartphone, Shield, LogOut, KeyRound,
-  RefreshCw, ChevronRight, User, Sparkles, Check, ArrowUpRight, Camera
+  RefreshCw, ChevronRight, User, Sparkles, Check, ArrowUpRight, Camera, ShieldCheck
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { FaceRegistrationModal } from "@/components/FaceRegistrationModal";
@@ -237,13 +237,60 @@ export default function StudentPortalPage() {
 
   if (loading && !data) {
     return (
-      <div className="min-h-screen bg-[#070B12] text-slate-100 flex flex-col items-center justify-center p-4">
-        <div className="w-16 h-16 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 mb-4 animate-pulse shadow-xl shadow-indigo-500/10">
-          <GraduationCap className="w-8 h-8" />
+      <div className="min-h-screen bg-[#060911] text-slate-100 flex flex-col items-center justify-between p-6 sm:p-10 relative overflow-hidden select-none">
+        {/* Ambient Glowing Atmospheric Aura */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[340px] sm:w-[480px] h-[340px] sm:h-[480px] bg-gradient-to-tr from-indigo-600/20 via-violet-600/15 to-teal-500/10 rounded-full blur-[110px] pointer-events-none" />
+        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-48 h-48 bg-indigo-500/15 rounded-full blur-[70px] pointer-events-none" />
+
+        {/* Top Live Sync Pill */}
+        <div className="w-full flex justify-end relative z-10">
+          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900/60 border border-slate-800 text-[10px] font-mono uppercase tracking-wider text-slate-400 backdrop-blur-md">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+            <span>Live Sync</span>
+          </div>
         </div>
-        <div className="flex items-center gap-2 text-indigo-400 font-semibold text-sm">
-          <RefreshCw className="w-4 h-4 animate-spin" />
-          <span>Synchronizing Medical Attendance Portal...</span>
+
+        {/* Center Hero Emblem & Progress Experience */}
+        <div className="flex flex-col items-center text-center relative z-10 max-w-sm w-full my-auto">
+          {/* Layered Glassmorphic Shield Emblem with Pulse Aura */}
+          <div className="relative mb-6">
+            <div className="absolute -inset-3 rounded-3xl bg-gradient-to-r from-indigo-500/25 via-violet-500/20 to-teal-500/25 blur-xl animate-pulse" />
+            <div className="relative w-20 h-20 rounded-2xl bg-gradient-to-b from-slate-800 via-slate-900 to-slate-950 p-0.5 shadow-2xl border border-slate-700/60 flex items-center justify-center">
+              <div className="w-full h-full rounded-[14px] bg-gradient-to-br from-indigo-600/20 via-slate-950 to-slate-950 flex items-center justify-center shadow-inner relative overflow-hidden">
+                <GraduationCap className="w-10 h-10 text-indigo-400 drop-shadow-[0_2px_12px_rgba(99,102,241,0.5)]" />
+                <div className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-emerald-400 border-2 border-[#060911] shadow-[0_0_8px_#10b981]" />
+              </div>
+            </div>
+          </div>
+
+          {/* Typography & Institutional Badging */}
+          <h1 className="text-2xl font-black text-white tracking-tight flex items-center justify-center gap-2">
+            MedAttend
+            <span className="text-[11px] font-bold font-mono px-2 py-0.5 rounded-lg bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+              AI
+            </span>
+          </h1>
+          <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400 mt-1">
+            Medical Student Portal
+          </p>
+
+          {/* Sleek Indeterminate Shimmer Progress Bar */}
+          <div className="mt-7 w-full max-w-[240px] flex flex-col items-center gap-3">
+            <div className="w-full h-1.5 bg-slate-900 rounded-full overflow-hidden relative border border-slate-800 shadow-inner">
+              <div className="absolute inset-y-0 w-28 bg-gradient-to-r from-transparent via-indigo-500 to-teal-300 rounded-full animate-shimmer-slide" />
+            </div>
+
+            <div className="flex items-center gap-2 text-xs text-indigo-300/90 font-medium">
+              <RefreshCw className="w-3.5 h-3.5 animate-spin text-indigo-400" />
+              <span>Synchronizing Academic Records...</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Bottom Trust Badge */}
+        <div className="relative z-10 flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-900/60 border border-slate-800/80 backdrop-blur-md text-[11px] text-slate-400 font-medium shadow-sm">
+          <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+          <span>NMC Verified • End-to-End Encrypted</span>
         </div>
       </div>
     );

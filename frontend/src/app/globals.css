@@ -52,3 +52,13 @@ svg *,
   user-select: none;
   -webkit-tap-highlight-color: transparent;
 }
+
+@keyframes shimmer-slide {
+  0% { transform: translateX(-120%); }
+  50% { transform: translateX(60%); }
+  100% { transform: translateX(220%); }
+}
+
+.animate-shimmer-slide {
+  animation: shimmer-slide 1.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
