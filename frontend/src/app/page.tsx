@@ -1,17 +1,13 @@
-import Link from "next/link";
 import { cookies } from "next/headers";
 import { Users, UserCheck, CalendarCheck, Activity, CalendarDays, TrendingUp } from "lucide-react";
 import { supabaseServer } from "@/lib/supabaseServer";
-import DownloadReportButton from "@/components/DownloadReportButton";
-import { WhatsAppDashboardButton } from "@/components/WhatsAppDashboardButton";
 import { AttendanceChart } from "@/components/AttendanceChart";
-import { decodeSessionMetadata } from "@/lib/geofence";
-import { FormattedDate } from "@/components/FormattedDate";
-import { getStartOfTodayISO, getTodayDateStr } from "@/lib/dateUtils";
+import { getStartOfTodayISO } from "@/lib/dateUtils";
 import { verifySessionToken, SESSION_COOKIE_NAME } from "@/lib/serverAuth";
-import { filterSessionsForFaculty } from "@/lib/attendanceAuth";
+import { RecentClassSessionsTable } from "@/components/RecentClassSessionsTable";
 
-export const revalidate = 0; // Dynamic rendering
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export default async function Dashboard() {
   const cookieStore = await cookies();
@@ -46,21 +42,17 @@ export default async function Dashboard() {
   const totalRegistered = totalStudents || 0;
   const todayUniqueAbsent = Math.max(0, totalRegistered - todayUniquePresent);
 
-  // Fetch Recent Sessions (fetch wider window for Faculty to capture past classes taken by them)
-  const queryLimit = isFaculty ? 80 : 10;
+  // Fetch Recent Sessions (fetch up to 80 so faculty sees all their classes)
   const { data: rawSessions } = await supabaseServer
     .from('sessions')
     .select('id, class_name, instructor_name, created_at, attendance(count)')
     .neq('class_name', '__SYSTEM_CONFIG__')
     .neq('class_name', '__GEOFENCE_CONFIG__')
     .order('created_at', { ascending: false })
-    .limit(queryLimit);
+    .limit(80);
 
-  const filteredSessions = await filterSessionsForFaculty(userSession, rawSessions || []);
-  const recentSessions = filteredSessions.slice(0, 10);
-
-  const lastClassPresent = recentSessions && recentSessions.length > 0 
-    ? ((recentSessions[0].attendance as any)?.[0]?.count || 0)
+  const lastClassPresent = rawSessions && rawSessions.length > 0 
+    ? ((rawSessions[0].attendance as any)?.[0]?.count || 0)
     : 0;
 
   // Fetch attendance for the last 7 days for the chart
@@ -107,14 +99,11 @@ export default async function Dashboard() {
   }
 
   const chartData = Array.from(last7DaysMap.values());
-  const attendanceRate = totalPresentCount + totalAbsentCount > 0 
-    ? Math.round((totalPresentCount / (totalPresentCount + totalAbsentCount)) * 100) 
-    : 0;
 
   const stats = [
     { name: "Total Students", stat: totalStudents?.toString() || "0", icon: Users, color: "text-blue-600 dark:text-blue-400", bg: "bg-blue-100 dark:bg-blue-900/30" },
     { 
-      name: isFaculty ? "Present in Your Last Class" : "Present Last Class", 
+      name: "Present Last Class", 
       stat: lastClassPresent.toString(), 
       icon: UserCheck, 
       color: "text-green-600 dark:text-green-400", 
@@ -130,9 +119,7 @@ export default async function Dashboard() {
         <div className="mb-6 sm:mb-8">
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-gray-900 dark:text-white">Dashboard Overview</h1>
           <p className="mt-1 text-xs sm:text-sm text-gray-500 dark:text-gray-400">
-            {isFaculty 
-              ? `Welcome, @${userSession?.username || "faculty"}. Monitor your live attendance and class records.` 
-              : "Monitor live attendance and system status across all campus lecture halls."}
+            Monitor live attendance records and academic lecture sessions.
           </p>
         </div>
 
@@ -155,113 +142,7 @@ export default async function Dashboard() {
 
         <AttendanceChart data={chartData} todayPresent={todayUniquePresent} todayAbsent={todayUniqueAbsent} totalStudents={totalRegistered} />
 
-        <div className="bg-white dark:bg-gray-900 shadow-sm border border-gray-100 dark:border-gray-800 rounded-xl overflow-hidden transition-colors duration-300 min-w-0 w-full">
-          <div className="p-4 sm:p-6 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
-            <div className="flex items-center gap-2 flex-wrap">
-              <CalendarDays className="w-5 h-5 text-indigo-600 dark:text-indigo-400 shrink-0" />
-              <h2 className="text-base sm:text-lg font-medium text-gray-900 dark:text-white">
-                {isFaculty
-                  ? `Recent Class Sessions (@${userSession?.username || "faculty"})`
-                  : "Recent Class Sessions"}
-              </h2>
-              {isFaculty ? (
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                  Your Classes Only
-                </span>
-              ) : (
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
-                  Campus-Wide Overview
-                </span>
-              )}
-            </div>
-            <span className="text-[11px] text-gray-400 sm:hidden">Scroll horizontally →</span>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="min-w-[650px] w-full divide-y divide-gray-200 dark:divide-gray-800">
-              <thead className="bg-gray-50 dark:bg-gray-800/50">
-                <tr>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Date & Time</th>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Subject & Lecture Hall</th>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Topic Name</th>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Attendance Count</th>
-                  <th className="px-4 sm:px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-800">
-                {recentSessions && recentSessions.length > 0 ? recentSessions.map((session: any) => {
-                  // Supabase returns count inside an array for one-to-many relationships when queried like attendance(count)
-                  const attendanceCount = (session.attendance as any)?.[0]?.count || 0;
-                  const topic = decodeSessionMetadata(session.instructor_name).topic;
-                  
-                  return (
-                    <tr key={session.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-                      <td className="px-4 sm:px-6 py-3.5 sm:py-4 whitespace-nowrap text-xs sm:text-sm text-gray-500 dark:text-gray-400">
-                        <FormattedDate date={session.created_at} />
-                      </td>
-                      <td className="px-4 sm:px-6 py-3.5 sm:py-4 whitespace-nowrap text-xs sm:text-sm font-medium text-gray-900 dark:text-white">
-                        <div className="flex flex-col">
-                          <span>{session.class_name}</span>
-                          {!isFaculty && (
-                            <span className="text-[11px] font-normal text-indigo-600 dark:text-indigo-400 mt-0.5">
-                              {(() => {
-                                const decoded = decodeSessionMetadata(session.instructor_name);
-                                return decoded.facultyUsername ? `By: @${decoded.facultyUsername}` : "By: Faculty";
-                              })()}
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-4 sm:px-6 py-3.5 sm:py-4 whitespace-nowrap text-xs sm:text-sm text-gray-500 dark:text-gray-400">
-                        {topic}
-                      </td>
-                      <td className="px-4 sm:px-6 py-3.5 sm:py-4 whitespace-nowrap text-xs sm:text-sm text-gray-500 dark:text-gray-400">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${attendanceCount > 0 ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300'}`}>
-                          {attendanceCount} Present
-                        </span>
-                      </td>
-                      <td className="px-4 sm:px-6 py-3.5 sm:py-4 whitespace-nowrap text-right text-xs sm:text-sm font-medium">
-                        <div className="flex items-center justify-end gap-2">
-                          <WhatsAppDashboardButton 
-                            sessionId={session.id} 
-                            sessionName={session.class_name} 
-                            topicName={topic}
-                          />
-                          <DownloadReportButton sessionId={session.id} sessionName={session.class_name} />
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                }) : (
-                  <tr>
-                    <td colSpan={5} className="px-6 py-12 text-center text-sm text-gray-500 dark:text-gray-400">
-                      <div className="flex flex-col items-center justify-center max-w-sm mx-auto">
-                        <div className="w-12 h-12 rounded-2xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-400 dark:text-gray-500 mb-3">
-                          <CalendarDays className="w-6 h-6" />
-                        </div>
-                        <p className="font-semibold text-gray-800 dark:text-gray-200 mb-1">
-                          {isFaculty ? "No Class Sessions Taken By You Yet" : "No recent sessions found"}
-                        </p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed mb-4">
-                          {isFaculty
-                            ? "Sessions you launch from Live Scan will appear here for monitoring and alert management."
-                            : "Start a new live scan to see session data here."}
-                        </p>
-                        {isFaculty && (
-                          <Link
-                            href="/live-scan"
-                            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs shadow-sm transition-all"
-                          >
-                            Launch Live Scan Session
-                          </Link>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <RecentClassSessionsTable initialSessions={rawSessions || []} />
       </div>
     </div>
   );
