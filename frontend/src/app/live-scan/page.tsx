@@ -20,6 +20,7 @@ import { MjpegPlayer } from "@/components/MjpegPlayer";
 import { GeofenceModal } from "@/components/GeofenceModal";
 import { ClassroomGpsModal } from "@/components/ClassroomGpsModal";
 import { WhatsAppAlertModal } from "@/components/WhatsAppAlertModal";
+import { useAuth } from "@/lib/auth";
 import {
   CampusGeofenceConfig,
   DEFAULT_GEOFENCE_CONFIG,
@@ -54,6 +55,7 @@ const DEFAULT_CAMERAS: CameraMeta[] = [
 ];
 
 export default function LiveScan() {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<"grid" | "cctv" | "ptz" | "live" | "manual">("grid");
   const [isScanning, setIsScanning] = useState(false);
 
@@ -545,7 +547,7 @@ export default function LiveScan() {
         date: today,
         start_time: now.toISOString(),
         end_time: new Date(now.getTime() + 2 * 60 * 60 * 1000).toISOString(),
-        instructor_name: encodeSessionMetadata(setupData.topic, sessionGeofence),
+        instructor_name: encodeSessionMetadata(setupData.topic, sessionGeofence, user?.username || user?.name),
         target_academic_year: targetCohort
       };
 

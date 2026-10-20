@@ -204,41 +204,76 @@ export function getUserCoordinates(
 }
 
 /**
- * Encodes GPS Geofence config inside session topic/instructor string for seamless cloud sync
+ * Encodes GPS Geofence config and faculty creator inside session topic/instructor string for seamless cloud sync
  */
-export function encodeSessionMetadata(topic: string, geofence?: CampusGeofenceConfig | null): string {
-  if (!geofence) return topic;
-  const tag = `[GPS:${geofence.latitude.toFixed(6)},${geofence.longitude.toFixed(6)},${geofence.radiusMeters},${geofence.enabled ? 1 : 0},${encodeURIComponent(geofence.campusName || "Campus")}]`;
-  return `${topic.trim()} ${tag}`.trim();
+export function encodeSessionMetadata(
+  topic: string,
+  geofence?: CampusGeofenceConfig | null,
+  facultyUsername?: string | null
+): string {
+  let res = topic ? topic.trim() : "";
+  if (geofence) {
+    const tag = `[GPS:${geofence.latitude.toFixed(6)},${geofence.longitude.toFixed(6)},${geofence.radiusMeters},${geofence.enabled ? 1 : 0},${encodeURIComponent(geofence.campusName || "Campus")}]`;
+    res = `${res} ${tag}`.trim();
+  }
+  if (facultyUsername && !res.includes("[BY:")) {
+    res = `${res} [BY:${encodeURIComponent(facultyUsername.trim())}]`.trim();
+  }
+  return res;
 }
 
 /**
- * Decodes GPS Geofence config from session topic/instructor string
+ * Decodes GPS Geofence config and faculty creator from session topic/instructor string
  */
-export function decodeSessionMetadata(rawTopicOrInstructor: string): { topic: string; geofence: CampusGeofenceConfig | null } {
+export function decodeSessionMetadata(rawTopicOrInstructor: string): {
+  topic: string;
+  geofence: CampusGeofenceConfig | null;
+  facultyUsername?: string;
+} {
   if (!rawTopicOrInstructor) return { topic: "", geofence: null };
-  const match = rawTopicOrInstructor.match(/\[GPS:([-\d.]+),([-\d.]+),(\d+),([01])(?:,([^\]]*))?\]/);
-  if (!match) {
-    return { topic: rawTopicOrInstructor.trim(), geofence: null };
-  }
-  const cleanTopic = rawTopicOrInstructor.replace(match[0], "").trim();
-  let campusName = "College Campus / Lecture Hall";
-  if (match[5]) {
+
+  let facultyUsername: string | undefined = undefined;
+  const byMatch = rawTopicOrInstructor.match(/\[BY:([^\]]+)\]/);
+  if (byMatch) {
     try {
-      campusName = decodeURIComponent(match[5]);
+      facultyUsername = decodeURIComponent(byMatch[1]);
     } catch (e) {
-      campusName = match[5];
+      facultyUsername = byMatch[1];
     }
   }
+
+  const gpsMatch = rawTopicOrInstructor.match(/\[GPS:([-\d.]+),([-\d.]+),(\d+),([01])(?:,([^\]]*))?\]/);
+
+  // Strip both tags from topic so clean text displays nicely
+  let cleanTopic = rawTopicOrInstructor;
+  if (byMatch) {
+    cleanTopic = cleanTopic.replace(byMatch[0], "").trim();
+  }
+  if (gpsMatch) {
+    cleanTopic = cleanTopic.replace(gpsMatch[0], "").trim();
+  }
+
+  let campusName = "College Campus / Lecture Hall";
+  if (gpsMatch && gpsMatch[5]) {
+    try {
+      campusName = decodeURIComponent(gpsMatch[5]);
+    } catch (e) {
+      campusName = gpsMatch[5];
+    }
+  }
+
   return {
     topic: cleanTopic || "General Lecture",
-    geofence: {
-      latitude: parseFloat(match[1]),
-      longitude: parseFloat(match[2]),
-      radiusMeters: parseInt(match[3], 10),
-      enabled: match[4] === "1",
-      campusName,
-    },
+    geofence: gpsMatch
+      ? {
+          latitude: parseFloat(gpsMatch[1]),
+          longitude: parseFloat(gpsMatch[2]),
+          radiusMeters: parseInt(gpsMatch[3], 10),
+          enabled: gpsMatch[4] === "1",
+          campusName,
+        }
+      : null,
+    facultyUsername,
   };
 }
 

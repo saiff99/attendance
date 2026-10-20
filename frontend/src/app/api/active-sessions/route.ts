@@ -1,7 +1,9 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, NextRequest } from 'next/server';
 import { supabaseServer } from '@/lib/supabaseServer';
 import { fetchBackend } from '@/lib/serverBackend';
 import { getTodayDateStr, getStartOfTodayISO } from '@/lib/dateUtils';
+import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/serverAuth';
+import { decodeSessionMetadata } from '@/lib/geofence';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,7 +29,82 @@ export function isInternalSession(s: any): boolean {
   );
 }
 
-export async function GET(request: Request) {
+/**
+ * Helper to enrich sessions with creator info and filter according to requester's role
+ */
+async function processAndFilterSessions(
+  rawSessions: any[],
+  authUser: { role: string; username: string; name?: string } | null
+): Promise<any[]> {
+  if (!rawSessions || !Array.isArray(rawSessions)) return [];
+
+  // Filter out system config rows first
+  const validSessions = rawSessions.filter((s: any) => !isInternalSession(s));
+  if (validSessions.length === 0) return [];
+
+  const sessionIds = validSessions.map((s: any) => s.id).filter(Boolean);
+
+  // Batch query audit_logs for creators of sessions lacking [BY:...] tag
+  const creatorMap: Record<string, string> = {};
+  if (sessionIds.length > 0) {
+    try {
+      const { data: auditData } = await supabaseServer
+        .from('audit_logs')
+        .select('target_id, actor_id, details')
+        .eq('action', 'START_SESSION')
+        .eq('target_type', 'session')
+        .in('target_id', sessionIds);
+
+      if (auditData) {
+        for (const row of auditData) {
+          if (row.target_id) {
+            const details = (row.details || {}) as Record<string, any>;
+            creatorMap[row.target_id] = row.actor_id || details.actor_name || details.instructor || '';
+          }
+        }
+      }
+    } catch (e) {
+      // Non-blocking fallback
+    }
+  }
+
+  // Enrich each session with creator info
+  const enriched = validSessions.map((s: any) => {
+    const rawInstructor = s.instructor_name || '';
+    const dec = decodeSessionMetadata(rawInstructor);
+    const auditCreator = creatorMap[s.id] || '';
+    const creator = dec.facultyUsername || auditCreator || '';
+
+    return {
+      ...s,
+      created_by: creator,
+    };
+  });
+
+  // If user is logged in as Faculty, filter to only their own sessions
+  if (authUser && authUser.role === 'Faculty') {
+    const facultyUser = (authUser.username || '').trim().toLowerCase();
+    const facultyName = (authUser.name || '').trim().toLowerCase();
+
+    return enriched.filter((s: any) => {
+      const cb = (s.created_by || '').trim().toLowerCase();
+      const dec = decodeSessionMetadata(s.instructor_name || '');
+      const byTag = (dec.facultyUsername || '').trim().toLowerCase();
+      const topic = (dec.topic || '').trim().toLowerCase();
+
+      return (
+        (byTag && (byTag === facultyUser || byTag === facultyName)) ||
+        (cb && (cb === facultyUser || cb === facultyName)) ||
+        (topic && (topic === facultyUser || topic === facultyName))
+      );
+    });
+  }
+
+  // Super Admin, Student, or public receives all sessions
+  return enriched;
+}
+
+export async function GET(request: NextRequest) {
   try {
     // 1. IP Rate Limiting (Max 30 requests per minute per IP)
     const forwarded = request.headers.get('x-forwarded-for') || request.headers.get('cf-connecting-ip') || 'unknown';
@@ -44,7 +121,11 @@ export async function GET(request: Request) {
     timestamps.push(nowMs);
     activeSessionsRateLimits[clientIp] = timestamps;
 
-    // 2. Try secure backend fast-path
+    // 2. Identify Authenticated User (if any)
+    const sessionCookie = request.cookies.get(SESSION_COOKIE_NAME)?.value;
+    const authUser = sessionCookie ? await verifySessionToken(sessionCookie) : null;
+
+    // 3. Try secure backend fast-path
     try {
       const res = await fetchBackend('/api/active-sessions', {
         headers: { 'ngrok-skip-browser-warning': '69420' },
@@ -54,16 +135,15 @@ export async function GET(request: Request) {
       if (res.ok) {
         const data = await res.json();
         if (data && data.sessions && Array.isArray(data.sessions)) {
-          // Strict filtering of any internal/configuration rows
-          const cleanSessions = data.sessions.filter((s: any) => !isInternalSession(s));
-          return NextResponse.json({ ...data, sessions: cleanSessions });
+          const processed = await processAndFilterSessions(data.sessions, authUser);
+          return NextResponse.json({ ...data, sessions: processed });
         }
       }
     } catch (e) {
       // Backend offline or unreachable, fall back to Supabase
     }
 
-    // 3. Query Supabase directly with strict exclusion of internal system rows
+    // 4. Query Supabase directly with strict exclusion of internal system rows
     const todayStr = getTodayDateStr();
     const startOfTodayIso = getStartOfTodayISO();
 
@@ -137,7 +217,8 @@ export async function GET(request: Request) {
       };
     });
 
-    return NextResponse.json({ success: true, sessions });
+    const processed = await processAndFilterSessions(sessions, authUser);
+    return NextResponse.json({ success: true, sessions: processed });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message, sessions: [] }, { status: 500 });
   }

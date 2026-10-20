@@ -1,6 +1,7 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { supabaseServer } from '@/lib/supabaseServer';
 import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/serverAuth';
+import { isFacultyAuthorizedForSession } from '@/lib/attendanceAuth';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,6 +39,16 @@ export async function GET(
       return NextResponse.json({ success: false, error: 'Session not found.' }, { status: 404 });
     }
 
+    if (session.role === 'Faculty') {
+      const authorized = await isFacultyAuthorizedForSession(session, data);
+      if (!authorized) {
+        return NextResponse.json(
+          { success: false, error: "Forbidden. You do not have permission to view another faculty member's session." },
+          { status: 403 }
+        );
+      }
+    }
+
     return NextResponse.json({
       success: true,
       session: data,
@@ -67,6 +78,21 @@ export async function PATCH(
     }
 
     const { id } = await params;
+    if (session.role === 'Faculty') {
+      const { data: existing } = await supabaseServer
+        .from('sessions')
+        .select('id, instructor_name, class_name')
+        .eq('id', id)
+        .maybeSingle();
+
+      if (!existing || !(await isFacultyAuthorizedForSession(session, existing))) {
+        return NextResponse.json(
+          { success: false, error: "Forbidden. You do not have permission to modify another faculty member's session." },
+          { status: 403 }
+        );
+      }
+    }
+
     const body = await request.json();
 
     const updatePayload: any = {};

@@ -3,6 +3,8 @@ import { supabaseServer } from '@/lib/supabaseServer';
 import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/serverAuth';
 import { logAuditEvent } from '@/lib/auditLog';
 
+import { decodeSessionMetadata } from '@/lib/geofence';
+
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
@@ -36,9 +38,22 @@ export async function GET(request: NextRequest) {
 
     if (error) throw error;
 
+    let filteredSessions = data || [];
+    if (session.role === 'Faculty') {
+      const u = (session.username || '').toLowerCase();
+      const n = (session.name || '').toLowerCase();
+      filteredSessions = filteredSessions.filter((s: any) => {
+        const raw = s.instructor_name || '';
+        const dec = decodeSessionMetadata(raw);
+        const fac = (dec.facultyUsername || '').toLowerCase();
+        const top = (dec.topic || '').toLowerCase();
+        return (fac && (fac === u || fac === n)) || (top && (top === u || top === n));
+      });
+    }
+
     return NextResponse.json({
       success: true,
-      sessions: data || [],
+      sessions: filteredSessions,
     });
   } catch (err: any) {
     console.error('Error fetching sessions:', err);
@@ -67,12 +82,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Class / Subject name is required.' }, { status: 400 });
     }
 
+    let finalInstructor = (body.instructor_name || '').trim();
+    const facultyUsername = (session.username || session.name || '').trim();
+    if (facultyUsername && !finalInstructor.includes('[BY:')) {
+      finalInstructor = `${finalInstructor} [BY:${encodeURIComponent(facultyUsername)}]`.trim();
+    }
+
     const newSession = {
       class_name: className,
       date: body.date,
       start_time: body.start_time,
       end_time: body.end_time,
-      instructor_name: body.instructor_name,
+      instructor_name: finalInstructor,
       target_academic_year: body.target_academic_year,
     };
 

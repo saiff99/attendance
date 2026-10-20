@@ -139,14 +139,13 @@ export async function isFacultyAuthorizedForSession(
 
   // Check if instructor_name matches directly
   if (rawInstructor) {
-    const { topic } = decodeSessionMetadata(rawInstructor);
-    const cleanInstructor = (topic || rawInstructor).trim().toLowerCase();
-
+    const { topic, facultyUsername } = decodeSessionMetadata(rawInstructor);
     if (
-      (userUsername && cleanInstructor === userUsername) ||
-      (userName && cleanInstructor === userName) ||
-      (userUsername && cleanInstructor.includes(userUsername)) ||
-      (userName && cleanInstructor.includes(userName))
+      (facultyUsername && (facultyUsername.toLowerCase() === userUsername || facultyUsername.toLowerCase() === userName)) ||
+      (userUsername && topic.toLowerCase() === userUsername) ||
+      (userName && topic.toLowerCase() === userName) ||
+      (userUsername && topic.toLowerCase().includes(userUsername)) ||
+      (userName && topic.toLowerCase().includes(userName))
     ) {
       return true;
     }

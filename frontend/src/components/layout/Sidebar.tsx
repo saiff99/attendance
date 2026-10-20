@@ -7,6 +7,7 @@ import { LayoutDashboard, ScanLine, Radio, Users, FileBarChart, Activity, Menu, 
 import { SystemHealth } from "@/components/SystemHealth";
 import { useAuth } from "@/lib/auth";
 import { useTheme } from "next-themes";
+import { decodeSessionMetadata } from "@/lib/geofence";
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
@@ -52,7 +53,18 @@ export default function Sidebar() {
           });
           if (res.ok) {
             const data = await res.json();
-            const activeList = (data.sessions || []).filter((s: any) => !s.is_expired && s.remaining_seconds > 0);
+            let activeList = (data.sessions || []).filter((s: any) => !s.is_expired && s.remaining_seconds > 0);
+            if (user?.role === "Faculty") {
+              const u = (user.username || "").toLowerCase();
+              const n = (user.name || "").toLowerCase();
+              activeList = activeList.filter((s: any) => {
+                const cb = (s.created_by || "").toLowerCase();
+                const dec = decodeSessionMetadata(s.instructor_name || "");
+                const byTag = (dec.facultyUsername || "").toLowerCase();
+                const topic = (dec.topic || "").toLowerCase();
+                return (byTag && (byTag === u || byTag === n)) || (cb && (cb === u || cb === n)) || (topic && (topic === u || topic === n));
+              });
+            }
             setOngoingCount(activeList.length);
           }
         } catch (e) {
@@ -71,7 +83,7 @@ export default function Sidebar() {
       window.removeEventListener("storage", checkActive);
       clearInterval(interval);
     };
-  }, []);
+  }, [user?.role, user?.username, user?.name]);
 
   return (
     <>

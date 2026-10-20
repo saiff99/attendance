@@ -14,6 +14,7 @@ import { getBackendUrl } from "@/lib/api";
 import { decodeSessionMetadata } from "@/lib/geofence";
 import { QRCodeSVG } from "qrcode.react";
 import { getTodayDateStr, getStartOfTodayISO } from "@/lib/dateUtils";
+import { useAuth } from "@/lib/auth";
 
 interface ActiveSessionItem {
   id: string;
@@ -32,6 +33,7 @@ interface ActiveSessionItem {
 
 export default function OngoingSessionsPage() {
   const router = useRouter();
+  const { user, isLoading: isAuthLoading } = useAuth();
   const [sessions, setSessions] = useState<ActiveSessionItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -51,7 +53,29 @@ export default function OngoingSessionsPage() {
         const data = await res.json();
         if (data && data.sessions && Array.isArray(data.sessions)) {
           // Filter strictly for sessions that are NOT expired (remaining_seconds > 0)
-          const activeOnly = data.sessions.filter((s: ActiveSessionItem) => !s.is_expired && s.remaining_seconds > 0);
+          let activeOnly = data.sessions.filter((s: ActiveSessionItem) => !s.is_expired && s.remaining_seconds > 0);
+
+          // Client-side faculty isolation guard
+          if (user?.role === "Faculty") {
+            const u = (user.username || "").toLowerCase();
+            const n = (user.name || "").toLowerCase();
+            const localActive = typeof window !== "undefined" ? localStorage.getItem("medattend_active_session_id") : null;
+
+            activeOnly = activeOnly.filter((s: ActiveSessionItem) => {
+              const cb = ((s as any).created_by || "").toLowerCase();
+              const dec = decodeSessionMetadata(s.instructor_name || "");
+              const byTag = (dec.facultyUsername || "").toLowerCase();
+              const topic = (dec.topic || "").toLowerCase();
+
+              return (
+                s.id === localActive ||
+                (byTag && (byTag === u || byTag === n)) ||
+                (cb && (cb === u || cb === n)) ||
+                (topic && (topic === u || topic === n))
+              );
+            });
+          }
+
           setSessions(activeOnly);
           return;
         }
@@ -62,7 +86,7 @@ export default function OngoingSessionsPage() {
       setIsLoading(false);
       if (!silent) setIsRefreshing(false);
     }
-  }, []);
+  }, [user?.role, user?.username, user?.name]);
 
   useEffect(() => {
     fetchActiveSessions();
@@ -173,10 +197,24 @@ export default function OngoingSessionsPage() {
                     {sessions.length} Live
                   </span>
                 )}
+                {user?.role === "Super Admin" && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
+                    <ShieldCheck className="w-3 h-3" />
+                    Admin View (All Faculties)
+                  </span>
+                )}
+                {user?.role === "Faculty" && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                    <Users className="w-3 h-3" />
+                    Faculty View ({user.name || user.username})
+                  </span>
+                )}
               </h1>
             </div>
             <p className="text-xs sm:text-sm text-gray-500 dark:text-slate-400">
-              Real-time monitoring of all live 5-minute attendance sessions currently active across lecture halls.
+              {user?.role === "Faculty"
+                ? "Real-time monitoring of your active 5-minute attendance sessions currently accepting student check-ins."
+                : "Real-time monitoring of all live 5-minute attendance sessions currently active across lecture halls."}
             </p>
           </div>
 
@@ -212,11 +250,22 @@ export default function OngoingSessionsPage() {
               <Radio className="w-8 h-8 sm:w-10 sm:h-10 opacity-60" />
             </div>
             <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white mb-2">
-              No Active Sessions Running
+              {user?.role === "Faculty" ? "You Have No Active Sessions" : "No Active Sessions Running"}
             </h2>
-            <p className="text-xs sm:text-sm text-gray-500 dark:text-slate-400 max-w-md leading-relaxed">
-              Attendance sessions automatically conclude and vanish from this view once their 5-minute active window elapses. All attendance logs are safely stored in reports.
+            <p className="text-xs sm:text-sm text-gray-500 dark:text-slate-400 max-w-md leading-relaxed mb-6">
+              {user?.role === "Faculty"
+                ? "Attendance sessions you launch from Live Scan will appear here during their active 5-minute check-in window."
+                : "Attendance sessions automatically conclude and vanish from this view once their 5-minute active window elapses. All attendance logs are safely stored in reports."}
             </p>
+            {user?.role === "Faculty" && (
+              <Link
+                href="/live-scan"
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs shadow-md shadow-indigo-600/20 transition-all cursor-pointer"
+              >
+                <Camera className="w-4 h-4" />
+                <span>Start New Session in Live Scan</span>
+              </Link>
+            )}
           </div>
         ) : (
           /* Active Sessions Grid */
@@ -281,9 +330,20 @@ export default function OngoingSessionsPage() {
 
                     {/* Meta info list */}
                     <div className="space-y-2 text-xs text-gray-600 dark:text-slate-300 mb-5 bg-gray-50/70 dark:bg-slate-950/60 rounded-xl p-3 border border-gray-100 dark:border-slate-800/80">
+                      {user?.role === "Super Admin" && (
+                        <div className="flex items-center justify-between pb-1.5 border-b border-gray-100 dark:border-slate-800/80">
+                          <span className="text-gray-400 dark:text-slate-500 flex items-center gap-1 font-medium">
+                            <ShieldCheck className="w-3.5 h-3.5 text-indigo-500" /> Host Faculty:
+                          </span>
+                          <span className="font-semibold text-indigo-600 dark:text-indigo-400 truncate max-w-[170px]">
+                            {(session as any).created_by || decoded.facultyUsername || "Faculty"}
+                          </span>
+                        </div>
+                      )}
+
                       <div className="flex items-center justify-between">
                         <span className="text-gray-400 dark:text-slate-500 flex items-center gap-1">
-                          <Users className="w-3.5 h-3.5" /> Topic / Faculty:
+                          <Users className="w-3.5 h-3.5" /> Topic / Subject:
                         </span>
                         <span className="font-semibold text-gray-800 dark:text-slate-200 truncate max-w-[180px]">
                           {decoded.topic || "Regular Lecture"}
