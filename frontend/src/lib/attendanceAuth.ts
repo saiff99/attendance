@@ -127,8 +127,8 @@ export async function isFacultyAuthorizedForSession(
   sessionUser: { role: string; username: string; name?: string },
   sessionData: { id: string; instructor_name?: string | null; class_name?: string }
 ): Promise<boolean> {
-  // 1. Super Admin is omnipotent across all sessions
-  if (sessionUser.role === 'Super Admin') return true;
+  // 1. Super Admin and Admin are omnipotent across all sessions
+  if (sessionUser.role === 'Super Admin' || sessionUser.role === 'Admin') return true;
 
   // 2. Only Faculty can access faculty-authorized actions
   if (sessionUser.role !== 'Faculty') return false;
@@ -191,7 +191,7 @@ export async function filterSessionsForFaculty<
   sessionUser: { role: string; username: string; name?: string } | null,
   sessions: T[]
 ): Promise<T[]> {
-  if (!sessionUser || sessionUser.role === 'Super Admin') {
+  if (!sessionUser || sessionUser.role === 'Super Admin' || sessionUser.role === 'Admin') {
     return sessions;
   }
   if (sessionUser.role !== 'Faculty') {

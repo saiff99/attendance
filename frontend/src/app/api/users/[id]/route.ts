@@ -15,9 +15,9 @@ export async function PATCH(
     }
 
     const session = await verifySessionToken(sessionCookie);
-    if (!session || session.role !== 'Super Admin') {
+    if (!session || (session.role !== 'Super Admin' && session.role !== 'Admin')) {
       return NextResponse.json(
-        { success: false, error: 'Forbidden. Super Admin access required.' },
+        { success: false, error: 'Forbidden. Administrator privileges required.' },
         { status: 403 }
       );
     }
@@ -30,15 +30,58 @@ export async function PATCH(
       );
     }
 
+    // Fetch target user to check permissions
+    const { data: targetUser, error: fetchErr } = await supabaseServer
+      .from('app_users')
+      .select('id, username, full_name, role')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (fetchErr || !targetUser) {
+      return NextResponse.json(
+        { success: false, error: 'Target user not found.' },
+        { status: 404 }
+      );
+    }
+
+    // Guardrail: Admins can ONLY modify Faculty accounts (cannot edit Super Admin or another Admin)
+    if (session.role === 'Admin') {
+      if (targetUser.role === 'Super Admin' || targetUser.role === 'Admin') {
+        return NextResponse.json(
+          { success: false, error: 'Forbidden. Admins can only modify Faculty accounts.' },
+          { status: 403 }
+        );
+      }
+    }
+
     const body = await request.json();
     const updatePayload: any = {};
 
     if (body.full_name !== undefined) updatePayload.full_name = body.full_name.trim();
     if (body.department !== undefined) updatePayload.department = body.department.trim();
     if (body.email !== undefined) updatePayload.email = body.email ? body.email.trim().toLowerCase() : null;
+    
     if (body.role !== undefined) {
-      updatePayload.role = body.role === 'Super Admin' ? 'Super Admin' : 'Faculty';
+      if (session.role === 'Admin') {
+        if (body.role !== 'Faculty') {
+          return NextResponse.json(
+            { success: false, error: 'Forbidden. Admins cannot change roles to Admin or Super Admin.' },
+            { status: 403 }
+          );
+        }
+        updatePayload.role = 'Faculty';
+      } else {
+        // Super Admin can assign Super Admin, Admin, or Faculty
+        if (body.role === 'Super Admin') {
+          updatePayload.role = 'Super Admin';
+        } else if (body.role === 'Admin') {
+          updatePayload.role = 'Admin';
+        } else {
+          updatePayload.role = 'Faculty';
+        }
+      }
     }
+
     if (body.is_active !== undefined) {
       updatePayload.is_active = Boolean(body.is_active);
     }
@@ -97,9 +140,9 @@ export async function DELETE(
     }
 
     const session = await verifySessionToken(sessionCookie);
-    if (!session || session.role !== 'Super Admin') {
+    if (!session || (session.role !== 'Super Admin' && session.role !== 'Admin')) {
       return NextResponse.json(
-        { success: false, error: 'Forbidden. Super Admin access required.' },
+        { success: false, error: 'Forbidden. Administrator privileges required.' },
         { status: 403 }
       );
     }
@@ -112,18 +155,35 @@ export async function DELETE(
       );
     }
 
-    // Fetch user to verify they are not deleting themselves
+    // Fetch user to verify they are not deleting themselves and check permissions
     const { data: targetUser } = await supabaseServer
       .from('app_users')
-      .select('id, username, full_name')
+      .select('id, username, full_name, role')
       .eq('id', id)
       .single();
 
-    if (targetUser && targetUser.username.toLowerCase() === session.username.toLowerCase()) {
+    if (!targetUser) {
+      return NextResponse.json(
+        { success: false, error: 'User not found.' },
+        { status: 404 }
+      );
+    }
+
+    if (targetUser.username.toLowerCase() === session.username.toLowerCase()) {
       return NextResponse.json(
         { success: false, error: 'You cannot delete your own active administrator account.' },
         { status: 400 }
       );
+    }
+
+    // Guardrail: Admins can ONLY delete Faculty accounts
+    if (session.role === 'Admin') {
+      if (targetUser.role === 'Super Admin' || targetUser.role === 'Admin') {
+        return NextResponse.json(
+          { success: false, error: 'Forbidden. Admins can only delete Faculty accounts.' },
+          { status: 403 }
+        );
+      }
     }
 
     const { error } = await supabaseServer

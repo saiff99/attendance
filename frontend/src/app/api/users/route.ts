@@ -12,9 +12,9 @@ export async function GET(request: NextRequest) {
     }
 
     const session = await verifySessionToken(sessionCookie);
-    if (!session || session.role !== 'Super Admin') {
+    if (!session || (session.role !== 'Super Admin' && session.role !== 'Admin')) {
       return NextResponse.json(
-        { success: false, error: 'Forbidden. Super Admin access required.' },
+        { success: false, error: 'Forbidden. Admin or Super Admin access required.' },
         { status: 403 }
       );
     }
@@ -60,9 +60,9 @@ export async function POST(request: NextRequest) {
     }
 
     const session = await verifySessionToken(sessionCookie);
-    if (!session || session.role !== 'Super Admin') {
+    if (!session || (session.role !== 'Super Admin' && session.role !== 'Admin')) {
       return NextResponse.json(
-        { success: false, error: 'Forbidden. Only Super Admin can create accounts.' },
+        { success: false, error: 'Forbidden. Administrator privileges required.' },
         { status: 403 }
       );
     }
@@ -72,8 +72,29 @@ export async function POST(request: NextRequest) {
     const fullName = (body.full_name || '').trim();
     const email = body.email ? body.email.trim().toLowerCase() : null;
     const password = (body.password || '').trim();
-    const role = (body.role === 'Super Admin' ? 'Super Admin' : 'Faculty') as 'Super Admin' | 'Faculty';
     const department = (body.department || '').trim();
+
+    // Strict Role Authorization:
+    // 1. Admin can ONLY create Faculty accounts.
+    // 2. Super Admin can create Super Admin, Admin, or Faculty accounts.
+    let role: 'Super Admin' | 'Admin' | 'Faculty' = 'Faculty';
+    if (session.role === 'Admin') {
+      if (body.role && body.role !== 'Faculty') {
+        return NextResponse.json(
+          { success: false, error: 'Forbidden. Admins can only create Faculty accounts.' },
+          { status: 403 }
+        );
+      }
+      role = 'Faculty';
+    } else if (session.role === 'Super Admin') {
+      if (body.role === 'Super Admin') {
+        role = 'Super Admin';
+      } else if (body.role === 'Admin') {
+        role = 'Admin';
+      } else {
+        role = 'Faculty';
+      }
+    }
 
     if (!username || username.length < 3) {
       return NextResponse.json(

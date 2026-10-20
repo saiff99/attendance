@@ -16,7 +16,7 @@ interface AppUser {
   username: string;
   full_name: string;
   email?: string;
-  role: "Super Admin" | "Faculty";
+  role: "Super Admin" | "Admin" | "Faculty";
   department?: string;
   is_active: boolean;
   created_at: string;
@@ -45,7 +45,7 @@ export default function UsersManagementPage() {
     full_name: "",
     email: "",
     department: "",
-    role: "Faculty" as "Super Admin" | "Faculty",
+    role: "Faculty" as "Super Admin" | "Admin" | "Faculty",
     password: "",
   });
   const [resetPasswordValue, setResetPasswordValue] = useState("");
@@ -66,9 +66,9 @@ export default function UsersManagementPage() {
   const [isSubjectSubmitting, setIsSubjectSubmitting] = useState(false);
   const [subjectError, setSubjectError] = useState<string | null>(null);
 
-  // Role Gate: Super Admin only
+  // Role Gate: Super Admin & Admin allowed
   useEffect(() => {
-    if (!isAuthLoading && currentUser && currentUser.role !== "Super Admin") {
+    if (!isAuthLoading && currentUser && currentUser.role !== "Super Admin" && currentUser.role !== "Admin") {
       router.push("/");
     }
   }, [currentUser, isAuthLoading, router]);
@@ -108,7 +108,7 @@ export default function UsersManagementPage() {
   };
 
   useEffect(() => {
-    if (currentUser?.role === "Super Admin") {
+    if (currentUser?.role === "Super Admin" || currentUser?.role === "Admin") {
       fetchUsers();
       fetchSubjects();
     }
@@ -319,9 +319,10 @@ export default function UsersManagementPage() {
   const summary = useMemo(() => {
     const total = users.length;
     const facultyCount = users.filter(u => u.role === "Faculty").length;
-    const adminCount = users.filter(u => u.role === "Super Admin").length;
+    const adminCount = users.filter(u => u.role === "Admin").length;
+    const superAdminCount = users.filter(u => u.role === "Super Admin").length;
     const activeCount = users.filter(u => u.is_active).length;
-    return { total, facultyCount, adminCount, activeCount };
+    return { total, facultyCount, adminCount, superAdminCount, activeCount };
   }, [users]);
 
   if (isAuthLoading) {
@@ -335,7 +336,7 @@ export default function UsersManagementPage() {
     );
   }
 
-  if (currentUser?.role !== "Super Admin") {
+  if (currentUser?.role !== "Super Admin" && currentUser?.role !== "Admin") {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-950 p-6">
         <div className="max-w-md w-full bg-white dark:bg-gray-900 border border-rose-200 dark:border-rose-900/50 rounded-2xl p-6 text-center shadow-lg">
@@ -467,8 +468,8 @@ export default function UsersManagementPage() {
               {[
                 { label: "Total Staff Accounts", value: summary.total, icon: Users, bg: "bg-blue-50 dark:bg-blue-900/20", ring: "border-blue-100 dark:border-blue-900/40", iconColor: "text-blue-600 dark:text-blue-400" },
                 { label: "Teaching Faculty", value: summary.facultyCount, icon: GraduationCap, bg: "bg-emerald-50 dark:bg-emerald-900/20", ring: "border-emerald-100 dark:border-emerald-900/40", iconColor: "text-emerald-600 dark:text-emerald-400" },
-                { label: "Super Administrators", value: summary.adminCount, icon: Shield, bg: "bg-purple-50 dark:bg-purple-900/20", ring: "border-purple-100 dark:border-purple-900/40", iconColor: "text-purple-600 dark:text-purple-400" },
-                { label: "Active Logins", value: summary.activeCount, icon: UserCheck, bg: "bg-teal-50 dark:bg-teal-900/20", ring: "border-teal-100 dark:border-teal-900/40", iconColor: "text-teal-600 dark:text-teal-400" },
+                { label: "Administrators", value: summary.adminCount, icon: Shield, bg: "bg-indigo-50 dark:bg-indigo-900/20", ring: "border-indigo-100 dark:border-indigo-900/40", iconColor: "text-indigo-600 dark:text-indigo-400" },
+                { label: "Super Admins", value: summary.superAdminCount, icon: ShieldAlert, bg: "bg-purple-50 dark:bg-purple-900/20", ring: "border-purple-100 dark:border-purple-900/40", iconColor: "text-purple-600 dark:text-purple-400" },
               ].map(card => (
                 <div key={card.label} className={`rounded-2xl bg-white dark:bg-gray-900 border ${card.ring} shadow-sm p-4 sm:p-5 flex items-center gap-3.5 transition-colors`}>
                   <div className={`p-2.5 sm:p-3 rounded-xl ${card.bg} shrink-0`}>
@@ -497,7 +498,7 @@ export default function UsersManagementPage() {
                 />
               </div>
               <div className="flex items-center gap-1.5 flex-wrap">
-                {["all", "Faculty", "Super Admin"].map(role => (
+                {["all", "Faculty", "Admin", "Super Admin"].map(role => (
                   <button
                     key={role}
                     onClick={() => setRoleFilter(role)}
@@ -603,6 +604,8 @@ export default function UsersManagementPage() {
                               <span
                                 className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${userItem.role === "Super Admin"
                                     ? "bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800"
+                                    : userItem.role === "Admin"
+                                    ? "bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800"
                                     : "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
                                   }`}
                               >
@@ -915,7 +918,10 @@ export default function UsersManagementPage() {
                         className="w-full px-3 py-2 rounded-xl text-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-400 focus:outline-none"
                       >
                         <option value="Faculty">Faculty (Can conduct attendance sessions)</option>
-                        <option value="Super Admin">Super Admin (Full administrative access)</option>
+                        <option value="Admin">Admin (Attendance records, edit & manual mark)</option>
+                        {currentUser?.role === "Super Admin" && (
+                          <option value="Super Admin">Super Admin (Full administrative access)</option>
+                        )}
                       </select>
                     </div>
 

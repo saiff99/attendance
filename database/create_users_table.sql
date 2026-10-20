@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS app_users (
     full_name VARCHAR(255) NOT NULL,
     email VARCHAR(255) UNIQUE,
     password_hash TEXT NOT NULL,
-    role VARCHAR(50) DEFAULT 'Faculty' CHECK (role IN ('Super Admin', 'Faculty')),
+    role VARCHAR(50) DEFAULT 'Faculty' CHECK (role IN ('Super Admin', 'Admin', 'Faculty')),
     department VARCHAR(100),
     is_active BOOLEAN DEFAULT true,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,

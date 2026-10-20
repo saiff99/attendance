@@ -58,7 +58,7 @@ export async function POST(request: Request) {
     let authUser = {
       username,
       name: '',
-      role: 'Faculty' as 'Super Admin' | 'Faculty' | 'Student',
+      role: 'Faculty' as 'Super Admin' | 'Admin' | 'Faculty' | 'Student',
       department: '',
       studentId: undefined as string | undefined,
       studentRoll: undefined as string | undefined,
@@ -89,7 +89,7 @@ export async function POST(request: Request) {
             authUser = {
               username: dbUser.username,
               name: dbUser.full_name,
-              role: dbUser.role as 'Super Admin' | 'Faculty',
+              role: dbUser.role as 'Super Admin' | 'Admin' | 'Faculty',
               department: dbUser.department || '',
               studentId: undefined,
               studentRoll: undefined,

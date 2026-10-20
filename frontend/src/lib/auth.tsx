@@ -6,7 +6,7 @@ import { useRouter, usePathname } from "next/navigation";
 export interface AuthUser {
   username: string;
   name: string;
-  role: "Super Admin" | "Faculty" | "Student";
+  role: "Super Admin" | "Admin" | "Faculty" | "Student";
   department?: string;
   studentId?: string;
   studentRoll?: string;

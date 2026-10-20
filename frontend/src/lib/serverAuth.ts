@@ -12,7 +12,7 @@ export const SESSION_COOKIE_NAME = 'medattend_session';
 export interface SessionPayload {
   username: string;
   name: string;
-  role: 'Super Admin' | 'Faculty' | 'Student';
+  role: 'Super Admin' | 'Admin' | 'Faculty' | 'Student';
   department?: string;
   studentId?: string;
   studentRoll?: string;
@@ -151,7 +151,7 @@ export async function getSessionFromRequest(request: Request | any): Promise<Ses
  */
 export async function requireRoles(
   request: Request | any,
-  allowedRoles: ('Super Admin' | 'Faculty' | 'Student')[]
+  allowedRoles: ('Super Admin' | 'Admin' | 'Faculty' | 'Student')[]
 ): Promise<{ user: SessionPayload; errorResponse?: never } | { user?: never; errorResponse: any }> {
   const session = await getSessionFromRequest(request);
   if (!session) {
