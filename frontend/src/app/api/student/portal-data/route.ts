@@ -27,8 +27,8 @@ export async function GET(request: NextRequest) {
     let student: any = null;
     let stuErr: any = null;
 
-    // 1. If Super Admin or Faculty explicitly requested a specific student roll
-    if ((session.role === 'Super Admin' || session.role === 'Faculty') && requestedRoll) {
+    // 1. If Super Admin, Admin or Faculty explicitly requested a specific student roll
+    if ((session.role === 'Super Admin' || session.role === 'Admin' || session.role === 'Faculty') && requestedRoll) {
       const cleanReqRoll = requestedRoll.trim();
       const res = await supabaseServer
         .from('students')
@@ -61,8 +61,8 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // 3. Fallback for Super Admin or Faculty browsing /portal without query param: pick first enrolled student
-    if (!student && (session.role === 'Super Admin' || session.role === 'Faculty')) {
+    // 3. Fallback for Super Admin, Admin or Faculty browsing /portal without query param: pick first enrolled student
+    if (!student && (session.role === 'Super Admin' || session.role === 'Admin' || session.role === 'Faculty')) {
       const res = await supabaseServer
         .from('students')
         .select('id, student_roll, full_name, email, academic_year, face_encoding, portal_pin, portal_password_hash, created_at')
@@ -88,9 +88,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Student not found in registry.' }, { status: 404 });
     }
 
-    // Fetch list of students if viewer is Super Admin or Faculty for interactive switcher
+    // Fetch list of students if viewer is Super Admin, Admin or Faculty for interactive switcher
     let adminStudentList: { roll: string; name: string; year: string }[] = [];
-    if (session.role === 'Super Admin' || session.role === 'Faculty') {
+    if (session.role === 'Super Admin' || session.role === 'Admin' || session.role === 'Faculty') {
       const { data: stList } = await supabaseServer
         .from('students')
         .select('student_roll, full_name, academic_year')

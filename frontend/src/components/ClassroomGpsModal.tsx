@@ -283,10 +283,10 @@ export function ClassroomGpsModal({
                 <Navigation className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
                 <span>Tips to resolve:</span>
               </p>
-              <ul className="list-disc list-inside space-y-0.5 text-[11px] text-amber-700 dark:text-amber-300/90 pl-1">
+              <ul className="list-disc list-inside space-y-1 text-[11px] text-amber-700 dark:text-amber-300/90 pl-1">
                 <li>Make sure location permission is set to <strong>"Allow"</strong> in your browser settings.</li>
-                <li>Ensure device location/GPS is switched on.</li>
-                <li>If indoors, move closer to a window for satellite visibility.</li>
+                <li><strong>On Mac (macOS):</strong> Open  <strong>System Settings &gt; Privacy &amp; Security &gt; Location Services</strong>, and ensure both <strong>Location Services</strong> and <strong>Google Chrome</strong> are toggled <strong>ON</strong>.</li>
+                <li>Ensure <strong>Wi-Fi is turned ON</strong> (Macs locate themselves using Wi-Fi networks).</li>
               </ul>
             </div>
 

@@ -197,7 +197,7 @@ export default function OngoingSessionsPage() {
                     {sessions.length} Live
                   </span>
                 )}
-                {user?.role === "Super Admin" && (
+                {(user?.role === "Super Admin" || user?.role === "Admin") && (
                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
                     <ShieldCheck className="w-3 h-3" />
                     Admin View (All Faculties)
@@ -330,7 +330,7 @@ export default function OngoingSessionsPage() {
 
                     {/* Meta info list */}
                     <div className="space-y-2 text-xs text-gray-600 dark:text-slate-300 mb-5 bg-gray-50/70 dark:bg-slate-950/60 rounded-xl p-3 border border-gray-100 dark:border-slate-800/80">
-                      {user?.role === "Super Admin" && (
+                      {(user?.role === "Super Admin" || user?.role === "Admin") && (
                         <div className="flex items-center justify-between pb-1.5 border-b border-gray-100 dark:border-slate-800/80">
                           <span className="text-gray-400 dark:text-slate-500 flex items-center gap-1 font-medium">
                             <ShieldCheck className="w-3.5 h-3.5 text-indigo-500" /> Host Faculty:

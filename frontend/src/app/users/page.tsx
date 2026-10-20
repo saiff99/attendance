@@ -6,7 +6,7 @@ import {
   Users, UserPlus, Shield, KeyRound, Search, RefreshCw, CheckCircle2,
   XCircle, MoreHorizontal, Trash2, Power, AlertTriangle, Eye, EyeOff,
   Sparkles, Lock, GraduationCap, Building2, UserCheck, ShieldAlert,
-  BookOpen, Plus
+  BookOpen, Plus, UserX
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { AcademicSubject, ACADEMIC_YEARS, DEFAULT_MBBS_SUBJECTS } from "@/lib/academicSubjects";
@@ -33,6 +33,7 @@ export default function UsersManagementPage() {
   const [tableReady, setTableReady] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [roleFilter, setRoleFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
 
   // Modal states
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -313,8 +314,11 @@ export default function UsersManagementPage() {
     if (roleFilter !== "all") {
       list = list.filter(u => u.role === roleFilter);
     }
+    if (statusFilter !== "all") {
+      list = list.filter(u => statusFilter === "active" ? u.is_active : !u.is_active);
+    }
     return list;
-  }, [users, searchTerm, roleFilter]);
+  }, [users, searchTerm, roleFilter, statusFilter]);
 
   const summary = useMemo(() => {
     const total = users.length;
@@ -322,7 +326,9 @@ export default function UsersManagementPage() {
     const adminCount = users.filter(u => u.role === "Admin").length;
     const superAdminCount = users.filter(u => u.role === "Super Admin").length;
     const activeCount = users.filter(u => u.is_active).length;
-    return { total, facultyCount, adminCount, superAdminCount, activeCount };
+    const inactiveCount = users.filter(u => !u.is_active).length;
+    const departmentsCount = new Set(users.map(u => u.department).filter(Boolean)).size;
+    return { total, facultyCount, adminCount, superAdminCount, activeCount, inactiveCount, departmentsCount };
   }, [users]);
 
   if (isAuthLoading) {
@@ -345,7 +351,7 @@ export default function UsersManagementPage() {
           </div>
           <h2 className="text-lg font-bold text-gray-900 dark:text-white">Restricted Access</h2>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 mb-5">
-            Faculty management is restricted to Super Administrators.
+            Faculty and staff management is restricted to authorized administrators.
           </p>
           <button
             onClick={() => router.push("/")}
@@ -402,7 +408,7 @@ export default function UsersManagementPage() {
                 : "border-transparent text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
               }`}
           >
-            <Users className="w-4 h-4" /> Faculty & Staff Accounts ({users.length})
+            <Users className="w-4 h-4" /> {currentUser?.role === "Admin" ? "Faculty Accounts" : "Faculty & Staff Accounts"} ({users.length})
           </button>
           <button
             type="button"
@@ -426,12 +432,19 @@ export default function UsersManagementPage() {
                   <div className="p-2 bg-indigo-100 dark:bg-indigo-900/40 rounded-xl">
                     <Users className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
                   </div>
-                  <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-gray-900 dark:text-white">
-                    Faculty & Staff Directory
+                  <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-gray-900 dark:text-white flex items-center gap-2">
+                    {currentUser?.role === "Admin" ? "Faculty Directory" : "Faculty & Staff Directory"}
+                    {currentUser?.role === "Admin" && (
+                      <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                        Admin Scope
+                      </span>
+                    )}
                   </h1>
                 </div>
                 <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 ml-11">
-                  Create and manage teaching faculty accounts, credentials, and access roles.
+                  {currentUser?.role === "Admin"
+                    ? "Create and manage teaching faculty accounts, credentials, and access."
+                    : "Create and manage teaching faculty, administrator accounts, credentials, and access roles."}
                 </p>
               </div>
 
@@ -458,19 +471,27 @@ export default function UsersManagementPage() {
                   }}
                   className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white transition-all shadow-sm shadow-indigo-200 dark:shadow-none"
                 >
-                  <UserPlus className="w-3.5 h-3.5" /> Add New Faculty
+                  <UserPlus className="w-3.5 h-3.5" /> {currentUser?.role === "Admin" ? "Add New Faculty" : "Add New Account"}
                 </button>
               </div>
             </div>
 
             {/* Summary Metric Cards */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-6">
-              {[
-                { label: "Total Staff Accounts", value: summary.total, icon: Users, bg: "bg-blue-50 dark:bg-blue-900/20", ring: "border-blue-100 dark:border-blue-900/40", iconColor: "text-blue-600 dark:text-blue-400" },
-                { label: "Teaching Faculty", value: summary.facultyCount, icon: GraduationCap, bg: "bg-emerald-50 dark:bg-emerald-900/20", ring: "border-emerald-100 dark:border-emerald-900/40", iconColor: "text-emerald-600 dark:text-emerald-400" },
-                { label: "Administrators", value: summary.adminCount, icon: Shield, bg: "bg-indigo-50 dark:bg-indigo-900/20", ring: "border-indigo-100 dark:border-indigo-900/40", iconColor: "text-indigo-600 dark:text-indigo-400" },
-                { label: "Super Admins", value: summary.superAdminCount, icon: ShieldAlert, bg: "bg-purple-50 dark:bg-purple-900/20", ring: "border-purple-100 dark:border-purple-900/40", iconColor: "text-purple-600 dark:text-purple-400" },
-              ].map(card => (
+              {(currentUser?.role === "Admin"
+                ? [
+                    { label: "Teaching Faculty", value: summary.facultyCount, icon: GraduationCap, bg: "bg-emerald-50 dark:bg-emerald-900/20", ring: "border-emerald-100 dark:border-emerald-900/40", iconColor: "text-emerald-600 dark:text-emerald-400" },
+                    { label: "Active Faculty", value: summary.activeCount, icon: UserCheck, bg: "bg-teal-50 dark:bg-teal-900/20", ring: "border-teal-100 dark:border-teal-900/40", iconColor: "text-teal-600 dark:text-teal-400" },
+                    { label: "Disabled Accounts", value: summary.inactiveCount, icon: UserX, bg: "bg-rose-50 dark:bg-rose-900/20", ring: "border-rose-100 dark:border-rose-900/40", iconColor: "text-rose-600 dark:text-rose-400" },
+                    { label: "Departments", value: summary.departmentsCount, icon: Building2, bg: "bg-indigo-50 dark:bg-indigo-900/20", ring: "border-indigo-100 dark:border-indigo-900/40", iconColor: "text-indigo-600 dark:text-indigo-400" },
+                  ]
+                : [
+                    { label: "Total Staff Accounts", value: summary.total, icon: Users, bg: "bg-blue-50 dark:bg-blue-900/20", ring: "border-blue-100 dark:border-blue-900/40", iconColor: "text-blue-600 dark:text-blue-400" },
+                    { label: "Teaching Faculty", value: summary.facultyCount, icon: GraduationCap, bg: "bg-emerald-50 dark:bg-emerald-900/20", ring: "border-emerald-100 dark:border-emerald-900/40", iconColor: "text-emerald-600 dark:text-emerald-400" },
+                    { label: "Administrators", value: summary.adminCount, icon: Shield, bg: "bg-indigo-50 dark:bg-indigo-900/20", ring: "border-indigo-100 dark:border-indigo-900/40", iconColor: "text-indigo-600 dark:text-indigo-400" },
+                    { label: "Super Admins", value: summary.superAdminCount, icon: ShieldAlert, bg: "bg-purple-50 dark:bg-purple-900/20", ring: "border-purple-100 dark:border-purple-900/40", iconColor: "text-purple-600 dark:text-purple-400" },
+                  ]
+              ).map(card => (
                 <div key={card.label} className={`rounded-2xl bg-white dark:bg-gray-900 border ${card.ring} shadow-sm p-4 sm:p-5 flex items-center gap-3.5 transition-colors`}>
                   <div className={`p-2.5 sm:p-3 rounded-xl ${card.bg} shrink-0`}>
                     <card.icon className={`w-5 h-5 sm:w-6 sm:h-6 ${card.iconColor}`} />
@@ -497,20 +518,42 @@ export default function UsersManagementPage() {
                   className="w-full pl-9 pr-4 py-2.5 rounded-xl text-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-400 transition-all"
                 />
               </div>
-              <div className="flex items-center gap-1.5 flex-wrap">
-                {["all", "Faculty", "Admin", "Super Admin"].map(role => (
-                  <button
-                    key={role}
-                    onClick={() => setRoleFilter(role)}
-                    className={`px-3 py-2 rounded-xl text-xs font-semibold capitalize transition-all whitespace-nowrap ${roleFilter === role
-                        ? "bg-indigo-600 text-white shadow-sm"
-                        : "bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700 hover:border-gray-300"
-                      }`}
-                  >
-                    {role === "all" ? "All Roles" : role}
-                  </button>
-                ))}
-              </div>
+
+              {currentUser?.role === "Super Admin" ? (
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {["all", "Faculty", "Admin", "Super Admin"].map(role => (
+                    <button
+                      key={role}
+                      onClick={() => setRoleFilter(role)}
+                      className={`px-3 py-2 rounded-xl text-xs font-semibold capitalize transition-all whitespace-nowrap ${roleFilter === role
+                          ? "bg-indigo-600 text-white shadow-sm"
+                          : "bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700 hover:border-gray-300"
+                        }`}
+                    >
+                      {role === "all" ? "All Roles" : role}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {[
+                    { id: "all", label: "All Faculty" },
+                    { id: "active", label: `Active (${summary.activeCount})` },
+                    { id: "inactive", label: `Disabled (${summary.inactiveCount})` },
+                  ].map(tab => (
+                    <button
+                      key={tab.id}
+                      onClick={() => setStatusFilter(tab.id)}
+                      className={`px-3 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap ${statusFilter === tab.id
+                          ? "bg-indigo-600 text-white shadow-sm"
+                          : "bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700 hover:border-gray-300"
+                        }`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Users Table */}
@@ -520,7 +563,7 @@ export default function UsersManagementPage() {
                   <thead>
                     <tr className="bg-gray-50 dark:bg-gray-800/60 border-b border-gray-100 dark:border-gray-800">
                       <th className="px-4 py-3 text-left text-[10px] sm:text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Staff Member
+                        {currentUser?.role === "Admin" ? "Faculty Member" : "Staff Member"}
                       </th>
                       <th className="px-4 py-3 text-left text-[10px] sm:text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                         Login ID
@@ -705,20 +748,26 @@ export default function UsersManagementPage() {
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${subjectsLoading ? "animate-spin" : ""}`} /> Refresh
                 </button>
-                <button
-                  onClick={() => {
-                    setSubjectError(null);
-                    setNewSubject({
-                      academic_year: selectedYearTab === "All" ? "1st Year" : selectedYearTab,
-                      name: "",
-                      code: "",
-                    });
-                    setIsAddSubjectModalOpen(true);
-                  }}
-                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white transition-all shadow-sm shadow-indigo-200 dark:shadow-none"
-                >
-                  <Plus className="w-3.5 h-3.5" /> Add New Subject
-                </button>
+                {currentUser?.role === "Super Admin" ? (
+                  <button
+                    onClick={() => {
+                      setSubjectError(null);
+                      setNewSubject({
+                        academic_year: selectedYearTab === "All" ? "1st Year" : selectedYearTab,
+                        name: "",
+                        code: "",
+                      });
+                      setIsAddSubjectModalOpen(true);
+                    }}
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white transition-all shadow-sm shadow-indigo-200 dark:shadow-none"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Add New Subject
+                  </button>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                    <Shield className="w-3 h-3 text-amber-500" /> Curriculum Reference (Super Admin Managed)
+                  </span>
+                )}
               </div>
             </div>
 
@@ -766,22 +815,24 @@ export default function UsersManagementPage() {
                         </span>
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSubjectError(null);
-                          setNewSubject({ academic_year: yearName, name: "", code: "" });
-                          setIsAddSubjectModalOpen(true);
-                        }}
-                        className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"
-                      >
-                        <Plus className="w-3.5 h-3.5" /> Add Subject to {yearName}
-                      </button>
+                      {currentUser?.role === "Super Admin" && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSubjectError(null);
+                            setNewSubject({ academic_year: yearName, name: "", code: "" });
+                            setIsAddSubjectModalOpen(true);
+                          }}
+                          className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"
+                        >
+                          <Plus className="w-3.5 h-3.5" /> Add Subject to {yearName}
+                        </button>
+                      )}
                     </div>
 
                     {yearSubjects.length === 0 ? (
                       <div className="py-8 text-center text-xs text-gray-400 dark:text-gray-500">
-                        No subjects configured for {yearName}. Click "Add Subject" to configure curriculum.
+                        No subjects configured for {yearName}.
                       </div>
                     ) : (
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -805,28 +856,34 @@ export default function UsersManagementPage() {
                               </span>
                             </div>
 
-                            <div className="flex items-center gap-1 shrink-0">
-                              <button
-                                type="button"
-                                onClick={() => handleToggleSubjectActive(sub)}
-                                title={sub.is_active ? "Deactivate Subject" : "Activate Subject"}
-                                className={`p-1.5 rounded-lg transition-colors ${
-                                  sub.is_active
-                                    ? "text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
-                                    : "text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
-                                }`}
-                              >
-                                <Power className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteSubject(sub)}
-                                title="Delete Subject"
-                                className="p-1.5 rounded-lg text-gray-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
+                            {currentUser?.role === "Super Admin" ? (
+                              <div className="flex items-center gap-1 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleSubjectActive(sub)}
+                                  title={sub.is_active ? "Deactivate Subject" : "Activate Subject"}
+                                  className={`p-1.5 rounded-lg transition-colors ${
+                                    sub.is_active
+                                      ? "text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
+                                      : "text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
+                                  }`}
+                                >
+                                  <Power className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteSubject(sub)}
+                                  title="Delete Subject"
+                                  className="p-1.5 rounded-lg text-gray-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            ) : (
+                              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${sub.is_active ? "bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300" : "bg-gray-100 dark:bg-gray-800 text-gray-400"}`}>
+                                {sub.is_active ? "Active" : "Disabled"}
+                              </span>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -847,7 +904,9 @@ export default function UsersManagementPage() {
                       <div className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400">
                         <UserPlus className="w-5 h-5" />
                       </div>
-                      <h3 className="text-lg font-bold text-gray-900 dark:text-white">Add New Faculty</h3>
+                      <h3 className="text-lg font-bold text-gray-900 dark:text-white">
+                        {currentUser?.role === "Admin" ? "Add New Faculty" : "Add Staff / Faculty Account"}
+                      </h3>
                     </div>
                     <button
                       onClick={() => setIsAddModalOpen(false)}
@@ -912,17 +971,32 @@ export default function UsersManagementPage() {
                       <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                         Role & Permissions
                       </label>
-                      <select
-                        value={newUser.role}
-                        onChange={e => setNewUser({ ...newUser, role: e.target.value as any })}
-                        className="w-full px-3 py-2 rounded-xl text-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-400 focus:outline-none"
-                      >
-                        <option value="Faculty">Faculty (Can conduct attendance sessions)</option>
-                        <option value="Admin">Admin (Attendance records, edit & manual mark)</option>
-                        {currentUser?.role === "Super Admin" && (
+                      {currentUser?.role === "Admin" ? (
+                        <div className="px-3 py-2 rounded-xl text-sm border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60 text-gray-700 dark:text-gray-300 flex items-center justify-between">
+                          <span className="flex items-center gap-2 text-xs font-semibold">
+                            <GraduationCap className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                            Faculty (Can conduct attendance sessions)
+                          </span>
+                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                            Fixed Role
+                          </span>
+                        </div>
+                      ) : (
+                        <select
+                          value={newUser.role}
+                          onChange={e => setNewUser({ ...newUser, role: e.target.value as any })}
+                          className="w-full px-3 py-2 rounded-xl text-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-400 focus:outline-none"
+                        >
+                          <option value="Faculty">Faculty (Can conduct attendance sessions)</option>
+                          <option value="Admin">Admin (Attendance records, edit & manual mark)</option>
                           <option value="Super Admin">Super Admin (Full administrative access)</option>
-                        )}
-                      </select>
+                        </select>
+                      )}
+                      {currentUser?.role === "Admin" && (
+                        <p className="text-[10px] text-gray-400 mt-1">
+                          Admins can only provision Teaching Faculty accounts.
+                        </p>
+                      )}
                     </div>
 
                     <div>

@@ -20,10 +20,18 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch dynamic users from Supabase
-    const { data: dbUsers, error } = await supabaseServer
+    let query = supabaseServer
       .from('app_users')
       .select('id, username, full_name, email, role, department, is_active, created_at, last_login')
       .order('created_at', { ascending: false });
+
+    // Zero-Trust Role Scoping: Admins can ONLY see Teaching Faculty members.
+    // Super Admins and other Admins are strictly isolated and never returned.
+    if (session.role === 'Admin') {
+      query = query.eq('role', 'Faculty');
+    }
+
+    const { data: dbUsers, error } = await query;
 
     if (error) {
       // If table doesn't exist yet in Supabase (PGRST205)

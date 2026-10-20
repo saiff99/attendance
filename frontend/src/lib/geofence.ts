@@ -78,17 +78,61 @@ export function getCalibratedHighPrecisionGPS(
     let watchId: number | null = null;
     let completed = false;
 
-    const finish = () => {
+    const fallbackToStandardAccuracy = () => {
       if (completed) return;
-      completed = true;
       if (watchId !== null) {
         navigator.geolocation.clearWatch(watchId);
+        watchId = null;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          if (completed) return;
+          completed = true;
+          resolve({
+            latitude: parseFloat(pos.coords.latitude.toFixed(6)),
+            longitude: parseFloat(pos.coords.longitude.toFixed(6)),
+            accuracy: Math.round(pos.coords.accuracy || 25),
+          });
+        },
+        (err) => {
+          if (completed) return;
+          completed = true;
+          let msg = "Could not access location.";
+          switch (err.code) {
+            case err.PERMISSION_DENIED:
+              msg = "Location permission was denied. Please allow location access in your browser settings and macOS System Settings > Privacy & Security > Location Services.";
+              break;
+            case err.POSITION_UNAVAILABLE:
+              msg = "Location information is unavailable. On Mac: Please ensure Wi-Fi is ON and Chrome is allowed in System Settings > Privacy & Security > Location Services.";
+              break;
+            case err.TIMEOUT:
+              msg = "Location request timed out. Please check your connection and try again.";
+              break;
+          }
+          reject(new Error(msg));
+        },
+        {
+          enableHighAccuracy: false,
+          timeout: 6000,
+          maximumAge: 120000,
+        }
+      );
+    };
+
+    const finish = () => {
+      if (completed) return;
+      if (watchId !== null) {
+        navigator.geolocation.clearWatch(watchId);
+        watchId = null;
       }
 
       if (samples.length === 0) {
-        reject(new Error("Could not acquire accurate GPS signal. Please ensure location is enabled."));
+        fallbackToStandardAccuracy();
         return;
       }
+
+      completed = true;
 
       // Sort samples by accuracy (ascending: smaller error radius is better)
       samples.sort((a, b) => a.accuracy - b.accuracy);
@@ -132,22 +176,10 @@ export function getCalibratedHighPrecisionGPS(
         }
       },
       (error) => {
+        // If high accuracy watchPosition reports POSITION_UNAVAILABLE or error, fallback to standard accuracy
         if (samples.length === 0) {
           clearTimeout(timer);
-          if (watchId !== null) navigator.geolocation.clearWatch(watchId);
-          let msg = "Could not access location.";
-          switch (error.code) {
-            case error.PERMISSION_DENIED:
-              msg = "Location permission was denied. Please allow location access in your browser settings.";
-              break;
-            case error.POSITION_UNAVAILABLE:
-              msg = "Location information is unavailable. Please check your device GPS.";
-              break;
-            case error.TIMEOUT:
-              msg = "Location request timed out. Please try again.";
-              break;
-          }
-          reject(new Error(msg));
+          fallbackToStandardAccuracy();
         }
       },
       {
@@ -180,23 +212,40 @@ export function getUserCoordinates(
         });
       },
       (error) => {
-        let msg = "Could not access location.";
-        switch (error.code) {
-          case error.PERMISSION_DENIED:
-            msg = "Location permission was denied. Please allow location access in your browser settings to verify attendance.";
-            break;
-          case error.POSITION_UNAVAILABLE:
-            msg = "Location information is unavailable. Please check your device GPS.";
-            break;
-          case error.TIMEOUT:
-            msg = "Location request timed out. Please try again.";
-            break;
-        }
-        reject(new Error(msg));
+        // If high accuracy fails, gracefully try standard accuracy
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            resolve({
+              latitude: pos.coords.latitude,
+              longitude: pos.coords.longitude,
+              accuracy: pos.coords.accuracy,
+            });
+          },
+          (err) => {
+            let msg = "Could not access location.";
+            switch (err.code) {
+              case err.PERMISSION_DENIED:
+                msg = "Location permission was denied. Please allow location access in your browser settings and macOS System Settings > Privacy & Security > Location Services.";
+                break;
+              case err.POSITION_UNAVAILABLE:
+                msg = "Location information is unavailable. On Mac: Please ensure Wi-Fi is ON and Chrome is allowed in System Settings > Privacy & Security > Location Services.";
+                break;
+              case err.TIMEOUT:
+                msg = "Location request timed out. Please try again.";
+                break;
+            }
+            reject(new Error(msg));
+          },
+          {
+            enableHighAccuracy: false,
+            timeout: timeoutMs,
+            maximumAge: 120000,
+          }
+        );
       },
       {
         enableHighAccuracy: true,
-        timeout: timeoutMs,
+        timeout: Math.floor(timeoutMs / 2),
         maximumAge: 0,
       }
     );

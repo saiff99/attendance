@@ -183,7 +183,9 @@ export default function Sidebar() {
                   )}
                   aria-hidden="true"
                 />
-                <span className="flex-1 truncate">{item.name}</span>
+                <span className="flex-1 truncate">
+                  {item.href === "/users" && user?.role === "Admin" ? "Faculty Directory" : item.name}
+                </span>
                 {isOngoing && ongoingCount > 0 && (
                   <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500 text-white animate-pulse shadow-sm shadow-rose-500/50 shrink-0 ml-2">
                     <span className="w-1.5 h-1.5 rounded-full bg-white mr-1" />
