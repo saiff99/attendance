@@ -454,14 +454,10 @@ export default function StudentPortalPage() {
                       Biometrics Registered
                     </span>
                   ) : (
-                    <button
-                      type="button"
-                      onClick={() => setIsFaceModalOpen(true)}
-                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30 hover:bg-amber-500/25 transition-all cursor-pointer shadow-sm group"
-                    >
-                      <AlertTriangle className="w-3.5 h-3.5 text-amber-400 animate-pulse group-hover:scale-110 transition-transform" />
-                      Biometrics Pending • Click to Register
-                    </button>
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20 shadow-sm">
+                      <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                      Biometrics Pending
+                    </span>
                   )}
                 </div>
               </div>
