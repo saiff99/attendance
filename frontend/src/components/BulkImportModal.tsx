@@ -230,7 +230,7 @@ export function BulkImportModal({
       { header: "Full Name", key: "name", width: 25 },
       { header: "Academic Year", key: "year", width: 18 },
       { header: "Group", key: "group", width: 15 },
-      { header: "Parent WhatsApp", key: "phone", width: 20 },
+      { header: "WhatsApp", key: "phone", width: 20 },
     ];
 
     sampleData.forEach((row) => worksheet.addRow(row));

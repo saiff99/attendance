@@ -72,10 +72,10 @@ export function StudentProfileModal({ student, isOpen, onClose }: StudentProfile
                 className="mt-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-semibold hover:bg-emerald-100 transition-colors"
                 title="Chat with Parent on WhatsApp"
               >
-                <span>📱 Parent WA: {formatPhoneDisplay(getParentPhone(student))}</span>
+                <span>📱 WhatsApp: {formatPhoneDisplay(getParentPhone(student))}</span>
               </a>
             ) : (
-              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1 italic">No Parent WhatsApp Registered</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1 italic">No WhatsApp Registered</p>
             )}
           </div>
 

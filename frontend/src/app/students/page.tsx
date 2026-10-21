@@ -395,7 +395,7 @@ export default function StudentDirectory() {
       alert("No students to export.");
       return;
     }
-    const headers = ["Roll Number", "Full Name", "Academic Year", "Parent WhatsApp", "Face Data Status"];
+    const headers = ["Roll Number", "Full Name", "Academic Year", "WhatsApp", "Face Data Status"];
     const rows = listToExport.map(s => [
       `"${s.student_roll || ''}"`,
       `"${s.full_name || ''}"`,
@@ -712,7 +712,7 @@ export default function StudentDirectory() {
                         </div>
                       </th>
                       <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900 dark:text-gray-300">
-                        Parent WhatsApp
+                        WhatsApp
                       </th>
                       <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900 dark:text-gray-300">
                         Face Data
@@ -1101,7 +1101,7 @@ export default function StudentDirectory() {
                 </div>
                 <div>
                   <label htmlFor="parent_phone" className="block text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center justify-between">
-                    <span>Parent WhatsApp Number</span>
+                    <span>WhatsApp Number</span>
                     <span className="text-[11px] text-emerald-500 font-normal">Optional</span>
                   </label>
                   <div className="relative mt-1">
