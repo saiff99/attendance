@@ -275,11 +275,11 @@ export async function GET(request: NextRequest) {
       ? Math.round((totalPresent / totalApplicableClasses) * 1000) / 10
       : 0;
 
-    let overallStatus: 'Eligible' | 'Borderline' | 'At Risk' = 'Eligible';
+    let overallStatus: 'Eligible' | 'Borderline' | 'Risk' = 'Eligible';
     if (totalApplicableClasses > 0) {
       if (overallRate >= 75) overallStatus = 'Eligible';
       else if (overallRate >= 65) overallStatus = 'Borderline';
-      else overallStatus = 'At Risk';
+      else overallStatus = 'Risk';
     }
 
     // 6. Recent Session Attendance Logs (Strictly Last 7 Days)

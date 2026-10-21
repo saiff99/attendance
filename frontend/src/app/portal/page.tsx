@@ -53,7 +53,7 @@ interface PortalData {
     present: number;
     absent: number;
     percentage: number;
-    status: "Eligible" | "Borderline" | "At Risk";
+    status: "Eligible" | "Borderline" | "Risk" | "At Risk";
     isExamEligible: boolean;
   };
   subjects: SubjectRow[];
@@ -558,16 +558,16 @@ export default function StudentPortalPage() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
           {/* Card 1: Overall Percentage */}
           <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl relative overflow-hidden">
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center justify-between gap-1.5 mb-2">
               <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Overall Rate</span>
-              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap shrink-0 ${
                 summary.percentage >= 75
                   ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
                   : summary.percentage >= 65
                   ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
                   : "bg-rose-500/20 text-rose-300 border border-rose-500/30"
               }`}>
-                {summary.status}
+                {summary.status === "At Risk" ? "Risk" : summary.status}
               </span>
             </div>
             <div className="text-2xl sm:text-3xl font-black text-white tracking-tight">

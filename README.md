@@ -241,7 +241,7 @@ MedAttend features a comprehensive three-tier hierarchy for institutional staff,
 Designed specifically for MBBS and academic curriculum tracking:
 - **7-Day Recent Class Attendance Log**: Displays verified sessions from the last 7 calendar days with verification mode badges (`Live CCTV AI Scan` or `GPS Mobile Selfie`).
 - **Curriculum Performance Breakdown**: Subject-wise statistics (Total Classes, Present, Absent, Attendance Percentage, and Health Status: Good / Borderline / Low).
-- **NMC Examination Eligibility**: Real-time feedback on examination eligibility (Eligible $\ge 75\%$, Borderline $65\%\text{--}74\%$, At Risk $< 65\%$).
+- **NMC Examination Eligibility**: Real-time feedback on examination eligibility (Eligible $\ge 75\%$, Borderline $65\%\text{--}74\%$, Risk $< 65\%$).
 - **Centered Security PIN Modal**: Self-service 6-digit PIN reset dialog with instant validation and secure random generation.
 - **Biometric Enrolled Status**: Real-time indicator displaying registered facial vector readiness.
 - **Elevated Faculty Viewer**: Administrators and Faculty can search and inspect student profiles with strict privacy compliance.
