@@ -275,7 +275,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
         } else {
           setGeofenceStatus("blocked");
           setGeofenceErrorMessage(
-            `Location Boundary Rejection: You are ${formatDistance(dist)} away from the classroom/campus (${effectiveGeofence.campusName}). Allowed radius is ${effectiveGeofence.radiusMeters}m. Attendance cannot be submitted from home or hostel.`
+            "Location Verification Failed: Physical presence inside the lecture hall is required to record attendance."
           );
           setGpsFixStatus("");
           return false;
@@ -529,7 +529,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
     // If geofence protection is enabled, the camera can NEVER open unless geofenceStatus is explicitly verified and allowed!
     if (effectiveGeofence.enabled) {
       if (geofenceStatus === "blocked") {
-        setLookupError(geofenceErrorMessage || `Location Boundary Rejection: You are outside the allowed ${effectiveGeofence.radiusMeters}m classroom boundary. Camera access is blocked.`);
+        setLookupError(geofenceErrorMessage || "Location Verification Failed: Physical presence inside the lecture hall is required.");
         return;
       }
       if (geofenceStatus === "permission_error") {
@@ -539,7 +539,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
       if (geofenceStatus !== "allowed") {
         const allowed = await verifyUserLocation();
         if (!allowed) {
-          setLookupError(geofenceErrorMessage || `Location Boundary Rejection: You are outside the allowed ${effectiveGeofence.radiusMeters}m classroom boundary. Camera access is blocked.`);
+          setLookupError(geofenceErrorMessage || "Location Verification Failed: Physical presence inside the lecture hall is required.");
           return;
         }
       }
@@ -758,7 +758,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
     if (effectiveGeofence.enabled && geofenceStatus !== "allowed") {
       setResultData({
         success: false,
-        message: geofenceErrorMessage || `Location Boundary Rejection: You must be physically inside ${effectiveGeofence.campusName} (${effectiveGeofence.radiusMeters}m radius) to record attendance.`,
+        message: geofenceErrorMessage || "Location Verification Failed: You must be physically inside the lecture hall to record attendance.",
       });
       setStep("result");
       return;
@@ -1062,18 +1062,6 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                     </div>
                   )}
 
-                  {/* Location Alert on Session List */}
-                  {effectiveGeofence.enabled && geofenceStatus === "blocked" && (
-                    <div className="flex items-center gap-2.5 p-3 rounded-xl bg-rose-950/60 border border-rose-500/40 text-xs text-rose-200 animate-in fade-in">
-                      <MapPin className="w-4 h-4 text-rose-400 shrink-0" />
-                      <div className="min-w-0">
-                        <span className="font-bold text-white block">Outside Campus Boundary</span>
-                        <span className="text-[11px] text-rose-300/80 block">
-                          You are currently outside the classroom area ({geofenceDistance !== null ? `${formatDistance(geofenceDistance)} away` : "out of range"}). Attendance requires physical presence inside the lecture hall.
-                        </span>
-                      </div>
-                    </div>
-                  )}
 
                   {displayedSessions.map((sess) => {
                     const remSec = getSessionRemainingSeconds(sess);
@@ -1428,17 +1416,14 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
 
                           {geofenceStatus === "allowed" && (
                             <p className="text-[11px] text-emerald-200/90 leading-relaxed">
-                              ✅ Physical location verified! You are inside <strong>{effectiveGeofence.campusName}</strong> ({geofenceDistance !== null ? `${formatDistance(geofenceDistance)} from center` : "within range"}).
+                              ✅ Physical location verified! You are inside the lecture hall.
                             </p>
                           )}
 
                           {geofenceStatus === "blocked" && (
                             <div className="space-y-1">
                               <p className="text-[11px] text-rose-200 leading-relaxed font-medium">
-                                ⛔ {geofenceErrorMessage || `You are outside the allowed ${effectiveGeofence.radiusMeters}m classroom radius.`}
-                              </p>
-                              <p className="text-[10px] text-rose-300/80">
-                                Proxy attendance from home or hostel is prevented by GPS geofencing.
+                                ⛔ {geofenceErrorMessage || "Location Verification Failed: Physical presence inside the lecture hall is required."}
                               </p>
                             </div>
                           )}
@@ -1451,7 +1436,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
 
                           {geofenceStatus === "idle" && (
                             <p className="text-[11px] text-slate-400">
-                              GPS check verifies you are within {effectiveGeofence.radiusMeters}m of {effectiveGeofence.campusName}.
+                              GPS check verifies your presence in the lecture hall.
                             </p>
                           )}
                         </div>
@@ -1493,18 +1478,15 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                         </button>
                       ) : (
                         <div className="flex flex-col gap-2 mt-1">
-                          {/* Explicit Warning Banner when Outside Classroom Boundary */}
+                          {/* Explicit Warning Banner when Location Verification Fails */}
                           {effectiveGeofence.enabled && geofenceStatus === "blocked" && (
                             <div className="p-3.5 rounded-xl bg-rose-950/70 border border-rose-500/50 text-rose-200 flex flex-col gap-1.5 shadow-lg shadow-rose-950/30 animate-in fade-in">
                               <div className="flex items-center gap-2 text-rose-300 font-bold text-xs">
                                 <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0" />
-                                <span>Camera Access Blocked • Outside Campus Boundary</span>
+                                <span>Camera Access Blocked • Location Not Verified</span>
                               </div>
                               <p className="text-xs text-rose-100 font-medium leading-relaxed">
-                                {geofenceErrorMessage || `You are outside the ${effectiveGeofence.radiusMeters}m boundary of ${effectiveGeofence.campusName}.`}
-                              </p>
-                              <p className="text-[11px] text-rose-300/80">
-                                The selfie camera cannot be opened from outside campus. You must be physically inside the lecture hall to take selfie attendance.
+                                {geofenceErrorMessage || "Physical presence inside the lecture hall could not be confirmed. Attendance requires you to be inside the classroom."}
                               </p>
                             </div>
                           )}
