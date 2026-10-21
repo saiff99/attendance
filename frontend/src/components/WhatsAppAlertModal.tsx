@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { getParentPhone, formatPhoneDisplay } from "@/lib/studentContact";
 import { isCohortMatching } from "@/lib/cohort";
+import { SessionWhatsAppAlertMeta } from "@/lib/geofence";
 
 interface WhatsAppAlertModalProps {
   isOpen: boolean;
@@ -26,6 +27,23 @@ interface WhatsAppAlertModalProps {
   sessionId: string;
   sessionName?: string;
   topicName?: string;
+  initialAlertMeta?: SessionWhatsAppAlertMeta | null;
+  onAlertSuccess?: (meta: SessionWhatsAppAlertMeta) => void;
+}
+
+function formatAlertDate(dateStr?: string): string {
+  if (!dateStr) return "recently";
+  try {
+    const d = new Date(dateStr);
+    return d.toLocaleDateString("en-GB", {
+      day: "numeric",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return dateStr;
+  }
 }
 
 export function WhatsAppAlertModal({
@@ -34,6 +52,8 @@ export function WhatsAppAlertModal({
   sessionId,
   sessionName = "Class Session",
   topicName = "General Lecture",
+  initialAlertMeta = null,
+  onAlertSuccess,
 }: WhatsAppAlertModalProps) {
   // Session Absentees State
   const [loading, setLoading] = useState(true);
@@ -41,6 +61,15 @@ export function WhatsAppAlertModal({
   const [presentCount, setPresentCount] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
   const [markingStudentId, setMarkingStudentId] = useState<string | null>(null);
+
+  // WhatsApp Alert Tracking State
+  const [alertMeta, setAlertMeta] = useState<SessionWhatsAppAlertMeta | null>(initialAlertMeta);
+
+  useEffect(() => {
+    if (initialAlertMeta) {
+      setAlertMeta(initialAlertMeta);
+    }
+  }, [initialAlertMeta]);
 
   // WhatsApp Web Multi-Device Connection State
   const [connectionStatus, setConnectionStatus] = useState<
@@ -214,6 +243,13 @@ export function WhatsAppAlertModal({
       return;
     }
 
+    if (alertMeta?.sent) {
+      const confirmResend = window.confirm(
+        `Notice: WhatsApp absentee notices were already dispatched for this session on ${formatAlertDate(alertMeta.sentAt)} (${alertMeta.sentCount} delivered).\n\nDo you want to send another batch notice to the ${absenteesWithPhone.length} absent student(s)?`
+      );
+      if (!confirmResend) return;
+    }
+
     setIsSending(true);
     setJobProgress(null);
 
@@ -262,6 +298,34 @@ export function WhatsAppAlertModal({
           if (data.status === "completed" || data.status === "failed") {
             if (jobPollRef.current) clearInterval(jobPollRef.current);
             setIsSending(false);
+
+            if (data.status === "completed") {
+              const sentCount = data.sent_count ?? 0;
+              const completedAt = data.completedAt || new Date().toISOString();
+              const newMeta: SessionWhatsAppAlertMeta = {
+                sent: true,
+                sentCount,
+                sentAt: completedAt,
+              };
+              setAlertMeta(newMeta);
+              if (onAlertSuccess) {
+                onAlertSuccess(newMeta);
+              }
+
+              // Persist status to Supabase via API
+              try {
+                fetch("/api/whatsapp/record-alert-status", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    sessionId,
+                    sessionName,
+                    sentCount,
+                    completedAt,
+                  }),
+                }).catch((e) => console.warn("Failed to record alert status:", e));
+              } catch {}
+            }
           }
         }
       } catch (err) {
@@ -505,6 +569,26 @@ export function WhatsAppAlertModal({
             </div>
           ) : (
             <>
+              {/* WhatsApp Alerts Already Dispatched Banner */}
+              {alertMeta?.sent && (
+                <div className="rounded-xl border border-emerald-500/40 bg-emerald-950/40 p-3.5 flex items-start gap-3 w-full shadow-inner animate-in fade-in duration-300">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-300 shrink-0 mt-0.5">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                  </div>
+                  <div className="flex-1 text-xs min-w-0">
+                    <div className="font-bold text-emerald-300 flex items-center justify-between flex-wrap gap-1">
+                      <span>WhatsApp Absentee Alerts Already Dispatched</span>
+                      <span className="text-[11px] font-mono text-emerald-400/90 font-normal">
+                        {formatAlertDate(alertMeta.sentAt)}
+                      </span>
+                    </div>
+                    <p className="text-slate-300 text-[11px] mt-1 leading-relaxed">
+                      This lecture session is marked as notified ({alertMeta.sentCount} absentee notices delivered). If you need to re-notify absent students, you can dispatch again below.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {/* Stats Overview Banner */}
               <div className="grid grid-cols-3 gap-2 sm:gap-3 w-full min-w-0">
                 <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800/80 min-w-0">
@@ -763,6 +847,10 @@ export function WhatsAppAlertModal({
               ) : connectionStatus !== "connected" ? (
                 <>
                   <QrCode className="w-4 h-4" /> <span>Scan QR to Send ({absenteesWithPhone.length})</span>
+                </>
+              ) : alertMeta?.sent ? (
+                <>
+                  <Send className="w-4 h-4 text-emerald-300" /> <span>Resend WhatsApp Alerts ({absenteesWithPhone.length})</span>
                 </>
               ) : (
                 <>

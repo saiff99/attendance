@@ -48,10 +48,10 @@ def extract_parent_phone(student: dict) -> str:
 
 
 def decode_session_topic(raw_instructor: str) -> str:
-    """Strips GPS metadata and extracts clean topic name for WhatsApp notices."""
+    """Strips GPS, creator, and WhatsApp metadata to extract clean topic name for WhatsApp notices."""
     if not raw_instructor:
         return "General Medical Lecture"
-    cleaned = re.sub(r"\[GPS:[^\]]*\]", "", str(raw_instructor)).strip()
+    cleaned = re.sub(r"\[(GPS|BY|WA):[^\]]*\]", "", str(raw_instructor)).strip()
     if "::" in cleaned:
         parts = [p.strip() for p in cleaned.split("::") if p.strip()]
         if len(parts) >= 2:
@@ -219,17 +219,67 @@ def send_session_absentee_alerts(session_id: str, async_mode: bool = True) -> di
         return {"success": False, "error": f"Failed to dispatch to WhatsApp service: {str(e)}"}
 
 
+def mark_session_whatsapp_completed(session_id: str, sent_count: int, completed_at: str = None) -> bool:
+    """
+    Tags the session in Supabase with [WA:<sent_count>:<timestamp>] and logs to audit_logs.
+    """
+    if not supabase or not session_id:
+        return False
+    try:
+        sess_res = supabase.table("sessions").select("instructor_name, class_name").eq("id", str(session_id).strip()).execute()
+        if not sess_res.data:
+            return False
+        curr_instr = sess_res.data[0].get("instructor_name") or ""
+        ts = completed_at or datetime.now().isoformat()
+        new_tag = f"[WA:{sent_count}:{ts}]"
+
+        if "[WA:" in curr_instr:
+            updated_instr = re.sub(r"\[WA:[^\]]*\]", new_tag, curr_instr)
+        else:
+            updated_instr = f"{curr_instr.strip()} {new_tag}".strip()
+
+        supabase.table("sessions").update({"instructor_name": updated_instr}).eq("id", str(session_id).strip()).execute()
+
+        try:
+            supabase.table("audit_logs").insert({
+                "actor_id": "whatsapp_service",
+                "action": "WHATSAPP_ABSENTEE_ALERTS",
+                "target_type": "session",
+                "target_id": str(session_id).strip(),
+                "details": {
+                    "sent_count": sent_count,
+                    "completed_at": ts,
+                    "class_name": sess_res.data[0].get("class_name"),
+                }
+            }).execute()
+        except Exception as audit_err:
+            print(f"[WhatsApp] Audit log note: {audit_err}")
+
+        return True
+    except Exception as e:
+        print(f"[WhatsApp] Failed to mark session {session_id} completed: {e}")
+        return False
+
+
 def get_whatsapp_job_status(job_id: str) -> dict:
     """
     Fetches real-time progress for a batch dispatch job from WhatsApp service.
+    Automatically tags session and writes audit log upon job completion.
     """
     url = f"{WHATSAPP_SERVICE_URL}/job/{job_id}"
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "MedAttend-Backend"})
         with urllib.request.urlopen(req, timeout=WHATSAPP_TIMEOUT) as response:
             res_body = response.read().decode("utf-8")
-            return json.loads(res_body)
+            data = json.loads(res_body)
+
+            if data.get("status") == "completed" and data.get("sessionId") and not data.get("synced_to_db"):
+                mark_session_whatsapp_completed(data["sessionId"], data.get("sent_count", 0), data.get("completedAt"))
+                data["synced_to_db"] = True
+
+            return data
     except urllib.error.HTTPError as he:
         return {"success": False, "error": f"Job not found or HTTP {he.code}"}
     except Exception as e:
         return {"success": False, "error": f"Failed to fetch job status: {str(e)}"}
+

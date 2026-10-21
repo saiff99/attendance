@@ -271,13 +271,39 @@ export function encodeSessionMetadata(
   return res;
 }
 
+export interface SessionWhatsAppAlertMeta {
+  sent: boolean;
+  sentCount: number;
+  sentAt: string;
+}
+
 /**
- * Decodes GPS Geofence config and faculty creator from session topic/instructor string
+ * Encodes or updates the [WA:sentCount:ISO_timestamp] metadata tag on a session instructor/topic string
+ */
+export function encodeSessionWhatsAppTag(
+  rawInstructor: string,
+  sentCount: number,
+  sentAt?: string
+): string {
+  const timestamp = sentAt || new Date().toISOString();
+  const newTag = `[WA:${sentCount}:${timestamp}]`;
+  let updated = (rawInstructor || "").trim();
+  if (updated.includes("[WA:")) {
+    updated = updated.replace(/\[WA:[^\]]*\]/g, newTag);
+  } else {
+    updated = `${updated} ${newTag}`.trim();
+  }
+  return updated;
+}
+
+/**
+ * Decodes GPS Geofence config, faculty creator, and WhatsApp alert status from session topic/instructor string
  */
 export function decodeSessionMetadata(rawTopicOrInstructor: string): {
   topic: string;
   geofence: CampusGeofenceConfig | null;
   facultyUsername?: string;
+  whatsappAlert?: SessionWhatsAppAlertMeta | null;
 } {
   if (!rawTopicOrInstructor) return { topic: "", geofence: null };
 
@@ -293,13 +319,26 @@ export function decodeSessionMetadata(rawTopicOrInstructor: string): {
 
   const gpsMatch = rawTopicOrInstructor.match(/\[GPS:([-\d.]+),([-\d.]+),(\d+),([01])(?:,([^\]]*))?\]/);
 
-  // Strip both tags from topic so clean text displays nicely
+  let whatsappAlert: SessionWhatsAppAlertMeta | null = null;
+  const waMatch = rawTopicOrInstructor.match(/\[WA:(\d+):([^\]]+)\]/);
+  if (waMatch) {
+    whatsappAlert = {
+      sent: true,
+      sentCount: parseInt(waMatch[1], 10) || 0,
+      sentAt: waMatch[2],
+    };
+  }
+
+  // Strip all tags from topic so clean text displays nicely
   let cleanTopic = rawTopicOrInstructor;
   if (byMatch) {
     cleanTopic = cleanTopic.replace(byMatch[0], "").trim();
   }
   if (gpsMatch) {
     cleanTopic = cleanTopic.replace(gpsMatch[0], "").trim();
+  }
+  if (waMatch) {
+    cleanTopic = cleanTopic.replace(waMatch[0], "").trim();
   }
 
   let campusName = "College Campus / Lecture Hall";
@@ -323,6 +362,7 @@ export function decodeSessionMetadata(rawTopicOrInstructor: string): {
         }
       : null,
     facultyUsername,
+    whatsappAlert,
   };
 }
 

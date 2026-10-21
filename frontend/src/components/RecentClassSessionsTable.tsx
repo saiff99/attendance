@@ -144,7 +144,9 @@ export function RecentClassSessionsTable({ initialSessions }: RecentClassSession
             ) : displaySessions && displaySessions.length > 0 ? (
               displaySessions.map((session: any) => {
                 const attendanceCount = (session.attendance as any)?.[0]?.count ?? 0;
-                const topic = decodeSessionMetadata(session.instructor_name).topic;
+                const meta = decodeSessionMetadata(session.instructor_name);
+                const topic = meta.topic;
+                const whatsappAlert = meta.whatsappAlert;
 
                 return (
                   <tr key={session.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
@@ -156,10 +158,7 @@ export function RecentClassSessionsTable({ initialSessions }: RecentClassSession
                         <span>{session.class_name}</span>
                         {!isFaculty && (
                           <span className="text-[11px] font-normal text-indigo-600 dark:text-indigo-400 mt-0.5">
-                            {(() => {
-                              const decoded = decodeSessionMetadata(session.instructor_name);
-                              return decoded.facultyUsername ? `By: @${decoded.facultyUsername}` : "By: Faculty";
-                            })()}
+                            {meta.facultyUsername ? `By: @${meta.facultyUsername}` : "By: Faculty"}
                           </span>
                         )}
                       </div>
@@ -184,6 +183,8 @@ export function RecentClassSessionsTable({ initialSessions }: RecentClassSession
                           sessionId={session.id}
                           sessionName={session.class_name}
                           topicName={topic}
+                          whatsappAlert={whatsappAlert}
+                          onAlertStatusChange={refreshSessions}
                         />
                         <DownloadReportButton sessionId={session.id} sessionName={session.class_name} />
                       </div>

@@ -24,6 +24,7 @@ import {
   CampusGeofenceConfig,
   DEFAULT_GEOFENCE_CONFIG,
   encodeSessionMetadata,
+  encodeSessionWhatsAppTag,
   decodeSessionMetadata,
   getLocalGeofence,
   saveLocalGeofence,
@@ -575,8 +576,6 @@ export default function LiveScan() {
         window.history.replaceState({}, "", window.location.pathname);
       }
     }
-    setActiveSession(null);
-
     // Trigger Step 7 memory cleanup on backend without dropping CCTV video streams
     if (endingSessionId) {
       try {
@@ -592,6 +591,19 @@ export default function LiveScan() {
       } catch (err) {
         console.warn("Backend session cleanup notice:", err);
       }
+    }
+
+    if (activeSession) {
+      const wantAlerts = window.confirm(
+        "Attendance session completed!\n\nWould you like to open the WhatsApp Alert sender now to notify parents of absent students?"
+      );
+      if (wantAlerts) {
+        setIsWhatsAppModalOpen(true);
+      } else {
+        setActiveSession(null);
+      }
+    } else {
+      setActiveSession(null);
     }
   };
 
@@ -1956,10 +1968,30 @@ export default function LiveScan() {
         {activeSession && (
           <WhatsAppAlertModal
             isOpen={isWhatsAppModalOpen}
-            onClose={() => setIsWhatsAppModalOpen(false)}
+            onClose={() => {
+              setIsWhatsAppModalOpen(false);
+              if (typeof window !== "undefined" && !localStorage.getItem("medattend_active_session_id")) {
+                setActiveSession(null);
+              }
+            }}
             sessionId={activeSession.id}
             sessionName={activeSession.class_name}
             topicName={decodeSessionMetadata(activeSession.instructor_name).topic}
+            initialAlertMeta={decodeSessionMetadata(activeSession.instructor_name).whatsappAlert}
+            onAlertSuccess={(meta) => {
+              // Update local session instructor_name with new WA tag
+              if (activeSession) {
+                const updatedInstructor = encodeSessionWhatsAppTag(
+                  activeSession.instructor_name,
+                  meta.sentCount,
+                  meta.sentAt
+                );
+                setActiveSession({
+                  ...activeSession,
+                  instructor_name: updatedInstructor,
+                });
+              }
+            }}
           />
         )}
 
