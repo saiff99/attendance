@@ -168,7 +168,7 @@ export default function StudentDirectory() {
     setIsSubmitting(true);
 
     const cleanPhone = newStudent.parent_phone ? cleanPhoneNumber(newStudent.parent_phone) : null;
-    const cleanEmail = newStudent.email ? newStudent.email.trim().toLowerCase() : encodeStudentEmail(cleanRoll);
+    const cleanEmail = encodeStudentEmail(cleanRoll, cleanPhone || undefined);
 
     // Strip any existing parenthesized groups/batches to prevent duplicate stacking like "(Group A) (Group B)"
     const cleanBaseYear = (newStudent.academic_year || '1st Year')

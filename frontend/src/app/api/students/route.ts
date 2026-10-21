@@ -3,7 +3,7 @@ import { supabaseServer } from '@/lib/supabaseServer';
 import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/serverAuth';
 import { isCohortMatching } from '@/lib/cohort';
 import { logAuditEvent } from '@/lib/auditLog';
-import { getParentPhone } from '@/lib/studentContact';
+import { getParentPhone, encodeStudentEmail, cleanPhoneNumber } from '@/lib/studentContact';
 
 export const dynamic = 'force-dynamic';
 
@@ -88,9 +88,9 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const cleanRoll = (body.student_roll || '').trim();
     const cleanName = (body.full_name || '').trim();
-    const cleanEmail = (body.email || '').trim().toLowerCase();
     const cleanYear = (body.academic_year || '1st Year').trim();
-    const cleanPhone = body.parent_phone ? body.parent_phone.trim() : null;
+    const rawPhone = body.parent_phone ? String(body.parent_phone).trim() : '';
+    const cleanPhone = rawPhone ? cleanPhoneNumber(rawPhone) : null;
 
     if (!cleanRoll) {
       return NextResponse.json({ success: false, error: 'Roll Number is required.' }, { status: 400 });
@@ -113,10 +113,13 @@ export async function POST(request: NextRequest) {
       }, { status: 409 });
     }
 
+    // Persistently encode WhatsApp phone into student.local email
+    const encodedEmail = encodeStudentEmail(cleanRoll, cleanPhone || undefined);
+
     const basePayload: any = {
       student_roll: cleanRoll,
       full_name: cleanName,
-      email: cleanEmail,
+      email: encodedEmail,
       academic_year: cleanYear,
     };
 
