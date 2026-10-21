@@ -1524,7 +1524,7 @@ export default function LiveScan() {
                       ? "bg-white dark:bg-slate-800 text-rose-600 dark:text-rose-400 shadow-sm border border-rose-500/20"
                       : "text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
                     }`}
-                  title="View absent students & use 1-Click Faculty Override for Burqa/Veil"
+                  title="View absent students & use 1-Click Faculty Override for unscanned students"
                 >
                   <UserX className="w-3.5 h-3.5" />
                   <span>Absent ({absentStudents.length})</span>
@@ -1633,7 +1633,7 @@ export default function LiveScan() {
                 <div className="space-y-2">
                   {/* Tip Banner for Teachers */}
                   <div className="p-2 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 text-[10px] sm:text-[11px] leading-relaxed">
-                    💡 <strong>Faculty Override:</strong> Click <strong>"Mark Present"</strong> for students wearing Burqa/Veil or whose faces were not scanned.
+                    💡 Click <strong>"Mark Present"</strong> for those whose faces have not been scanned.
                   </div>
 
                   {filteredAbsentStudents.length === 0 ? (
@@ -1682,7 +1682,7 @@ export default function LiveScan() {
                             disabled={markingStudentId === student.id}
                             onClick={() => handleManualMarkPresent(student.id)}
                             className="px-2.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold flex items-center gap-1 transition-all shadow-md shadow-emerald-600/20 active:scale-95 disabled:opacity-50 cursor-pointer shrink-0"
-                            title="1-Click Mark Present for Burqa/Veil or unscanned student"
+                            title="1-Click Mark Present for unscanned student"
                           >
                             {markingStudentId === student.id ? (
                               <Loader2 className="w-3 h-3 animate-spin text-white" />

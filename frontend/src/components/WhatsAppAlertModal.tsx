@@ -307,7 +307,7 @@ export function WhatsAppAlertModal({
                               disabled={markingStudentId === student.id || isSending}
                               onClick={() => handleManualMarkPresent(student.id)}
                               className="px-2.5 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/30 text-[10px] font-semibold flex items-center gap-1 transition-all cursor-pointer disabled:opacity-50 active:scale-95 shadow-sm"
-                              title="1-Click Faculty Override: Mark Present for Burqa/Veil or unscanned student"
+                              title="1-Click Faculty Override: Mark Present for unscanned student"
                             >
                               {markingStudentId === student.id ? (
                                 <Loader2 className="w-3 h-3 animate-spin text-emerald-300" />
