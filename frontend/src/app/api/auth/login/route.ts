@@ -208,12 +208,15 @@ export async function POST(request: Request) {
       // Record failed attempt and release concurrency slot
       await slot.release(false);
 
-      logAuditEvent({
-        action: 'FAILED_LOGIN_ATTEMPT',
-        targetType: 'system',
-        actorId: username,
-        details: { reason: 'Incorrect credentials', ip: clientIp, mode },
-      });
+      // Record failed attempt for Admin & Faculty security auditing only (exclude routine student login typos)
+      if (mode !== 'student') {
+        logAuditEvent({
+          action: 'FAILED_LOGIN_ATTEMPT',
+          targetType: 'system',
+          actorId: username,
+          details: { reason: 'Incorrect credentials', ip: clientIp, mode },
+        });
+      }
 
       const genericError = mode === 'student'
         ? 'Invalid Student Roll Number or PIN.'
@@ -230,13 +233,15 @@ export async function POST(request: Request) {
     // Authentication succeeded: clear rate limiter and release concurrency slot
     await slot.release(true);
 
-    // Log successful login audit entry
-    logAuditEvent({
-      action: 'USER_LOGIN',
-      targetType: 'system',
-      actorId: authUser.username,
-      details: { name: authUser.name, role: authUser.role, ip: clientIp },
-    });
+    // Log successful login audit entry (Excluded for routine Students to keep audit trail clean and focused on Admin/Faculty operations)
+    if (authUser.role !== 'Student') {
+      logAuditEvent({
+        action: 'USER_LOGIN',
+        targetType: 'system',
+        actorId: authUser.username,
+        details: { name: authUser.name, role: authUser.role, ip: clientIp },
+      });
+    }
 
     // Create signed cryptographic HMAC-SHA256 session token (10 hours expiry)
     const token = await createSessionToken({
