@@ -97,6 +97,7 @@ export default function StudentPortalPage() {
       setLoading(true);
     }
     setError(null);
+    const startTime = Date.now();
     try {
       const url = rollQuery ? `/api/student/portal-data?roll=${encodeURIComponent(rollQuery)}` : "/api/student/portal-data";
       const res = await fetch(url, { cache: "no-store" });
@@ -113,6 +114,12 @@ export default function StudentPortalPage() {
         setError(err.message || "Failed to load attendance portal.");
       }
     } finally {
+      if (!isSilent) {
+        const elapsed = Date.now() - startTime;
+        if (elapsed < 600) {
+          await new Promise((resolve) => setTimeout(resolve, 600 - elapsed));
+        }
+      }
       setLoading(false);
     }
   }, []);
@@ -626,9 +633,10 @@ export default function StudentPortalPage() {
             </div>
             <button
               onClick={() => fetchPortalData(selectedRoll)}
-              className="self-start sm:self-auto flex items-center gap-1.5 py-1.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-all cursor-pointer"
+              disabled={loading}
+              className="self-start sm:self-auto flex items-center gap-1.5 py-1.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-all cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
             >
-              <RefreshCw className="w-3.5 h-3.5" />
+              <RefreshCw className={`w-3.5 h-3.5 text-indigo-400 ${loading ? 'animate-spin' : ''}`} />
               <span>Refresh</span>
             </button>
           </div>
