@@ -604,7 +604,7 @@ export default function StudentPortalPage() {
 
           {/* Card 4: Classes Absent */}
           <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 block mb-2">Missed / Absent</span>
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 block mb-2">Absent</span>
             <div className="text-2xl sm:text-3xl font-black text-rose-400 tracking-tight">{summary.absent}</div>
             <p className="text-[11px] text-slate-500 mt-2">Classes not attended</p>
           </div>
