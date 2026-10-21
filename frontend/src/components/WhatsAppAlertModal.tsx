@@ -425,20 +425,20 @@ export function WhatsAppAlertModal({
                     <span>Scan to Connect Any WhatsApp Number</span>
                   </div>
                   <p className="text-slate-400 text-[11px] leading-relaxed">
-                    যে কোনো ব্যক্তিগত বা অফিসিয়াল ফোন থেকে WhatsApp খুলে নিচের সহজ ধাপগুলো অনুসরণ করুন:
+                    Open WhatsApp on your mobile phone and follow these simple steps:
                   </p>
                   <ol className="space-y-1.5 text-[11px] pl-1 text-slate-300">
                     <li className="flex items-start gap-1.5">
-                      <span className="font-bold text-emerald-400 shrink-0">১.</span>
-                      <span>আপনার ফোনের <strong>WhatsApp</strong> অ্যাপটি ওপেন করুন।</span>
+                      <span className="font-bold text-emerald-400 shrink-0">1.</span>
+                      <span>Open <strong>WhatsApp</strong> on your phone.</span>
                     </li>
                     <li className="flex items-start gap-1.5">
-                      <span className="font-bold text-emerald-400 shrink-0">২.</span>
-                      <span>উপরের ৩টি ডট বা <strong>Settings</strong> থেকে <strong>Linked Devices</strong> এ ট্যাপ করুন।</span>
+                      <span className="font-bold text-emerald-400 shrink-0">2.</span>
+                      <span>Tap the three dots (Android) or <strong>Settings</strong> (iPhone) &gt; <strong>Linked Devices</strong>.</span>
                     </li>
                     <li className="flex items-start gap-1.5">
-                      <span className="font-bold text-emerald-400 shrink-0">৩.</span>
-                      <span><strong>Link a Device</strong> এ ক্লিক করে বাঁদিকের এই QR কোডটি স্ক্যান করুন।</span>
+                      <span className="font-bold text-emerald-400 shrink-0">3.</span>
+                      <span>Tap <strong>Link a Device</strong> and point your camera at this QR code.</span>
                     </li>
                   </ol>
                   <div className="pt-2 flex items-center justify-between text-[11px] text-slate-400">
