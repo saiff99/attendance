@@ -7,6 +7,10 @@ export function cleanPhoneNumber(phone: string): string {
   if (digits.length === 10 && ["6", "7", "8", "9"].includes(digits[0])) {
     return `91${digits}`;
   }
+  // If 11 digits with leading 0 (e.g. 08100983818), replace 0 with 91
+  if (digits.length === 11 && digits.startsWith("0") && ["6", "7", "8", "9"].includes(digits[1])) {
+    return `91${digits.slice(1)}`;
+  }
   return digits;
 }
 
