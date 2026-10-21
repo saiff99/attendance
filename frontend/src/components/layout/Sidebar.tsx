@@ -150,11 +150,15 @@ export default function Sidebar() {
         <nav className="mt-2 flex-1 space-y-1 px-3">
           {(user?.role === "Student"
             ? studentNavigation
-            : navigation.filter((item: any) => 
-                !item.superAdminOnly || 
-                user?.role === "Super Admin" || 
-                (item.href === "/users" && user?.role === "Admin")
-              )
+            : navigation.filter((item: any) => {
+                if (item.superAdminOnly && user?.role !== "Super Admin" && !(item.href === "/users" && user?.role === "Admin")) {
+                  return false;
+                }
+                if (user?.role === "Faculty" && (item.href === "/students" || item.href === "/reports")) {
+                  return false;
+                }
+                return true;
+              })
           ).map((item) => {
               const isActive = pathname === item.href;
             const isLiveScan = item.href === "/live-scan";

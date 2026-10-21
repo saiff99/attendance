@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { Search, UserPlus, FileDown, MoreHorizontal, X, UploadCloud, Loader2, Edit2, Trash2, Folder, ArrowLeft, Users, FileSpreadsheet, ArrowUpDown, ArrowUp, ArrowDown, MessageSquare, Phone, AlertTriangle, Lock, KeyRound, CheckCircle2, UserX } from "lucide-react";
 // Student Directory
 import type { Student } from "@/types/database";
@@ -33,8 +34,15 @@ function getInitialStudents(): Student[] {
 }
 
 export default function StudentDirectory() {
-  const { user } = useAuth();
+  const router = useRouter();
+  const { user, isLoading } = useAuth();
   const isSuperAdmin = user?.role === "Super Admin";
+
+  useEffect(() => {
+    if (!isLoading && user?.role === "Faculty") {
+      router.replace("/");
+    }
+  }, [user?.role, isLoading, router]);
 
   const [searchTerm, setSearchTerm] = useState("");
   const [activeView, setActiveView] = useState<string | null>(null);
@@ -412,6 +420,20 @@ export default function StudentDirectory() {
     { id: "3rd Year", title: "Third Year", iconBg: "bg-amber-500/10 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400", glow: "bg-amber-500" },
     { id: "4th Year", title: "Fourth Year", iconBg: "bg-purple-500/10 dark:bg-purple-500/20 text-purple-600 dark:text-purple-400", glow: "bg-purple-500" },
   ];
+
+  if (!isLoading && user?.role === "Faculty") {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6">
+        <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-500 mb-4">
+          <Lock className="w-8 h-8" />
+        </div>
+        <h2 className="text-xl font-bold text-gray-900 dark:text-white">Access Restricted</h2>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-2 max-w-md">
+          Student Directory is restricted to Administrators. Redirecting to Dashboard...
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full min-h-screen bg-gray-50 dark:bg-gray-950 transition-colors duration-300">

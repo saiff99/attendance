@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, Fragment } from "react";
+import { useRouter } from "next/navigation";
 import {
   Search, Download, Users, AlertTriangle, CheckCircle, XCircle, BarChart3,
   ChevronDown, ChevronUp, Shield, UserCheck, UserX, Filter, RefreshCw, FileBarChart,
@@ -9,6 +10,7 @@ import {
 // Academic Attendance Reports Component
 import { isCohortMatching } from "@/lib/cohort";
 import { DEFAULT_MBBS_SUBJECTS, getSubjectsForCohort } from "@/lib/academicSubjects";
+import { useAuth } from "@/lib/auth";
 
 export interface SubjectBreakdown {
   subject: string;
@@ -66,6 +68,15 @@ function RiskBadge({ rate, totalSessions }: { rate: number; totalSessions: numbe
 }
 
 export default function ReportsPage() {
+  const router = useRouter();
+  const { user, isLoading } = useAuth();
+
+  useEffect(() => {
+    if (!isLoading && user?.role === "Faculty") {
+      router.replace("/");
+    }
+  }, [user?.role, isLoading, router]);
+
   const [reports, setReports] = useState<StudentReport[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -211,7 +222,11 @@ export default function ReportsPage() {
     }
   };
 
-  useEffect(() => { fetchReports(); }, []);
+  useEffect(() => {
+    if (!isLoading && user?.role !== "Faculty") {
+      fetchReports();
+    }
+  }, [isLoading, user?.role]);
 
   const availableCohorts = useMemo(() => {
     const set = new Set<string>();
@@ -295,6 +310,20 @@ export default function ReportsPage() {
     if (sortField !== field) return <ChevronDown className="w-3 h-3 text-gray-400 opacity-40" />;
     return sortOrder === "asc" ? <ChevronUp className="w-3 h-3 text-indigo-500" /> : <ChevronDown className="w-3 h-3 text-indigo-500" />;
   };
+
+  if (!isLoading && user?.role === "Faculty") {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6">
+        <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-500 mb-4">
+          <Shield className="w-8 h-8" />
+        </div>
+        <h2 className="text-xl font-bold text-gray-900 dark:text-white">Access Restricted</h2>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-2 max-w-md">
+          Attendance Reports are restricted to Administrators. Redirecting to Dashboard...
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full min-h-screen bg-gray-50 dark:bg-gray-950 transition-colors duration-300">

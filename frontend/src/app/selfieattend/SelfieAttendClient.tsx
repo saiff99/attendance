@@ -36,6 +36,7 @@ export interface ActiveSession {
   instructor_name: string;
   target_academic_year?: string;
   created_at: string;
+  created_by?: string;
   attendance_count?: number;
   remaining_seconds?: number;
   is_expired?: boolean;
@@ -88,13 +89,31 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
   // Data States
   const [sessions, setSessions] = useState<ActiveSession[]>(initialSessions);
 
-  // Filter active sessions strictly for logged-in student's cohort
+  // Filter active sessions strictly for logged-in student's cohort or logged-in faculty's sessions
   const displayedSessions = useMemo(() => {
     if (isStudentUser && studentCohort) {
       return sessions.filter((sess) => isCohortMatching(sess.target_academic_year, studentCohort));
     }
+    if (user?.role === "Faculty") {
+      const u = (user.username || "").toLowerCase();
+      const n = (user.name || "").toLowerCase();
+      const localActive = typeof window !== "undefined" ? localStorage.getItem("medattend_active_session_id") : null;
+      return sessions.filter((s: any) => {
+        const cb = ((s as any).created_by || "").toLowerCase();
+        const dec = decodeSessionMetadata(s.instructor_name || "");
+        const byTag = (dec.facultyUsername || "").toLowerCase();
+        const topic = (dec.topic || "").toLowerCase();
+
+        return (
+          s.id === localActive ||
+          (byTag && (byTag === u || byTag === n)) ||
+          (cb && (cb === u || cb === n)) ||
+          (topic && (topic === u || topic === n))
+        );
+      });
+    }
     return sessions;
-  }, [sessions, isStudentUser, studentCohort]);
+  }, [sessions, isStudentUser, studentCohort, user?.role, user?.username, user?.name]);
 
   const [loadingSessions, setLoadingSessions] = useState<boolean>(initialSessions.length === 0);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
@@ -358,6 +377,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
         instructor_name: s.instructor_name,
         target_academic_year: s.target_academic_year,
         created_at: s.created_at,
+        created_by: s.created_by,
         attendance_count: s.attendance_count || 0,
         remaining_seconds: remainingSeconds,
         is_expired: isExpired,
@@ -1011,9 +1031,13 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                 <div className="py-10 px-4 rounded-xl bg-slate-950/50 border border-slate-800/80 flex flex-col items-center text-center gap-3">
                   <AlertCircle className="w-8 h-8 text-amber-400/80" />
                   <div>
-                    <h3 className="text-sm font-semibold text-white">No Live Lectures Right Now</h3>
+                    <h3 className="text-sm font-semibold text-white">
+                      {user?.role === "Faculty" ? "No Active Sessions" : "No Live Lectures Right Now"}
+                    </h3>
                     <p className="text-xs text-slate-400 mt-1 max-w-xs">
-                      No attendance sessions are currently running today. Please wait for the professor to start the session.
+                      {user?.role === "Faculty"
+                        ? "You have no active attendance sessions running today."
+                        : "No attendance sessions are currently running today. Please wait for the professor to start the session."}
                     </p>
                   </div>
                   <button
@@ -1029,9 +1053,19 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                 <div className="py-10 px-4 rounded-xl bg-slate-950/50 border border-slate-800/80 flex flex-col items-center text-center gap-3">
                   <GraduationCap className="w-8 h-8 text-indigo-400" />
                   <div>
-                    <h3 className="text-sm font-semibold text-white">No Live Lectures for {studentCohort}</h3>
+                    <h3 className="text-sm font-semibold text-white">
+                      {user?.role === "Faculty"
+                        ? "No Active Sessions Created by You"
+                        : isStudentUser && studentCohort
+                        ? `No Live Lectures for ${studentCohort}`
+                        : "No Live Sessions Running"}
+                    </h3>
                     <p className="text-xs text-slate-400 mt-1 max-w-xs">
-                      No attendance sessions are currently running for your cohort. Please wait for the professor to start the session.
+                      {user?.role === "Faculty"
+                        ? "You have not launched any attendance sessions right now, or your previous sessions have expired."
+                        : isStudentUser && studentCohort
+                        ? "No attendance sessions are currently running for your cohort. Please wait for the professor to start the session."
+                        : "No attendance sessions are currently active. Check back shortly."}
                     </p>
                   </div>
                   <button
@@ -1056,6 +1090,23 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                           </span>
                           <span className="text-slate-400 text-[11px] block truncate">
                             Logged in as {user?.name || user?.studentRoll}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Creator Filter Banner for Logged-In Faculty */}
+                  {user?.role === "Faculty" && (
+                    <div className="flex items-center p-2.5 rounded-xl bg-indigo-950/40 border border-indigo-500/30 text-xs">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Activity className="w-4 h-4 text-indigo-400 shrink-0" />
+                        <div className="min-w-0">
+                          <span className="font-semibold text-white">
+                            Your Sessions Only
+                          </span>
+                          <span className="text-slate-400 text-[11px] block truncate">
+                            Showing classes created by you ({user?.name || user?.username})
                           </span>
                         </div>
                       </div>

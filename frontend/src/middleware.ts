@@ -106,7 +106,15 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // 7. Restrict /audit-logs and /api/audit-logs strictly to Super Admin role
+  // 7. Enforce Faculty Role Isolation: Faculty cannot access /students or /reports
+  if (isAuthenticated && user?.role === 'Faculty') {
+    const facultyRestrictedPaths = ['/students', '/reports'];
+    if (facultyRestrictedPaths.some(p => pathname === p || pathname.startsWith(`${p}/`))) {
+      return NextResponse.redirect(new URL('/', request.url));
+    }
+  }
+
+  // 8. Restrict /audit-logs and /api/audit-logs strictly to Super Admin role
   if ((pathname.startsWith('/audit-logs') || pathname.startsWith('/api/audit-logs')) && user?.role !== 'Super Admin') {
     if (pathname.startsWith('/api/')) {
       return NextResponse.json(

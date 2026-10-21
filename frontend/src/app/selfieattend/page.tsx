@@ -1,7 +1,10 @@
 import { Suspense } from 'react';
+import { cookies } from 'next/headers';
 import { supabaseServer } from '@/lib/supabaseServer';
 import { SelfieAttendContent, ActiveSession } from './SelfieAttendClient';
 import { getTodayDateStr, getStartOfTodayISO } from '@/lib/dateUtils';
+import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/serverAuth';
+import { decodeSessionMetadata } from '@/lib/geofence';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -77,7 +80,27 @@ async function getInitialSessions(): Promise<ActiveSession[]> {
 }
 
 export default async function SelfieAttendPortal() {
-  const initialSessions = await getInitialSessions();
+  const cookieStore = await cookies();
+  const sessionToken = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+  const authUser = sessionToken ? await verifySessionToken(sessionToken) : null;
+  let initialSessions = await getInitialSessions();
+
+  if (authUser?.role === "Faculty") {
+    const u = (authUser.username || "").toLowerCase();
+    const n = (authUser.name || "").toLowerCase();
+    initialSessions = initialSessions.filter((s: any) => {
+      const cb = ((s as any).created_by || "").toLowerCase();
+      const dec = decodeSessionMetadata(s.instructor_name || "");
+      const byTag = (dec.facultyUsername || "").toLowerCase();
+      const topic = (dec.topic || "").toLowerCase();
+
+      return (
+        (byTag && (byTag === u || byTag === n)) ||
+        (cb && (cb === u || cb === n)) ||
+        (topic && (topic === u || topic === n))
+      );
+    });
+  }
 
   return (
     <Suspense 
