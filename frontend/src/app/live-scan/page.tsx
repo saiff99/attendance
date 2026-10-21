@@ -5,8 +5,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import Link from "next/link";
 import {
   Camera, Upload, CheckCircle2, PlayCircle, StopCircle, Activity, Loader2,
-  ArrowLeft, BookOpen, Users, MapPin, Video, Download, Focus,
-  ChevronUp, ChevronDown, ChevronLeft, ChevronRight, ZoomIn, ZoomOut,
+  ArrowLeft, BookOpen, Users, MapPin, Video, Download,
   Grid, Maximize2, Minimize2, Eye, ShieldCheck, RefreshCw, X, Search,
   Clock, Sparkles, ChevronLeft as PrevIcon, ChevronRight as NextIcon,
   QrCode, Copy, Check, ExternalLink, Smartphone, Navigation, MessageSquare,
@@ -56,7 +55,7 @@ const DEFAULT_CAMERAS: CameraMeta[] = [
 
 export default function LiveScan() {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<"grid" | "cctv" | "ptz" | "live" | "manual">("grid");
+  const [activeTab, setActiveTab] = useState<"grid" | "cctv" | "live" | "manual">("grid");
   const [isScanning, setIsScanning] = useState(false);
 
   // Attendance & Manual Override State
@@ -250,8 +249,6 @@ export default function LiveScan() {
     }
   }, [setupData.hall, customHallName, sessionGeofence]);
   const [copiedLink, setCopiedLink] = useState(false);
-  const [ptzCameraCount, setPtzCameraCount] = useState(1);
-  const [selectedPtzIndex, setSelectedPtzIndex] = useState(0);
   const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false);
 
   // Auto-Tour Camera Cycle State for Single Camera View
@@ -360,7 +357,7 @@ export default function LiveScan() {
   // Log polling for CCTV / Grid mode
   useEffect(() => {
     let interval: NodeJS.Timeout;
-    if ((activeTab === "grid" || activeTab === "cctv" || activeTab === "ptz") && activeSession) {
+    if ((activeTab === "grid" || activeTab === "cctv") && activeSession) {
       fetchLogs();
       interval = setInterval(() => {
         fetchLogs();
@@ -386,30 +383,7 @@ export default function LiveScan() {
       })
       .catch(err => console.error("Failed to fetch camera count", err));
 
-    // Fetch available PTZ cameras
-    fetch(`${backendUrl}/api/ptz-cameras`, {
-      headers: { "ngrok-skip-browser-warning": "69420" }
-    })
-      .then(res => res.json())
-      .then(data => setPtzCameraCount(data.count || 1))
-      .catch(err => console.error("Failed to fetch PTZ camera count", err));
   }, []);
-
-  // PTZ Control functions
-  const sendPtzCommand = (direction: string) => {
-    const backendUrl = getBackendUrl();
-    fetch(`${backendUrl}/api/ptz/move`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'ngrok-skip-browser-warning': '69420'
-      },
-      body: JSON.stringify({ direction })
-    }).catch(err => console.error("PTZ Command Failed", err));
-  };
-
-  const startPtzMove = (direction: string) => sendPtzCommand(direction);
-  const stopPtzMove = () => sendPtzCommand('stop');
 
   const exportToCSV = () => {
     if (!logs || logs.length === 0) {
@@ -1193,16 +1167,6 @@ export default function LiveScan() {
                 Single
               </button>
               <button
-                onClick={() => setActiveTab("ptz")}
-                className={`flex-1 min-w-[65px] sm:min-w-[80px] py-2 px-2.5 sm:px-3 text-xs font-semibold rounded-xl flex items-center justify-center whitespace-nowrap transition-all ${activeTab === "ptz"
-                    ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
-                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-200/70 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800/60"
-                  }`}
-              >
-                <Focus className="w-3.5 h-3.5 mr-1.5" />
-                PTZ
-              </button>
-              <button
                 onClick={() => setActiveTab("live")}
                 className={`flex-1 min-w-[80px] sm:min-w-[90px] py-2 px-2.5 sm:px-3 text-xs font-semibold rounded-xl flex items-center justify-center whitespace-nowrap transition-all ${activeTab === "live"
                     ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
@@ -1425,122 +1389,6 @@ export default function LiveScan() {
                     <div className="absolute top-3 right-3 sm:top-4 sm:right-4 bg-black/70 backdrop-blur-sm rounded-full px-2.5 sm:px-3 py-1 flex items-center shadow-lg border border-white/10">
                       <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-red-500 animate-pulse mr-1.5 sm:mr-2" />
                       <span className="text-white text-[10px] sm:text-[11px] font-semibold tracking-wider">LIVE 4K AI</span>
-                    </div>
-                  </div>
-                </div>
-              ) : activeTab === "ptz" ? (
-                /* PTZ VIEW */
-                <div className="flex-1 flex flex-col items-center justify-center bg-slate-950 rounded-2xl relative overflow-hidden group aspect-video min-h-[240px] sm:min-h-[360px] lg:min-h-[440px] border border-slate-800">
-                  {ptzCameraCount > 1 && (
-                    <div className="absolute top-3 left-3 sm:top-4 sm:left-4 z-20 bg-slate-900/90 backdrop-blur-md rounded-xl shadow-xl border border-slate-700/70 text-xs flex items-center pr-2">
-                      <div className="pl-2.5 sm:pl-3 py-1.5 sm:py-2 border-r border-slate-700/70">
-                        <Focus className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-400" />
-                      </div>
-                      <select
-                        className="py-1.5 sm:py-2 pl-2 pr-5 sm:pr-6 border-0 bg-transparent text-white font-medium focus:ring-0 cursor-pointer outline-none w-full max-w-[160px] sm:max-w-[200px] text-xs sm:text-sm truncate"
-                        value={selectedPtzIndex}
-                        onChange={(e) => setSelectedPtzIndex(Number(e.target.value))}
-                      >
-                        {Array.from({ length: ptzCameraCount }).map((_, idx) => (
-                          <option key={idx} value={idx} className="bg-slate-900 text-white">
-                            PTZ Camera {idx + 1}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-
-                  <div className="absolute inset-0 w-full h-full bg-black flex items-center justify-center">
-                    <MjpegPlayer
-                      key={selectedPtzIndex}
-                      url={`${getVideoBackendUrl(selectedPtzIndex)}/api/ptz-video-feed/${activeSession.id}?camera_index=${selectedPtzIndex}&grid=0`}
-                      className="w-full h-full object-contain"
-                    />
-
-                    <div className="absolute top-3 right-3 sm:top-4 sm:right-4 bg-black/70 backdrop-blur-sm rounded-full px-2.5 sm:px-3 py-1 flex items-center shadow-lg border border-white/10 z-20">
-                      <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-blue-500 animate-pulse mr-1.5 sm:mr-2" />
-                      <span className="text-white text-[10px] sm:text-[11px] font-semibold tracking-wider">PTZ ACTIVE</span>
-                    </div>
-
-                    {/* PTZ Joystick (Touch-friendly & Responsive Scale) */}
-                    <div className="absolute bottom-3 left-3 sm:bottom-6 sm:left-6 z-20 flex flex-col items-center gap-1.5 sm:gap-2 bg-slate-950/85 backdrop-blur-md p-2.5 sm:p-3.5 rounded-2xl border border-slate-800 shadow-2xl scale-90 sm:scale-100 origin-bottom-left">
-                      <div className="text-slate-400 text-[9px] font-bold tracking-widest uppercase">PTZ Control</div>
-
-                      <div className="grid grid-cols-3 gap-1">
-                        <div />
-                        <button
-                          onMouseDown={() => startPtzMove('up')}
-                          onMouseUp={stopPtzMove}
-                          onMouseLeave={stopPtzMove}
-                          onTouchStart={() => startPtzMove('up')}
-                          onTouchEnd={stopPtzMove}
-                          className="w-7 h-7 sm:w-8 sm:h-8 bg-slate-800/80 hover:bg-slate-700 active:bg-indigo-600 rounded-lg flex items-center justify-center text-white transition-all"
-                        >
-                          <ChevronUp className="w-4 h-4" />
-                        </button>
-                        <div />
-                        <button
-                          onMouseDown={() => startPtzMove('left')}
-                          onMouseUp={stopPtzMove}
-                          onMouseLeave={stopPtzMove}
-                          onTouchStart={() => startPtzMove('left')}
-                          onTouchEnd={stopPtzMove}
-                          className="w-7 h-7 sm:w-8 sm:h-8 bg-slate-800/80 hover:bg-slate-700 active:bg-indigo-600 rounded-lg flex items-center justify-center text-white transition-all"
-                        >
-                          <ChevronLeft className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={stopPtzMove}
-                          className="w-7 h-7 sm:w-8 sm:h-8 bg-slate-900 rounded-full flex items-center justify-center text-slate-500"
-                        >
-                          <div className="w-2 h-2 rounded-full bg-slate-500" />
-                        </button>
-                        <button
-                          onMouseDown={() => startPtzMove('right')}
-                          onMouseUp={stopPtzMove}
-                          onMouseLeave={stopPtzMove}
-                          onTouchStart={() => startPtzMove('right')}
-                          onTouchEnd={stopPtzMove}
-                          className="w-7 h-7 sm:w-8 sm:h-8 bg-slate-800/80 hover:bg-slate-700 active:bg-indigo-600 rounded-lg flex items-center justify-center text-white transition-all"
-                        >
-                          <ChevronRight className="w-4 h-4" />
-                        </button>
-                        <div />
-                        <button
-                          onMouseDown={() => startPtzMove('down')}
-                          onMouseUp={stopPtzMove}
-                          onMouseLeave={stopPtzMove}
-                          onTouchStart={() => startPtzMove('down')}
-                          onTouchEnd={stopPtzMove}
-                          className="w-7 h-7 sm:w-8 sm:h-8 bg-slate-800/80 hover:bg-slate-700 active:bg-indigo-600 rounded-lg flex items-center justify-center text-white transition-all"
-                        >
-                          <ChevronDown className="w-4 h-4" />
-                        </button>
-                        <div />
-                      </div>
-
-                      <div className="flex gap-1.5 mt-1 pt-1.5 sm:pt-2 border-t border-slate-800 w-full justify-center">
-                        <button
-                          onMouseDown={() => startPtzMove('zoom_out')}
-                          onMouseUp={stopPtzMove}
-                          onMouseLeave={stopPtzMove}
-                          onTouchStart={() => startPtzMove('zoom_out')}
-                          onTouchEnd={stopPtzMove}
-                          className="flex-1 py-1 bg-slate-800/80 hover:bg-slate-700 active:bg-indigo-600 rounded-md flex items-center justify-center text-white text-[10px] sm:text-[11px] transition-all"
-                        >
-                          <ZoomOut className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onMouseDown={() => startPtzMove('zoom_in')}
-                          onMouseUp={stopPtzMove}
-                          onMouseLeave={stopPtzMove}
-                          onTouchStart={() => startPtzMove('zoom_in')}
-                          onTouchEnd={stopPtzMove}
-                          className="flex-1 py-1 bg-slate-800/80 hover:bg-slate-700 active:bg-indigo-600 rounded-md flex items-center justify-center text-white text-[10px] sm:text-[11px] transition-all"
-                        >
-                          <ZoomIn className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
                     </div>
                   </div>
                 </div>
