@@ -6,7 +6,8 @@ import Link from "next/link";
 import {
   GraduationCap, BookOpen, CheckCircle2, AlertTriangle, XCircle,
   Calendar, Clock, MapPin, Smartphone, Shield, LogOut, KeyRound,
-  RefreshCw, ChevronRight, User, Sparkles, Check, ArrowUpRight, Camera, ShieldCheck
+  RefreshCw, ChevronRight, User, Sparkles, Check, ArrowUpRight, Camera, ShieldCheck,
+  Eye, EyeOff
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { FaceRegistrationModal } from "@/components/FaceRegistrationModal";
@@ -85,6 +86,9 @@ export default function StudentPortalPage() {
   const [oldPin, setOldPin] = useState("");
   const [newPin, setNewPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
+  const [showOldPin, setShowOldPin] = useState(false);
+  const [showNewPin, setShowNewPin] = useState(false);
+  const [showConfirmPin, setShowConfirmPin] = useState(false);
   const [pinLoading, setPinLoading] = useState(false);
   const [pinMessage, setPinMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
@@ -228,6 +232,9 @@ export default function StudentPortalPage() {
         setOldPin("");
         setNewPin("");
         setConfirmPin("");
+        setShowOldPin(false);
+        setShowNewPin(false);
+        setShowConfirmPin(false);
         setPinMessage(null);
       }, 700);
     } catch (err: any) {
@@ -240,6 +247,7 @@ export default function StudentPortalPage() {
   const generateRandomPin = () => {
     const random = Math.floor(100000 + Math.random() * 900000).toString();
     setNewPin(random);
+    setShowNewPin(true);
   };
 
   if (loading && !data) {
@@ -872,17 +880,28 @@ export default function StudentPortalPage() {
                 <label className="block text-xs font-semibold text-slate-400 mb-1">
                   Current 6-Digit PIN
                 </label>
-                <input
-                  type="password"
-                  inputMode="numeric"
-                  maxLength={6}
-                  required
-                  pattern="[0-9]{6}"
-                  value={oldPin}
-                  onChange={(e) => setOldPin(e.target.value.replace(/\D/g, ""))}
-                  placeholder="••••••"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white font-mono text-center text-lg tracking-widest focus:outline-none focus:border-indigo-500"
-                />
+                <div className="relative flex items-center">
+                  <input
+                    type={showOldPin ? "text" : "password"}
+                    inputMode="numeric"
+                    maxLength={6}
+                    required
+                    pattern="[0-9]{6}"
+                    value={oldPin}
+                    onChange={(e) => setOldPin(e.target.value.replace(/\D/g, ""))}
+                    placeholder="••••••"
+                    className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white font-mono text-center text-lg tracking-widest focus:outline-none focus:border-indigo-500 transition-colors"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowOldPin(!showOldPin)}
+                    className="absolute right-3 p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/80 transition-colors cursor-pointer"
+                    title={showOldPin ? "Hide PIN" : "Show PIN"}
+                    tabIndex={-1}
+                  >
+                    {showOldPin ? <EyeOff className="w-4 h-4 text-indigo-400" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
                 <p className="text-[10px] text-slate-500 mt-1">Enter your current PIN or temporary activation PIN.</p>
               </div>
 
@@ -897,34 +916,56 @@ export default function StudentPortalPage() {
                     🎲 Random PIN
                   </button>
                 </div>
-                <input
-                  type="password"
-                  inputMode="numeric"
-                  maxLength={6}
-                  required
-                  pattern="[0-9]{6}"
-                  value={newPin}
-                  onChange={(e) => setNewPin(e.target.value.replace(/\D/g, ""))}
-                  placeholder="••••••"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white font-mono text-center text-lg tracking-widest focus:outline-none focus:border-indigo-500"
-                />
+                <div className="relative flex items-center">
+                  <input
+                    type={showNewPin ? "text" : "password"}
+                    inputMode="numeric"
+                    maxLength={6}
+                    required
+                    pattern="[0-9]{6}"
+                    value={newPin}
+                    onChange={(e) => setNewPin(e.target.value.replace(/\D/g, ""))}
+                    placeholder="••••••"
+                    className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white font-mono text-center text-lg tracking-widest focus:outline-none focus:border-indigo-500 transition-colors"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPin(!showNewPin)}
+                    className="absolute right-3 p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/80 transition-colors cursor-pointer"
+                    title={showNewPin ? "Hide PIN" : "Show PIN"}
+                    tabIndex={-1}
+                  >
+                    {showNewPin ? <EyeOff className="w-4 h-4 text-indigo-400" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-slate-400 mb-1">
                   Confirm New PIN
                 </label>
-                <input
-                  type="password"
-                  inputMode="numeric"
-                  maxLength={6}
-                  required
-                  pattern="[0-9]{6}"
-                  value={confirmPin}
-                  onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, ""))}
-                  placeholder="••••••"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white font-mono text-center text-lg tracking-widest focus:outline-none focus:border-indigo-500"
-                />
+                <div className="relative flex items-center">
+                  <input
+                    type={showConfirmPin ? "text" : "password"}
+                    inputMode="numeric"
+                    maxLength={6}
+                    required
+                    pattern="[0-9]{6}"
+                    value={confirmPin}
+                    onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, ""))}
+                    placeholder="••••••"
+                    className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white font-mono text-center text-lg tracking-widest focus:outline-none focus:border-indigo-500 transition-colors"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPin(!showConfirmPin)}
+                    className="absolute right-3 p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/80 transition-colors cursor-pointer"
+                    title={showConfirmPin ? "Hide PIN" : "Show PIN"}
+                    tabIndex={-1}
+                  >
+                    {showConfirmPin ? <EyeOff className="w-4 h-4 text-indigo-400" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
 
               <div className="flex items-center gap-2 pt-2">
@@ -935,6 +976,9 @@ export default function StudentPortalPage() {
                     setOldPin("");
                     setNewPin("");
                     setConfirmPin("");
+                    setShowOldPin(false);
+                    setShowNewPin(false);
+                    setShowConfirmPin(false);
                     setPinMessage(null);
                   }}
                   className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold cursor-pointer transition-all"
