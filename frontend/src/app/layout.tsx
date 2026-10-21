@@ -4,7 +4,6 @@ import { AppShell } from "@/components/layout/AppShell";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { AuthProvider } from "@/lib/auth";
 import { PwaInstallPrompt } from "@/components/PwaInstallPrompt";
-import { PortraitOrientationGuard } from "@/components/PortraitOrientationGuard";
 import "./globals.css";
 
 const inter = Inter({
@@ -75,7 +74,6 @@ export default function RootLayout({
           >
             <AppShell>{children}</AppShell>
             <PwaInstallPrompt />
-            <PortraitOrientationGuard />
           </ThemeProvider>
         </AuthProvider>
       </body>
