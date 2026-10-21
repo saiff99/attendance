@@ -4,6 +4,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { AuthProvider } from "@/lib/auth";
 import { PwaInstallPrompt } from "@/components/PwaInstallPrompt";
+import { PortraitOrientationGuard } from "@/components/PortraitOrientationGuard";
 import "./globals.css";
 
 const inter = Inter({
@@ -60,6 +61,9 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="screen-orientation" content="portrait" />
+        <meta name="x5-orientation" content="portrait" />
+        <meta name="orientation" content="portrait" />
       </head>
       <body suppressHydrationWarning className="min-h-screen bg-gray-50 dark:bg-gray-950 transition-colors duration-300 antialiased">
         <AuthProvider>
@@ -71,6 +75,7 @@ export default function RootLayout({
           >
             <AppShell>{children}</AppShell>
             <PwaInstallPrompt />
+            <PortraitOrientationGuard />
           </ThemeProvider>
         </AuthProvider>
       </body>

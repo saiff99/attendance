@@ -62,3 +62,25 @@ svg *,
 .animate-shimmer-slide {
   animation: shimmer-slide 1.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
+
+@keyframes phone-rotate-hint {
+  0%, 20% {
+    transform: rotate(90deg);
+  }
+  60%, 100% {
+    transform: rotate(0deg);
+  }
+}
+
+.animate-phone-rotate {
+  animation: phone-rotate-hint 2.2s cubic-bezier(0.4, 0, 0.2, 1) infinite alternate;
+}
+
+/* Enforce Portrait Guard on Mobile Devices in Landscape */
+@media screen and (orientation: landscape) and (max-height: 520px) and (hover: none) {
+  .portrait-guard-overlay {
+    display: flex !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+  }
+}
