@@ -1134,24 +1134,13 @@ async def selfie_attendance(
 
     # 9. Record Attendance in Supabase
     try:
-        try:
-            safe_db_execute(supabase.table("attendance").upsert({
-                "session_id": session_id,
-                "student_id": student["id"],
-                "status": "Present",
-                "capture_mode": "Selfie Scan",
-                "confidence_score": confidence_score
-            }, on_conflict="session_id,student_id"))
-        except Exception as insert_err:
-            # Fallback if DB check constraint only permits legacy 'Live Scan' / 'Manual Upload'
-            print("Retrying attendance insert with compatible capture_mode:", insert_err)
-            safe_db_execute(supabase.table("attendance").upsert({
-                "session_id": session_id,
-                "student_id": student["id"],
-                "status": "Present",
-                "capture_mode": "Live Scan",
-                "confidence_score": confidence_score
-            }, on_conflict="session_id,student_id"))
+        safe_db_execute(supabase.table("attendance").upsert({
+            "session_id": session_id,
+            "student_id": student["id"],
+            "status": "Present",
+            "capture_mode": "Live Scan",
+            "confidence_score": confidence_score
+        }, on_conflict="session_id,student_id"))
         
         # 10. Lock Device for this Student & Session
         if device_id and device_id.strip():
