@@ -460,9 +460,8 @@ PTZ_IP="192.168.1.120"
 PTZ_USER="admin"
 PTZ_PASSWORD="password"
 
-# Meta WhatsApp Cloud API
-WHATSAPP_TOKEN="your_meta_access_token"
-WHATSAPP_PHONE_ID="your_meta_phone_id"
+# WhatsApp Multi-Device Bridge
+WHATSAPP_SERVICE_URL="http://127.0.0.1:5005"
 
 # AI & Thermal Tuning
 AI_SCAN_INTERVAL_SEC=1.0
@@ -541,14 +540,14 @@ The system automatically synchronizes backend updates to Hugging Face Spaces via
 
 ---
 
-### 9. Meta WhatsApp Cloud API Setup
+### 9. WhatsApp Multi-Device QR Bridge Setup
 
-1. Create a Meta Business app at [Meta Developer Portal](https://developers.facebook.com/).
-2. Add the **WhatsApp** product.
-3. Under **WhatsApp > API Setup**, copy:
-   - **Phone number ID** ➡️ `WHATSAPP_PHONE_ID`
-   - **Temporary access token** ➡️ `WHATSAPP_TOKEN`
-4. In the MedAttend Dashboard, you can test alerts or update expired tokens at any time via the **WhatsApp Alert Modal**.
+MedAttend features a zero-configuration WhatsApp Web QR scan bridge:
+1. No Meta Developer accounts, temporary tokens, or template approvals required.
+2. In the MedAttend Dashboard, click **"WhatsApp Alerts"** on any session.
+3. Open **WhatsApp** on your personal or college mobile phone > **Linked Devices** > **Link a Device**.
+4. Scan the QR code displayed in the modal.
+5. The session is saved persistently. Absentee student notifications will now be automatically dispatched from your scanned number with built-in anti-spam throttling (3s delay).
 
 ---
 
@@ -682,13 +681,14 @@ attendance/
 | `/api/upload-photo` | `POST` | Processes batch photo for server-side face enrollment |
 | `/api/students/{id}/revoke-biometrics` | `POST` | Irreversibly purges biometric face vectors under DPDP Act 2023 |
 
-### 💬 WhatsApp Dispatcher & Queue
+### 💬 WhatsApp QR Bridge & Dispatcher
 | Endpoint | Method | Description |
 | :--- | :--- | :--- |
-| `/api/whatsapp/queue-alerts` | `POST` | Enqueues absentee alerts to the non-blocking background queue |
-| `/api/whatsapp/status` | `GET` | Returns live WhatsApp background worker queue status |
-| `/api/whatsapp/update-token` | `POST` | Dynamically updates Meta Access Token without restarting |
-| `/api/whatsapp/test` | `POST` | Sends diagnostic template message to verified phone number |
+| `/api/whatsapp/status` | `GET` | Returns live connection status, active QR code Data URL, and linked account |
+| `/api/whatsapp/disconnect` | `POST` | Disconnects the active WhatsApp session and triggers a fresh QR code |
+| `/api/whatsapp/send-absent-alerts` | `POST` | Dispatches absentee parent alerts from the connected number with 3s anti-spam delay |
+| `/api/whatsapp/job-status/{job_id}` | `GET` | Polls real-time progress counter and delivery report for batch jobs |
+| `/api/whatsapp/test` | `POST` | Sends a single test message from the connected WhatsApp account |
 
 ---
 

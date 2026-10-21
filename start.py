@@ -22,6 +22,7 @@ import platform
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 FRONTEND_DIR = os.path.join(BASE_DIR, "frontend")
 BACKEND_DIR = os.path.join(BASE_DIR, "backend")
+WHATSAPP_DIR = os.path.join(BASE_DIR, "whatsapp-service")
 VENV_PYTHON = os.path.join(BACKEND_DIR, ".venv", "bin", "python")
 VENV_UVICORN = os.path.join(BACKEND_DIR, ".venv", "bin", "uvicorn")
 CLOUDFLARED_BIN = os.path.join(BACKEND_DIR, "bin", "cloudflared")
@@ -59,6 +60,7 @@ RESET = "\033[0m"
 managed_procs = {
     "frontend": None,
     "backend": None,
+    "whatsapp": None,
     "tunnel": None
 }
 watchdog_running = True
@@ -305,6 +307,35 @@ def start_backend_process():
     return proc
 
 
+def start_whatsapp_process():
+    """Starts local WhatsApp Multi-Device QR Bridge service on port 5005."""
+    free_port_safely(5005)
+    proc = subprocess.Popen(
+        ["node", "server.js"],
+        cwd=WHATSAPP_DIR,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1
+    )
+
+    def log_whatsapp_output(p):
+        try:
+            for line in iter(p.stdout.readline, ""):
+                if not line:
+                    break
+                stripped = line.strip()
+                if "Service running" in stripped or "Connected successfully" in stripped or "QR Code generated" in stripped:
+                    print(f"  {GREEN}✓{RESET} WhatsApp Bridge: {stripped}")
+                elif "ERROR" in stripped or "Exception" in stripped:
+                    print(f"  {RED}! WhatsApp Bridge: {stripped}{RESET}")
+        except Exception:
+            pass
+
+    threading.Thread(target=log_whatsapp_output, args=(proc,), daemon=True).start()
+    return proc
+
+
 def wait_for_backend_health(timeout_sec=15.0) -> bool:
     """Fast-polls the FastAPI backend health endpoint until online."""
     start = time.time()
@@ -322,7 +353,7 @@ def wait_for_backend_health(timeout_sec=15.0) -> bool:
 def watchdog_loop():
     """
     Step 9 & Step 10 — Production System Watchdog & Auto-Recovery.
-    Monitors FastAPI Backend and Next.js Frontend health.
+    Monitors FastAPI Backend, Next.js Frontend, and WhatsApp Bridge health.
     Automatically recovers from unexpected process terminations without affecting other running components.
     Consumes < 0.001% CPU.
     """
@@ -402,6 +433,21 @@ def watchdog_loop():
                 except Exception as fe_err:
                     print(f"{RED}❌ [WATCHDOG] Failed to recover frontend: {fe_err}{RESET}\n")
 
+            # --- 3. Monitor WhatsApp Bridge ---
+            with watchdog_lock:
+                wa_proc = managed_procs.get("whatsapp")
+
+            if wa_proc and wa_proc.poll() is not None:
+                now_str = time.strftime("%H:%M:%S")
+                print(f"\n{RED}⚠️  [WATCHDOG] WhatsApp Bridge process exited unexpectedly at {now_str}! Restarting on Port 5005...{RESET}")
+                try:
+                    new_wa = start_whatsapp_process()
+                    with watchdog_lock:
+                        managed_procs["whatsapp"] = new_wa
+                    print(f"{GREEN}✅ [WATCHDOG] WhatsApp Bridge recovered on Port 5005{RESET}\n")
+                except Exception as wa_err:
+                    print(f"{RED}❌ [WATCHDOG] Failed to recover WhatsApp Bridge: {wa_err}{RESET}\n")
+
         except Exception:
             time.sleep(3.0)
 
@@ -414,6 +460,7 @@ def main():
     # 1. Clean previous lingering processes safely on target ports
     free_port_safely(3000)
     free_port_safely(8000)
+    free_port_safely(5005)
     time.sleep(0.3)
 
     if not os.path.exists(VENV_UVICORN):
@@ -426,13 +473,13 @@ def main():
         sys.exit(1)
 
     # 2. Start Production Next.js Frontend (Step 10: npm start)
-    print(f"{BLUE}[1/4]{RESET} Starting Production Next.js Frontend (http://localhost:3000)...")
+    print(f"{BLUE}[1/5]{RESET} Starting Production Next.js Frontend (http://localhost:3000)...")
     frontend_proc = start_frontend_process()
     with watchdog_lock:
         managed_procs["frontend"] = frontend_proc
 
     # 3. Start Uvicorn AI Backend (Production mode without --reload)
-    print(f"{BLUE}[2/4]{RESET} Starting FastAPI Backend + InsightFace AI (Port 8000, Production Mode)...")
+    print(f"{BLUE}[2/5]{RESET} Starting FastAPI Backend + InsightFace AI (Port 8000, Production Mode)...")
     uvicorn_proc = start_backend_process()
     with watchdog_lock:
         managed_procs["backend"] = uvicorn_proc
@@ -443,11 +490,17 @@ def main():
     else:
         print(f"  {YELLOW}! Backend is taking a bit longer to initialize models...{RESET}")
 
+    # 4. Start WhatsApp Multi-Device QR Bridge
+    print(f"{BLUE}[3/5]{RESET} Starting WhatsApp Multi-Device QR Bridge (Port 5005)...")
+    wa_proc = start_whatsapp_process()
+    with watchdog_lock:
+        managed_procs["whatsapp"] = wa_proc
+
     # Start Unified System Watchdog Thread (Step 9 & 10)
     threading.Thread(target=watchdog_loop, daemon=True, name="SystemWatchdog").start()
 
-    # 4. Start Cloudflare Unlimited Tunnel
-    print(f"{BLUE}[3/4]{RESET} Initializing Cloudflare Unlimited Bandwidth Tunnel...")
+    # 5. Start Cloudflare Unlimited Tunnel
+    print(f"{BLUE}[4/5]{RESET} Initializing Cloudflare Unlimited Bandwidth Tunnel...")
     cf_proc = subprocess.Popen(
         [cf_binary, "tunnel", "--url", "http://127.0.0.1:8000"],
         cwd=BACKEND_DIR,
@@ -490,16 +543,17 @@ def main():
     if not tunnel_url:
         print(f"{YELLOW}! Warning: Cloudflare Tunnel is still initializing in background.{RESET}")
     else:
-        print(f"{BLUE}[4/4]{RESET} Cloud Vercel Portal synced successfully!")
+        print(f"{BLUE}[5/5]{RESET} Cloud Vercel Portal synced successfully!")
 
-    # 5. Display Dashboard
+    # 6. Display Dashboard
     display_tunnel = tunnel_url or "Connecting in background..."
     print("\n" + BOLD + GREEN + "╔" + "═"*68 + "╗" + RESET)
     print(f"{BOLD}{GREEN}║  🎉 MedAttend System is 100% ONLINE (Full Production Mode)         ║{RESET}")
     print(BOLD + GREEN + "╠" + "═"*68 + "╣" + RESET)
     print(f"║  {CYAN}Local Web Dashboard:{RESET}  http://localhost:3000 (Production)               ║")
     print(f"║  {CYAN}Local AI Backend:{RESET}     http://127.0.0.1:8000 (Production)               ║")
-    print(f"║  {CYAN}Watchdog Recovery:{RESET}    {GREEN}Active (Auto-restarts Backend & Frontend){RESET} ║")
+    print(f"║  {CYAN}WhatsApp QR Bridge:{RESET}   http://127.0.0.1:5005 (Active)                   ║")
+    print(f"║  {CYAN}Watchdog Recovery:{RESET}    {GREEN}Active (Auto-restarts All Hub Services){RESET}   ║")
     print(f"║  {CYAN}Cloudflare Tunnel:{RESET}    {display_tunnel:<49} ║")
     print(f"║  {CYAN}Vercel Live Portal:{RESET}   https://newshuge.com/selfieattend                ║")
     print(f"║  {CYAN}Bandwidth Quota:{RESET}      {GREEN}UNLIMITED FOREVER (No Limits){RESET}                    ║")

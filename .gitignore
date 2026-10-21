@@ -62,5 +62,7 @@ backend/ngrok
 backend/ngrok*
 cloudflared
 backend/bin/cloudflared
-*.exe
-*.bin
+# WhatsApp Multi-Device Session State
+whatsapp-service/session/
+whatsapp-service/session*
+whatsapp_session/

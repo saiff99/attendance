@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
   try {
-    const auth = await requireRoles(req, ['Super Admin']);
+    const auth = await requireRoles(req, ['Super Admin', 'Admin', 'Faculty']);
     if (auth.errorResponse) {
       return NextResponse.json(auth.errorResponse.body, { status: auth.errorResponse.status });
     }

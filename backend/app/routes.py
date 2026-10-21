@@ -1185,59 +1185,51 @@ async def selfie_attendance(
 
 
 # ==========================================
-# WhatsApp Cloud API Notifications
+# WhatsApp Multi-Device QR Bridge Notifications
 # ==========================================
 
 from app.whatsapp import (
+    get_whatsapp_status,
+    disconnect_whatsapp,
     send_whatsapp_raw,
     send_session_absentee_alerts,
-    get_whatsapp_job_status,
-    get_whatsapp_diagnostics,
-    update_whatsapp_credentials
+    get_whatsapp_job_status
 )
 
 class WhatsAppTestRequest(BaseModel):
     phone: str
     message: Optional[str] = None
-    template_name: Optional[str] = None
 
 class WhatsAppAlertRequest(BaseModel):
     session_id: str
     async_mode: Optional[bool] = True
 
-class WhatsAppUpdateTokenRequest(BaseModel):
-    token: str
-    phone_id: Optional[str] = None
+@router.get("/api/whatsapp/status")
+async def api_whatsapp_status():
+    """Returns real-time WhatsApp Web connection status, active QR code, and linked phone number."""
+    return await asyncio.to_thread(get_whatsapp_status)
 
-@router.post("/api/whatsapp/update-token")
-async def api_whatsapp_update_token(req: WhatsAppUpdateTokenRequest):
-    """Updates WhatsApp access token dynamically."""
-    return update_whatsapp_credentials(req.token, req.phone_id)
+@router.post("/api/whatsapp/disconnect")
+async def api_whatsapp_disconnect():
+    """Disconnects the active WhatsApp account and generates a fresh QR code."""
+    return await asyncio.to_thread(disconnect_whatsapp)
 
 @router.post("/api/whatsapp/test")
 async def api_whatsapp_test(req: WhatsAppTestRequest):
-    """Sends a test WhatsApp message to verify phone & token setup."""
-    if req.template_name:
-        return send_whatsapp_raw(req.phone, "", template_name=req.template_name)
-    msg = req.message or "🏫 *Jagannath Gupta Institute of Medical Sciences & Hospital*\nThis is a verified test message from your Attendance Notification System."
-    return send_whatsapp_raw(req.phone, msg)
+    """Sends a test WhatsApp message from the connected account."""
+    msg = req.message or "🏫 *Jagannath Gupta Institute of Medical Sciences & Hospital*\nThis is a verified test message from your MedAttend Attendance Notification System."
+    return await asyncio.to_thread(send_whatsapp_raw, req.phone, msg)
 
 @router.post("/api/whatsapp/send-absent-alerts")
 async def api_whatsapp_send_absent_alerts(req: WhatsAppAlertRequest):
     """
     Step 8 — Non-Blocking WhatsApp Absentee Alert Dispatcher.
-    Dispatches WhatsApp absent notices asynchronously via a dedicated background queue worker.
-    Returns immediately without blocking CCTV streams, AI loops, or FastAPI request threads.
+    Dispatches WhatsApp absent notices asynchronously from the connected account with safe anti-spam throttling.
     """
     return await asyncio.to_thread(send_session_absentee_alerts, req.session_id, req.async_mode)
 
 @router.get("/api/whatsapp/job-status/{job_id}")
 async def api_whatsapp_job_status(job_id: str):
-    """Fetches real-time status of a background WhatsApp alert dispatch job."""
-    return get_whatsapp_job_status(job_id)
-
-@router.get("/api/whatsapp/status")
-async def api_whatsapp_status():
-    """Returns queue diagnostics for WhatsApp background worker."""
-    return get_whatsapp_diagnostics()
+    """Fetches real-time status and live counter of a background WhatsApp alert dispatch job."""
+    return await asyncio.to_thread(get_whatsapp_job_status, job_id)
 

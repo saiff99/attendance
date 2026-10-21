@@ -1,8 +1,22 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { MessageSquare, Send, CheckCircle2, AlertCircle, X, Loader2, Phone, ShieldCheck, Users, RefreshCw, Check } from "lucide-react";
-// WhatsApp Absentee Alert Modal Component
+import { useState, useEffect, useRef } from "react";
+import {
+  MessageSquare,
+  Send,
+  CheckCircle2,
+  AlertCircle,
+  X,
+  Loader2,
+  Phone,
+  RefreshCw,
+  Check,
+  QrCode,
+  Smartphone,
+  LogOut,
+  Radio,
+  ExternalLink,
+} from "lucide-react";
 import { getParentPhone, formatPhoneDisplay } from "@/lib/studentContact";
 import { isCohortMatching } from "@/lib/cohort";
 
@@ -19,86 +33,110 @@ export function WhatsAppAlertModal({
   onClose,
   sessionId,
   sessionName = "Class Session",
-  topicName = "General Lecture"
+  topicName = "General Lecture",
 }: WhatsAppAlertModalProps) {
+  // Session Absentees State
   const [loading, setLoading] = useState(true);
-  const [isSending, setIsSending] = useState(false);
   const [absentStudents, setAbsentStudents] = useState<any[]>([]);
   const [presentCount, setPresentCount] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
-  const [sendResult, setSendResult] = useState<any | null>(null);
   const [markingStudentId, setMarkingStudentId] = useState<string | null>(null);
 
-  // Token update state
-  const [newToken, setNewToken] = useState("");
-  const [isUpdatingToken, setIsUpdatingToken] = useState(false);
-  const [tokenUpdateMsg, setTokenUpdateMsg] = useState<string | null>(null);
+  // WhatsApp Web Multi-Device Connection State
+  const [connectionStatus, setConnectionStatus] = useState<
+    "disconnected" | "connecting" | "qr_ready" | "connected"
+  >("connecting");
+  const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string | null>(null);
+  const [connectedUser, setConnectedUser] = useState<any | null>(null);
+  const [isDisconnecting, setIsDisconnecting] = useState(false);
+  const [isCheckingStatus, setIsCheckingStatus] = useState(false);
 
-  // Test send state
+  // Dispatch & Batch Progress State
+  const [isSending, setIsSending] = useState(false);
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const [jobProgress, setJobProgress] = useState<{
+    status: string;
+    total: number;
+    sent_count: number;
+    failed_count: number;
+    missing_phone_count: number;
+    current_student?: string | null;
+    details: any[];
+  } | null>(null);
+
+  // Test Message State
   const [testPhone, setTestPhone] = useState("");
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<string | null>(null);
 
-  const handleManualMarkPresent = async (studentId: string) => {
-    if (!sessionId || !studentId) return;
-    setMarkingStudentId(studentId);
+  const statusPollRef = useRef<NodeJS.Timeout | null>(null);
+  const jobPollRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Fetch WhatsApp Connection Status & QR Code
+  const fetchWhatsAppStatus = async () => {
     try {
-      const res = await fetch('/api/attendance/mark', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          session_id: sessionId,
-          student_id: studentId,
-          status: 'Present',
-          capture_mode: 'Manual Upload',
-          confidence_score: 1.0,
-          recorded_at: new Date().toISOString(),
-        }),
-      });
+      setIsCheckingStatus(true);
+      const res = await fetch("/api/whatsapp/status");
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to mark present');
-      await fetchSessionAbsentees();
-    } catch (err: any) {
-      alert("Failed to mark present: " + (err.message || "Unknown error"));
+      if (res.ok && data) {
+        setConnectionStatus(data.status || "disconnected");
+        setQrCodeDataUrl(data.qr || null);
+        setConnectedUser(data.user || null);
+      } else {
+        setConnectionStatus("disconnected");
+      }
+    } catch (err) {
+      console.warn("Failed to check WhatsApp status:", err);
+      setConnectionStatus("disconnected");
     } finally {
-      setMarkingStudentId(null);
+      setIsCheckingStatus(false);
     }
   };
 
+  // Poll connection status while modal is open (faster poll if waiting for QR scan)
+  useEffect(() => {
+    if (!isOpen) {
+      if (statusPollRef.current) clearInterval(statusPollRef.current);
+      return;
+    }
 
-  const handleUpdateToken = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newToken.trim()) return;
-    setIsUpdatingToken(true);
-    setTokenUpdateMsg(null);
+    fetchWhatsAppStatus();
+
+    const intervalMs = connectionStatus === "connected" ? 8000 : 2500;
+    statusPollRef.current = setInterval(fetchWhatsAppStatus, intervalMs);
+
+    return () => {
+      if (statusPollRef.current) clearInterval(statusPollRef.current);
+    };
+  }, [isOpen, connectionStatus]);
+
+  // Handle Disconnect / Logout
+  const handleDisconnect = async () => {
+    if (!confirm("Are you sure you want to disconnect this WhatsApp number? A new QR code will be generated.")) {
+      return;
+    }
+    setIsDisconnecting(true);
     try {
-      const res = await fetch("/api/whatsapp/update-token", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: newToken.trim() })
-      });
+      const res = await fetch("/api/whatsapp/disconnect", { method: "POST" });
       const data = await res.json();
       if (data.success) {
-        setTokenUpdateMsg("✅ New Access Token saved! Re-dispatching alerts now...");
-        setNewToken("");
-        // Automatically retry dispatching
-        setTimeout(() => {
-          handleSendAlerts();
-        }, 800);
-      } else {
-        setTokenUpdateMsg(`❌ Failed: ${data.error || "Could not update token"}`);
+        setConnectionStatus("connecting");
+        setConnectedUser(null);
+        setQrCodeDataUrl(null);
+        setTimeout(fetchWhatsAppStatus, 1500);
       }
     } catch (err: any) {
-      setTokenUpdateMsg(`❌ Failed: ${err.message || "Network error"}`);
+      alert("Failed to disconnect: " + (err.message || "Network error"));
     } finally {
-      setIsUpdatingToken(false);
+      setIsDisconnecting(false);
     }
   };
 
+  // Fetch Class Session Absentees
   const fetchSessionAbsentees = async () => {
     if (!sessionId) return;
     setLoading(true);
-    setSendResult(null);
+    setJobProgress(null);
     try {
       // 1. Fetch Session Info
       const sessRes = await fetch(`/api/sessions/${sessionId}`);
@@ -107,15 +145,19 @@ export function WhatsAppAlertModal({
       const targetYear = session?.target_academic_year;
 
       // 2. Fetch Enrolled Students for this specific cohort & sub-batch
-      const stuRes = await fetch('/api/students');
+      const stuRes = await fetch("/api/students");
       const stuData = await stuRes.json();
       const rawStudents = stuData.students || [];
-      const allStudents = rawStudents.filter((s: any) => isCohortMatching(targetYear, s.academic_year));
+      const allStudents = rawStudents.filter((s: any) =>
+        isCohortMatching(targetYear, s.academic_year)
+      );
 
       // 3. Fetch Present Attendances
       const attRes = await fetch(`/api/attendance/session/${sessionId}`);
       const attData = await attRes.json();
-      const attendances = (attData.logs || []).filter((a: any) => a.status === 'Present');
+      const attendances = (attData.logs || []).filter(
+        (a: any) => a.status === "Present"
+      );
 
       const presentIds = new Set(attendances.map((a: any) => a.student_id));
       const total = allStudents || [];
@@ -138,42 +180,124 @@ export function WhatsAppAlertModal({
     }
   }, [isOpen, sessionId]);
 
+  // 1-Click Faculty Manual Override: Mark Present
+  const handleManualMarkPresent = async (studentId: string) => {
+    if (!sessionId || !studentId) return;
+    setMarkingStudentId(studentId);
+    try {
+      const res = await fetch("/api/attendance/mark", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: sessionId,
+          student_id: studentId,
+          status: "Present",
+          capture_mode: "Manual Upload",
+          confidence_score: 1.0,
+          recorded_at: new Date().toISOString(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to mark present");
+      await fetchSessionAbsentees();
+    } catch (err: any) {
+      alert("Failed to mark present: " + (err.message || "Unknown error"));
+    } finally {
+      setMarkingStudentId(null);
+    }
+  };
+
+  // Start Batch Absentee Alert Dispatch
   const handleSendAlerts = async () => {
+    if (connectionStatus !== "connected") {
+      alert("Please scan the WhatsApp QR code first to connect your phone.");
+      return;
+    }
+
     setIsSending(true);
-    setSendResult(null);
+    setJobProgress(null);
+
     try {
       const res = await fetch("/api/whatsapp/send-alerts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ session_id: sessionId })
+        body: JSON.stringify({ session_id: sessionId }),
       });
 
       const data = await res.json();
-      setSendResult(data);
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Failed to start WhatsApp dispatch");
+      }
+
+      if (data.jobId) {
+        setActiveJobId(data.jobId);
+        pollJobProgress(data.jobId);
+      } else {
+        setIsSending(false);
+      }
     } catch (err: any) {
-      setSendResult({
-        success: false,
-        error: err.message || "Failed to connect to WhatsApp service"
+      setJobProgress({
+        status: "failed",
+        total: 0,
+        sent_count: 0,
+        failed_count: 1,
+        missing_phone_count: 0,
+        details: [{ status: "failed", error: err.message || "Failed to connect to WhatsApp service" }],
       });
-    } finally {
       setIsSending(false);
     }
   };
 
+  // Poll Job Progress from server
+  const pollJobProgress = (jobId: string) => {
+    if (jobPollRef.current) clearInterval(jobPollRef.current);
+
+    jobPollRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/whatsapp/job-status/${jobId}`);
+        const data = await res.json();
+
+        if (res.ok && data) {
+          setJobProgress(data);
+          if (data.status === "completed" || data.status === "failed") {
+            if (jobPollRef.current) clearInterval(jobPollRef.current);
+            setIsSending(false);
+          }
+        }
+      } catch (err) {
+        console.error("Job status polling error:", err);
+      }
+    }, 1000);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (jobPollRef.current) clearInterval(jobPollRef.current);
+    };
+  }, []);
+
+  // Send Single Test WhatsApp Message
   const handleSendTestMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!testPhone.trim()) return;
+    if (connectionStatus !== "connected") {
+      setTestResult("⚠️ Please scan the QR code and connect WhatsApp first.");
+      return;
+    }
     setIsTesting(true);
     setTestResult(null);
     try {
       const res = await fetch("/api/whatsapp/test", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: testPhone.trim() })
+        body: JSON.stringify({
+          phone: testPhone.trim(),
+          message: `🏫 *Jagannath Gupta Institute of Medical Sciences & Hospital*\n✅ *Test WhatsApp Notice*\n\nThis is a verified test message sent from the MedAttend Attendance Hub via linked WhatsApp account (${connectedUser?.phone || "Connected"}).`,
+        }),
       });
       const data = await res.json();
       if (data.success) {
-        setTestResult(`✅ Test WhatsApp message sent successfully to ${data.recipient || testPhone}!`);
+        setTestResult(`✅ Test WhatsApp message delivered to ${data.recipient || testPhone}! Check your phone.`);
       } else {
         setTestResult(`❌ Error: ${data.error || "Failed to deliver message"}`);
       }
@@ -186,26 +310,47 @@ export function WhatsAppAlertModal({
 
   if (!isOpen) return null;
 
-  const absenteesWithPhone = absentStudents.filter(s => Boolean(getParentPhone(s)));
-  const absenteesWithoutPhone = absentStudents.filter(s => !getParentPhone(s));
+  const absenteesWithPhone = absentStudents.filter((s) => Boolean(getParentPhone(s)));
+  const absenteesWithoutPhone = absentStudents.filter((s) => !getParentPhone(s));
+
+  // Progress Calculation
+  const progressPercent =
+    jobProgress && jobProgress.total > 0
+      ? Math.round(
+          ((jobProgress.sent_count +
+            jobProgress.failed_count +
+            jobProgress.missing_phone_count) /
+            jobProgress.total) *
+            100
+        )
+      : 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-xl sm:max-w-2xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
-
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-xl sm:max-w-2xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-slate-800 bg-slate-950/70 shrink-0">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-slate-800 bg-slate-950/80 shrink-0">
           <div className="flex items-center gap-3 min-w-0">
             <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0">
               <MessageSquare className="w-5 h-5" />
             </div>
             <div className="min-w-0">
-              <h2 className="text-sm sm:text-base font-bold text-white flex items-center gap-2 truncate">
-                <span>WhatsApp Absentee Dispatcher</span>
-                <span className="text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shrink-0">
-                  Cloud API
-                </span>
-              </h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm sm:text-base font-bold text-white truncate">
+                  WhatsApp Absentee Dispatcher
+                </h2>
+                {connectionStatus === "connected" ? (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shrink-0">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    <span>Linked</span>
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 shrink-0">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                    <span>Scan QR</span>
+                  </span>
+                )}
+              </div>
               <p className="text-xs text-slate-400 truncate">
                 {sessionName} • {topicName}
               </p>
@@ -219,12 +364,120 @@ export function WhatsAppAlertModal({
           </button>
         </div>
 
-        {/* Content Body - with strict horizontal overflow prevention */}
+        {/* Modal Scrollable Body */}
         <div className="p-4 sm:p-6 overflow-y-auto overflow-x-hidden space-y-4 flex-1 w-full min-w-0">
+          {/* Section 1: WhatsApp Device Connection Card */}
+          <div className="rounded-2xl border border-slate-800 bg-slate-950/90 p-4 transition-all">
+            {connectionStatus === "connected" ? (
+              // Connected State
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+                    <Smartphone className="w-5 h-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold text-emerald-400 flex items-center gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5" /> Connected WhatsApp Account
+                      </span>
+                    </div>
+                    <p className="text-sm font-bold text-white tracking-wide truncate">
+                      {connectedUser?.phone || "Connected Device"}
+                      {connectedUser?.name ? ` (${connectedUser.name})` : ""}
+                    </p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Messages will be sent directly to absent students' parents from this number.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                  <button
+                    type="button"
+                    onClick={handleDisconnect}
+                    disabled={isDisconnecting}
+                    className="px-3 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    title="Disconnect and link a different WhatsApp number"
+                  >
+                    {isDisconnecting ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <LogOut className="w-3.5 h-3.5" />
+                    )}
+                    <span>Change Number</span>
+                  </button>
+                </div>
+              </div>
+            ) : connectionStatus === "qr_ready" && qrCodeDataUrl ? (
+              // QR Code Ready to Scan State
+              <div className="flex flex-col md:flex-row items-center gap-5">
+                <div className="p-2 rounded-xl bg-white shadow-xl flex items-center justify-center shrink-0">
+                  <img
+                    src={qrCodeDataUrl}
+                    alt="WhatsApp QR Code"
+                    className="w-44 h-44 sm:w-48 sm:h-48 rounded-lg object-contain"
+                  />
+                </div>
+
+                <div className="space-y-2.5 text-xs text-slate-300 flex-1 min-w-0">
+                  <div className="flex items-center gap-2 text-emerald-400 font-bold text-sm">
+                    <QrCode className="w-4 h-4" />
+                    <span>Scan to Connect Any WhatsApp Number</span>
+                  </div>
+                  <p className="text-slate-400 text-[11px] leading-relaxed">
+                    যে কোনো ব্যক্তিগত বা অফিসিয়াল ফোন থেকে WhatsApp খুলে নিচের সহজ ধাপগুলো অনুসরণ করুন:
+                  </p>
+                  <ol className="space-y-1.5 text-[11px] pl-1 text-slate-300">
+                    <li className="flex items-start gap-1.5">
+                      <span className="font-bold text-emerald-400 shrink-0">১.</span>
+                      <span>আপনার ফোনের <strong>WhatsApp</strong> অ্যাপটি ওপেন করুন।</span>
+                    </li>
+                    <li className="flex items-start gap-1.5">
+                      <span className="font-bold text-emerald-400 shrink-0">২.</span>
+                      <span>উপরের ৩টি ডট বা <strong>Settings</strong> থেকে <strong>Linked Devices</strong> এ ট্যাপ করুন।</span>
+                    </li>
+                    <li className="flex items-start gap-1.5">
+                      <span className="font-bold text-emerald-400 shrink-0">৩.</span>
+                      <span><strong>Link a Device</strong> এ ক্লিক করে বাঁদিকের এই QR কোডটি স্ক্যান করুন।</span>
+                    </li>
+                  </ol>
+                  <div className="pt-2 flex items-center justify-between text-[11px] text-slate-400">
+                    <span className="flex items-center gap-1 text-emerald-400">
+                      <Radio className="w-3 h-3 animate-ping" />
+                      <span>Waiting for QR scan...</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={fetchWhatsAppStatus}
+                      disabled={isCheckingStatus}
+                      className="text-slate-400 hover:text-white flex items-center gap-1 text-[11px] cursor-pointer"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${isCheckingStatus ? "animate-spin" : ""}`} />
+                      <span>Refresh</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              // Connecting / Initializing State
+              <div className="py-6 flex flex-col items-center justify-center text-center space-y-2">
+                <Loader2 className="w-6 h-6 text-emerald-400 animate-spin" />
+                <p className="text-xs text-slate-300 font-medium">
+                  Connecting to WhatsApp service & generating QR code...
+                </p>
+                <p className="text-[11px] text-slate-500">
+                  Please wait a moment while the secure bridge initializes.
+                </p>
+              </div>
+            )}
+          </div>
+
           {loading ? (
-            <div className="py-12 flex flex-col items-center justify-center text-center">
-              <Loader2 className="w-8 h-8 text-emerald-400 animate-spin mb-3" />
-              <p className="text-xs sm:text-sm font-medium text-slate-300">Analyzing session attendance & parent numbers...</p>
+            <div className="py-10 flex flex-col items-center justify-center text-center">
+              <Loader2 className="w-7 h-7 text-emerald-400 animate-spin mb-2" />
+              <p className="text-xs font-medium text-slate-300">
+                Analyzing session attendance & parent WhatsApp numbers...
+              </p>
             </div>
           ) : (
             <>
@@ -248,18 +501,17 @@ export function WhatsAppAlertModal({
               <div className="p-3.5 sm:p-4 rounded-xl bg-slate-950/90 border border-slate-800 w-full min-w-0 overflow-hidden">
                 <div className="text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2 flex items-center justify-between">
                   <span>WhatsApp Notice Preview</span>
-                  <span className="text-[10px] text-emerald-400 font-normal">Official Meta Template</span>
+                  <span className="text-[10px] text-emerald-400 font-normal">Direct WhatsApp Message</span>
                 </div>
-                <div className="p-3 rounded-lg bg-emerald-950/20 border border-emerald-500/20 text-xs text-slate-200 leading-relaxed break-words whitespace-pre-wrap">
-                  🏫 <strong className="text-emerald-300">Jagannath Gupta Institute of Medical Sciences & Hospital</strong>
-                  ⚠️ <strong>Student Attendance Alert Notice</strong>
-
-                  Dear Parent/Guardian,
-                  This is to notify you that your ward <strong>[Student Name]</strong> (Roll: <strong>[Roll No]</strong>) was marked <span className="text-rose-400 font-bold">ABSENT</span> for today's class:
-
-                  📚 <strong>Class:</strong> {sessionName}
-                  👨‍🏫 <strong>Topic:</strong> {topicName}
-                  📅 <strong>Date:</strong> {new Date().toLocaleDateString([], { dateStyle: 'medium' })}
+                <div className="p-3 rounded-lg bg-emerald-950/20 border border-emerald-500/20 text-xs text-slate-200 leading-relaxed break-words whitespace-pre-wrap font-mono">
+                  🏫 <strong className="text-emerald-300">Jagannath Gupta Institute of Medical Sciences & Hospital</strong>{"\n"}
+                  ⚠️ <strong>Student Attendance Alert Notice</strong>{"\n\n"}
+                  Dear Parent/Guardian,{"\n"}
+                  This is to notify you that your ward <strong>[Student Name]</strong> (Roll: <strong>[Roll No]</strong>) was marked <span className="text-rose-400 font-bold">ABSENT</span> for today's class:{"\n\n"}
+                  📚 <strong>Class:</strong> {sessionName}{"\n"}
+                  👨‍🏫 <strong>Topic:</strong> {topicName}{"\n"}
+                  📅 <strong>Date:</strong> {new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}{"\n\n"}
+                  <em>If you believe this is an error, please contact the department coordinator.</em>
                 </div>
               </div>
 
@@ -270,7 +522,8 @@ export function WhatsAppAlertModal({
                     Absent Students List ({absentStudents.length})
                   </span>
                   <span className="text-[11px] text-slate-400">
-                    <strong className="text-emerald-400">{absenteesWithPhone.length}</strong> with WhatsApp • <strong className="text-amber-400">{absenteesWithoutPhone.length}</strong> no phone
+                    <strong className="text-emerald-400">{absenteesWithPhone.length}</strong> with WhatsApp •{" "}
+                    <strong className="text-amber-400">{absenteesWithoutPhone.length}</strong> no phone
                   </span>
                 </div>
 
@@ -307,7 +560,7 @@ export function WhatsAppAlertModal({
                               disabled={markingStudentId === student.id || isSending}
                               onClick={() => handleManualMarkPresent(student.id)}
                               className="px-2.5 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/30 text-[10px] font-semibold flex items-center gap-1 transition-all cursor-pointer disabled:opacity-50 active:scale-95 shadow-sm"
-                              title="1-Click Faculty Override: Mark Present for unscanned student"
+                              title="Faculty Override: Mark Present for unscanned student"
                             >
                               {markingStudentId === student.id ? (
                                 <Loader2 className="w-3 h-3 animate-spin text-emerald-300" />
@@ -324,178 +577,123 @@ export function WhatsAppAlertModal({
                 )}
               </div>
 
-              {/* Send Results Banner */}
-              {sendResult && (
-                <div
-                  className={`p-3.5 sm:p-4 rounded-xl border text-xs space-y-3 w-full min-w-0 break-words ${sendResult.success && sendResult.failed_count === 0
-                      ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-200"
-                      : sendResult.success && sendResult.sent_count > 0
-                        ? "bg-amber-500/10 border-amber-500/30 text-amber-200"
-                        : "bg-rose-500/10 border-rose-500/30 text-rose-200"
-                    }`}
-                >
-                  <div className="font-bold flex items-center gap-2">
-                    {sendResult.success && sendResult.failed_count === 0 ? (
-                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                    ) : (
-                      <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
-                    )}
-                    <span className="truncate">
-                      {sendResult.success && sendResult.failed_count === 0
-                        ? "All WhatsApp Alerts Dispatched Successfully!"
-                        : sendResult.success
-                          ? "WhatsApp Dispatch Complete (Partial/Errors)"
-                          : "Dispatch Failed"}
+              {/* Live Batch Dispatch Progress & Results */}
+              {(isSending || jobProgress) && (
+                <div className="p-4 rounded-xl bg-slate-950 border border-emerald-500/30 text-xs space-y-3 w-full min-w-0">
+                  <div className="flex items-center justify-between font-semibold">
+                    <span className="flex items-center gap-2 text-white">
+                      {isSending ? (
+                        <Loader2 className="w-4 h-4 text-emerald-400 animate-spin" />
+                      ) : (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                      )}
+                      <span>
+                        {isSending
+                          ? "Sending Absentee WhatsApp Alerts..."
+                          : "WhatsApp Dispatch Completed!"}
+                      </span>
                     </span>
+                    <span className="text-emerald-400 font-bold">{progressPercent}%</span>
                   </div>
 
-                  {sendResult.success ? (
-                    <div className="space-y-2 text-[11px] text-slate-300">
-                      <div>✅ Successfully sent: <strong className="text-emerald-300">{sendResult.sent_count}</strong> parent WhatsApp alerts</div>
-                      {sendResult.missing_phone_count > 0 && (
-                        <div>⚠️ Skipped (no parent phone): <strong className="text-slate-400">{sendResult.missing_phone_count}</strong> students</div>
-                      )}
-                      {sendResult.failed_count > 0 && (
-                        <div className="text-rose-300">❌ Failed to deliver: <strong>{sendResult.failed_count}</strong> alerts</div>
-                      )}
+                  {/* Progress Bar */}
+                  <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+                    <div
+                      className="bg-gradient-to-r from-emerald-500 to-teal-400 h-2 transition-all duration-300"
+                      style={{ width: `${progressPercent}%` }}
+                    />
+                  </div>
 
-                      {/* Per-student dispatch details */}
-                      {Array.isArray(sendResult.details) && sendResult.details.length > 0 && (
-                        <div className="mt-2 pt-2 border-t border-slate-800/60 space-y-1.5 w-full min-w-0">
-                          {sendResult.details.map((d: any, idx: number) => (
-                            <div key={idx} className="flex items-center justify-between text-[11px] py-1 border-b border-slate-800/40 last:border-0 gap-2 min-w-0">
-                              <span className="text-slate-300 font-medium truncate min-w-0 flex-1">
-                                {d.student_name} ({d.student_roll}) {d.phone ? `• ${d.phone}` : ''}
-                              </span>
-                              <span className={`shrink-0 text-[11px] font-semibold ${d.status === 'sent'
-                                  ? 'text-emerald-400'
-                                  : d.status === 'skipped_no_phone'
-                                    ? 'text-amber-400'
-                                    : 'text-rose-400'
-                                }`}>
-                                {d.status === 'sent' ? '✅ Sent' : d.status === 'skipped_no_phone' ? '⚠️ No Phone' : '❌ Delivery Failed'}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
+                  {isSending && jobProgress?.current_student && (
+                    <p className="text-[11px] text-slate-400 truncate">
+                      Sending notice to: <strong className="text-slate-200">{jobProgress.current_student}</strong>...
+                    </p>
+                  )}
 
-                      {/* Token Expired Action Box */}
-                      {sendResult.failed_count > 0 && JSON.stringify(sendResult.details || '').includes('Meta Access Token expired') && (
-                        <div className="mt-3 p-3 rounded-xl bg-rose-950/40 border border-rose-500/30 text-rose-200 text-[11px] space-y-2 w-full min-w-0 break-words">
-                          <div className="font-bold flex items-center gap-1.5 text-rose-300">
-                            <span>🔑 Meta Access Token Expired:</span>
-                          </div>
-                          <p className="text-slate-300 leading-relaxed">
-                            Meta Developer Temporary Access Tokens expire every 24 hours. Paste a fresh token to resolve immediately:
-                          </p>
-                          <ol className="list-decimal list-inside space-y-0.5 text-slate-300 pl-1">
-                            <li>Go to <strong>developers.facebook.com</strong> &gt; <strong>WhatsApp</strong> &gt; <strong>API Setup</strong>.</li>
-                            <li>Click <strong>Generate Token</strong> or copy the <strong>Temporary access token</strong>.</li>
-                            <li>Paste the new token in the box below and click <strong>"Save &amp; Retry"</strong>.</li>
-                          </ol>
-
-                          <form onSubmit={handleUpdateToken} className="flex flex-col sm:flex-row items-center gap-2 pt-1 w-full min-w-0">
-                            <input
-                              type="password"
-                              placeholder="Paste new Meta Access Token (EAAX...)"
-                              value={newToken}
-                              onChange={(e) => setNewToken(e.target.value)}
-                              className="w-full min-w-0 flex-1 px-3 py-2 rounded-xl bg-slate-950 border border-rose-500/40 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-rose-400"
-                            />
-                            <button
-                              type="submit"
-                              disabled={isUpdatingToken || !newToken.trim()}
-                              className="w-full sm:w-auto px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-semibold text-xs transition-all disabled:opacity-50 cursor-pointer shrink-0 flex items-center justify-center gap-1.5"
-                            >
-                              {isUpdatingToken ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-                              <span>Save &amp; Retry</span>
-                            </button>
-                          </form>
-                          {tokenUpdateMsg && (
-                            <p className="text-[11px] text-slate-200 mt-1">{tokenUpdateMsg}</p>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Sandbox Restriction Guidance Box */}
-                      {sendResult.failed_count > 0 && JSON.stringify(sendResult.details || '').includes('Sandbox Restriction') && (
-                        <div className="mt-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-200 text-[11px] space-y-1 w-full min-w-0 break-words">
-                          <div className="font-bold flex items-center gap-1.5 text-amber-300">
-                            <span>🛡️ Meta Developer Sandbox Requirement:</span>
-                          </div>
-                          <p className="text-slate-300 leading-relaxed">
-                            To receive messages in Meta Developer Test Sandbox, the recipient phone number must be whitelisted:
-                          </p>
-                          <ol className="list-decimal list-inside space-y-0.5 text-slate-300 pl-1 pt-1">
-                            <li>Go to <strong>Meta Developer Portal</strong> &gt; <strong>WhatsApp</strong> &gt; <strong>API Setup</strong>.</li>
-                            <li>In <strong>Step 1</strong>, click <strong>"Manage phone number list"</strong> next to <strong>"To"</strong>.</li>
-                            <li>Add the recipient phone number (+91...) and verify with the OTP.</li>
-                          </ol>
-                        </div>
-                      )}
+                  {/* Summary Counters */}
+                  {jobProgress && (
+                    <div className="grid grid-cols-3 gap-2 pt-1 text-[11px] text-center">
+                      <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-300">
+                        <div>Sent</div>
+                        <div className="text-sm font-bold">{jobProgress.sent_count}</div>
+                      </div>
+                      <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-300">
+                        <div>Skipped (No Phone)</div>
+                        <div className="text-sm font-bold">{jobProgress.missing_phone_count}</div>
+                      </div>
+                      <div className="p-2 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-300">
+                        <div>Failed</div>
+                        <div className="text-sm font-bold">{jobProgress.failed_count}</div>
+                      </div>
                     </div>
-                  ) : (
-                    <div className="text-[11px] text-rose-300 break-words">{sendResult.error || "Failed to send alerts"}</div>
+                  )}
+
+                  {/* Per-student delivery log */}
+                  {jobProgress?.details && jobProgress.details.length > 0 && (
+                    <div className="mt-2 max-h-36 overflow-y-auto space-y-1 pt-2 border-t border-slate-800">
+                      {jobProgress.details.map((d: any, idx: number) => (
+                        <div
+                          key={idx}
+                          className="flex items-center justify-between text-[11px] py-0.5 border-b border-slate-800/40 last:border-0"
+                        >
+                          <span className="text-slate-300 truncate">
+                            {d.student_name} ({d.student_roll}) {d.phone ? `• ${d.phone}` : ""}
+                          </span>
+                          <span
+                            className={`shrink-0 font-semibold ${
+                              d.status === "sent"
+                                ? "text-emerald-400"
+                                : d.status === "skipped_no_phone"
+                                ? "text-amber-400"
+                                : "text-rose-400"
+                            }`}
+                          >
+                            {d.status === "sent"
+                              ? "✅ Sent"
+                              : d.status === "skipped_no_phone"
+                              ? "⚠️ No Phone"
+                              : "❌ Failed"}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </div>
               )}
 
-              {/* Test Phone Box & Sandbox Tip */}
+              {/* Single Test Message Section */}
               <div className="pt-3 border-t border-slate-800/80 space-y-2.5 w-full min-w-0">
-                <form onSubmit={handleSendTestMessage} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full min-w-0">
+                <form
+                  onSubmit={handleSendTestMessage}
+                  className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full min-w-0"
+                >
                   <div className="relative flex-1 min-w-0">
                     <input
                       type="text"
-                      placeholder="Send instant test WhatsApp to (+91...)"
+                      placeholder="Send quick test notice to (+91...)"
                       value={testPhone}
                       onChange={(e) => setTestPhone(e.target.value)}
                       className="w-full pl-3 pr-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500"
                     />
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button
-                      type="button"
-                      disabled={isTesting || !testPhone.trim()}
-                      onClick={async () => {
-                        if (!testPhone.trim()) return;
-                        setIsTesting(true);
-                        setTestResult(null);
-                        try {
-                          const res = await fetch("/api/whatsapp/test", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ phone: testPhone.trim(), template_name: "hello_world" })
-                          });
-                          const data = await res.json();
-                          if (data.success) {
-                            setTestResult(`✅ Official Meta 'hello_world' Template sent to ${data.recipient || testPhone}! Check your WhatsApp.`);
-                          } else {
-                            setTestResult(`❌ Error: ${data.error || "Failed to deliver"}`);
-                          }
-                        } catch (err: any) {
-                          setTestResult(`❌ Error: ${err.message || "Network error"}`);
-                        } finally {
-                          setIsTesting(false);
-                        }
-                      }}
-                      className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-300 text-xs font-semibold transition-all disabled:opacity-50 cursor-pointer shrink-0 flex items-center gap-1 border border-emerald-500/20"
-                      title="Send Meta Hello World Template"
-                    >
-                      <span>Template Test</span>
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={isTesting || !testPhone.trim()}
-                      className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition-all disabled:opacity-50 cursor-pointer shrink-0 flex items-center justify-center gap-1.5"
-                    >
-                      {isTesting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5 text-emerald-400" />}
-                      <span>Send Notice</span>
-                    </button>
-                  </div>
+                  <button
+                    type="submit"
+                    disabled={isTesting || !testPhone.trim() || connectionStatus !== "connected"}
+                    className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition-all disabled:opacity-50 cursor-pointer shrink-0 flex items-center justify-center gap-1.5"
+                    title={connectionStatus !== "connected" ? "Connect WhatsApp first" : "Send Test WhatsApp"}
+                  >
+                    {isTesting ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Send className="w-3.5 h-3.5 text-emerald-400" />
+                    )}
+                    <span>Send Test</span>
+                  </button>
                 </form>
                 {testResult && (
-                  <p className="text-[11px] text-slate-300 bg-slate-950/80 p-2.5 rounded-lg border border-slate-800 break-words">{testResult}</p>
+                  <p className="text-[11px] text-slate-300 bg-slate-950/80 p-2.5 rounded-lg border border-slate-800 break-words">
+                    {testResult}
+                  </p>
                 )}
               </div>
             </>
@@ -526,12 +724,21 @@ export function WhatsAppAlertModal({
             <button
               type="button"
               onClick={handleSendAlerts}
-              disabled={isSending || loading || absenteesWithPhone.length === 0}
+              disabled={
+                isSending ||
+                loading ||
+                absentStudents.length === 0 ||
+                connectionStatus !== "connected"
+              }
               className="px-4 sm:px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs transition-all shadow-lg shadow-emerald-600/30 flex items-center gap-2 cursor-pointer disabled:opacity-50 active:scale-95 shrink-0"
             >
               {isSending ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" /> <span>Sending Alerts...</span>
+                </>
+              ) : connectionStatus !== "connected" ? (
+                <>
+                  <QrCode className="w-4 h-4" /> <span>Scan QR to Send ({absenteesWithPhone.length})</span>
                 </>
               ) : (
                 <>
@@ -541,7 +748,6 @@ export function WhatsAppAlertModal({
             </button>
           </div>
         </div>
-
       </div>
     </div>
   );

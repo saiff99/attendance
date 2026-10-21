@@ -6,7 +6,7 @@ import { CalendarDays, RefreshCw, Sparkles } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { decodeSessionMetadata } from "@/lib/geofence";
 import { FormattedDate } from "@/components/FormattedDate";
-// import { WhatsAppDashboardButton } from "@/components/WhatsAppDashboardButton";
+import { WhatsAppDashboardButton } from "@/components/WhatsAppDashboardButton";
 import DownloadReportButton from "@/components/DownloadReportButton";
 
 interface SessionItem {
@@ -180,12 +180,11 @@ export function RecentClassSessionsTable({ initialSessions }: RecentClassSession
                     </td>
                     <td className="px-4 sm:px-6 py-3.5 sm:py-4 whitespace-nowrap text-right text-xs sm:text-sm font-medium">
                       <div className="flex items-center justify-end gap-2">
-                        {/* Temporarily hidden WhatsApp Alert button */}
-                        {/* <WhatsAppDashboardButton
+                        <WhatsAppDashboardButton
                           sessionId={session.id}
                           sessionName={session.class_name}
                           topicName={topic}
-                        /> */}
+                        />
                         <DownloadReportButton sessionId={session.id} sessionName={session.class_name} />
                       </div>
                     </td>
