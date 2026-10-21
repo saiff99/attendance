@@ -327,7 +327,7 @@ export function WhatsAppAlertModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-xl sm:max-w-2xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-xl sm:max-w-2xl lg:max-w-3xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-slate-800 bg-slate-950/80 shrink-0">
           <div className="flex items-center gap-3 min-w-0">
@@ -367,7 +367,7 @@ export function WhatsAppAlertModal({
         {/* Modal Scrollable Body */}
         <div className="p-4 sm:p-6 overflow-y-auto overflow-x-hidden space-y-4 flex-1 w-full min-w-0">
           {/* Section 1: WhatsApp Device Connection Card */}
-          <div className="rounded-2xl border border-slate-800 bg-slate-950/90 p-4 transition-all">
+          <div className="rounded-2xl border border-slate-800 bg-slate-950/90 p-4 sm:p-5 transition-all w-full min-w-0 overflow-hidden">
             {connectionStatus === "connected" ? (
               // Connected State
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
@@ -409,51 +409,75 @@ export function WhatsAppAlertModal({
                 </div>
               </div>
             ) : connectionStatus === "qr_ready" && qrCodeDataUrl ? (
-              // QR Code Ready to Scan State
-              <div className="flex flex-col md:flex-row items-center gap-5">
-                <div className="p-2 rounded-xl bg-white shadow-xl flex items-center justify-center shrink-0">
+              // QR Code Ready to Scan State (Spacious, Clean Card Layout)
+              <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5 sm:gap-6 w-full min-w-0">
+                {/* QR Code Container */}
+                <div className="p-3 rounded-2xl bg-white shadow-xl flex flex-col items-center justify-center shrink-0 border border-slate-200">
                   <img
                     src={qrCodeDataUrl}
                     alt="WhatsApp QR Code"
-                    className="w-44 h-44 sm:w-48 sm:h-48 rounded-lg object-contain"
+                    className="w-36 h-36 sm:w-40 sm:h-40 rounded-xl object-contain block"
                   />
+                  <div className="mt-2 flex items-center gap-1.5 text-[11px] font-semibold text-slate-700">
+                    <Radio className="w-3 h-3 text-emerald-600 animate-pulse" />
+                    <span>Live QR Code</span>
+                  </div>
                 </div>
 
-                <div className="space-y-2.5 text-xs text-slate-300 flex-1 min-w-0">
-                  <div className="flex items-center gap-2 text-emerald-400 font-bold text-sm">
-                    <QrCode className="w-4 h-4" />
-                    <span>Scan to Connect Any WhatsApp Number</span>
+                {/* Instructions Column */}
+                <div className="flex-1 min-w-0 space-y-3 w-full pr-1">
+                  <div>
+                    <div className="flex items-center gap-2 text-emerald-400 font-bold text-sm">
+                      <QrCode className="w-4 h-4 shrink-0" />
+                      <span>Link Any WhatsApp Account</span>
+                    </div>
+                    <p className="text-slate-400 text-xs mt-1 leading-relaxed">
+                      Scan from any personal or departmental WhatsApp account:
+                    </p>
                   </div>
-                  <p className="text-slate-400 text-[11px] leading-relaxed">
-                    Open WhatsApp on your mobile phone and follow these simple steps:
-                  </p>
-                  <ol className="space-y-1.5 text-[11px] pl-1 text-slate-300">
-                    <li className="flex items-start gap-1.5">
-                      <span className="font-bold text-emerald-400 shrink-0">1.</span>
-                      <span>Open <strong>WhatsApp</strong> on your phone.</span>
-                    </li>
-                    <li className="flex items-start gap-1.5">
-                      <span className="font-bold text-emerald-400 shrink-0">2.</span>
-                      <span>Tap the three dots (Android) or <strong>Settings</strong> (iPhone) &gt; <strong>Linked Devices</strong>.</span>
-                    </li>
-                    <li className="flex items-start gap-1.5">
-                      <span className="font-bold text-emerald-400 shrink-0">3.</span>
-                      <span>Tap <strong>Link a Device</strong> and point your camera at this QR code.</span>
-                    </li>
-                  </ol>
-                  <div className="pt-2 flex items-center justify-between text-[11px] text-slate-400">
-                    <span className="flex items-center gap-1 text-emerald-400">
-                      <Radio className="w-3 h-3 animate-ping" />
-                      <span>Waiting for QR scan...</span>
+
+                  {/* Step Cards */}
+                  <div className="space-y-2 text-xs">
+                    <div className="flex items-center gap-2.5 p-2 rounded-xl bg-slate-900/90 border border-slate-800/80">
+                      <span className="w-5 h-5 rounded-lg bg-emerald-500/20 text-emerald-400 font-bold text-xs flex items-center justify-center shrink-0">
+                        1
+                      </span>
+                      <span className="text-slate-200 text-xs truncate">
+                        Open <strong>WhatsApp</strong> on your mobile phone
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2.5 p-2 rounded-xl bg-slate-900/90 border border-slate-800/80">
+                      <span className="w-5 h-5 rounded-lg bg-emerald-500/20 text-emerald-400 font-bold text-xs flex items-center justify-center shrink-0">
+                        2
+                      </span>
+                      <span className="text-slate-200 text-xs truncate">
+                        Go to <strong>Settings</strong> &gt; <strong>Linked Devices</strong>
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2.5 p-2 rounded-xl bg-slate-900/90 border border-slate-800/80">
+                      <span className="w-5 h-5 rounded-lg bg-emerald-500/20 text-emerald-400 font-bold text-xs flex items-center justify-center shrink-0">
+                        3
+                      </span>
+                      <span className="text-slate-200 text-xs truncate">
+                        Tap <strong>Link a Device</strong> &amp; point camera at this QR code
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Action Row */}
+                  <div className="pt-1 flex items-center justify-between text-xs text-slate-400">
+                    <span className="text-[11px] text-slate-400 flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                      <span>Waiting for scan...</span>
                     </span>
                     <button
                       type="button"
                       onClick={fetchWhatsAppStatus}
                       disabled={isCheckingStatus}
-                      className="text-slate-400 hover:text-white flex items-center gap-1 text-[11px] cursor-pointer"
+                      className="text-emerald-400 hover:text-emerald-300 font-medium flex items-center gap-1.5 text-xs cursor-pointer px-2.5 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 transition-all"
                     >
-                      <RefreshCw className={`w-3 h-3 ${isCheckingStatus ? "animate-spin" : ""}`} />
-                      <span>Refresh</span>
+                      <RefreshCw className={`w-3.5 h-3.5 ${isCheckingStatus ? "animate-spin" : ""}`} />
+                      <span>Refresh QR</span>
                     </button>
                   </div>
                 </div>
