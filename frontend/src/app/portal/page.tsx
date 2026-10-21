@@ -763,35 +763,23 @@ export default function StudentPortalPage() {
 
         {/* Recent Session Attendance Timeline */}
         <section className="bg-slate-900/90 border border-slate-800 rounded-3xl p-5 sm:p-7 shadow-2xl relative overflow-hidden backdrop-blur-xl">
-          <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center justify-between gap-3 mb-5">
             <div>
-              <div className="flex items-center gap-2.5">
-                <Calendar className="w-5 h-5 text-indigo-400" />
+              <div className="flex items-center gap-2">
+                <Calendar className="w-5 h-5 text-indigo-400 shrink-0" />
                 <h2 className="text-lg sm:text-xl font-bold text-white tracking-tight">Recent Class Attendance Log</h2>
-                <span className="text-[10px] sm:text-[11px] font-semibold px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
-                  Last 7 Days
-                </span>
               </div>
               <p className="text-xs text-slate-400 mt-1">Verification logs from Live Scan AI &amp; GPS Selfie portal (Past 7 days).</p>
             </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => fetchPortalData(selectedRoll || undefined)}
-                disabled={loading}
-                className="py-1 px-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5"
-                title="Refresh Logs"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 text-indigo-400 ${loading ? 'animate-spin' : ''}`} />
-                <span className="hidden sm:inline">Refresh</span>
-              </button>
-              <Link
-                href="/selfieattend"
-                className="flex items-center gap-1 text-xs font-semibold text-indigo-400 hover:text-indigo-300 transition-colors"
-              >
-                <span>Take Attendance</span>
-                <ArrowUpRight className="w-3.5 h-3.5" />
-              </Link>
-            </div>
+            <button
+              onClick={() => fetchPortalData(selectedRoll || undefined)}
+              disabled={loading}
+              className="shrink-0 flex items-center gap-1.5 py-1.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-all cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
+              title="Refresh Logs"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 text-indigo-400 ${loading ? 'animate-spin' : ''}`} />
+              <span>Refresh</span>
+            </button>
           </div>
 
           {last7DaysSessions.length === 0 ? (
