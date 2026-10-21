@@ -6,6 +6,7 @@ import {
   Send,
   CheckCircle2,
   AlertCircle,
+  AlertTriangle,
   X,
   Loader2,
   Phone,
@@ -64,6 +65,7 @@ export function WhatsAppAlertModal({
 
   // WhatsApp Alert Tracking State
   const [alertMeta, setAlertMeta] = useState<SessionWhatsAppAlertMeta | null>(initialAlertMeta);
+  const [showResendConfirm, setShowResendConfirm] = useState(false);
 
   useEffect(() => {
     if (initialAlertMeta) {
@@ -244,12 +246,14 @@ export function WhatsAppAlertModal({
     }
 
     if (alertMeta?.sent) {
-      const confirmResend = window.confirm(
-        `Notice: WhatsApp absentee notices were already dispatched for this session on ${formatAlertDate(alertMeta.sentAt)} (${alertMeta.sentCount} delivered).\n\nDo you want to send another batch notice to the ${absenteesWithPhone.length} absent student(s)?`
-      );
-      if (!confirmResend) return;
+      setShowResendConfirm(true);
+      return;
     }
 
+    startBatchDispatch();
+  };
+
+  const startBatchDispatch = async () => {
     setIsSending(true);
     setJobProgress(null);
 
@@ -861,6 +865,58 @@ export function WhatsAppAlertModal({
           </div>
         </div>
       </div>
+
+      {/* Centered Beautiful Re-send Confirmation Dialog */}
+      {showResendConfirm && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-150">
+          <div className="bg-slate-900 border border-slate-700/80 rounded-2xl p-6 sm:p-7 max-w-sm sm:max-w-md w-full shadow-2xl animate-in zoom-in-95 duration-200 text-center relative overflow-hidden">
+            <div className="w-12 h-12 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 mx-auto mb-4 shadow-inner">
+              <AlertTriangle className="w-6 h-6 text-amber-400" />
+            </div>
+
+            <h3 className="text-base sm:text-lg font-bold text-white">
+              Re-send Absentee Alerts?
+            </h3>
+
+            <div className="mt-3 text-xs text-slate-300 leading-relaxed space-y-2">
+              <p>
+                WhatsApp absentee notices were already dispatched for this session on{" "}
+                <span className="font-semibold text-emerald-400 font-mono">
+                  {formatAlertDate(alertMeta?.sentAt)}
+                </span>{" "}
+                ({alertMeta?.sentCount} delivered).
+              </p>
+              <p className="text-slate-400">
+                Are you sure you want to send another batch notice to the{" "}
+                <strong className="text-white font-semibold">
+                  {absenteesWithPhone.length} absent student{absenteesWithPhone.length === 1 ? "" : "s"}
+                </strong>?
+              </p>
+            </div>
+
+            <div className="mt-6 flex items-center justify-center gap-3">
+              <button
+                type="button"
+                onClick={() => setShowResendConfirm(false)}
+                className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-all cursor-pointer flex-1"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowResendConfirm(false);
+                  startBatchDispatch();
+                }}
+                className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-white text-xs font-bold transition-all shadow-lg shadow-amber-600/30 cursor-pointer flex-1 flex items-center justify-center gap-1.5 active:scale-95"
+              >
+                <Send className="w-3.5 h-3.5" />
+                <span>Yes, Re-send</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
