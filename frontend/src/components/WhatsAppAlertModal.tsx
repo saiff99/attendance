@@ -391,7 +391,7 @@ export function WhatsAppAlertModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-xl sm:max-w-2xl lg:max-w-3xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-xl sm:max-w-2xl lg:max-w-3xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden whitespace-normal text-left">
         {/* Header */}
         <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-slate-800 bg-slate-950/80 shrink-0">
           <div className="flex items-center gap-3 min-w-0">
@@ -571,19 +571,19 @@ export function WhatsAppAlertModal({
             <>
               {/* WhatsApp Alerts Already Dispatched Banner */}
               {alertMeta?.sent && (
-                <div className="rounded-xl border border-emerald-500/40 bg-emerald-950/40 p-3.5 flex items-start gap-3 w-full shadow-inner animate-in fade-in duration-300">
+                <div className="rounded-xl border border-emerald-500/40 bg-emerald-950/40 p-3.5 flex items-start gap-3 w-full shadow-inner animate-in fade-in duration-300 whitespace-normal">
                   <div className="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-300 shrink-0 mt-0.5">
                     <CheckCircle2 className="w-5 h-5 text-emerald-400" />
                   </div>
                   <div className="flex-1 text-xs min-w-0">
                     <div className="font-bold text-emerald-300 flex items-center justify-between flex-wrap gap-1">
                       <span>WhatsApp Absentee Alerts Already Dispatched</span>
-                      <span className="text-[11px] font-mono text-emerald-400/90 font-normal">
+                      <span className="text-[11px] font-mono text-emerald-400/90 font-normal shrink-0">
                         {formatAlertDate(alertMeta.sentAt)}
                       </span>
                     </div>
-                    <p className="text-slate-300 text-[11px] mt-1 leading-relaxed">
-                      This lecture session is marked as notified ({alertMeta.sentCount} absentee notices delivered). If you need to re-notify absent students, you can dispatch again below.
+                    <p className="text-slate-300 text-[11px] mt-1 leading-relaxed whitespace-normal break-words">
+                      This lecture session is marked as notified ({alertMeta.sentCount} absentee notice{alertMeta.sentCount === 1 ? "" : "s"} delivered). If you need to re-notify absent students, you can dispatch again below.
                     </p>
                   </div>
                 </div>
