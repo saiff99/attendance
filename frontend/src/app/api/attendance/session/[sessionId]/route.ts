@@ -2,6 +2,7 @@ import { NextResponse, NextRequest } from 'next/server';
 import { supabaseServer } from '@/lib/supabaseServer';
 import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/serverAuth';
 import { isValidUuid, isFacultyAuthorizedForSession } from '@/lib/attendanceAuth';
+import { logAuditEvent } from '@/lib/auditLog';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,6 +47,21 @@ export async function GET(
     // 2. Authorization & Scope Check
     const isAuthorized = await isFacultyAuthorizedForSession(session, sessionInfo);
     if (!isAuthorized) {
+      logAuditEvent({
+        action: 'UNAUTHORIZED_SESSION_ACCESS_REJECTED',
+        targetType: 'session',
+        targetId: sessionId,
+        actorId: session.username || session.name || 'unauthorized_faculty',
+        request,
+        details: {
+          session_id: sessionId,
+          class_name: sessionInfo.class_name,
+          instructor: sessionInfo.instructor_name,
+          faculty_actor: session.name || session.username,
+          faculty_role: session.role,
+          attempted_action: 'VIEW_SESSION_LOGS',
+        },
+      });
       return NextResponse.json(
         { success: false, error: 'Forbidden. You are not authorized to view logs for another faculty member\'s session.' },
         { status: 403 }

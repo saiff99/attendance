@@ -122,21 +122,19 @@ export async function POST(request: Request) {
         if (!stuErr && student) {
           let isStudentMatch = false;
 
-          // Check custom portal password hash if set
+          // Strict Zero-Trust PIN Verification:
+          // Authentication is exclusively verified against salted bcrypt hashes ($2b$10$...).
+          // Insecure plaintext comparisons against portal_pin have been permanently eliminated.
           if (student.portal_password_hash && student.portal_password_hash.startsWith('$2')) {
             isStudentMatch = await bcrypt.compare(password, student.portal_password_hash);
           }
 
-          // Only allow login if plain portal PIN matches and is not a temporary placeholder
-          if (!isStudentMatch && student.portal_pin && student.portal_pin !== 'TEMP') {
-            isStudentMatch = (password === student.portal_pin.trim());
-          }
-
-          // Strict Zero-Trust: If no valid PIN or hash exists, login fails immediately.
+          // Strict Zero-Trust: If no valid hash exists or comparison fails, login fails immediately.
           // No Roll Number, empty string, or default 123456 fallback is ever permitted.
 
           if (isStudentMatch) {
             authSuccess = true;
+            const isTempActivationPin = student.portal_pin === 'TEMP';
             authUser = {
               username: student.student_roll,
               name: student.full_name,
@@ -145,6 +143,7 @@ export async function POST(request: Request) {
               studentId: student.id,
               studentRoll: student.student_roll,
               academicYear: student.academic_year || '1st Year',
+              requiresPinChange: isTempActivationPin,
             };
 
             // Update last_portal_login timestamp asynchronously if column exists

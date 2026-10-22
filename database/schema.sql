@@ -21,8 +21,8 @@ CREATE TABLE IF NOT EXISTS public.students (
     academic_year VARCHAR(50) DEFAULT '1st Year',
     parent_phone VARCHAR(50),
     face_encoding JSONB, -- 512D ArcFace vector embeddings for InsightFace recognition
-    portal_pin VARCHAR(20), -- Optional initial or legacy PIN
-    portal_password_hash TEXT, -- Salted bcrypt hash for student portal authentication
+    portal_pin VARCHAR(20), -- Status flag ('TEMP' for temporary single-use PIN, NULL once set by student). Never stores plaintext credentials.
+    portal_password_hash TEXT, -- Salted bcrypt hash ($2b$10$...) for student portal authentication
     last_portal_login TIMESTAMPTZ,
     biometric_consent BOOLEAN DEFAULT false, -- DPDP Act 2023: Explicit consent (opt-in only)
     biometric_consent_date TIMESTAMPTZ, -- Timestamp recorded upon explicit enrollment
@@ -219,3 +219,22 @@ FROM (VALUES
 WHERE NOT EXISTS (
     SELECT 1 FROM public.academic_subjects WHERE name = v.name AND academic_year = v.year
 );
+
+-- ==============================================================================
+-- 12. Immutable Audit Log Ledger Trigger (DPDP Act 2023 & ISO 27001 Non-Repudiation)
+-- ==============================================================================
+CREATE OR REPLACE FUNCTION public.enforce_audit_log_immutability()
+RETURNS TRIGGER AS $$
+BEGIN
+    RAISE EXCEPTION 'SECURITY VIOLATION: audit_logs entries are immutable and cannot be updated, modified, or deleted.';
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS trg_audit_logs_immutable ON public.audit_logs;
+CREATE TRIGGER trg_audit_logs_immutable
+BEFORE UPDATE OR DELETE ON public.audit_logs
+FOR EACH ROW
+EXECUTE FUNCTION public.enforce_audit_log_immutability();
+
+REVOKE UPDATE, DELETE, TRUNCATE ON public.audit_logs FROM public, anon, authenticated;
+

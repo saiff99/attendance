@@ -92,6 +92,21 @@ export async function POST(request: NextRequest) {
     // 3. Authorization & Scope Check: Faculty can only mark attendance for their own sessions
     const isAuthorized = await isFacultyAuthorizedForSession(session, sessionInfo);
     if (!isAuthorized) {
+      logAuditEvent({
+        action: 'UNAUTHORIZED_SESSION_ACCESS_REJECTED',
+        targetType: 'session',
+        targetId: session_id,
+        actorId: session.username || session.name || 'unauthorized_faculty',
+        request,
+        details: {
+          session_id,
+          class_name: sessionInfo.class_name,
+          instructor: sessionInfo.instructor_name,
+          faculty_actor: session.name || session.username,
+          faculty_role: session.role,
+          attempted_action: 'MARK_ATTENDANCE',
+        },
+      });
       return NextResponse.json(
         {
           success: false,
@@ -318,6 +333,21 @@ export async function DELETE(request: NextRequest) {
     // 3. Authorization & Scope Check: Faculty can only delete records from their OWN sessions
     const isAuthorized = await isFacultyAuthorizedForSession(session, sessionInfo);
     if (!isAuthorized) {
+      logAuditEvent({
+        action: 'UNAUTHORIZED_SESSION_ACCESS_REJECTED',
+        targetType: 'session',
+        targetId: existingRecord.session_id,
+        actorId: session.username || session.name || 'unauthorized_faculty',
+        request,
+        details: {
+          session_id: existingRecord.session_id,
+          attendance_id: existingRecord.id,
+          instructor: sessionInfo.instructor_name,
+          faculty_actor: session.name || session.username,
+          faculty_role: session.role,
+          attempted_action: 'DELETE_ATTENDANCE',
+        },
+      });
       return NextResponse.json(
         {
           success: false,

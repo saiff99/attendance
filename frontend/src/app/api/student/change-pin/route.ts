@@ -55,16 +55,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Student record not found.' }, { status: 404 });
     }
 
-    // 4. Strict validation of old PIN against stored hash or activation PIN
+    // 4. Strict Zero-Trust validation of old PIN against salted bcrypt hash ($2b$10$...)
     let isOldMatch = false;
     if (student.portal_password_hash && student.portal_password_hash.startsWith('$2')) {
       isOldMatch = await bcrypt.compare(oldPin, student.portal_password_hash);
     }
-    if (!isOldMatch && student.portal_pin && student.portal_pin !== 'TEMP') {
-      isOldMatch = (oldPin === student.portal_pin.trim());
-    }
 
     if (!isOldMatch) {
+      logAuditEvent({
+        action: 'FAILED_PIN_CHANGE_ATTEMPT',
+        targetType: 'student',
+        targetId: student.id,
+        actorId: student.student_roll || session.username,
+        request,
+        details: {
+          student_roll: student.student_roll,
+          reason: 'Current PIN verification failed',
+        },
+      });
       return NextResponse.json({ success: false, error: 'Current PIN is incorrect.' }, { status: 401 });
     }
 
