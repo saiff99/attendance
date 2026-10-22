@@ -30,6 +30,7 @@ from app.ai import app_fa, AI_ENABLED, calculate_confidence_score
 from app.antispoof import verify_face_liveness
 from app.stream import generate_video_feed
 
+import uuid
 from app.rate_limiter import (
     check_device_lock,
     record_device_lock,
@@ -37,6 +38,7 @@ from app.rate_limiter import (
     record_face_failure,
     clear_face_failure,
     check_selfie_rate_limit,
+    check_public_selfie_ip_limit,
     check_lookup_rate_limit
 )
 
@@ -970,20 +972,43 @@ async def selfie_attendance(
     Processes a student's mobile selfie, verifies face against student's enrolled embedding using InsightFace AI,
     and logs attendance if matched (valid within 5-minute window, cohort check, anti-spoofing, device lock, and server GPS geofence).
     """
+    # 0. Strict Input Validation (Prevent malformed, injection, or DoS payloads)
+    if not session_id or not session_id.strip():
+        raise HTTPException(status_code=400, detail="session_id is required.")
+    clean_sess_id = session_id.strip()
+    try:
+        uuid.UUID(clean_sess_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid session_id format: Must be a valid UUID.")
+
+    if not student_roll or not student_roll.strip():
+        raise HTTPException(status_code=400, detail="student_roll is required.")
     clean_roll = student_roll.strip()
+    if len(clean_roll) > 50:
+        raise HTTPException(status_code=400, detail="student_roll is too long (Max 50 characters).")
+
+    clean_dev_id = None
+    if device_id and device_id.strip():
+        clean_dev_id = device_id.strip()
+        if len(clean_dev_id) > 128:
+            raise HTTPException(status_code=400, detail="device_id is too long (Max 128 characters).")
+
     client_ip = get_real_client_ip(request)
 
-    # 1. Lockout Cooldown Check (Shared & Persistent: Scoped to Session + Roll + Client IP)
-    lock_info = check_fail_cooldown(session_id, clean_roll, client_ip)
+    # 1. Public Endpoint Global IP Flood Protection (Max 20 attempts/min per IP to protect AI inference)
+    check_public_selfie_ip_limit(client_ip)
 
-    # 2. Anti-Bruteforce Rate Limiter (Shared & Persistent: Max 5 attempts per IP + Student Roll in 60s)
+    # 2. Lockout Cooldown Check (Shared & Persistent: Scoped to Session + Roll + Client IP)
+    lock_info = check_fail_cooldown(clean_sess_id, clean_roll, client_ip)
+
+    # 3. Anti-Bruteforce Rate Limiter (Shared & Persistent: Max 5 attempts per IP + Student Roll in 60s)
     check_selfie_rate_limit(client_ip, clean_roll)
 
-    # 3. Device Lock Check (Shared & Persistent: 1 mobile device per student per session)
-    check_device_lock(session_id, device_id, clean_roll)
+    # 4. Device Lock Check (Shared & Persistent: 1 mobile device per student per session)
+    check_device_lock(clean_sess_id, clean_dev_id, clean_roll)
 
-    # 3. Check Session Expiration & Load Metadata
-    session_res = safe_db_execute(supabase.table("sessions").select("id, start_time, created_at, class_name, target_academic_year, instructor_name").eq("id", session_id))
+    # 5. Check Session Expiration & Load Metadata
+    session_res = safe_db_execute(supabase.table("sessions").select("id, start_time, created_at, class_name, target_academic_year, instructor_name").eq("id", clean_sess_id))
     if not session_res.data:
         raise HTTPException(status_code=404, detail="Lecture session not found.")
         

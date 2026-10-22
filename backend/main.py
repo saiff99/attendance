@@ -11,7 +11,7 @@ app = FastAPI(
     version="2.0.0"
 )
 
-# Allowed CORS Origins for frontend clients
+# Allowed CORS Origins for frontend clients (Dynamic from environment, locked down by default)
 allowed_origins_env = os.getenv("ALLOWED_ORIGINS", "")
 configured_origins = [o.strip() for o in allowed_origins_env.split(",") if o.strip()]
 
@@ -22,14 +22,30 @@ default_allowed_origins = [
     "http://127.0.0.1:8000",
 ] + configured_origins
 
-# CORS Middleware (Locked down to local dev and trusted deployment domains)
+# Deduplicate origins while preserving order
+allowed_origins = list(dict.fromkeys(default_allowed_origins))
+
+# Optional exact regex (only if explicitly configured by administrator in environment)
+allowed_origin_regex = os.getenv("ALLOWED_ORIGIN_REGEX", "").strip() or None
+
+# CORS Middleware (Enterprise Zero-Trust: Strictly allowlisted origins, methods, and headers)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=default_allowed_origins,
-    allow_origin_regex=r"^https://.*\.vercel\.app$",
+    allow_origins=allowed_origins,
+    allow_origin_regex=allowed_origin_regex,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"],
+    allow_headers=[
+        "Content-Type",
+        "Authorization",
+        "X-Internal-API-Key",
+        "X-Actor-Id",
+        "X-Actor-Name",
+        "X-Actor-Role",
+        "Accept",
+        "Origin",
+    ],
+    expose_headers=["Content-Length", "Retry-After"],
 )
 
 # Enterprise API Security Middleware (Blocks unauthenticated external access to management endpoints)

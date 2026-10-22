@@ -10,6 +10,7 @@ _mem_lock = threading.Lock()
 # L1 In-Memory Caches for sub-millisecond fast lookups and degraded fail-closed shield
 _memory_dev_locks: Dict[str, str] = {} # "session_id:device_id" -> clean_roll
 _memory_selfie_limits: Dict[str, List[float]] = {} # "ip:roll" -> [timestamp, ...]
+_memory_selfie_ip_limits: Dict[str, List[float]] = {} # "ip" -> [timestamp, ...] (Global IP ceiling)
 _memory_lookup_limits: Dict[str, List[float]] = {} # "ip" -> [timestamp, ...]
 _memory_fail_cooldowns: Dict[str, Dict[str, Any]] = {} # "session_id:roll:ip" -> {"fails": int, "locked_until": float}
 
@@ -334,3 +335,66 @@ def check_lookup_rate_limit(client_ip: str) -> None:
             }).execute()
         except Exception as e:
             print(f"[LookupRateLimit Warning] L2 DB upsert fallback: {e}")
+
+
+# ==============================================================================
+# 5. Public Selfie IP Flood Protection (Shared & Persistent)
+# Enforces: Max 20 selfie attempts per IP within 60 seconds (across all student rolls).
+# Protects heavy InsightFace AI neural inference from CPU/GPU exhaustion DoS attacks.
+# ==============================================================================
+
+def check_public_selfie_ip_limit(client_ip: str) -> None:
+    """
+    Limits total selfie attendance submissions from any single IP to 20 calls per 60 seconds.
+    Prevents scripted flood attacks using randomized rolls against the AI vision model.
+    """
+    db_key = f"rl_selfie_ip:{client_ip}"
+    now_ts = time.time()
+    window_seconds = 60.0
+    max_attempts = 20
+
+    # 1. Read attempts from L1 cache
+    with _mem_lock:
+        attempts = _memory_selfie_ip_limits.get(client_ip, [])
+
+    # 2. Sync with L2 Database
+    if supabase:
+        try:
+            res = supabase.table("settings").select("value").eq("key", db_key).execute()
+            if res.data and len(res.data) > 0:
+                val = res.data[0].get("value") or {}
+                db_attempts = val.get("attempts") or []
+                if isinstance(db_attempts, list):
+                    all_ts = set(attempts).union(set(float(t) for t in db_attempts))
+                    attempts = sorted(list(all_ts))
+        except Exception as e:
+            print(f"[SelfieIPLimit Warning] L2 DB lookup fallback: {e}")
+
+    # 3. Prune old timestamps
+    attempts = [ts for ts in attempts if now_ts - ts < window_seconds]
+
+    if len(attempts) >= max_attempts:
+        with _mem_lock:
+            _memory_selfie_ip_limits[client_ip] = attempts
+        raise HTTPException(
+            status_code=429,
+            detail="Too many selfie verification requests from this IP address. Please wait 60 seconds."
+        )
+
+    # 4. Add current attempt and save
+    attempts.append(now_ts)
+    with _mem_lock:
+        _memory_selfie_ip_limits[client_ip] = attempts
+
+    if supabase:
+        try:
+            supabase.table("settings").upsert({
+                "key": db_key,
+                "value": {
+                    "attempts": attempts,
+                    "updated_at": now_ts
+                }
+            }).execute()
+        except Exception as e:
+            print(f"[SelfieIPLimit Warning] L2 DB upsert fallback: {e}")
+
