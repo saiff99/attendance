@@ -13,6 +13,7 @@ export interface SessionPayload {
   username: string;
   name: string;
   role: 'Super Admin' | 'Admin' | 'Faculty' | 'Student';
+  userId?: string;
   department?: string;
   studentId?: string;
   studentRoll?: string;

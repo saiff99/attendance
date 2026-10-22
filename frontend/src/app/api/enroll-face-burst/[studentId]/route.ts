@@ -66,7 +66,7 @@ export async function POST(
       method: 'POST',
       body: formData,
       headers: {
-        'X-Actor-Id': session.userId || '',
+        'X-Actor-Id': session.username || session.userId || '',
         'X-Actor-Name': session.name || session.username || 'Admin',
         'X-Actor-Role': session.role || 'Admin',
       },

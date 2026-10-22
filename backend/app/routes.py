@@ -30,17 +30,15 @@ from app.ai import app_fa, AI_ENABLED, calculate_confidence_score
 from app.antispoof import verify_face_liveness
 from app.stream import generate_video_feed
 
-# Session Device Lock Registry: {session_id: {device_id: student_roll}}
-session_device_locks: dict = {}
-
-# Anti-Brute-force Rate Limiter: {rate_key: [timestamp, ...]}
-selfie_rate_limits: dict = {}
-
-# Anti-Scraping Rate Limiter for Roll Lookup: {client_ip: [timestamp, ...]}
-lookup_rate_limits: dict = {}
-
-# Failed Face Verification Attempt Tracker: {f"{session_id}:{roll}:{ip}": {"fails": int, "locked_until": float}}
-selfie_roll_failures: dict = {}
+from app.rate_limiter import (
+    check_device_lock,
+    record_device_lock,
+    check_fail_cooldown,
+    record_face_failure,
+    clear_face_failure,
+    check_selfie_rate_limit,
+    check_lookup_rate_limit
+)
 
 def get_real_client_ip(request: Request) -> str:
     """Extracts genuine client IP behind Cloudflare Tunnel, reverse proxies, or direct connection."""
@@ -861,20 +859,10 @@ async def student_lookup(request: Request, student_roll: str, session_id: Option
     Looks up student details by roll number for an active session.
     Protected against scraping / roster enumeration via IP rate limits and active session requirements.
     """
-    client_ip = request.client.host if request.client else "unknown"
-    now_ts = time.time()
+    client_ip = get_real_client_ip(request)
 
-    # 1. Anti-Scraping Rate Limiter (Max 10 roll lookups per IP per 60s)
-    attempts = lookup_rate_limits.get(client_ip, [])
-    attempts = [ts for ts in attempts if now_ts - ts < 60.0]
-    if len(attempts) >= 10:
-        lookup_rate_limits[client_ip] = attempts
-        raise HTTPException(
-            status_code=429,
-            detail="Too many student lookup requests. Please wait 60 seconds."
-        )
-    attempts.append(now_ts)
-    lookup_rate_limits[client_ip] = attempts
+    # 1. Anti-Scraping Rate Limiter (Shared & Persistent: Max 10 roll lookups per IP per 60s)
+    check_lookup_rate_limit(client_ip)
 
     # 2. Require an active session_id to prevent general roster scraping
     if not session_id or not session_id.strip():
@@ -984,41 +972,15 @@ async def selfie_attendance(
     """
     clean_roll = student_roll.strip()
     client_ip = get_real_client_ip(request)
-    now_ts = time.time()
 
-    # 1. Lockout Cooldown Check (Scoped to Session + Roll + Client IP to prevent DoS attacks against fellow classmates)
-    lockout_key = f"{session_id}:{clean_roll.upper()}:{client_ip}"
-    lock_info = selfie_roll_failures.setdefault(lockout_key, {"fails": 0, "locked_until": 0.0})
-    if now_ts < lock_info.get("locked_until", 0.0):
-        wait_seconds = int(lock_info["locked_until"] - now_ts)
-        raise HTTPException(
-            status_code=429,
-            detail=f"Cooldown active: 3 failed face attempts recorded for Roll '{clean_roll}' on this device. Please wait {wait_seconds}s."
-        )
+    # 1. Lockout Cooldown Check (Shared & Persistent: Scoped to Session + Roll + Client IP)
+    lock_info = check_fail_cooldown(session_id, clean_roll, client_ip)
 
-    # 2. Anti-Bruteforce Rate Limiter (Max 5 attempts per IP + Student Roll in 60s)
-    rate_key = f"{client_ip}:{clean_roll.upper()}"
-    attempts = selfie_rate_limits.get(rate_key, [])
-    attempts = [ts for ts in attempts if now_ts - ts < 60.0]
-    if len(attempts) >= 5:
-        selfie_rate_limits[rate_key] = attempts
-        raise HTTPException(
-            status_code=429,
-            detail="Too many verification attempts. Please wait 60 seconds before trying again."
-        )
-    attempts.append(now_ts)
-    selfie_rate_limits[rate_key] = attempts
+    # 2. Anti-Bruteforce Rate Limiter (Shared & Persistent: Max 5 attempts per IP + Student Roll in 60s)
+    check_selfie_rate_limit(client_ip, clean_roll)
 
-    # 2. Device Lock Check (1 mobile device per student per session)
-    if device_id and device_id.strip():
-        clean_dev_id = device_id.strip()
-        sess_locks = session_device_locks.setdefault(session_id, {})
-        if clean_dev_id in sess_locks and sess_locks[clean_dev_id] != clean_roll.upper():
-            other_roll = sess_locks[clean_dev_id]
-            raise HTTPException(
-                status_code=403,
-                detail=f"Device Lock: This phone/device has already submitted attendance for Roll '{other_roll}' in this session. One device cannot be used for multiple students."
-            )
+    # 3. Device Lock Check (Shared & Persistent: 1 mobile device per student per session)
+    check_device_lock(session_id, device_id, clean_roll)
 
     # 3. Check Session Expiration & Load Metadata
     session_res = safe_db_execute(supabase.table("sessions").select("id, start_time, created_at, class_name, target_academic_year, instructor_name").eq("id", session_id))
@@ -1241,23 +1203,15 @@ async def selfie_attendance(
         
         # High precision threshold for selfie verification (ArcFace cosine similarity >= 0.40)
         if sim < threshold:
-            lock_info["fails"] = lock_info.get("fails", 0) + 1
-            if lock_info["fails"] >= 3:
-                lock_info["locked_until"] = time.time() + 120.0  # 2-minute lockout
-                selfie_roll_failures[lockout_key] = lock_info
-                raise HTTPException(
-                    status_code=429,
-                    detail=f"Face mismatch! 3 consecutive failed attempts recorded for Roll '{clean_roll}'. Temporary cooldown active for 2 minutes."
-                )
-            selfie_roll_failures[lockout_key] = lock_info
+            current_fails = lock_info.get("fails", 0)
+            record_face_failure(session_id, clean_roll, client_ip, current_fails)
             raise HTTPException(
                 status_code=400,
-                detail=f"Face mismatch! The captured selfie does not match the registered face for {student['full_name']} (Roll {clean_roll}). (Attempt {lock_info['fails']}/3)"
+                detail=f"Face mismatch! The captured selfie does not match the registered face for {student['full_name']} (Roll {clean_roll}). (Attempt {current_fails + 1}/3)"
             )
             
-        # Reset fail counter on successful match
-        if lockout_key in selfie_roll_failures:
-            del selfie_roll_failures[lockout_key]
+        # Reset fail counter on successful match across all workers and shared storage
+        clear_face_failure(session_id, clean_roll, client_ip)
 
         return calculate_confidence_score(sim)
 
@@ -1273,9 +1227,9 @@ async def selfie_attendance(
     existing_att = safe_db_execute(supabase.table("attendance").select("id, recorded_at, confidence_score").eq("session_id", session_id).eq("student_id", student["id"]))
     if existing_att.data:
         rec_time = existing_att.data[0].get("recorded_at", "Earlier Today")
-        # Ensure device lock is registered even if already present
+        # Ensure device lock is registered even if already present (Shared & Persistent)
         if device_id and device_id.strip():
-            session_device_locks.setdefault(session_id, {})[device_id.strip()] = clean_roll.upper()
+            record_device_lock(session_id, device_id, clean_roll)
         return {
             "success": True,
             "already_marked": True,
@@ -1297,9 +1251,9 @@ async def selfie_attendance(
             "confidence_score": confidence_score
         }, on_conflict="session_id,student_id"))
         
-        # 10. Lock Device for this Student & Session
+        # 10. Lock Device for this Student & Session (Shared & Persistent)
         if device_id and device_id.strip():
-            session_device_locks.setdefault(session_id, {})[device_id.strip()] = clean_roll.upper()
+            record_device_lock(session_id, device_id, clean_roll)
 
         # Sync memory cache if stream is currently active
         try:
@@ -1325,7 +1279,7 @@ async def selfie_attendance(
         existing = safe_db_execute(supabase.table("attendance").select("id, recorded_at, confidence_score").eq("session_id", session_id).eq("student_id", student["id"]))
         if existing.data:
             if device_id and device_id.strip():
-                session_device_locks.setdefault(session_id, {})[device_id.strip()] = clean_roll.upper()
+                record_device_lock(session_id, device_id, clean_roll)
             return {
                 "success": True,
                 "already_marked": True,

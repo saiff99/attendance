@@ -65,7 +65,7 @@ export async function POST(
       const backendRes = await fetchBackend(`/api/students/${encodeURIComponent(id)}/revoke-biometrics`, {
         method: 'POST',
         headers: {
-          'X-Actor-Id': session.userId || '',
+          'X-Actor-Id': session.username || session.userId || '',
           'X-Actor-Name': session.name || session.username || 'Admin',
           'X-Actor-Role': session.role || 'Admin',
         },
