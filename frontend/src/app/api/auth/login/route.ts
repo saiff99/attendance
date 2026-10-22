@@ -55,14 +55,22 @@ export async function POST(request: Request) {
     }
 
     let authSuccess = false;
-    let authUser = {
+    interface AuthUser {
+      username: string;
+      name: string;
+      role: 'Super Admin' | 'Admin' | 'Faculty' | 'Student';
+      department: string;
+      studentId?: string;
+      studentRoll?: string;
+      academicYear?: string;
+      requiresPinChange?: boolean;
+    }
+
+    let authUser: AuthUser = {
       username,
       name: '',
-      role: 'Faculty' as 'Super Admin' | 'Admin' | 'Faculty' | 'Student',
+      role: 'Faculty',
       department: '',
-      studentId: undefined as string | undefined,
-      studentRoll: undefined as string | undefined,
-      academicYear: undefined as string | undefined,
     };
 
     // 1. Check dynamic Supabase app_users table (Only for Admin/Faculty mode or unspecified mode)
