@@ -12,7 +12,7 @@
 
 > **MedAttend AI** is an enterprise-grade, end-to-end automated academic attendance and classroom surveillance system designed for large educational auditoriums, medical colleges, and institutions (**stress-tested for 300+ students across 6 simultaneous CCTV streams**).
 > 
-> It pairs ultra-fast biometric facial recognition (InsightFace ArcFace 512D) with dual-stream RTSP camera pipelines, ONVIF PTZ controls, isolated WhatsApp parent notifications, a dedicated **Medical Student Portal** (with 7-day attendance logs & curriculum eligibility), **3-Tier Role-Based Access Control (Super Admin / Admin / Faculty)**, **Dynamic Academic Curriculum Configuration**, **Geofenced GPS Selfie Check-In** with multi-tier hardware fallback, **24/7 Cloud Failover via Hugging Face Spaces**, and **Enterprise Audit Logging**.
+> It pairs ultra-fast biometric facial recognition (InsightFace ArcFace 512D) with dual-stream RTSP camera pipelines, ONVIF PTZ controls, isolated WhatsApp parent notifications, a dedicated **Medical Student Portal** (with 7-day attendance logs & curriculum eligibility), **3-Tier Role-Based Access Control (Super Admin / Admin / Faculty)** with **Bulletproof Lockout Guardrails**, **Staff & Faculty Account Management**, **Centralized MBBS Academic Curriculum Governance**, **Faculty Full Name Session Attribution**, **Geofenced GPS Selfie Check-In** with multi-tier hardware fallback, **24/7 Cloud Failover via Hugging Face Spaces**, and **Enterprise Audit Logging**.
 
 ---
 
@@ -70,18 +70,24 @@
 - **Cryptographic Tunnel Verification**: Dynamic Cloudflare tunnels are signed with HMAC-SHA256 tokens and synchronized to Supabase in real-time, preventing DNS or tunnel hijacking.
 - **Automated GitHub Actions CI/CD**: Pushing changes to `backend/**` automatically syncs and deploys containerized updates to Hugging Face Spaces.
 
-### 👥 3. Three-Tier Role-Based Access Control (RBAC) & Faculty Privacy
-- **Super Admin vs. Admin vs. Faculty**: Strict separation of administrative responsibilities.
+### 👥 3. Three-Tier Role-Based Access Control (RBAC) & Bulletproof Lockout Guardrails
+- **Super Admin vs. Admin vs. Faculty**: Strict separation of institutional responsibilities and administrative boundaries.
 - **Zero-Trust Super Admin Isolation**: Admins can manage faculty members, sessions, and attendance, but cannot view, edit, or tamper with Super Administrator accounts.
-- **Faculty Session Privacy**: Faculty members can strictly see, edit, and export attendance for the subjects and sessions they personally instruct.
+- **Three-Layer Lockout Protection**:
+  - **Self-Action Immunity**: Logged-in administrators cannot delete or deactivate their own accounts (highlighted with an intuitive `You` badge).
+  - **Root Admin Immunity**: The primary built-in root administrator (`admin` / `is_builtin`) is permanently protected from deletion, deactivation, and username tampering.
+  - **Last Active Super Admin Guardrail**: Backend and frontend prevent deletion, deactivation, or demotion if only one active Super Admin exists in the institution.
+- **Comprehensive Staff Account Editing**: In-place modal editing of full names, alphanumeric usernames (`/^[a-zA-Z0-9._-]{3,30}$/`), departments, emails, and credentials with instant validation.
+- **Faculty Session Privacy & Full Name Attribution**: Sessions are tagged with official Faculty Full Names (e.g., `By: Dr. Rajesh Sharma`) instead of raw usernames, and faculty only see and manage their instructed classes.
 
 ### 📍 4. Multi-Tier Geofencing & Centered GPS Radar Modal
 - **High-Accuracy Geolocation**: Haversine distance calculations ensure students are physically inside the designated lecture hall radius.
 - **Modern Centered GPS Radar Calibration Modal**: Replaced intrusive native browser dialogs with a centered radar-pulse modal showing live coordinates and accuracy radii.
 - **Multi-Tier Hardware Fallback**: Gracefully falls back from satellite GPS to network Wi-Fi positioning on macOS and laptops, with diagnostic guidance to eliminate `POSITION_UNAVAILABLE` errors.
 
-### 📚 5. Dynamic Academic Curriculum & Subject Management
-- **Year-by-Year MBBS Subject Configuration**: Full interactive interface to configure and update academic subjects for 1st Year, 2nd Year, 3rd Year Part 1, and 3rd Year Part 2.
+### 📚 5. Centralized Academic Curriculum & Syllabus Governance
+- **Institutional MBBS Subject Governance**: Standardized academic syllabus for 1st Year, 2nd Year, 3rd Year Part 1, and 3rd Year Part 2. Ad-hoc custom subject inputs are restricted to maintain clean, unified records.
+- **Streamlined 4-Year Cohort Selection**: Intuitive cohort selection (`1st Year MBBS` to `4th Year MBBS`) and simplified sub-groups (`All Group`, `Group A`, `Group B`, `Group C`).
 - **Instant Database Synchronization**: Configured subjects are dynamically available in session creation drop-downs and student medical portal calculations.
 
 ### 🌡️ 6. Adaptive Thermal Load Controller & Eco-Power Engine
@@ -166,6 +172,8 @@ MedAttend features a comprehensive three-tier hierarchy for institutional staff,
 | :--- | :---: | :---: | :---: | :---: |
 | **Manage Super Admin Accounts** | ✅ | ❌ | ❌ | ❌ |
 | **Manage Admin & Faculty Accounts** | ✅ | ✅ (Faculty only) | ❌ | ❌ |
+| **Edit Staff & Faculty Accounts** | ✅ | ✅ (Faculty only) | ❌ | ❌ |
+| **Self-Action & Root Lockout Protection** | 🛡️ Protected | 🛡️ Protected | 🛡️ Protected | ❌ |
 | **Academic Curriculum Configuration (`/users`)** | ✅ | ✅ | ❌ | ❌ |
 | **View All Ongoing / Past Class Sessions** | ✅ | ✅ | ❌ (Own only) | ❌ |
 | **Create & Start New Class Sessions** | ✅ | ✅ | ✅ | ❌ |
@@ -256,16 +264,21 @@ Mobile-friendly student self-check-in:
 ### 3. User Management & Curriculum Configuration (`/users`)
 Accessible to Super Administrators and Administrators:
 - **Tab 1: Staff & Faculty Directory**:
-  - Provision, search, and manage user accounts with role assignments (`Admin` or `Faculty`).
-  - Super Admin accounts are masked from Admins under Zero-Trust role scoping.
-  - Reset faculty credentials and manage account statuses.
+  - Provision, search, and manage user accounts with clean role assignments (`Faculty`, `Admin`, or `Super Admin`).
+  - **Edit Staff Modal**: In-place editing of Full Name, Username, Department, Email, Role, and optional Password resets.
+  - **Bulletproof Lockout Guardrails**:
+    - Current logged-in administrator is protected with an intuitive `You` badge; self-deletion and self-deactivation are completely disabled.
+    - Built-in root administrator (`admin`) is permanently locked from deletion, deactivation, or username modifications.
+    - Last active Super Admin account is protected from deletion or demotion to prevent institutional lockout.
+  - Zero-Trust role scoping masks Super Admin accounts from regular Admins.
 - **Tab 2: Academic Subjects & Curriculum**:
   - Configure subjects per academic year (1st Year, 2nd Year, 3rd Year Part 1, 3rd Year Part 2).
-  - Add, delete, and search subjects with instant database updates.
+  - Add, delete, and search subjects with instant database updates and synchronization with session creation.
 
 ### 4. Faculty Session Isolation & Ongoing Classes (`/ongoing`)
 - **Faculty Scoping**: Faculty members see only the active sessions for subjects they instruct.
 - **Administrative Oversight**: Super Admins and Admins view all active sessions across the institution.
+- **Faculty Full Name Attribution**: Displays the host instructor's official Full Name (e.g., `By: Dr. Rajesh Sharma` or `By: Faculty Member`) rather than raw `@username` handles.
 - **Dynamic Header Badges**: Displays faculty name and initials (`profile-initials-badge`) dynamically.
 - **Live Attendance Tally**: Real-time counter of present students, absent students, and session elapsed time.
 
@@ -277,11 +290,14 @@ Accessible to Super Administrators and Administrators:
 ### 6. Enterprise Audit Logs (`/audit-logs`)
 Full compliance and governance for institutional accountability:
 - Tracks manual attendance insertions, deletions, and overrides (`attendance/mark`).
-- Records student PIN resets, user account creation, and credential modifications.
+- Records student PIN resets, user account creation, profile edits, and credential modifications.
 - Searchable and filterable by action, severity (`INFO`, `WARN`, `CRITICAL`), actor, and date range.
+- High-contrast **Live Refresh** action bar with seamless dark and light mode theme integration.
 
 ### 7. Live Multi-Camera Surveillance (`/live-scan`)
 - 6-Camera simultaneous grid with real-time bounding boxes and student identification overlays.
+- **Standardized Academic Cohorts**: Streamlined Target Student Cohort dropdown strictly featuring 4 academic years (`1st Year MBBS`, `2nd Year MBBS`, `3rd Year MBBS`, `4th Year MBBS`) and simplified sub-groups (`All Group`, `Group A`, `Group B`, `Group C`).
+- **Curriculum Governance**: Enforces institutional syllabus subjects, eliminating fragmented ad-hoc custom subject entries.
 - ONVIF PTZ control pad with pan/tilt/zoom speeds and preset recall.
 - Real-time present student counter and cohort attendance statistics.
 
@@ -650,13 +666,14 @@ attendance/
 | `/api/auth/me` | `GET` | Retrieves current session user info and role (`Super Admin`, `Admin`, `Faculty`, `Student`) |
 | `/api/auth/logout` | `POST` | Invalidates session and clears secure HTTP-only cookies |
 | `/api/users` | `GET`, `POST` | User account directory & creation with Zero-Trust Super Admin isolation |
-| `/api/users/{id}` | `PUT`, `DELETE`| Update role, reset credentials, or deactivate user account |
+| `/api/users/{id}` | `PUT`, `PATCH`, `DELETE`| Update staff account (Full Name, Username, Department, Email, Role, Password) or delete user account with bulletproof lockout guardrails (self-action, root admin, last super admin) |
 
 ### 📚 Academic Curriculum & Sessions
 | Endpoint | Method | Description |
 | :--- | :--- | :--- |
 | `/api/subjects` | `GET`, `POST`, `DELETE` | Manage dynamic academic curriculum subjects configured per MBBS year |
-| `/api/sessions` | `GET`, `POST` | List and create class sessions (faculty-isolated or institution-wide) |
+| `/api/sessions` | `GET`, `POST` | List and create class sessions (faculty-isolated or institution-wide, with full faculty name resolution) |
+| `/api/active-sessions` | `GET` | Retrieve live active sessions with host faculty full name attribution |
 | `/api/sessions/{id}` | `GET`, `PATCH`, `DELETE` | Retrieve session details, calibrate classroom GPS coordinates, or end session |
 
 ### 🛡️ Enterprise Audit Logs & Attendance
@@ -717,6 +734,17 @@ attendance/
 
 ### Q7: Port 3000 or 8000 already in use?
 > **Answer**: Simply launch the app using `./start.sh`. The built-in process manager identifies and cleans only conflicting local processes before starting the production services.
+
+### Q8: How does MedAttend prevent accidental Super Admin lockout or administrative disruption?
+> **Answer**: 
+> MedAttend incorporates **Three-Layer Lockout Guardrails**:
+> 1. **Self-Action Immunity**: Logged-in administrators are visually identified with a `You` badge and cannot delete or deactivate themselves.
+> 2. **Root Admin Immunity**: The primary built-in root administrator (`admin`) is permanently protected from deletion, deactivation, and username changes.
+> 3. **Last Active Super Admin Guardrail**: Both backend API and frontend prevent deleting or demoting a Super Admin if only one active Super Admin remains in the entire institution.
+
+### Q9: Why is ad-hoc custom subject entry restricted in Live Scan and session creation?
+> **Answer**: 
+> In institutional and medical college environments, attendance records must align strictly with the official NMC curriculum. Allowing ad-hoc custom subjects leads to fragmented reports, misspelled subject duplicates, and inaccurate student examination eligibility tallies. All subjects are centrally governed by Administrators under **Curriculum Configuration** (`/users`), ensuring reliable, unified attendance ledgers.
 
 ---
 
