@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
-import { CalendarDays, RefreshCw, Sparkles } from "lucide-react";
+import { CalendarDays, RefreshCw, Sparkles, CheckCircle2 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { decodeSessionMetadata } from "@/lib/geofence";
 import { FormattedDate } from "@/components/FormattedDate";
@@ -179,13 +179,23 @@ export function RecentClassSessionsTable({ initialSessions }: RecentClassSession
                     </td>
                     <td className="px-4 sm:px-6 py-3.5 sm:py-4 whitespace-nowrap text-right text-xs sm:text-sm font-medium">
                       <div className="flex items-center justify-end gap-2">
-                        <WhatsAppDashboardButton
-                          sessionId={session.id}
-                          sessionName={session.class_name}
-                          topicName={topic}
-                          whatsappAlert={whatsappAlert}
-                          onAlertStatusChange={refreshSessions}
-                        />
+                        {!isFaculty ? (
+                          <WhatsAppDashboardButton
+                            sessionId={session.id}
+                            sessionName={session.class_name}
+                            topicName={topic}
+                            whatsappAlert={whatsappAlert}
+                            onAlertStatusChange={refreshSessions}
+                          />
+                        ) : whatsappAlert?.sent ? (
+                          <span
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 border border-emerald-500/30 text-xs font-medium rounded-lg text-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 dark:text-emerald-400 select-none shadow-sm"
+                            title={`Admin dispatched WhatsApp absentee notices for this lecture (${whatsappAlert.sentCount} sent).`}
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                            <span>Notified ({whatsappAlert.sentCount})</span>
+                          </span>
+                        ) : null}
                         <DownloadReportButton sessionId={session.id} sessionName={session.class_name} />
                       </div>
                     </td>

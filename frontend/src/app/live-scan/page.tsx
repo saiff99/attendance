@@ -56,6 +56,7 @@ const DEFAULT_CAMERAS: CameraMeta[] = [
 
 export default function LiveScan() {
   const { user } = useAuth();
+  const canSendWhatsAppAlerts = user?.role === "Super Admin" || user?.role === "Admin";
   const [activeTab, setActiveTab] = useState<"grid" | "cctv" | "live" | "manual">("grid");
   const [isScanning, setIsScanning] = useState(false);
 
@@ -593,7 +594,7 @@ export default function LiveScan() {
       }
     }
 
-    if (activeSession) {
+    if (activeSession && canSendWhatsAppAlerts) {
       const wantAlerts = window.confirm(
         "Attendance session completed!\n\nWould you like to open the WhatsApp Alert sender now to notify parents of absent students?"
       );
@@ -1133,13 +1134,15 @@ export default function LiveScan() {
               <RefreshCw className="w-3.5 h-3.5 mr-1 text-gray-400 dark:text-slate-400" /> Sync
             </button>
 
-            <button
-              onClick={() => setIsWhatsAppModalOpen(true)}
-              className="inline-flex items-center px-3 sm:px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold text-white shadow-md shadow-emerald-600/20 transition-all cursor-pointer active:scale-95"
-              title="Send Absentee WhatsApp Alerts to Parents"
-            >
-              <MessageSquare className="w-3.5 h-3.5 mr-1" /> WhatsApp Alerts
-            </button>
+            {canSendWhatsAppAlerts && (
+              <button
+                onClick={() => setIsWhatsAppModalOpen(true)}
+                className="inline-flex items-center px-3 sm:px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold text-white shadow-md shadow-emerald-600/20 transition-all cursor-pointer active:scale-95"
+                title="Send Absentee WhatsApp Alerts to Parents"
+              >
+                <MessageSquare className="w-3.5 h-3.5 mr-1" /> WhatsApp Alerts
+              </button>
+            )}
 
             <button
               onClick={exportToCSV}
