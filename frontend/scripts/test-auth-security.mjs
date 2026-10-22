@@ -422,9 +422,9 @@ async function runTests() {
     });
     assert(invalidUuid.status === 400, 'Non-UUID session_id and student_id REJECTED (HTTP 400)');
 
-    // 4. Schema validation: Invalid status rejected with HTTP 400
-    const validSessionId = '6581a431-42ca-40fe-b1c6-530f258eb658'; // Session owned by Rajashri Mam
-    const validStudentId = '7c138d01-37e5-4074-9900-66a111d9e580'; // Student SAIF (3rd Year)
+    // 4. Test Session and Student IDs (matching cohort: 1st Year (Group A))
+    const validSessionId = '9eb595b2-fda7-4275-aa8e-1490ed041b04';
+    const validStudentId = '814d8b14-40c1-4329-a81a-b58de3f540a9';
 
     const invalidStatus = await request('/api/attendance/mark', {
       method: 'POST',
