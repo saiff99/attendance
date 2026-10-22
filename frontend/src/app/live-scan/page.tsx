@@ -859,10 +859,10 @@ export default function LiveScan() {
                   value={setupData.sub_batch}
                   onChange={e => setSetupData({ ...setupData, sub_batch: e.target.value })}
                 >
-                  <option value="All" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">All Group (Full Class)</option>
-                  <option value="Group A" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">Group A (e.g. Roll 1-100)</option>
-                  <option value="Group B" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">Group B (e.g. Roll 101-200)</option>
-                  <option value="Group C" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">Group C (e.g. Roll 201-300)</option>
+                  <option value="All" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">All Group</option>
+                  <option value="Group A" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">Group A</option>
+                  <option value="Group B" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">Group B</option>
+                  <option value="Group C" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">Group C</option>
                 </select>
               </div>
             </div>
