@@ -46,9 +46,14 @@ export async function GET(request: NextRequest) {
       throw error;
     }
 
+    const mappedUsers = (dbUsers || []).map((u: any) => ({
+      ...u,
+      is_builtin: u.username.toLowerCase() === 'admin' || Boolean(u.is_builtin),
+    }));
+
     return NextResponse.json({
       success: true,
-      users: dbUsers || [],
+      users: mappedUsers,
       tableReady: true,
     });
   } catch (error: any) {

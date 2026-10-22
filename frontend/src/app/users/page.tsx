@@ -712,6 +712,11 @@ export default function UsersManagementPage() {
                       </tr>
                     ) : (
                       filteredUsers.map(userItem => {
+                        const isCurrentUser = userItem.username.toLowerCase() === (currentUser?.username || "").toLowerCase();
+                        const isRootAdmin = userItem.username.toLowerCase() === "admin" || Boolean(userItem.is_builtin);
+                        const activeSuperAdmins = users.filter(u => u.role === "Super Admin" && u.is_active);
+                        const isOnlySuperAdmin = userItem.role === "Super Admin" && activeSuperAdmins.length <= 1;
+
                         const initials = userItem.full_name
                           .trim()
                           .split(/\s+/)
@@ -791,20 +796,22 @@ export default function UsersManagementPage() {
                                   </button>
                                 )}
 
-                                {!userItem.is_builtin && (
-                                  <>
-                                    <button
-                                      onClick={() => {
-                                        setSelectedUser(userItem);
-                                        setResetPasswordValue(generateRandomPassword());
-                                        setIsResetModalOpen(true);
-                                      }}
-                                      title="Reset Password"
-                                      className="p-1.5 rounded-lg text-gray-500 hover:text-indigo-600 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                                    >
-                                      <KeyRound className="w-3.5 h-3.5" />
-                                    </button>
+                                {!isRootAdmin && (
+                                  <button
+                                    onClick={() => {
+                                      setSelectedUser(userItem);
+                                      setResetPasswordValue(generateRandomPassword());
+                                      setIsResetModalOpen(true);
+                                    }}
+                                    title="Reset Password"
+                                    className="p-1.5 rounded-lg text-gray-500 hover:text-indigo-600 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                                  >
+                                    <KeyRound className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
 
+                                {!isCurrentUser && !isRootAdmin && !isOnlySuperAdmin && (
+                                  <>
                                     <button
                                       onClick={() => handleToggleActive(userItem)}
                                       title={userItem.is_active ? "Deactivate Account" : "Activate Account"}
@@ -824,6 +831,12 @@ export default function UsersManagementPage() {
                                       <Trash2 className="w-3.5 h-3.5" />
                                     </button>
                                   </>
+                                )}
+
+                                {isCurrentUser && (
+                                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 border border-indigo-200/50 dark:border-indigo-800/50">
+                                    You
+                                  </span>
                                 )}
                               </div>
                             </td>

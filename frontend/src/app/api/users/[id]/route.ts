@@ -62,6 +62,12 @@ export async function PATCH(
     if (body.email !== undefined) updatePayload.email = body.email ? body.email.trim().toLowerCase() : null;
 
     if (body.username !== undefined) {
+      if (targetUser.username.toLowerCase() === 'admin') {
+        return NextResponse.json(
+          { success: false, error: 'The primary system admin login ID cannot be renamed.' },
+          { status: 400 }
+        );
+      }
       const newUsername = body.username.trim().toLowerCase();
       if (!/^[a-zA-Z0-9._-]{3,30}$/.test(newUsername)) {
         return NextResponse.json(
@@ -97,6 +103,20 @@ export async function PATCH(
         }
         updatePayload.role = 'Faculty';
       } else {
+        if (targetUser.role === 'Super Admin' && body.role !== 'Super Admin') {
+          const { count: superAdminCount } = await supabaseServer
+            .from('app_users')
+            .select('*', { count: 'exact', head: true })
+            .eq('role', 'Super Admin')
+            .eq('is_active', true);
+
+          if ((superAdminCount || 0) <= 1) {
+            return NextResponse.json(
+              { success: false, error: 'Cannot demote the only remaining active Super Admin account.' },
+              { status: 400 }
+            );
+          }
+        }
         // Super Admin can assign Super Admin, Admin, or Faculty
         if (body.role === 'Super Admin') {
           updatePayload.role = 'Super Admin';
@@ -109,7 +129,28 @@ export async function PATCH(
     }
 
     if (body.is_active !== undefined) {
-      updatePayload.is_active = Boolean(body.is_active);
+      const targetIsActive = Boolean(body.is_active);
+      if (!targetIsActive && targetUser.username.toLowerCase() === 'admin') {
+        return NextResponse.json(
+          { success: false, error: 'The primary system administrator account cannot be deactivated.' },
+          { status: 400 }
+        );
+      }
+      if (!targetIsActive && targetUser.role === 'Super Admin') {
+        const { count: superAdminCount } = await supabaseServer
+          .from('app_users')
+          .select('*', { count: 'exact', head: true })
+          .eq('role', 'Super Admin')
+          .eq('is_active', true);
+
+        if ((superAdminCount || 0) <= 1) {
+          return NextResponse.json(
+            { success: false, error: 'Cannot deactivate the only remaining active Super Admin account.' },
+            { status: 400 }
+          );
+        }
+      }
+      updatePayload.is_active = targetIsActive;
     }
 
     // Password reset support
@@ -200,6 +241,27 @@ export async function DELETE(
         { success: false, error: 'You cannot delete your own active administrator account.' },
         { status: 400 }
       );
+    }
+
+    if (targetUser.username.toLowerCase() === 'admin') {
+      return NextResponse.json(
+        { success: false, error: 'The primary system administrator account cannot be deleted.' },
+        { status: 403 }
+      );
+    }
+
+    if (targetUser.role === 'Super Admin') {
+      const { count: superAdminCount } = await supabaseServer
+        .from('app_users')
+        .select('*', { count: 'exact', head: true })
+        .eq('role', 'Super Admin');
+
+      if ((superAdminCount || 0) <= 1) {
+        return NextResponse.json(
+          { success: false, error: 'Cannot delete the only remaining Super Admin account.' },
+          { status: 400 }
+        );
+      }
     }
 
     // Guardrail: Admins can ONLY delete Faculty accounts
