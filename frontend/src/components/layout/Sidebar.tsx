@@ -275,11 +275,6 @@ export default function Sidebar() {
                 )}>
                   {user?.role || "User"}
                 </span>
-                {user?.username && (
-                  <span className="text-[11px] text-gray-400 dark:text-gray-500 font-medium truncate" title={`Username: @${user.username}`}>
-                    @{user.username}
-                  </span>
-                )}
               </div>
             </div>
           </div>
