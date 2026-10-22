@@ -41,7 +41,7 @@ export async function POST(
     }
 
     // 1. Permanently erase biometric face encoding and reset consent flags in database
-    const { error: resetErr } = await supabaseServer
+    let { error: resetErr } = await supabaseServer
       .from('students')
       .update({
         face_encoding: null,
@@ -50,6 +50,19 @@ export async function POST(
         biometric_consent_revoked_at: new Date().toISOString(),
       })
       .eq('id', id);
+
+    if (resetErr && resetErr.message?.includes('biometric_consent_revoked_at')) {
+      // Backward-compatible fallback if migration 11 column is not yet added in Supabase
+      const fallback = await supabaseServer
+        .from('students')
+        .update({
+          face_encoding: null,
+          biometric_consent: false,
+          biometric_consent_date: null,
+        })
+        .eq('id', id);
+      resetErr = fallback.error;
+    }
 
     if (resetErr) {
       console.error('[ERASURE ERROR] Failed to reset biometric consent in database:', resetErr);

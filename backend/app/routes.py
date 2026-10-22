@@ -305,7 +305,17 @@ async def enroll_face(
             "biometric_consent_actor": resolved_actor_str,
             "biometric_consent_revoked_at": None
         }
-        res = supabase.table("students").update(update_payload).eq("id", student_id).execute()
+        try:
+            res = supabase.table("students").update(update_payload).eq("id", student_id).execute()
+        except Exception as col_err:
+            if any(col in str(col_err) for col in ["biometric_consent_version", "biometric_consent_actor", "biometric_consent_revoked_at"]):
+                res = supabase.table("students").update({
+                    "face_encoding": encoding,
+                    "biometric_consent": True,
+                    "biometric_consent_date": consent_now
+                }).eq("id", student_id).execute()
+            else:
+                raise col_err
 
         if hasattr(res, 'error') and res.error:
             raise RuntimeError(f"Database error: {res.error}")
@@ -451,7 +461,17 @@ async def enroll_face_burst(
             "biometric_consent_actor": resolved_actor_str,
             "biometric_consent_revoked_at": None
         }
-        res = supabase.table("students").update(update_payload).eq("id", student_id).execute()
+        try:
+            res = supabase.table("students").update(update_payload).eq("id", student_id).execute()
+        except Exception as col_err:
+            if any(col in str(col_err) for col in ["biometric_consent_version", "biometric_consent_actor", "biometric_consent_revoked_at"]):
+                res = supabase.table("students").update({
+                    "face_encoding": encoding_list,
+                    "biometric_consent": True,
+                    "biometric_consent_date": consent_now
+                }).eq("id", student_id).execute()
+            else:
+                raise col_err
 
         if hasattr(res, 'error') and res.error:
             raise RuntimeError(f"Database error: {res.error}")
@@ -517,12 +537,22 @@ async def revoke_biometrics(student_id: str, request: Request):
     # 3. Database Erasure: erase facial embedding, record revocation timestamp, and reset consent
     try:
         revocation_now = datetime.now(timezone.utc).isoformat()
-        res = supabase.table("students").update({
-            "face_encoding": None,
-            "biometric_consent": False,
-            "biometric_consent_date": None,
-            "biometric_consent_revoked_at": revocation_now
-        }).eq("id", student_id).execute()
+        try:
+            res = supabase.table("students").update({
+                "face_encoding": None,
+                "biometric_consent": False,
+                "biometric_consent_date": None,
+                "biometric_consent_revoked_at": revocation_now
+            }).eq("id", student_id).execute()
+        except Exception as col_err:
+            if "biometric_consent_revoked_at" in str(col_err):
+                res = supabase.table("students").update({
+                    "face_encoding": None,
+                    "biometric_consent": False,
+                    "biometric_consent_date": None
+                }).eq("id", student_id).execute()
+            else:
+                raise col_err
 
         if hasattr(res, 'error') and res.error:
             raise RuntimeError(f"Database update error: {res.error}")
