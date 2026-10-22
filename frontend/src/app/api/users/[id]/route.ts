@@ -60,6 +60,32 @@ export async function PATCH(
     if (body.full_name !== undefined) updatePayload.full_name = body.full_name.trim();
     if (body.department !== undefined) updatePayload.department = body.department.trim();
     if (body.email !== undefined) updatePayload.email = body.email ? body.email.trim().toLowerCase() : null;
+
+    if (body.username !== undefined) {
+      const newUsername = body.username.trim().toLowerCase();
+      if (!/^[a-zA-Z0-9._-]{3,30}$/.test(newUsername)) {
+        return NextResponse.json(
+          { success: false, error: 'Username must be 3-30 characters with letters, numbers, dot, underscore, or hyphen.' },
+          { status: 400 }
+        );
+      }
+      if (newUsername !== targetUser.username.toLowerCase()) {
+        const { data: existingUser } = await supabaseServer
+          .from('app_users')
+          .select('id')
+          .ilike('username', newUsername)
+          .neq('id', id)
+          .maybeSingle();
+
+        if (existingUser) {
+          return NextResponse.json(
+            { success: false, error: `Login ID / Username "${newUsername}" is already in use by another account.` },
+            { status: 409 }
+          );
+        }
+        updatePayload.username = newUsername;
+      }
+    }
     
     if (body.role !== undefined) {
       if (session.role === 'Admin') {

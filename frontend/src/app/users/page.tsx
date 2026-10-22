@@ -6,7 +6,7 @@ import {
   Users, UserPlus, Shield, KeyRound, Search, RefreshCw, CheckCircle2,
   XCircle, MoreHorizontal, Trash2, Power, AlertTriangle, Eye, EyeOff,
   Sparkles, Lock, GraduationCap, Building2, UserCheck, ShieldAlert,
-  BookOpen, Plus, UserX, Loader2
+  BookOpen, Plus, UserX, Loader2, Pencil
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { AcademicSubject, ACADEMIC_YEARS, DEFAULT_MBBS_SUBJECTS, getCachedSubjects, saveCachedSubjects } from "@/lib/academicSubjects";
@@ -39,6 +39,19 @@ export default function UsersManagementPage() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<AppUser | null>(null);
+
+  // Edit User Modal states
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [userToEdit, setUserToEdit] = useState<AppUser | null>(null);
+  const [editFormData, setEditFormData] = useState({
+    full_name: "",
+    username: "",
+    email: "",
+    department: "",
+    role: "Faculty" as "Super Admin" | "Admin" | "Faculty",
+  });
+  const [isEditSubmitting, setIsEditSubmitting] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
 
   // Custom Deletion Confirmation Modal states
   const [subjectToDelete, setSubjectToDelete] = useState<AcademicSubject | null>(null);
@@ -323,6 +336,74 @@ export default function UsersManagementPage() {
       setFormError("Error deleting user.");
     } finally {
       setIsDeletingUser(false);
+    }
+  };
+
+  const canEditUser = (target: AppUser) => {
+    if (currentUser?.role === "Super Admin") return true;
+    if (currentUser?.role === "Admin") {
+      return target.role === "Faculty";
+    }
+    return false;
+  };
+
+  const handleOpenEditModal = (targetUser: AppUser) => {
+    setUserToEdit(targetUser);
+    setEditFormData({
+      full_name: targetUser.full_name || "",
+      username: targetUser.username || "",
+      email: targetUser.email || "",
+      department: targetUser.department || "",
+      role: targetUser.role || "Faculty",
+    });
+    setEditError(null);
+    setIsEditModalOpen(true);
+  };
+
+  const handleSaveEditUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userToEdit) return;
+    setEditError(null);
+    setIsEditSubmitting(true);
+
+    try {
+      const payload: any = {
+        full_name: editFormData.full_name.trim(),
+        department: editFormData.department.trim(),
+        email: editFormData.email.trim() ? editFormData.email.trim() : null,
+      };
+
+      if (!userToEdit.is_builtin) {
+        payload.username = editFormData.username.trim().toLowerCase();
+      }
+
+      if (currentUser?.role === "Super Admin" && !userToEdit.is_builtin) {
+        payload.role = editFormData.role;
+      }
+
+      const res = await fetch(`/api/users/${userToEdit.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setEditError(data.error || "Failed to update user details.");
+        return;
+      }
+
+      setUsers(prev =>
+        prev.map(u => (u.id === userToEdit.id ? { ...u, ...data.user } : u))
+      );
+      setActionSuccess(`Account for "${data.user.full_name}" (@${data.user.username}) updated successfully!`);
+      setIsEditModalOpen(false);
+      setUserToEdit(null);
+      setTimeout(() => setActionSuccess(null), 4000);
+    } catch (err: any) {
+      setEditError(err.message || "Failed to submit edit request.");
+    } finally {
+      setIsEditSubmitting(false);
     }
   };
 
@@ -700,6 +781,16 @@ export default function UsersManagementPage() {
 
                             <td className="px-4 py-3.5 text-right">
                               <div className="flex items-center justify-end gap-1.5">
+                                {canEditUser(userItem) && (
+                                  <button
+                                    onClick={() => handleOpenEditModal(userItem)}
+                                    title="Edit User Details"
+                                    className="p-1.5 rounded-lg text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 transition-colors"
+                                  >
+                                    <Pencil className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+
                                 {!userItem.is_builtin && (
                                   <>
                                     <button
@@ -1242,6 +1333,174 @@ export default function UsersManagementPage() {
                         className="px-4 py-2 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm disabled:opacity-50"
                       >
                         {isSubjectSubmitting ? "Saving..." : "Save Subject"}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+
+            {/* Modal: Edit Staff / Faculty Account */}
+            {isEditModalOpen && userToEdit && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+                <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md p-6 border border-gray-100 dark:border-gray-800 animate-fadeIn">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <div className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400">
+                        <Pencil className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-bold text-gray-900 dark:text-white">
+                          Edit Staff Account
+                        </h3>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          Update profile, login ID, department, or permissions
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setIsEditModalOpen(false);
+                        setUserToEdit(null);
+                        setEditError(null);
+                      }}
+                      className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  {editError && (
+                    <div className="mb-4 p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-xs text-rose-700 dark:text-rose-300 flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 shrink-0 text-rose-500" />
+                      <span>{editError}</span>
+                    </div>
+                  )}
+
+                  <form onSubmit={handleSaveEditUser} className="space-y-3.5">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                        Full Name <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. Dr. Arindam Ghosh"
+                        value={editFormData.full_name}
+                        onChange={e => setEditFormData({ ...editFormData, full_name: e.target.value })}
+                        className="w-full px-3 py-2 rounded-xl text-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-400 focus:outline-none"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                          Login ID / Username <span className="text-rose-500">*</span>
+                        </label>
+                        {userToEdit.is_builtin ? (
+                          <div>
+                            <input
+                              type="text"
+                              disabled
+                              value={userToEdit.username}
+                              className="w-full px-3 py-2 rounded-xl text-sm border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800/60 text-gray-500 font-mono cursor-not-allowed"
+                            />
+                            <span className="text-[10px] text-amber-600 dark:text-amber-400 mt-1 block">
+                              Built-in ID locked
+                            </span>
+                          </div>
+                        ) : (
+                          <input
+                            type="text"
+                            required
+                            placeholder="e.g. arindam"
+                            value={editFormData.username}
+                            onChange={e => setEditFormData({ ...editFormData, username: e.target.value.toLowerCase().trim() })}
+                            className="w-full px-3 py-2 rounded-xl text-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white font-mono focus:ring-2 focus:ring-indigo-400 focus:outline-none"
+                          />
+                        )}
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                          Department
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Anatomy"
+                          value={editFormData.department}
+                          onChange={e => setEditFormData({ ...editFormData, department: e.target.value })}
+                          className="w-full px-3 py-2 rounded-xl text-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-400 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                        Email Address (Optional)
+                      </label>
+                      <input
+                        type="email"
+                        placeholder="e.g. staff@institution.edu"
+                        value={editFormData.email}
+                        onChange={e => setEditFormData({ ...editFormData, email: e.target.value })}
+                        className="w-full px-3 py-2 rounded-xl text-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-400 focus:outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                        Role & Permissions
+                      </label>
+                      {currentUser?.role === "Super Admin" && !userToEdit.is_builtin ? (
+                        <select
+                          value={editFormData.role}
+                          onChange={e => setEditFormData({ ...editFormData, role: e.target.value as any })}
+                          className="w-full px-3 py-2 rounded-xl text-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-400 focus:outline-none"
+                        >
+                          <option value="Faculty">Faculty (Can conduct attendance sessions)</option>
+                          <option value="Admin">Admin (Attendance records, edit & manual mark)</option>
+                          <option value="Super Admin">Super Admin (Full administrative access)</option>
+                        </select>
+                      ) : (
+                        <div className="px-3 py-2 rounded-xl text-sm border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60 text-gray-700 dark:text-gray-300 flex items-center justify-between">
+                          <span className="flex items-center gap-2 text-xs font-semibold">
+                            <Shield className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                            {userToEdit.role}
+                          </span>
+                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+                            {userToEdit.is_builtin ? "System Protected" : "Role Fixed for Admin"}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="pt-3 border-t border-gray-100 dark:border-gray-800 flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsEditModalOpen(false);
+                          setUserToEdit(null);
+                          setEditError(null);
+                        }}
+                        disabled={isEditSubmitting}
+                        className="px-4 py-2 rounded-xl text-xs font-semibold border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={isEditSubmitting}
+                        className="px-4 py-2 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm flex items-center gap-1.5 disabled:opacity-50 transition-colors"
+                      >
+                        {isEditSubmitting ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            <span>Updating...</span>
+                          </>
+                        ) : (
+                          <span>Save Changes</span>
+                        )}
                       </button>
                     </div>
                   </form>
