@@ -92,7 +92,6 @@ export default function LiveScan() {
     sub_batch: "All"
   });
   const [customHallName, setCustomHallName] = useState("");
-  const [customSubjectName, setCustomSubjectName] = useState("");
   const [academicSubjects, setAcademicSubjects] = useState<AcademicSubject[]>(getCachedSubjects);
   const [isStartingSession, setIsStartingSession] = useState(false);
 
@@ -136,7 +135,7 @@ export default function LiveScan() {
   useEffect(() => {
     if (availableCohortSubjects.length > 0) {
       const isCurrentValid = availableCohortSubjects.some(s => s.name === setupData.subject);
-      if (!isCurrentValid && setupData.subject !== "custom") {
+      if (!isCurrentValid) {
         setSetupData(prev => ({ ...prev, subject: availableCohortSubjects[0].name }));
       }
     }
@@ -147,7 +146,7 @@ export default function LiveScan() {
     const isCurrentValid = cohortSubs.some(s => s.name === setupData.subject);
     const nextSubject = isCurrentValid
       ? setupData.subject
-      : (cohortSubs.length > 0 ? cohortSubs[0].name : "custom");
+      : (cohortSubs.length > 0 ? cohortSubs[0].name : "General");
 
     setSetupData(prev => ({
       ...prev,
@@ -535,7 +534,7 @@ export default function LiveScan() {
       const today = `${localYear}-${localMonth}-${localDay}`;
 
       const finalHall = setupData.hall === "custom" ? (customHallName.trim() || "Custom Hall") : setupData.hall;
-      const finalSubject = setupData.subject === "custom" ? (customSubjectName.trim() || "General Lecture") : setupData.subject;
+      const finalSubject = setupData.subject.trim() || "General Lecture";
       const className = `${finalSubject} - ${finalHall}`;
 
       const targetCohort = setupData.academic_year === "All"
@@ -886,33 +885,18 @@ export default function LiveScan() {
                 value={setupData.subject}
                 onChange={e => setSetupData({ ...setupData, subject: e.target.value })}
               >
-                {availableCohortSubjects.map(sub => (
-                  <option key={sub.id || `${sub.academic_year}-${sub.name}`} value={sub.name} className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">
-                    {sub.code ? `${sub.name} (${sub.code})` : sub.name} {setupData.academic_year === "All" ? `— [${sub.academic_year}]` : ''}
+                {availableCohortSubjects.length > 0 ? (
+                  availableCohortSubjects.map(sub => (
+                    <option key={sub.id || `${sub.academic_year}-${sub.name}`} value={sub.name} className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">
+                      {sub.code ? `${sub.name} (${sub.code})` : sub.name} {setupData.academic_year === "All" ? `— [${sub.academic_year}]` : ''}
+                    </option>
+                  ))
+                ) : (
+                  <option value="General" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">
+                    General Session
                   </option>
-                ))}
-                <option value="custom" className="bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 font-medium">
-                  + Other / Custom Subject...
-                </option>
+                )}
               </select>
-
-              {setupData.subject === "custom" && (
-                <div className="mt-2.5 animate-in fade-in slide-in-from-top-1 duration-200">
-                  <label htmlFor="custom-subject" className="block text-[11px] font-medium text-indigo-600 dark:text-indigo-400 mb-1">
-                    Enter Custom Subject / Special Session Name:
-                  </label>
-                  <input
-                    id="custom-subject"
-                    required
-                    type="text"
-                    className="w-full rounded-xl border border-indigo-300 dark:border-indigo-500/50 py-2 sm:py-2.5 px-3.5 text-gray-900 dark:text-white bg-white dark:bg-slate-950/90 placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-xs sm:text-sm shadow-inner"
-                    value={customSubjectName}
-                    onChange={e => setCustomSubjectName(e.target.value)}
-                    placeholder="e.g. Clinical Seminar, Medical Ethics, Grand Rounds..."
-                    autoFocus
-                  />
-                </div>
-              )}
             </div>
 
             <div>
