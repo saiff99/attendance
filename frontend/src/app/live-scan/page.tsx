@@ -548,7 +548,7 @@ export default function LiveScan() {
         date: today,
         start_time: now.toISOString(),
         end_time: new Date(now.getTime() + 2 * 60 * 60 * 1000).toISOString(),
-        instructor_name: encodeSessionMetadata(setupData.topic, sessionGeofence, user?.username || user?.name),
+        instructor_name: encodeSessionMetadata(setupData.topic, sessionGeofence, user?.name || user?.username),
         target_academic_year: targetCohort
       };
 

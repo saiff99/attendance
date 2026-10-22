@@ -15,6 +15,7 @@ interface SessionItem {
   instructor_name?: string | null;
   created_at: string;
   attendance?: any;
+  creator_name?: string | null;
 }
 
 interface RecentClassSessionsTableProps {
@@ -161,7 +162,19 @@ export function RecentClassSessionsTable({ initialSessions, userRole }: RecentCl
                         <span>{session.class_name}</span>
                         {!isFaculty && (
                           <span className="text-[11px] font-normal text-indigo-600 dark:text-indigo-400 mt-0.5">
-                            {meta.facultyUsername ? `By: @${meta.facultyUsername}` : "By: Faculty"}
+                            {(() => {
+                              const name = session.creator_name;
+                              if (name) {
+                                return `By: ${name}`;
+                              }
+                              if (meta.facultyUsername) {
+                                const uname = meta.facultyUsername.toLowerCase();
+                                if (uname === "admin") return "By: System Administrator";
+                                if (uname === "faculty") return "By: Faculty Member";
+                                return `By: ${meta.facultyUsername.startsWith("@") ? meta.facultyUsername.slice(1) : meta.facultyUsername}`;
+                              }
+                              return "By: Faculty Member";
+                            })()}
                           </span>
                         )}
                       </div>

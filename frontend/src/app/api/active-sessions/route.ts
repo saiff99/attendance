@@ -68,16 +68,39 @@ async function processAndFilterSessions(
     }
   }
 
+  const userMap: Record<string, string> = {
+    admin: 'System Administrator',
+    faculty: 'Faculty Member',
+  };
+  try {
+    const { data: appUsers } = await supabaseServer
+      .from('app_users')
+      .select('username, full_name');
+    if (appUsers) {
+      appUsers.forEach((u: any) => {
+        if (u.username && u.full_name) {
+          userMap[u.username.toLowerCase()] = u.full_name;
+        }
+      });
+    }
+  } catch (e) {
+    // Non-blocking
+  }
+
   // Enrich each session with creator info
   const enriched = validSessions.map((s: any) => {
     const rawInstructor = s.instructor_name || '';
     const dec = decodeSessionMetadata(rawInstructor);
     const auditCreator = creatorMap[s.id] || '';
     const creator = dec.facultyUsername || auditCreator || '';
+    const creatorClean = creator.startsWith('@') ? creator.slice(1) : creator;
+    const fullName = userMap[creatorClean.toLowerCase()] || creatorClean || 'Faculty Member';
 
     return {
       ...s,
       created_by: creator,
+      creator_name: fullName,
+      created_by_name: fullName,
     };
   });
 

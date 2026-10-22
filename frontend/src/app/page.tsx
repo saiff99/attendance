@@ -5,6 +5,7 @@ import { AttendanceChart } from "@/components/AttendanceChart";
 import { getStartOfTodayISO } from "@/lib/dateUtils";
 import { verifySessionToken, SESSION_COOKIE_NAME } from "@/lib/serverAuth";
 import { RecentClassSessionsTable } from "@/components/RecentClassSessionsTable";
+import { decodeSessionMetadata } from "@/lib/geofence";
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -50,6 +51,32 @@ export default async function Dashboard() {
     .neq('class_name', '__GEOFENCE_CONFIG__')
     .order('created_at', { ascending: false })
     .limit(80);
+
+  // Fetch registered users to map usernames to full names
+  const { data: appUsers } = await supabaseServer
+    .from('app_users')
+    .select('username, full_name');
+
+  const userMap: Record<string, string> = {
+    admin: "System Administrator",
+    faculty: "Faculty Member",
+  };
+  if (appUsers) {
+    appUsers.forEach((u: any) => {
+      if (u.username && u.full_name) {
+        userMap[u.username.toLowerCase()] = u.full_name;
+      }
+    });
+  }
+
+  const enrichedRawSessions = (rawSessions || []).map((s: any) => {
+    const meta = decodeSessionMetadata(s.instructor_name || "");
+    const facUser = (meta.facultyUsername || "").toLowerCase();
+    return {
+      ...s,
+      creator_name: userMap[facUser] || (meta.facultyUsername ? (meta.facultyUsername.startsWith("@") ? meta.facultyUsername.slice(1) : meta.facultyUsername) : null),
+    };
+  });
 
   const lastClassPresent = rawSessions && rawSessions.length > 0 
     ? ((rawSessions[0].attendance as any)?.[0]?.count || 0)
@@ -142,7 +169,7 @@ export default async function Dashboard() {
 
         <AttendanceChart data={chartData} todayPresent={todayUniquePresent} todayAbsent={todayUniqueAbsent} totalStudents={totalRegistered} />
 
-        <RecentClassSessionsTable initialSessions={rawSessions || []} userRole={userSession?.role || null} />
+        <RecentClassSessionsTable initialSessions={enrichedRawSessions || []} userRole={userSession?.role || null} />
       </div>
     </div>
   );

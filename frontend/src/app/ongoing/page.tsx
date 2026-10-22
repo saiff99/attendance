@@ -337,8 +337,12 @@ export default function OngoingSessionsPage() {
                           </span>
                           <span className="font-semibold text-indigo-600 dark:text-indigo-400 truncate max-w-[170px]">
                             {(() => {
-                              const rawHost = (session as any).created_by || decoded.facultyUsername;
-                              return rawHost ? (rawHost.startsWith("@") ? rawHost : `@${rawHost}`) : "Faculty";
+                              const rawHost = (session as any).creator_name || (session as any).created_by_name || (session as any).created_by || decoded.facultyUsername;
+                              if (!rawHost) return "Faculty Member";
+                              const lower = String(rawHost).toLowerCase().trim();
+                              if (lower === "admin" || lower === "@admin") return "System Administrator";
+                              if (lower === "faculty" || lower === "@faculty") return "Faculty Member";
+                              return rawHost.startsWith("@") ? rawHost.slice(1) : rawHost;
                             })()}
                           </span>
                         </div>

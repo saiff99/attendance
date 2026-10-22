@@ -51,9 +51,37 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    // Fetch registered users to map usernames to full names
+    const { data: appUsers } = await supabaseServer
+      .from('app_users')
+      .select('username, full_name');
+
+    const userMap: Record<string, string> = {
+      admin: 'System Administrator',
+      faculty: 'Faculty Member',
+    };
+    if (appUsers) {
+      appUsers.forEach((u: any) => {
+        if (u.username && u.full_name) {
+          userMap[u.username.toLowerCase()] = u.full_name;
+        }
+      });
+    }
+
+    const enrichedSessions = filteredSessions.map((s: any) => {
+      const dec = decodeSessionMetadata(s.instructor_name || '');
+      const facUser = (dec.facultyUsername || '').toLowerCase();
+      const rawUser = dec.facultyUsername || '';
+      return {
+        ...s,
+        creator_name: userMap[facUser] || (rawUser.startsWith('@') ? rawUser.slice(1) : rawUser) || null,
+        creator_username: dec.facultyUsername || null,
+      };
+    });
+
     return NextResponse.json({
       success: true,
-      sessions: filteredSessions,
+      sessions: enrichedSessions,
     });
   } catch (err: any) {
     console.error('Error fetching sessions:', err);
