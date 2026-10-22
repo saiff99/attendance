@@ -21,6 +21,7 @@ import {
 import { getParentPhone, formatPhoneDisplay } from "@/lib/studentContact";
 import { isCohortMatching } from "@/lib/cohort";
 import { SessionWhatsAppAlertMeta } from "@/lib/geofence";
+import { useAuth } from "@/lib/auth";
 
 interface WhatsAppAlertModalProps {
   isOpen: boolean;
@@ -56,6 +57,9 @@ export function WhatsAppAlertModal({
   initialAlertMeta = null,
   onAlertSuccess,
 }: WhatsAppAlertModalProps) {
+  const { user } = useAuth();
+  const canSendAlerts = user?.role === "Super Admin" || user?.role === "Admin";
+
   // Session Absentees State
   const [loading, setLoading] = useState(true);
   const [absentStudents, setAbsentStudents] = useState<any[]>([]);
@@ -126,7 +130,7 @@ export function WhatsAppAlertModal({
 
   // Poll connection status while modal is open (faster poll if waiting for QR scan)
   useEffect(() => {
-    if (!isOpen) {
+    if (!isOpen || !canSendAlerts) {
       if (statusPollRef.current) clearInterval(statusPollRef.current);
       return;
     }
@@ -376,7 +380,7 @@ export function WhatsAppAlertModal({
     }
   };
 
-  if (!isOpen) return null;
+  if (!isOpen || !canSendAlerts) return null;
 
   const absenteesWithPhone = absentStudents.filter((s) => Boolean(getParentPhone(s)));
   const absenteesWithoutPhone = absentStudents.filter((s) => !getParentPhone(s));

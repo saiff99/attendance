@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { MessageSquare, CheckCircle2 } from "lucide-react";
+import { useAuth } from "@/lib/auth";
 import { WhatsAppAlertModal } from "./WhatsAppAlertModal";
 import { SessionWhatsAppAlertMeta } from "@/lib/geofence";
 
@@ -11,6 +12,7 @@ interface WhatsAppDashboardButtonProps {
   topicName?: string;
   whatsappAlert?: SessionWhatsAppAlertMeta | null;
   onAlertStatusChange?: () => void;
+  userRole?: string | null;
 }
 
 function formatAlertDate(dateStr?: string): string {
@@ -34,10 +36,14 @@ export function WhatsAppDashboardButton({
   topicName = "Lecture Topic",
   whatsappAlert = null,
   onAlertStatusChange,
+  userRole,
 }: WhatsAppDashboardButtonProps) {
+  const { user } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [currentAlertMeta, setCurrentAlertMeta] = useState<SessionWhatsAppAlertMeta | null>(whatsappAlert);
 
+  const effectiveRole = user?.role || userRole;
+  const canSendAlerts = effectiveRole === "Super Admin" || effectiveRole === "Admin";
   const isSent = Boolean(currentAlertMeta?.sent);
 
   const handleAlertSuccess = (meta: SessionWhatsAppAlertMeta) => {
@@ -46,6 +52,22 @@ export function WhatsAppDashboardButton({
       onAlertStatusChange();
     }
   };
+
+  // Strictly block Faculty from seeing or interacting with the Send Alert trigger
+  if (!canSendAlerts) {
+    if (isSent) {
+      return (
+        <span
+          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 border border-emerald-500/30 text-xs font-medium rounded-lg text-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 dark:text-emerald-400 select-none shadow-sm"
+          title={`Admin dispatched WhatsApp absentee notices for this lecture (${currentAlertMeta?.sentCount || 0} sent).`}
+        >
+          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+          <span>Notified ({currentAlertMeta?.sentCount ?? 0})</span>
+        </span>
+      );
+    }
+    return null;
+  }
 
   return (
     <>

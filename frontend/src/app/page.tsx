@@ -142,7 +142,7 @@ export default async function Dashboard() {
 
         <AttendanceChart data={chartData} todayPresent={todayUniquePresent} todayAbsent={todayUniqueAbsent} totalStudents={totalRegistered} />
 
-        <RecentClassSessionsTable initialSessions={rawSessions || []} />
+        <RecentClassSessionsTable initialSessions={rawSessions || []} userRole={userSession?.role || null} />
       </div>
     </div>
   );

@@ -19,14 +19,17 @@ interface SessionItem {
 
 interface RecentClassSessionsTableProps {
   initialSessions: SessionItem[];
+  userRole?: string | null;
 }
 
-export function RecentClassSessionsTable({ initialSessions }: RecentClassSessionsTableProps) {
+export function RecentClassSessionsTable({ initialSessions, userRole }: RecentClassSessionsTableProps) {
   const { user, isLoading } = useAuth();
   const [sessions, setSessions] = useState<SessionItem[]>(initialSessions || []);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const isFaculty = user?.role === "Faculty";
+  const effectiveRole = user?.role || userRole;
+  const isFaculty = effectiveRole === "Faculty";
+  const canManageAlerts = effectiveRole === "Super Admin" || effectiveRole === "Admin";
   const userUsername = (user?.username || "").toLowerCase();
   const userName = (user?.name || "").toLowerCase();
 
@@ -179,13 +182,14 @@ export function RecentClassSessionsTable({ initialSessions }: RecentClassSession
                     </td>
                     <td className="px-4 sm:px-6 py-3.5 sm:py-4 whitespace-nowrap text-right text-xs sm:text-sm font-medium">
                       <div className="flex items-center justify-end gap-2">
-                        {!isFaculty ? (
+                        {canManageAlerts ? (
                           <WhatsAppDashboardButton
                             sessionId={session.id}
                             sessionName={session.class_name}
                             topicName={topic}
                             whatsappAlert={whatsappAlert}
                             onAlertStatusChange={refreshSessions}
+                            userRole={effectiveRole}
                           />
                         ) : whatsappAlert?.sent ? (
                           <span
