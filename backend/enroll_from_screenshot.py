@@ -24,8 +24,15 @@ if not os.path.exists(screenshot_path):
     print("Screenshot not found at:", screenshot_path)
     exit(1)
 
+INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY", "")
+
 with open(screenshot_path, "rb") as f:
     files = {"file": ("screenshot.webp", f, "image/webp")}
-    response = requests.post(f"http://localhost:8000/api/enroll-face/{student_id}", files=files)
+    response = requests.post(
+        f"http://localhost:8000/api/enroll-face/{student_id}",
+        files=files,
+        data={"consent_granted": "true", "actor": "SAIF (Admin Script)"},
+        headers={"X-Internal-API-Key": INTERNAL_API_KEY}
+    )
     
 print("Enrollment Response:", response.status_code, response.text)

@@ -47,6 +47,7 @@ export async function POST(
         face_encoding: null,
         biometric_consent: false,
         biometric_consent_date: null,
+        biometric_consent_revoked_at: new Date().toISOString(),
       })
       .eq('id', id);
 
@@ -63,6 +64,11 @@ export async function POST(
     try {
       const backendRes = await fetchBackend(`/api/students/${encodeURIComponent(id)}/revoke-biometrics`, {
         method: 'POST',
+        headers: {
+          'X-Actor-Id': session.userId || '',
+          'X-Actor-Name': session.name || session.username || 'Admin',
+          'X-Actor-Role': session.role || 'Admin',
+        },
       });
       if (backendRes.ok) {
         backendInvalidationResult = await backendRes.json().catch(() => null);

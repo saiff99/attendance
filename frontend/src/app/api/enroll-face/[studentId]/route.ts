@@ -61,6 +61,11 @@ export async function POST(
     const res = await fetchBackend(`/api/enroll-face/${studentId}`, {
       method: 'POST',
       body: formData,
+      headers: {
+        'X-Actor-Id': session.userId || '',
+        'X-Actor-Name': session.name || session.username || 'Super Admin',
+        'X-Actor-Role': session.role || 'Super Admin',
+      },
     });
 
     let data;

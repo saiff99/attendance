@@ -134,6 +134,11 @@ export async function POST(request: NextRequest) {
     const res = await fetchBackend(`/api/enroll-face-burst/${targetStudentId}`, {
       method: 'POST',
       body: formData,
+      headers: {
+        'X-Actor-Id': String(targetStudentId),
+        'X-Actor-Name': student.full_name || student.student_roll || 'Student',
+        'X-Actor-Role': 'Student (Self-Enrollment)',
+      },
     });
 
     let data;
