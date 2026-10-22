@@ -86,7 +86,7 @@ export function RecentClassSessionsTable({ initialSessions, userRole }: RecentCl
           <CalendarDays className="w-5 h-5 text-indigo-600 dark:text-indigo-400 shrink-0" />
           <h2 className="text-base sm:text-lg font-medium text-gray-900 dark:text-white">
             {isFaculty
-              ? `Recent Class Sessions (@${user?.username || "faculty"})`
+              ? `Recent Class Sessions (${user?.name || (user?.username ? `@${user.username}` : "Faculty")})`
               : "Recent Class Sessions"}
           </h2>
           {isFaculty ? (

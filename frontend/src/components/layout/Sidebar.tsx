@@ -249,14 +249,9 @@ export default function Sidebar() {
             )}>
               <span className="text-xs font-bold leading-none tracking-wider">
                 {(() => {
-                  let identifier = user?.username || user?.name || "Faculty";
-                  if (user?.role === "Faculty" && user?.username) {
-                    identifier = user.username;
-                  } else if (user?.name && user.name.toLowerCase() !== "faculty member") {
-                    identifier = user.name;
-                  }
+                  let identifier = user?.name || user?.username || "Faculty";
                   identifier = identifier.trim().replace(/^@/, "");
-                  const parts = identifier.split(/[\s._-]+/);
+                  const parts = identifier.split(/[\s._-]+/).filter(Boolean);
                   if (parts.length >= 2 && parts[0][0] && parts[1][0]) {
                     return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
                   }
@@ -267,20 +262,25 @@ export default function Sidebar() {
             <div className="ml-3 min-w-0">
               <p 
                 className="text-sm font-bold text-gray-800 dark:text-gray-100 truncate"
-                title={user?.name && user.name.toLowerCase() !== "faculty member" ? `${user.name} (@${user?.username})` : (user?.username ? `@${user.username}` : user?.name || "Faculty")}
+                title={user?.name ? `${user.name} (@${user?.username})` : (user?.username ? `@${user.username}` : "Faculty")}
               >
-                {user?.role === "Faculty"
-                  ? (user?.username ? `@${user.username}` : (user?.name || "Faculty"))
-                  : (user?.name || user?.username || "Admin")}
+                {user?.name || (user?.username ? `@${user.username}` : "Faculty")}
               </p>
-              <span className={classNames(
-                "inline-block text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded-md mt-0.5",
-                user?.role === "Faculty"
-                  ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
-                  : "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20"
-              )}>
-                {user?.role || "User"}
-              </span>
+              <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
+                <span className={classNames(
+                  "inline-block text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded-md shrink-0",
+                  user?.role === "Faculty"
+                    ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
+                    : "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20"
+                )}>
+                  {user?.role || "User"}
+                </span>
+                {user?.username && (
+                  <span className="text-[11px] text-gray-400 dark:text-gray-500 font-medium truncate" title={`Username: @${user.username}`}>
+                    @{user.username}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 
