@@ -30,10 +30,10 @@ import {
   saveLocalGeofence,
   getUserCoordinates,
   getCalibratedHighPrecisionGPS,
-  formatDistance
+  formatDistance,
 } from "@/lib/geofence";
 import { isCohortMatching } from "@/lib/cohort";
-import { AcademicSubject, DEFAULT_MBBS_SUBJECTS, getSubjectsForCohort } from "@/lib/academicSubjects";
+import { AcademicSubject, getCachedSubjects, saveCachedSubjects, getSubjectsForCohort } from "@/lib/academicSubjects";
 
 interface CameraMeta {
   index: number;
@@ -93,28 +93,54 @@ export default function LiveScan() {
   });
   const [customHallName, setCustomHallName] = useState("");
   const [customSubjectName, setCustomSubjectName] = useState("");
-  const [academicSubjects, setAcademicSubjects] = useState<AcademicSubject[]>(DEFAULT_MBBS_SUBJECTS);
+  const [academicSubjects, setAcademicSubjects] = useState<AcademicSubject[]>(getCachedSubjects);
   const [isStartingSession, setIsStartingSession] = useState(false);
 
-  // Fetch dynamic curriculum subjects on mount
+  // Fetch dynamic curriculum subjects on mount & sync in real-time
   useEffect(() => {
+    let isMounted = true;
     const loadSubjects = async () => {
       try {
         const res = await fetch("/api/subjects");
         const data = await res.json();
-        if (res.ok && data.subjects && data.subjects.length > 0) {
+        if (res.ok && data.subjects && Array.isArray(data.subjects) && data.subjects.length > 0 && isMounted) {
           setAcademicSubjects(data.subjects);
+          saveCachedSubjects(data.subjects);
         }
       } catch (e) {
-        // Fallback to DEFAULT_MBBS_SUBJECTS already initialized
+        // Fallback to cached subjects
       }
     };
     loadSubjects();
+
+    const handleSync = () => {
+      if (isMounted) {
+        setAcademicSubjects(getCachedSubjects());
+      }
+    };
+    window.addEventListener("medattend-subjects-changed", handleSync);
+    window.addEventListener("storage", handleSync);
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener("medattend-subjects-changed", handleSync);
+      window.removeEventListener("storage", handleSync);
+    };
   }, []);
 
   const availableCohortSubjects = useMemo(() => {
     return getSubjectsForCohort(academicSubjects, setupData.academic_year);
   }, [academicSubjects, setupData.academic_year]);
+
+  // Ensure current selected subject is always aligned with available cohort subjects
+  useEffect(() => {
+    if (availableCohortSubjects.length > 0) {
+      const isCurrentValid = availableCohortSubjects.some(s => s.name === setupData.subject);
+      if (!isCurrentValid && setupData.subject !== "custom") {
+        setSetupData(prev => ({ ...prev, subject: availableCohortSubjects[0].name }));
+      }
+    }
+  }, [availableCohortSubjects, setupData.subject]);
 
   const handleCohortChange = (newCohort: string) => {
     const cohortSubs = getSubjectsForCohort(academicSubjects, newCohort);

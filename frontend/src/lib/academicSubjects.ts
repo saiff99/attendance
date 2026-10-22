@@ -16,21 +16,62 @@ export const ACADEMIC_YEARS = [
 ] as const;
 
 export const DEFAULT_MBBS_SUBJECTS: AcademicSubject[] = [
-  { id: "sub-1-anat", academic_year: "1st Year", name: "Anatomy", code: "ANAT", is_active: true },
-  { id: "sub-1-phys", academic_year: "1st Year", name: "Physiology", code: "PHYS", is_active: true },
-  { id: "sub-1-bioc", academic_year: "1st Year", name: "Biochemistry", code: "BIOC", is_active: true },
-  { id: "sub-2-path", academic_year: "2nd Year", name: "Pathology", code: "PATH", is_active: true },
-  { id: "sub-2-phar", academic_year: "2nd Year", name: "Pharmacology", code: "PHAR", is_active: true },
-  { id: "sub-2-micr", academic_year: "2nd Year", name: "Microbiology", code: "MICR", is_active: true },
-  { id: "sub-2-fmt",  academic_year: "2nd Year", name: "Forensic Medicine & Toxicology", code: "FMT", is_active: true },
-  { id: "sub-3-opht", academic_year: "3rd Year", name: "Ophthalmology", code: "OPHT", is_active: true },
-  { id: "sub-3-ent",  academic_year: "3rd Year", name: "ENT (Otorhinolaryngology)", code: "ENT", is_active: true },
-  { id: "sub-3-comm", academic_year: "3rd Year", name: "Community Medicine", code: "COMM", is_active: true },
-  { id: "sub-4-med",  academic_year: "4th Year", name: "General Medicine", code: "MED", is_active: true },
-  { id: "sub-4-surg", academic_year: "4th Year", name: "General Surgery", code: "SURG", is_active: true },
-  { id: "sub-4-ped",  academic_year: "4th Year", name: "Pediatrics", code: "PED", is_active: true },
-  { id: "sub-4-obg",  academic_year: "4th Year", name: "Obstetrics & Gynaecology", code: "OBG", is_active: true },
+  // 1st Year MBBS
+  { id: "sub-1-anat", academic_year: "1st Year", name: "Anatomy", is_active: true },
+  { id: "sub-1-bioc", academic_year: "1st Year", name: "Biochemistry", is_active: true },
+  { id: "sub-1-phys", academic_year: "1st Year", name: "Physiology", is_active: true },
+
+  // 2nd Year MBBS
+  { id: "sub-2-fmt",  academic_year: "2nd Year", name: "FMT", is_active: true },
+  { id: "sub-2-micr", academic_year: "2nd Year", name: "Microbiology", is_active: true },
+  { id: "sub-2-path", academic_year: "2nd Year", name: "Pathology", is_active: true },
+  { id: "sub-2-phar", academic_year: "2nd Year", name: "Pharmacology", is_active: true },
+
+  // 3rd Year MBBS
+  { id: "sub-3-comm", academic_year: "3rd Year", name: "Community Medicine", is_active: true },
+  { id: "sub-3-ent",  academic_year: "3rd Year", name: "ENT", is_active: true },
+  { id: "sub-3-eye",  academic_year: "3rd Year", name: "EYE", is_active: true },
+
+  // 4th Year MBBS
+  { id: "sub-4-med",  academic_year: "4th Year", name: "General Medicine", is_active: true },
+  { id: "sub-4-surg", academic_year: "4th Year", name: "General Surgery", is_active: true },
+  { id: "sub-4-obg",  academic_year: "4th Year", name: "OBG", is_active: true },
+  { id: "sub-4-orth", academic_year: "4th Year", name: "Orthopedics", is_active: true },
+  { id: "sub-4-ped",  academic_year: "4th Year", name: "Pediatrics", is_active: true },
 ];
+
+export const CACHED_SUBJECTS_STORAGE_KEY = "medattend_cached_subjects";
+
+/**
+ * Returns instantaneous cached curriculum subjects from client storage,
+ * completely preventing any flash of outdated default subjects during network fetch.
+ */
+export function getCachedSubjects(): AcademicSubject[] {
+  if (typeof window !== "undefined") {
+    try {
+      const raw = localStorage.getItem(CACHED_SUBJECTS_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch {}
+  }
+  return DEFAULT_MBBS_SUBJECTS;
+}
+
+/**
+ * Saves and synchronizes subjects to browser cache and notifies all listeners.
+ */
+export function saveCachedSubjects(subjects: AcademicSubject[]) {
+  if (typeof window !== "undefined" && Array.isArray(subjects) && subjects.length > 0) {
+    try {
+      localStorage.setItem(CACHED_SUBJECTS_STORAGE_KEY, JSON.stringify(subjects));
+      window.dispatchEvent(new Event("medattend-subjects-changed"));
+    } catch {}
+  }
+}
 
 /**
  * Filter subjects by academic year cohort (e.g. '1st Year' or '1st Year MBBS')

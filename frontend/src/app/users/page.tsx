@@ -9,7 +9,7 @@ import {
   BookOpen, Plus, UserX, Loader2
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
-import { AcademicSubject, ACADEMIC_YEARS, DEFAULT_MBBS_SUBJECTS } from "@/lib/academicSubjects";
+import { AcademicSubject, ACADEMIC_YEARS, DEFAULT_MBBS_SUBJECTS, getCachedSubjects, saveCachedSubjects } from "@/lib/academicSubjects";
 
 interface AppUser {
   id: string;
@@ -65,7 +65,7 @@ export default function UsersManagementPage() {
   const [activeMainTab, setActiveMainTab] = useState<"users" | "subjects">("users");
 
   // Subject Management State
-  const [subjects, setSubjects] = useState<AcademicSubject[]>(DEFAULT_MBBS_SUBJECTS);
+  const [subjects, setSubjects] = useState<AcademicSubject[]>(getCachedSubjects);
   const [subjectsLoading, setSubjectsLoading] = useState(false);
   const [selectedYearTab, setSelectedYearTab] = useState<string>("All");
   const [isAddSubjectModalOpen, setIsAddSubjectModalOpen] = useState(false);
@@ -104,8 +104,9 @@ export default function UsersManagementPage() {
     try {
       const res = await fetch("/api/subjects");
       const data = await res.json();
-      if (res.ok && data.success) {
-        setSubjects(data.subjects || DEFAULT_MBBS_SUBJECTS);
+      if (res.ok && data.success && Array.isArray(data.subjects)) {
+        setSubjects(data.subjects);
+        saveCachedSubjects(data.subjects);
       }
     } catch (e) {
       console.error(e);
@@ -163,6 +164,9 @@ export default function UsersManagementPage() {
         return;
       }
       setActionSuccess(`Subject "${subjectToDelete.name}" deleted successfully.`);
+      const updated = subjects.filter(s => s.id !== subjectToDelete.id);
+      setSubjects(updated);
+      saveCachedSubjects(updated);
       fetchSubjects();
       setSubjectToDelete(null);
       setTimeout(() => setActionSuccess(null), 3000);
@@ -182,9 +186,11 @@ export default function UsersManagementPage() {
       });
       const data = await res.json();
       if (res.ok && data.success) {
-        setSubjects(prev =>
-          prev.map(s => (s.id === subject.id ? { ...s, is_active: !s.is_active } : s))
-        );
+        setSubjects(prev => {
+          const updated = prev.map(s => (s.id === subject.id ? { ...s, is_active: !s.is_active } : s));
+          saveCachedSubjects(updated);
+          return updated;
+        });
       }
     } catch (e) {
       console.error(e);
