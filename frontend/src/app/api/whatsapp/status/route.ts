@@ -16,6 +16,13 @@ export async function GET(req: Request) {
     });
 
     const data = await res.json();
+
+    // SECURITY: WhatsApp QR code data is strictly reserved for Super Admin to prevent unauthorized session hijacking
+    const isSuperAdmin = auth.user?.role === 'Super Admin';
+    if (!isSuperAdmin && data && data.qr) {
+      data.qr = null;
+    }
+
     return NextResponse.json(data, { status: res.status });
   } catch (error: any) {
     return NextResponse.json(

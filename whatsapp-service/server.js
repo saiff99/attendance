@@ -12,8 +12,69 @@ const {
 } = require('@whiskeysockets/baileys');
 
 const app = express();
-app.use(cors());
+
+// Helper: Safely resolve internal API key from environment or local env files
+function getInternalApiKey() {
+  if (process.env.INTERNAL_API_KEY) return process.env.INTERNAL_API_KEY.trim();
+  try {
+    const envPaths = [
+      path.join(__dirname, '..', 'backend', '.env'),
+      path.join(__dirname, '..', 'frontend', '.env.local'),
+      path.join(__dirname, '..', '.env')
+    ];
+    for (const p of envPaths) {
+      if (fs.existsSync(p)) {
+        const content = fs.readFileSync(p, 'utf-8');
+        const match = content.match(/INTERNAL_API_KEY\s*=\s*["']?([^"'\r\n]+)/);
+        if (match && match[1]) return match[1].trim();
+      }
+    }
+  } catch (e) {}
+  return null;
+}
+const INTERNAL_API_KEY = getInternalApiKey();
+
+// Strict CORS: Allow only authorized local frontend and backend origins
+const ALLOWED_ORIGINS = [
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+  'http://localhost:8000',
+  'http://127.0.0.1:8000',
+];
+
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || ALLOWED_ORIGINS.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error('CORS blocked: Origin not authorized for WhatsApp bridge.'));
+  },
+  credentials: true,
+}));
+
 app.use(express.json());
+
+// Security Middleware: Require valid x-internal-secret token on all endpoints (except /health)
+app.use((req, res, next) => {
+  if (req.path === '/health') return next();
+
+  if (!INTERNAL_API_KEY) {
+    return next();
+  }
+
+  const authHeader = req.headers['x-internal-secret'] || req.headers['authorization'];
+  const cleanToken = authHeader ? String(authHeader).replace(/^Bearer\s+/i, '').trim() : '';
+
+  if (!cleanToken || cleanToken !== INTERNAL_API_KEY) {
+    console.warn(`[WhatsApp Security] 🚫 Blocked unauthorized ${req.method} request to ${req.path} from ${req.ip}`);
+    return res.status(401).json({
+      success: false,
+      error: 'Unauthorized: Missing or invalid x-internal-secret authentication token.'
+    });
+  }
+
+  next();
+});
 
 const PORT = process.env.WHATSAPP_PORT || 5005;
 const SESSION_DIR = path.join(__dirname, 'session');
@@ -374,7 +435,7 @@ app.get('/job/:jobId', (req, res) => {
   return res.json({ success: true, ...job });
 });
 
-// Start Express Listener
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 [WhatsApp Bridge] Service running on http://127.0.0.1:${PORT}`);
+// Start Express Listener strictly on 127.0.0.1 (Localhost / Loopback interface only)
+app.listen(PORT, '127.0.0.1', () => {
+  console.log(`🚀 [WhatsApp Bridge] Service running securely on http://127.0.0.1:${PORT} (Loopback only)`);
 });

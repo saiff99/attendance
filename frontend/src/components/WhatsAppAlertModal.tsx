@@ -59,6 +59,7 @@ export function WhatsAppAlertModal({
 }: WhatsAppAlertModalProps) {
   const { user } = useAuth();
   const canSendAlerts = user?.role === "Super Admin" || user?.role === "Admin";
+  const isSuperAdmin = user?.role === "Super Admin";
 
   // Session Absentees State
   const [loading, setLoading] = useState(true);
@@ -463,25 +464,38 @@ export function WhatsAppAlertModal({
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
-                  <button
-                    type="button"
-                    onClick={handleDisconnect}
-                    disabled={isDisconnecting}
-                    className="px-3 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                    title="Disconnect and link a different WhatsApp number"
-                  >
-                    {isDisconnecting ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    ) : (
-                      <LogOut className="w-3.5 h-3.5" />
-                    )}
-                    <span>Change Number</span>
-                  </button>
+                {isSuperAdmin && (
+                  <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                    <button
+                      type="button"
+                      onClick={handleDisconnect}
+                      disabled={isDisconnecting}
+                      className="px-3 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                      title="Disconnect and link a different WhatsApp number (Super Admin only)"
+                    >
+                      {isDisconnecting ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <LogOut className="w-3.5 h-3.5" />
+                      )}
+                      <span>Change Number</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : connectionStatus === "qr_ready" && (!isSuperAdmin || !qrCodeDataUrl) ? (
+              // Non-SuperAdmin Restricted State (or waiting for QR)
+              <div className="flex items-start gap-3 p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 w-full">
+                <AlertCircle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                <div className="text-xs space-y-1">
+                  <p className="font-semibold text-amber-300">WhatsApp Service is not linked yet</p>
+                  <p className="text-slate-400 leading-relaxed">
+                    For institutional security, only a <strong>Super Administrator</strong> has permission to scan the QR code to link the official college WhatsApp account. Please contact your Super Admin to link the device.
+                  </p>
                 </div>
               </div>
-            ) : connectionStatus === "qr_ready" && qrCodeDataUrl ? (
-              // QR Code Ready to Scan State (Spacious, Clean Card Layout)
+            ) : connectionStatus === "qr_ready" && isSuperAdmin && qrCodeDataUrl ? (
+              // QR Code Ready to Scan State (Super Admin Only)
               <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5 sm:gap-6 w-full min-w-0">
                 {/* QR Code Container */}
                 <div className="p-3 rounded-2xl bg-white shadow-xl flex flex-col items-center justify-center shrink-0 border border-slate-200">

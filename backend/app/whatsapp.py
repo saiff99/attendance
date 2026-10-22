@@ -61,6 +61,17 @@ def decode_session_topic(raw_instructor: str) -> str:
     return cleaned or "General Medical Lecture"
 
 
+def get_internal_auth_headers(content_type: Optional[str] = None) -> dict:
+    """Returns headers with x-internal-secret for secured local WhatsApp bridge communication."""
+    headers = {
+        "User-Agent": "MedAttend-Backend",
+        "x-internal-secret": os.getenv("INTERNAL_API_KEY", "")
+    }
+    if content_type:
+        headers["Content-Type"] = content_type
+    return headers
+
+
 def get_whatsapp_status() -> dict:
     """
     Fetches real-time WhatsApp Web connection status and active QR code Data URL
@@ -68,7 +79,7 @@ def get_whatsapp_status() -> dict:
     """
     url = f"{WHATSAPP_SERVICE_URL}/status"
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "MedAttend-Backend"})
+        req = urllib.request.Request(url, headers=get_internal_auth_headers())
         with urllib.request.urlopen(req, timeout=WHATSAPP_TIMEOUT) as response:
             res_body = response.read().decode("utf-8")
             data = json.loads(res_body)
@@ -97,7 +108,7 @@ def disconnect_whatsapp() -> dict:
         req = urllib.request.Request(
             url,
             data=json.dumps({}).encode("utf-8"),
-            headers={"Content-Type": "application/json", "User-Agent": "MedAttend-Backend"},
+            headers=get_internal_auth_headers("application/json"),
             method="POST"
         )
         with urllib.request.urlopen(req, timeout=WHATSAPP_TIMEOUT) as response:
@@ -120,7 +131,7 @@ def send_whatsapp_raw(to_phone: str, text: str) -> dict:
         req = urllib.request.Request(
             url,
             data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json", "User-Agent": "MedAttend-Backend"},
+            headers=get_internal_auth_headers("application/json"),
             method="POST"
         )
         with urllib.request.urlopen(req, timeout=12.0) as response:
@@ -199,7 +210,7 @@ def send_session_absentee_alerts(session_id: str, async_mode: bool = True) -> di
         req = urllib.request.Request(
             batch_url,
             data=json.dumps(batch_payload).encode("utf-8"),
-            headers={"Content-Type": "application/json", "User-Agent": "MedAttend-Backend"},
+            headers=get_internal_auth_headers("application/json"),
             method="POST"
         )
         with urllib.request.urlopen(req, timeout=15.0) as response:
@@ -268,7 +279,7 @@ def get_whatsapp_job_status(job_id: str) -> dict:
     """
     url = f"{WHATSAPP_SERVICE_URL}/job/{job_id}"
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "MedAttend-Backend"})
+        req = urllib.request.Request(url, headers=get_internal_auth_headers())
         with urllib.request.urlopen(req, timeout=WHATSAPP_TIMEOUT) as response:
             res_body = response.read().decode("utf-8")
             data = json.loads(res_body)
