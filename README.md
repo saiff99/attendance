@@ -16,8 +16,23 @@
 
 ---
 
+## 📚 Comprehensive Documentation Suite
+
+For specialized operational, administrative, and compliance instructions, please refer to our dedicated documentation guides:
+
+| Guide | Target Audience | Primary Focus |
+| :--- | :--- | :--- |
+| [**👨‍🏫 Faculty & User Guide**](docs/USER_GUIDE.md) | Professors, Lecturers & Teaching Staff | Conducting attendance sessions, live AI camera monitoring, GPS selfie instructions, and exporting Excel reports. |
+| [**🛠️ Admin & IT Setup Guide**](docs/ADMIN_SETUP_GUIDE.md) | System Admins & IT Engineers | 3-tier user governance, lockout guardrails, RTSP multi-camera setup, ONVIF PTZ controls, and curriculum configuration. |
+| [**🎓 Student Portal Guide**](docs/STUDENT_PORTAL_GUIDE.md) | Medical Students & Interns | Logging in with Roll No & PIN, mobile GPS selfie check-in, 7-day attendance logs, and NMC exam eligibility. |
+| [**🛡️ Security & Privacy Policy**](docs/SECURITY_AND_PRIVACY.md) | Deans, Legal Counsel & Compliance | India DPDP Act 2023 compliance, irreversible 512D ArcFace embeddings, zero raw photo storage, and audit logs. |
+| [**🤝 Contributing Guidelines**](CONTRIBUTING.md) | Developers & Open-Source Contributors | Development environment setup, branch conventions, testing, and pull request workflow. |
+
+---
+
 ## 📑 Table of Contents
 
+- [📚 Comprehensive Documentation Suite](#-comprehensive-documentation-suite)
 - [✨ Core Enterprise Features](#-core-enterprise-features)
 - [👥 3-Tier Role-Based Access Control (RBAC)](#-3-tier-role-based-access-control-rbac)
   - [Role Hierarchy Overview](#role-hierarchy-overview)
