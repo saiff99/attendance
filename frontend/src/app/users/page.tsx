@@ -1092,7 +1092,7 @@ export default function UsersManagementPage() {
                         <div className="px-3 py-2 rounded-xl text-sm border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60 text-gray-700 dark:text-gray-300 flex items-center justify-between">
                           <span className="flex items-center gap-2 text-xs font-semibold">
                             <GraduationCap className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                            Faculty (Can conduct attendance sessions)
+                            Faculty
                           </span>
                           <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
                             Fixed Role
@@ -1104,9 +1104,9 @@ export default function UsersManagementPage() {
                           onChange={e => setNewUser({ ...newUser, role: e.target.value as any })}
                           className="w-full px-3 py-2 rounded-xl text-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-400 focus:outline-none"
                         >
-                          <option value="Faculty">Faculty (Can conduct attendance sessions)</option>
-                          <option value="Admin">Admin (Attendance records, edit & manual mark)</option>
-                          <option value="Super Admin">Super Admin (Full administrative access)</option>
+                          <option value="Faculty">Faculty</option>
+                          <option value="Admin">Admin</option>
+                          <option value="Super Admin">Super Admin</option>
                         </select>
                       )}
                       {currentUser?.role === "Admin" && (
@@ -1458,9 +1458,9 @@ export default function UsersManagementPage() {
                           onChange={e => setEditFormData({ ...editFormData, role: e.target.value as any })}
                           className="w-full px-3 py-2 rounded-xl text-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-400 focus:outline-none"
                         >
-                          <option value="Faculty">Faculty (Can conduct attendance sessions)</option>
-                          <option value="Admin">Admin (Attendance records, edit & manual mark)</option>
-                          <option value="Super Admin">Super Admin (Full administrative access)</option>
+                          <option value="Faculty">Faculty</option>
+                          <option value="Admin">Admin</option>
+                          <option value="Super Admin">Super Admin</option>
                         </select>
                       ) : (
                         <div className="px-3 py-2 rounded-xl text-sm border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60 text-gray-700 dark:text-gray-300 flex items-center justify-between">
