@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 const QRCode = require('qrcode');
 const pino = require('pino');
 const {
@@ -34,6 +35,27 @@ function getInternalApiKey() {
 }
 const INTERNAL_API_KEY = getInternalApiKey();
 
+// Fail-closed enforcement: Refuse to boot without an authentication secret
+if (!INTERNAL_API_KEY) {
+  console.error('\n❌ [WhatsApp Security] FATAL: INTERNAL_API_KEY is not defined.');
+  console.error('❌ [WhatsApp Security] WhatsApp Bridge server refusing to start in fail-open state.');
+  console.error('❌ [WhatsApp Security] Please configure INTERNAL_API_KEY in backend/.env, frontend/.env.local, or environment variables.\n');
+  process.exit(1);
+}
+
+// Timing-safe secret comparison helper to protect against timing attacks
+function safeCompareTokens(provided, expected) {
+  if (typeof provided !== 'string' || typeof expected !== 'string') {
+    return false;
+  }
+  if (!provided || !expected) {
+    return false;
+  }
+  const providedHash = crypto.createHash('sha256').update(provided).digest();
+  const expectedHash = crypto.createHash('sha256').update(expected).digest();
+  return crypto.timingSafeEqual(providedHash, expectedHash);
+}
+
 // Strict CORS: Allow only authorized local frontend and backend origins
 const ALLOWED_ORIGINS = [
   'http://localhost:3000',
@@ -59,13 +81,17 @@ app.use((req, res, next) => {
   if (req.path === '/health') return next();
 
   if (!INTERNAL_API_KEY) {
-    return next();
+    console.error(`[WhatsApp Security] ❌ Rejected ${req.method} ${req.path}: Server misconfigured (INTERNAL_API_KEY missing).`);
+    return res.status(500).json({
+      success: false,
+      error: 'Server misconfiguration: INTERNAL_API_KEY is not configured.'
+    });
   }
 
   const authHeader = req.headers['x-internal-secret'] || req.headers['authorization'];
   const cleanToken = authHeader ? String(authHeader).replace(/^Bearer\s+/i, '').trim() : '';
 
-  if (!cleanToken || cleanToken !== INTERNAL_API_KEY) {
+  if (!cleanToken || !safeCompareTokens(cleanToken, INTERNAL_API_KEY)) {
     console.warn(`[WhatsApp Security] 🚫 Blocked unauthorized ${req.method} request to ${req.path} from ${req.ip}`);
     return res.status(401).json({
       success: false,
