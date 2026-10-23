@@ -3,6 +3,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import {
   Camera, CheckCircle2, ShieldCheck, AlertCircle, RefreshCw,
   UserCheck, ArrowRight, ArrowLeft, Clock, MapPin, BookOpen,
@@ -84,6 +85,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
   // User Authentication & Student Cohort Awareness
   const { user } = useAuth();
   const isStudentUser = Boolean(user && user.role === "Student");
+  const isStaffUser = Boolean(user && (user.role === "Super Admin" || user.role === "Admin" || user.role === "Faculty"));
   const studentCohort = user?.academicYear || "";
 
   // Data States
@@ -983,14 +985,14 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
           </div>
         </div>
 
-        <a
-          href="/portal"
+        <Link
+          href={isStaffUser ? "/" : "/portal"}
           className="group inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-800/80 hover:bg-indigo-600/20 text-slate-300 hover:text-white text-xs font-semibold border border-slate-700/80 hover:border-indigo-500/40 transition-all duration-200 backdrop-blur-md shadow-sm hover:shadow-md hover:shadow-indigo-500/10 cursor-pointer active:scale-95"
-          title="Return to Student Portal"
+          title={isStaffUser ? "Return to Dashboard" : "Return to Student Portal"}
         >
           <ArrowLeft className="w-3.5 h-3.5 text-indigo-400 group-hover:text-indigo-300 group-hover:-translate-x-0.5 transition-transform duration-200 shrink-0" />
-          <span className="tracking-tight">Back to Portal</span>
-        </a>
+          <span className="tracking-tight">{isStaffUser ? "Back to Dashboard" : "Back to Portal"}</span>
+        </Link>
       </header>
 
       {/* Main Container */}
