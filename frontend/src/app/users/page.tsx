@@ -796,14 +796,14 @@ export default function UsersManagementPage() {
                                   </button>
                                 )}
 
-                                {!isRootAdmin && (
+                                {(currentUser?.role === "Super Admin" || isCurrentUser || !isRootAdmin) && (
                                   <button
                                     onClick={() => {
                                       setSelectedUser(userItem);
                                       setResetPasswordValue(generateRandomPassword());
                                       setIsResetModalOpen(true);
                                     }}
-                                    title="Reset Password"
+                                    title="Reset / Change Password"
                                     className="p-1.5 rounded-lg text-gray-500 hover:text-indigo-600 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
                                   >
                                     <KeyRound className="w-3.5 h-3.5" />
