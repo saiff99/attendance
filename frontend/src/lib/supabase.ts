@@ -1,8 +1,14 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Retrieve environment variables with fallback credentials
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://bsphlgmxzmlbgzanpujh.supabase.co";
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "sb_publishable_u8O4lCQg9KtcxeLj7nxqFg_xu3v2WLz";
+// Retrieve environment variables strictly without hardcoded fallback credentials
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  if (typeof window !== 'undefined') {
+    console.error('[CRITICAL CONFIG ERROR] NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY must be configured.');
+  }
+}
 
 // Create and export the Supabase client
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);

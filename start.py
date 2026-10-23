@@ -45,7 +45,12 @@ def load_env_file(filepath):
 load_env_file(os.path.join(BACKEND_DIR, ".env"))
 load_env_file(os.path.join(FRONTEND_DIR, ".env.local"))
 
-SUPABASE_URL = os.getenv("SUPABASE_URL", "https://bsphlgmxzmlbgzanpujh.supabase.co")
+SUPABASE_URL = (os.getenv("SUPABASE_URL") or os.getenv("NEXT_PUBLIC_SUPABASE_URL") or "").strip()
+if not SUPABASE_URL:
+    print(f"\n\033[91m[CRITICAL CONFIG ERROR] SUPABASE_URL / NEXT_PUBLIC_SUPABASE_URL is not configured in backend/.env or frontend/.env.local!\033[0m")
+    print(f"\033[91mUnder Production Zero-Trust guidelines, silent fallbacks to external test databases are prohibited.\033[0m")
+    print(f"\033[91mPlease set your college's production SUPABASE_URL in backend/.env.\033[0m\n")
+    sys.exit(1)
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_KEY")
 
 GREEN = "\033[92m"
@@ -83,8 +88,29 @@ def terminate_process(proc, name="process", timeout=2.0):
         pass
 
 
+def is_medattend_process(pid: int) -> bool:
+    """Verifies that a PID belongs to MedAttend stack before terminating."""
+    try:
+        cmd = subprocess.check_output(["ps", "-p", str(pid), "-o", "args="], text=True, stderr=subprocess.DEVNULL).strip()
+        cmd_lower = cmd.lower()
+        allowed_signatures = [
+            "attendance-app",
+            "uvicorn",
+            "main:app",
+            "next",
+            "next-server",
+            "whatsapp",
+            "node",
+            "cloudflared",
+            "python",
+        ]
+        return any(sig in cmd_lower for sig in allowed_signatures)
+    except Exception:
+        return False
+
+
 def free_port_safely(port: int):
-    """Safely frees a local port only if occupied by a dangling process from previous run."""
+    """Safely frees a local port only if occupied by a dangling MedAttend process from previous run."""
     try:
         cmd = f"lsof -ti:{port}"
         output = subprocess.check_output(cmd, shell=True, text=True, stderr=subprocess.DEVNULL).strip()
@@ -93,13 +119,16 @@ def free_port_safely(port: int):
             if pid and pid.isdigit():
                 pid_int = int(pid)
                 if pid_int != os.getpid():
-                    try:
-                        os.kill(pid_int, signal.SIGTERM)
-                        time.sleep(0.1)
-                        if pid_int_running(pid_int):
-                            os.kill(pid_int, signal.SIGKILL)
-                    except Exception:
-                        pass
+                    if is_medattend_process(pid_int):
+                        try:
+                            os.kill(pid_int, signal.SIGTERM)
+                            time.sleep(0.1)
+                            if pid_int_running(pid_int):
+                                os.kill(pid_int, signal.SIGKILL)
+                        except Exception:
+                            pass
+                    else:
+                        print(f"  {YELLOW}! [SAFETY] Port {port} is occupied by foreign process (PID {pid_int}). Leaving untouched.{RESET}")
     except Exception:
         pass
 
@@ -278,7 +307,7 @@ def start_backend_process():
     """Starts production FastAPI backend using Uvicorn without --reload."""
     free_port_safely(8000)
     proc = subprocess.Popen(
-        [VENV_UVICORN, "main:app", "--host", "0.0.0.0", "--port", "8000"],
+        [VENV_UVICORN, "main:app", "--host", "127.0.0.1", "--port", "8000"],
         cwd=BACKEND_DIR,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,

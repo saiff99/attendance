@@ -16,8 +16,15 @@ if os.path.exists(_env_path):
 load_dotenv()
 
 # Supabase Initialization
-SUPABASE_URL = os.getenv("SUPABASE_URL", "https://bsphlgmxzmlbgzanpujh.supabase.co")
+SUPABASE_URL = (os.getenv("SUPABASE_URL") or os.getenv("NEXT_PUBLIC_SUPABASE_URL") or "").strip()
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_KEY")
+
+if not SUPABASE_URL:
+    raise RuntimeError(
+        "[CRITICAL CONFIG ERROR] SUPABASE_URL is missing from environment! "
+        "Under Production Zero-Trust standards, silent fallbacks to external test projects are prohibited. "
+        "Please set SUPABASE_URL in backend/.env."
+    )
 
 if not SUPABASE_KEY:
     print(

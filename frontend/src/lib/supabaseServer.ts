@@ -3,11 +3,22 @@ import { createClient } from '@supabase/supabase-js';
 
 // Server-only Supabase Client with Service Role Key (Bypasses RLS on the server)
 // WARNING: This file must only be imported in server-side code (API routes, Server Components, server actions)
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://bsphlgmxzmlbgzanpujh.supabase.co";
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '';
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY;
 
-// Fail-Fast: Enforce service-role credentials on the server.
-// Silent fallback to public anon keys or hardcoded publishable keys is strictly prohibited.
+// Fail-Fast: Enforce Supabase URL and service-role credentials on the server.
+// Silent fallback to public anon keys or hardcoded project URLs is strictly prohibited.
+if (!supabaseUrl) {
+  const urlErrorMsg =
+    '[CRITICAL SECURITY ERROR] NEXT_PUBLIC_SUPABASE_URL or SUPABASE_URL is required for server-side database operations! ' +
+    'Please set NEXT_PUBLIC_SUPABASE_URL in your environment.';
+  if (process.env.NODE_ENV === 'production' && typeof window === 'undefined') {
+    throw new Error(urlErrorMsg);
+  } else {
+    console.error(urlErrorMsg);
+  }
+}
+
 if (!supabaseServiceRoleKey) {
   const errorMsg = 
     '[CRITICAL SECURITY ERROR] SUPABASE_SERVICE_ROLE_KEY is required for server-side database operations! ' +

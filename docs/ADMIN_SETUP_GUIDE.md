@@ -37,6 +37,30 @@ chmod +x start.sh
 ./start.sh
 ```
 
+### Hardware Sizing & Recommended Specifications (300+ Students Cohort)
+To guarantee high-recall face recognition across multiple simultaneous 4K/1080p RTSP camera streams in large tiered lecture halls:
+
+| Component | Minimum Specification (1–2 Cameras) | Recommended Specification (6 Cameras, 300+ Cohort) |
+| :--- | :--- | :--- |
+| **Processor (CPU)** | 6-Core Intel Core i5 / AMD Ryzen 5 / Apple M1 | 8–16 Core Intel Core i7/i9 (12th Gen+) / AMD Ryzen 7/9 / Apple M2/M3/M4 |
+| **GPU Acceleration** | Integrated GPU / Neural Engine | **Dedicated NVIDIA GPU (RTX 3060 12GB / RTX 4060 / A2000+)** with CUDA 12.x or Apple Silicon Neural Engine |
+| **RAM** | 16 GB DDR4/LPDDR5 | **32 GB DDR5** (Ensures smooth concurrent Next.js, Uvicorn, and WhatsApp runtime) |
+| **Networking** | 100 Mbps Fast Ethernet | **Dedicated Gigabit Ethernet Switch (Cat6 cabling)**. *RTSP video streams must not run over Wi-Fi to eliminate packet jitter.* |
+| **Storage** | 256 GB SSD | 512 GB NVMe PCIe 4.0 SSD |
+
+### Distributed Multi-Worker State Architecture & Cache Lifecycle
+When deploying MedAttend across multiple processes, container instances, or load-balanced nodes:
+
+1. **Volatile Local Memory (Per-Worker)**:
+   - RTSP frame buffers (`numpy.ndarray`) and live RetinaFace detection grids are held in volatile RAM for $< 100$ms before being discarded.
+   - Facial feature vector matrices (`session_matrix_cache`) use an automatic **60-second Time-to-Live (TTL)**.
+2. **Centralized Shared State (Database Layer)**:
+   - **Attendance Deduplication**: Enforced via PostgreSQL `CONSTRAINT unique_session_student UNIQUE (session_id, student_id)`. Parallel requests across instances cannot create duplicate records.
+   - **Persistent Rate Limiting & Device Fingerprints**: Centrally synchronized in the `public.settings` table and Supabase cache.
+3. **Biometric Erasure & Consent Revocation Lifecycle**:
+   - When consent is revoked (`POST /api/students/{id}/revoke-biometrics`), the student's vector embedding is set to `NULL` in the database immediately.
+   - The serving instance purges its local cache instantly; peer instances drop the embedding automatically upon their 60-second TTL expiry. Furthermore, database-level constraint validation prevents unconsented attendance insertion.
+
 ---
 
 ## 2. Staff & Faculty Account Governance (`/users`)

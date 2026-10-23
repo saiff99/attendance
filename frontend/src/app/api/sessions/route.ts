@@ -23,18 +23,58 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
-    const limit = parseInt(searchParams.get('limit') || '50', 10);
 
-    const { data, error } = await supabaseServer
+    // Strict schema validation on query limits (prevents query amplification and DoS)
+    const rawLimit = searchParams.get('limit');
+    let limit = 50;
+    if (rawLimit !== null) {
+      if (!/^\d+$/.test(rawLimit)) {
+        return NextResponse.json(
+          { success: false, error: 'Invalid limit parameter. Must be an integer between 1 and 100.' },
+          { status: 400 }
+        );
+      }
+      const parsed = parseInt(rawLimit, 10);
+      if (parsed < 1 || parsed > 100) {
+        return NextResponse.json(
+          { success: false, error: 'Invalid limit parameter. Must be an integer between 1 and 100.' },
+          { status: 400 }
+        );
+      }
+      limit = parsed;
+    }
+
+    const rawPage = searchParams.get('page');
+    let page = 1;
+    if (rawPage !== null) {
+      if (!/^\d+$/.test(rawPage)) {
+        return NextResponse.json(
+          { success: false, error: 'Invalid page parameter. Must be a positive integer.' },
+          { status: 400 }
+        );
+      }
+      const parsedPage = parseInt(rawPage, 10);
+      if (parsedPage < 1) {
+        return NextResponse.json(
+          { success: false, error: 'Invalid page parameter. Must be a positive integer.' },
+          { status: 400 }
+        );
+      }
+      page = parsedPage;
+    }
+
+    const offset = (page - 1) * limit;
+
+    const { data, error, count } = await supabaseServer
       .from('sessions')
-      .select('id, class_name, date, start_time, end_time, instructor_name, target_academic_year, created_at, attendance(count)')
+      .select('id, class_name, date, start_time, end_time, instructor_name, target_academic_year, created_at, attendance(count)', { count: 'exact' })
       .neq('class_name', '__SYSTEM_CONFIG__')
       .neq('class_name', '__GEOFENCE_CONFIG__')
       .neq('id', '00000000-0000-0000-0000-000000000001')
       .neq('id', '00000000-0000-0000-0000-000000000000')
       .neq('target_academic_year', 'System')
       .order('created_at', { ascending: false })
-      .limit(limit);
+      .range(offset, offset + limit - 1);
 
     if (error) throw error;
 
@@ -82,6 +122,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       sessions: enrichedSessions,
+      pagination: {
+        page,
+        limit,
+        total: count ?? enrichedSessions.length,
+      },
     });
   } catch (err: any) {
     console.error('Error fetching sessions:', err);

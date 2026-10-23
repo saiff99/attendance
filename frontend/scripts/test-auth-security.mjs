@@ -545,6 +545,28 @@ async function runTests() {
       }),
     });
     assert(adminDel.status === 200 && adminDel.data?.success === true, 'Authorized Super Admin attendance deletion succeeded (HTTP 200)');
+
+    // 12. Sessions Query Limits & Pagination Validation
+    const invalidLimitNegative = await request('/api/sessions?limit=-5', {
+      headers: { Cookie: adminSessionCookie },
+    });
+    assert(invalidLimitNegative.status === 400, 'Negative session limit REJECTED (HTTP 400)');
+
+    const invalidLimitExcessive = await request('/api/sessions?limit=500', {
+      headers: { Cookie: adminSessionCookie },
+    });
+    assert(invalidLimitExcessive.status === 400, 'Excessive session limit (>100) REJECTED (HTTP 400)');
+
+    const invalidLimitString = await request('/api/sessions?limit=hacked', {
+      headers: { Cookie: adminSessionCookie },
+    });
+    assert(invalidLimitString.status === 400, 'Non-numeric session limit REJECTED (HTTP 400)');
+
+    const validPagination = await request('/api/sessions?limit=10&page=1', {
+      headers: { Cookie: adminSessionCookie },
+    });
+    assert(validPagination.status === 200 && validPagination.data?.success === true, 'Valid session query with pagination ACCEPTED (HTTP 200)');
+    assert(Boolean(validPagination.data?.pagination), 'Pagination metadata present in response');
   }
 
   // =========================================================================
