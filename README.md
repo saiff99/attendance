@@ -432,7 +432,7 @@ All migrations in [`database/migrations/`](database/migrations/) are **strictly 
 | [`07_biometric_explicit_consent_and_erasure.sql`](database/migrations/07_biometric_explicit_consent_and_erasure.sql) | DPDP Act 2023 opt-in default (`biometric_consent = false`) | Safe migration of existing consent states |
 | [`08_dedicated_tunnel_security_settings.sql`](database/migrations/08_dedicated_tunnel_security_settings.sql) | Migrates Cloudflare tunnel config to dedicated settings store | Eliminates reliance on dummy session rows |
 | [`09_zero_trust_rls_purge_and_verification.sql`](database/migrations/09_zero_trust_rls_purge_and_verification.sql) | Purges legacy permissive policies and verifies Zero-Trust lockdown | Automated assertion checks for 0 public policy leaks |
-| [`10_zero_trust_credentials_and_pins.sql`](database/migrations/10_zero_trust_credentials_and_pins.sql) | Eliminates default passwords and provisions bcrypt hashed admin logins | Prevents default `123456` or roll number login fallback |
+| [`10_zero_trust_credentials_and_pins.sql`](database/migrations/10_zero_trust_credentials_and_pins.sql) | Enforces Zero-Trust app_users schema and eliminates default credentials | Prevents default `123456` or roll number login fallback |
 | [`11_biometric_explicit_consent_audit_and_erasure.sql`](database/migrations/11_biometric_explicit_consent_audit_and_erasure.sql) | Adds consent versioning, actor tracking, and revocation audit fields | Additive compliance audit fields under DPDP Act 2023 |
 | [`12_add_admin_role.sql`](database/migrations/12_add_admin_role.sql) | Updates `app_users_role_check` constraint to support `'Admin'` role | Expands RBAC hierarchy to Super Admin, Admin, and Faculty |
 
