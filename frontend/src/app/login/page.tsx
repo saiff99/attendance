@@ -3,12 +3,11 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Activity, Lock, User, ShieldCheck,
+  Lock, User, ShieldCheck,
   AlertCircle, Eye, EyeOff, Loader2, CheckCircle2,
   GraduationCap, KeyRound
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
-import { AppLogo } from "@/components/layout/AppLogo";
 
 const LOGIN_MODE_STORAGE_KEY = "medattend_login_mode";
 
@@ -132,7 +131,9 @@ export default function LoginPage() {
 
         {/* Header Branding */}
         <div className="flex flex-col items-center text-center mb-5">
-          <AppLogo className="w-14 h-14 mb-3 shadow-xl shadow-indigo-600/30 transition-transform duration-300 hover:scale-105 shrink-0" size={56} />
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-indigo-600 to-violet-600 flex items-center justify-center text-white mb-3 shadow-xl shadow-indigo-600/30 transition-transform duration-300 hover:scale-105">
+            <GraduationCap className="w-7 h-7" />
+          </div>
           <h1 className="text-2xl font-black text-white tracking-tight flex items-center gap-2">
             MedAttend{" "}
             <span className={`text-xs uppercase font-bold px-2 py-0.5 rounded-full border ${

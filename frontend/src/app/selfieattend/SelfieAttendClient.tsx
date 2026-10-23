@@ -12,7 +12,6 @@ import {
 } from "lucide-react";
 import Webcam from "react-webcam";
 import { getBackendUrl } from "@/lib/api";
-import { AppLogo } from "@/components/layout/AppLogo";
 // Biometric Attendance Client Component
 import {
   CampusGeofenceConfig,
@@ -973,7 +972,9 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
       {/* Header */}
       <header className="w-full max-w-md flex items-center justify-between py-3 mb-3 border-b border-slate-800/80 shrink-0">
         <div className="flex items-center gap-2.5">
-          <AppLogo className="w-9 h-9 rounded-xl shadow-lg shadow-indigo-500/25 shrink-0" size={36} />
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center text-white shadow-lg shadow-indigo-500/25 shrink-0">
+            <GraduationCap className="w-5 h-5" />
+          </div>
           <div>
             <h1 className="text-base font-bold text-white tracking-tight flex items-center gap-1.5">
               MedAttend <span className="text-[10px] font-semibold uppercase bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-1.5 py-0.2 rounded">Selfie Portal</span>

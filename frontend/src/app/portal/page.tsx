@@ -11,7 +11,6 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { FaceRegistrationModal } from "@/components/FaceRegistrationModal";
-import { AppLogo } from "@/components/layout/AppLogo";
 
 interface SubjectRow {
   subject: string;
@@ -356,7 +355,9 @@ export default function StudentPortalPage() {
       {/* Top Header Navbar */}
       <header className="sticky top-0 z-30 bg-slate-950/80 backdrop-blur-xl border-b border-slate-800/80 px-3.5 sm:px-8 py-3 sm:py-3.5 flex items-center justify-between gap-2.5 sm:gap-4">
         <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-          <AppLogo className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl shadow-md shadow-indigo-600/30 shrink-0" size={36} />
+          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center text-white shadow-md shadow-indigo-600/30 shrink-0">
+            <GraduationCap className="w-4 h-4 sm:w-5 sm:h-5" />
+          </div>
           <div className="min-w-0">
             <div className="flex items-center gap-1.5 sm:gap-2">
               <span className="text-sm font-black text-white tracking-tight shrink-0">MedAttend</span>
