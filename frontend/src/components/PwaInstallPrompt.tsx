@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { Download, Share2, PlusSquare, X, Check, Smartphone, Laptop, GraduationCap } from "lucide-react";
+import { Download, Share2, PlusSquare, X, Check, Smartphone, Laptop } from "lucide-react";
 
 export function PwaInstallPrompt() {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
@@ -107,8 +107,12 @@ export function PwaInstallPrompt() {
 
         <div className="flex items-start justify-between gap-3 relative z-10">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-600 flex items-center justify-center text-white shadow-lg shadow-indigo-600/30 shrink-0">
-              <GraduationCap className="w-6 h-6" />
+            <div className="w-11 h-11 rounded-xl bg-gradient-to-tr from-indigo-600 to-emerald-500 flex items-center justify-center shadow-md shadow-indigo-600/30 shrink-0">
+              {isMobile ? (
+                <Smartphone className="w-6 h-6 text-white" />
+              ) : (
+                <Laptop className="w-6 h-6 text-white" />
+              )}
             </div>
             <div>
               <h4 className="text-sm font-bold text-white flex items-center gap-1.5">

@@ -1,16 +1,12 @@
 // MedAttend PWA Service Worker
-const CACHE_NAME = 'medattend-pwa-v3';
+const CACHE_NAME = 'medattend-pwa-v2';
 const STATIC_ASSETS = [
   '/',
   '/portal',
   '/selfieattend',
   '/manifest.json',
-  '/favicon.ico',
-  '/favicon.svg',
-  '/icons/icon.svg',
   '/icons/icon-192x192.png',
   '/icons/icon-512x512.png',
-  '/icons/icon-maskable-512x512.png',
   '/icons/apple-touch-icon.png'
 ];
 

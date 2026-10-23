@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Sidebar from "./Sidebar";
 import { useAuth } from "@/lib/auth";
-import { Loader2, GraduationCap } from "lucide-react";
+import { Activity, Loader2 } from "lucide-react";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -70,7 +70,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return (
       <div className="fixed inset-0 z-50 bg-[#070B12] flex flex-col items-center justify-center p-4 text-center select-none">
         <div className="w-14 h-14 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 shadow-xl shadow-indigo-500/10 mb-4 animate-pulse">
-          <GraduationCap className="w-7 h-7" />
+          <Activity className="w-7 h-7" />
         </div>
         <div className="flex items-center gap-2.5 text-indigo-400 mb-1.5">
           <Loader2 className="w-5 h-5 animate-spin" />
@@ -85,7 +85,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return (
       <div className="fixed inset-0 z-50 bg-[#070B12] flex flex-col items-center justify-center p-4 text-center select-none">
         <div className="w-14 h-14 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 shadow-xl shadow-indigo-500/10 mb-4 animate-pulse">
-          <GraduationCap className="w-7 h-7" />
+          <Activity className="w-7 h-7" />
         </div>
         <div className="flex items-center gap-2.5 text-indigo-400 mb-1.5">
           <Loader2 className="w-5 h-5 animate-spin" />

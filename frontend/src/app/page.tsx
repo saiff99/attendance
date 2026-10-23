@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import { Users, UserCheck, CalendarCheck, CalendarDays, TrendingUp } from "lucide-react";
+import { Users, UserCheck, CalendarCheck, Activity, CalendarDays, TrendingUp } from "lucide-react";
 import { supabaseServer } from "@/lib/supabaseServer";
 import { AttendanceChart } from "@/components/AttendanceChart";
 import { getStartOfTodayISO } from "@/lib/dateUtils";

@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Lock, User, ShieldCheck,
+  Activity, Lock, User, ShieldCheck,
   AlertCircle, Eye, EyeOff, Loader2, CheckCircle2,
   GraduationCap, KeyRound
 } from "lucide-react";
@@ -131,8 +131,8 @@ export default function LoginPage() {
 
         {/* Header Branding */}
         <div className="flex flex-col items-center text-center mb-5">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-indigo-600 to-violet-600 flex items-center justify-center text-white mb-3 shadow-xl shadow-indigo-600/30 transition-transform duration-300 hover:scale-105">
-            <GraduationCap className="w-7 h-7" />
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center text-white mb-3 shadow-xl shadow-indigo-600/30 transition-transform duration-300 hover:scale-105">
+            {loginMode === "student" ? <GraduationCap className="w-7 h-7" /> : <Activity className="w-7 h-7" />}
           </div>
           <h1 className="text-2xl font-black text-white tracking-tight flex items-center gap-2">
             MedAttend{" "}

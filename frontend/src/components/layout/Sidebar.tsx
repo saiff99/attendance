@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, ScanLine, Radio, Users, FileBarChart, Menu, X, Smartphone, LogOut, Sun, Moon, ShieldCheck, UserCog, GraduationCap } from "lucide-react";
+import { LayoutDashboard, ScanLine, Radio, Users, FileBarChart, Activity, Menu, X, Smartphone, LogOut, Sun, Moon, ShieldCheck, UserCog, GraduationCap } from "lucide-react";
 import { SystemHealth } from "@/components/SystemHealth";
 import { useAuth } from "@/lib/auth";
 import { useTheme } from "next-themes";
@@ -91,9 +91,7 @@ export default function Sidebar() {
       {!isStudentPortal && (
         <div className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-white/95 dark:bg-gray-900/95 backdrop-blur-md border-b border-gray-200 dark:border-gray-800 flex items-center justify-between px-4 sm:px-6 z-40 shadow-sm transition-colors duration-300">
           <div className="flex items-center">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-600 flex items-center justify-center text-white shadow-md shadow-indigo-600/25 mr-2.5 shrink-0">
-              <GraduationCap className="w-4 h-4" />
-            </div>
+            <Activity className="h-7 w-7 text-indigo-600 dark:text-indigo-400 mr-2.5" />
             <span className="text-xl font-bold tracking-tight text-gray-900 dark:text-white">
               MedAttend
             </span>
@@ -136,9 +134,7 @@ export default function Sidebar() {
       )}>
       <div className="flex h-16 shrink-0 items-center justify-between px-6 border-b border-gray-100 dark:border-gray-800">
         <div className="flex items-center">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-600 flex items-center justify-center text-white shadow-md shadow-indigo-600/25 mr-3 shrink-0">
-            <GraduationCap className="w-5 h-5" />
-          </div>
+          <Activity className="h-8 w-8 text-indigo-600 dark:text-indigo-400 mr-2" />
           <span className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">
             MedAttend
           </span>
