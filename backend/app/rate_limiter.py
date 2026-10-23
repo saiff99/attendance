@@ -314,9 +314,12 @@ def check_lookup_rate_limit(client_ip: str) -> None:
     if len(attempts) >= max_attempts:
         with _mem_lock:
             _memory_lookup_limits[client_ip] = attempts
+        oldest = attempts[0] if attempts else now_ts
+        remaining = max(1, int(window_seconds - (now_ts - oldest)))
         raise HTTPException(
             status_code=429,
-            detail="Too many student lookup requests. Please wait 60 seconds."
+            detail="Too many student lookup requests. Please wait 60 seconds.",
+            headers={"Retry-After": str(remaining)}
         )
 
     # 4. Add current attempt and save
@@ -335,6 +338,19 @@ def check_lookup_rate_limit(client_ip: str) -> None:
             }).execute()
         except Exception as e:
             print(f"[LookupRateLimit Warning] L2 DB upsert fallback: {e}")
+
+
+def reset_lookup_rate_limit(client_ip: str) -> None:
+    """Resets the student roll lookup rate limit for a specific client IP."""
+    with _mem_lock:
+        _memory_lookup_limits.pop(client_ip, None)
+    if supabase:
+        try:
+            db_key = f"rl_lookup:{client_ip}"
+            supabase.table("settings").delete().eq("key", db_key).execute()
+        except Exception as e:
+            print(f"[LookupRateLimit Reset Warning] L2 DB clear fallback: {e}")
+
 
 
 # ==============================================================================

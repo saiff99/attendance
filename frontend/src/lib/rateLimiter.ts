@@ -428,3 +428,90 @@ export async function resetLoginRateLimit(username: string): Promise<void> {
     console.warn('[RATE LIMIT RESET DB WARNING]', err);
   }
 }
+
+/**
+ * Shared & Persistent Student Roll Lookup Rate Limiter (L1 in-memory + L2 Supabase settings table).
+ * Enforces: Max 10 roll lookups per IP per 60 seconds to prevent roster scraping and student enumeration.
+ * Synchronized across Next.js and Python backend using the shared key `rl_lookup:{clientIp}`.
+ */
+const memoryLookupLimits: Record<string, number[]> = {};
+
+export async function checkStudentLookupRateLimit(
+  clientIp: string,
+  nowSec: number = Date.now() / 1000
+): Promise<{ allowed: boolean; remainingSeconds: number }> {
+  const dbKey = `rl_lookup:${clientIp}`;
+  const windowSeconds = 60.0;
+  const maxAttempts = 10;
+
+  let attempts: number[] = (memoryLookupLimits[clientIp] || []).filter(
+    (ts) => nowSec - ts < windowSeconds
+  );
+
+  // Sync with L2 Database
+  try {
+    const { data, error } = await supabaseServer
+      .from('settings')
+      .select('value')
+      .eq('key', dbKey)
+      .maybeSingle();
+
+    if (!error && data?.value) {
+      const dbAttempts = data.value.attempts;
+      if (Array.isArray(dbAttempts)) {
+        const combined = new Set([
+          ...attempts,
+          ...dbAttempts.map((t: any) => Number(t)).filter((t: number) => !isNaN(t) && t > 0)
+        ]);
+        attempts = Array.from(combined).sort((a, b) => a - b);
+      }
+    }
+  } catch (err) {
+    console.warn('[LookupRateLimit Warning] L2 DB lookup fallback:', err);
+  }
+
+  // Prune timestamps older than window
+  attempts = attempts.filter((ts) => nowSec - ts < windowSeconds);
+
+  if (attempts.length >= maxAttempts) {
+    memoryLookupLimits[clientIp] = attempts;
+    const oldest = attempts[0];
+    const remainingSeconds = Math.max(1, Math.ceil(windowSeconds - (nowSec - oldest)));
+    return { allowed: false, remainingSeconds };
+  }
+
+  // Record attempt in memory
+  attempts.push(nowSec);
+  memoryLookupLimits[clientIp] = attempts;
+
+  // Persist asynchronously to L2 Database
+  try {
+    Promise.resolve(
+      supabaseServer.from('settings').upsert({
+        key: dbKey,
+        value: {
+          attempts: attempts,
+          updated_at: nowSec,
+        },
+      })
+    ).catch(() => {});
+  } catch (err) {
+    console.warn('[LookupRateLimit Warning] L2 DB upsert fallback:', err);
+  }
+
+  return { allowed: true, remainingSeconds: 0 };
+}
+
+/**
+ * Resets the lookup rate limit for a specific client IP (used in tests and admin actions).
+ */
+export async function resetStudentLookupRateLimit(clientIp: string): Promise<void> {
+  delete memoryLookupLimits[clientIp];
+  const dbKey = `rl_lookup:${clientIp}`;
+  try {
+    await supabaseServer.from('settings').delete().eq('key', dbKey);
+  } catch (err) {
+    console.warn('[LookupRateLimit Reset Warning]', err);
+  }
+}
+

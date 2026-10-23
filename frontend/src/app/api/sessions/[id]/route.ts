@@ -119,3 +119,42 @@ export async function PATCH(
     return NextResponse.json({ success: false, error: err.message || 'Failed to update session' }, { status: 500 });
   }
 }
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const sessionCookie = request.cookies.get(SESSION_COOKIE_NAME)?.value;
+    if (!sessionCookie) {
+      return NextResponse.json({ success: false, error: 'Unauthorized.' }, { status: 401 });
+    }
+
+    const session = await verifySessionToken(sessionCookie);
+    if (!session || (session.role !== 'Super Admin' && session.role !== 'Admin')) {
+      return NextResponse.json(
+        { success: false, error: 'Forbidden. Admin privileges required.' },
+        { status: 403 }
+      );
+    }
+
+    const { id } = await params;
+    if (!id) {
+      return NextResponse.json({ success: false, error: 'Session ID required.' }, { status: 400 });
+    }
+
+    const { error } = await supabaseServer
+      .from('sessions')
+      .delete()
+      .eq('id', id)
+      .neq('class_name', '__SYSTEM_CONFIG__');
+
+    if (error) throw error;
+
+    return NextResponse.json({ success: true, message: 'Session deleted successfully.' });
+  } catch (err: any) {
+    console.error('Error deleting session:', err);
+    return NextResponse.json({ success: false, error: err.message || 'Failed to delete session' }, { status: 500 });
+  }
+}
+

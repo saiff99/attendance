@@ -904,6 +904,14 @@ async def student_lookup(request: Request, student_roll: str, session_id: Option
         )
 
     clean_sess_id = session_id.strip()
+    try:
+        uuid.UUID(clean_sess_id)
+    except (ValueError, AttributeError, TypeError):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid session_id format: Must be a valid UUID."
+        )
+
     sess_res = safe_db_execute(supabase.table("sessions").select("id, class_name, start_time, created_at, target_academic_year").eq("id", clean_sess_id))
     if not sess_res.data:
         raise HTTPException(status_code=404, detail="Lecture session not found.")
@@ -926,21 +934,21 @@ async def student_lookup(request: Request, student_roll: str, session_id: Option
 
     try:
         clean_roll = student_roll.strip()
-        # Query only necessary non-sensitive fields (omitting email)
+        # Query only necessary non-sensitive fields; omit biometric face_encoding vectors completely
         res = safe_db_execute(supabase.table("students").select(
-            "id, student_roll, full_name, academic_year, face_encoding"
+            "id, student_roll, full_name, academic_year, biometric_consent"
         ).ilike("student_roll", clean_roll))
         
         if not res.data:
             res = safe_db_execute(supabase.table("students").select(
-                "id, student_roll, full_name, academic_year, face_encoding"
+                "id, student_roll, full_name, academic_year, biometric_consent"
             ).eq("student_roll", clean_roll))
             
         if not res.data:
             raise HTTPException(status_code=404, detail=f"No student found with Roll Number '{clean_roll}'. Please check and try again.")
             
         student = res.data[0]
-        has_face = student.get("face_encoding") is not None and len(student.get("face_encoding") or []) > 0
+        has_face = bool(student.get("biometric_consent"))
         
         # Check target cohort
         target_academic_year = sess_obj.get("target_academic_year")
@@ -952,24 +960,20 @@ async def student_lookup(request: Request, student_roll: str, session_id: Option
         attendance_info = None
 
         att_res = safe_db_execute(supabase.table("attendance").select(
-            "id, status, capture_mode, confidence_score, recorded_at"
+            "status, recorded_at"
         ).eq("session_id", clean_sess_id).eq("student_id", student["id"]))
         
         if att_res.data:
             is_already_present = True
             att_record = att_res.data[0]
             attendance_info = {
-                "id": att_record["id"],
                 "status": att_record.get("status", "Present"),
-                "capture_mode": att_record.get("capture_mode", "Live Scan"),
-                "confidence_score": att_record.get("confidence_score", 0.95),
                 "recorded_at": att_record.get("recorded_at", "Earlier Today")
             }
         
         return {
             "success": True,
             "student": {
-                "id": student["id"],
                 "student_roll": student["student_roll"],
                 "full_name": student["full_name"],
                 "academic_year": student.get("academic_year") or "MBBS",

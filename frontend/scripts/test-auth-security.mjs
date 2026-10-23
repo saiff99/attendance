@@ -910,10 +910,121 @@ async function runTests() {
     assert(!perfDataStr.includes('Tech_1234'), 'Plaintext camera password "Tech_1234" is NEVER exposed in /health/performance');
   }
 
+  // =========================================================================
+  // Test Suite 15: Student Lookup API Hardening & Anti-Scraping Defense
+  // =========================================================================
+  console.log('--- Suite 15: Student Lookup API Hardening & Anti-Scraping Defense ---');
+  {
+    const testLookupIp = '203.0.113.55';
+
+    // 1. Missing session_id must be strictly rejected (HTTP 403)
+    const missingSessRes = await request('/api/student-lookup/25001', {
+      headers: { 'cf-connecting-ip': testLookupIp }
+    });
+    assert(missingSessRes.status === 403, 'Missing session_id on student lookup REJECTED (HTTP 403)');
+    assert(missingSessRes.data?.detail?.includes('Active') || missingSessRes.data?.detail?.includes('session'),
+      'Missing session_id error explains active lecture session requirement');
+
+    // 2. Malformed / non-UUID session_id must be rejected (HTTP 400)
+    const malformedSessRes = await request('/api/student-lookup/25001?session_id=not-a-valid-uuid', {
+      headers: { 'cf-connecting-ip': testLookupIp }
+    });
+    assert(malformedSessRes.status === 400, 'Malformed non-UUID session_id REJECTED (HTTP 400)');
+
+    // 3. Nonexistent session UUID returns HTTP 404
+    const nonexistentSessUuid = 'a0000000-0000-4000-8000-000000000001';
+    const nonExistSessRes = await request(`/api/student-lookup/25001?session_id=${nonexistentSessUuid}`, {
+      headers: { 'cf-connecting-ip': testLookupIp }
+    });
+    assert(nonExistSessRes.status === 404, 'Nonexistent session UUID returns HTTP 404');
+
+    // 4. Expired lecture session window (> 5.5 min) returns HTTP 403
+    const expiredSessionId = '9eb595b2-fda7-4275-aa8e-1490ed041b04';
+    const expiredSessRes = await request(`/api/student-lookup/25001?session_id=${expiredSessionId}`, {
+      headers: { 'cf-connecting-ip': testLookupIp }
+    });
+    assert(expiredSessRes.status === 403, 'Expired lecture session window (>5 min) returns HTTP 403');
+    assert(expiredSessRes.data?.detail?.includes('expired') || expiredSessRes.data?.detail?.includes('closed'),
+      'Expired session response clarifies attendance window closed');
+
+    // 5. Create an active session using Admin session cookie for testing live lookup
+    const now = new Date();
+    const createLiveSess = await request('/api/sessions', {
+      method: 'POST',
+      headers: { Cookie: adminSessionCookie },
+      body: JSON.stringify({
+        class_name: 'Security Test Lecture - Student Lookup Suite',
+        target_academic_year: '1st Year',
+        date: now.toISOString().split('T')[0],
+        start_time: now.toISOString(),
+        end_time: new Date(now.getTime() + 3600000).toISOString()
+      })
+    });
+    assert(createLiveSess.status === 200 && Boolean(createLiveSess.data?.session?.id),
+      'Created active session for live student lookup verification');
+    const liveSessionId = createLiveSess.data?.session?.id;
+
+    // 6. Nonexistent student roll returns HTTP 404
+    const nonExistStudentRes = await request(`/api/student-lookup/999999?session_id=${liveSessionId}`, {
+      headers: { 'cf-connecting-ip': testLookupIp }
+    });
+    assert(nonExistStudentRes.status === 404, 'Lookup for nonexistent student roll returns HTTP 404');
+
+    // 7. Legitimate student lookup succeeds (HTTP 200)
+    const validLookupRes = await request(`/api/student-lookup/25001?session_id=${liveSessionId}`, {
+      headers: { 'cf-connecting-ip': testLookupIp }
+    });
+    assert(validLookupRes.status === 200 && validLookupRes.data?.success === true,
+      'Legitimate student lookup in active session succeeded (HTTP 200)');
+
+    const stud = validLookupRes.data?.student || {};
+    // 8. Strict Data Minimization Assertions
+    assert(stud.face_encoding === undefined, 'Data Minimization: face_encoding is NEVER returned in response');
+    assert(stud.id === undefined, 'Data Minimization: student database internal UUID is NEVER returned');
+    assert(stud.student_roll === '25001', 'Sanitized student record contains expected student_roll');
+    assert(typeof stud.full_name === 'string' && stud.full_name.length > 0, 'Sanitized student record contains full_name');
+    assert(typeof stud.has_face_enrolled === 'boolean', 'Sanitized student record contains boolean has_face_enrolled flag');
+    assert(typeof stud.cohort_mismatch === 'boolean', 'Sanitized student record contains cohort_mismatch flag');
+    assert(stud.target_academic_year === '1st Year', 'Sanitized student record specifies target_academic_year');
+
+    // 9. Direct Backend Student Lookup Verification (FastAPI Port 8000)
+    const backendLookupRes = await backendRequest(`/api/student-lookup/25001?session_id=${liveSessionId}`);
+    assert(backendLookupRes.status === 200, 'Direct backend student lookup succeeds (HTTP 200)');
+    const backendStud = backendLookupRes.data?.student || {};
+    assert(backendStud.face_encoding === undefined, 'Backend Data Minimization: face_encoding is NEVER returned');
+    assert(backendStud.id === undefined, 'Backend Data Minimization: student UUID is NEVER returned');
+    assert(typeof backendStud.has_face_enrolled === 'boolean', 'Backend returns boolean has_face_enrolled flag');
+
+    // 10. Anti-Scraping / Persistent IP Rate Limiting Verification
+    const scrapeTestIp = '198.51.100.88';
+    let lookupRateLimited = false;
+    let rlRetryHeader = null;
+    for (let i = 1; i <= 12; i++) {
+      const rlRes = await request(`/api/student-lookup/25001?session_id=${liveSessionId}`, {
+        headers: { 'cf-connecting-ip': scrapeTestIp }
+      });
+      if (rlRes.status === 429) {
+        lookupRateLimited = true;
+        rlRetryHeader = rlRes.headers.get('retry-after');
+        break;
+      }
+    }
+    assert(lookupRateLimited, 'Repeated student roll lookups trigger persistent rate limit (HTTP 429)');
+    assert(Boolean(rlRetryHeader), 'Student lookup rate limit response includes Retry-After header');
+
+    // 11. Clean up active test session
+    const delSessRes = await request(`/api/sessions/${liveSessionId}`, {
+      method: 'DELETE',
+      headers: { Cookie: adminSessionCookie }
+    });
+    assert(delSessRes.status === 200, 'Active test session cleaned up cleanly');
+  }
+
   // Summary
   console.log('\n=======================================================');
   console.log(`📊 Test Summary: ${passedTests} Passed, ${failedTests} Failed`);
   console.log('=======================================================\n');
+
 
   if (failedTests > 0) {
     process.exit(1);
