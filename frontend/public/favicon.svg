@@ -1,0 +1,140 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <!-- Background Gradient -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#090D1A"/>
+      <stop offset="45%" stop-color="#0F172A"/>
+      <stop offset="100%" stop-color="#1E1B4B"/>
+    </linearGradient>
+
+    <!-- Outer Rim Highlight -->
+    <linearGradient id="rimGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#A5B4FC" stop-opacity="0.7"/>
+      <stop offset="35%" stop-color="#6366F1" stop-opacity="0.25"/>
+      <stop offset="70%" stop-color="#38BDF8" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="#22D3EE" stop-opacity="0.6"/>
+    </linearGradient>
+
+    <!-- Ambient Center Glow -->
+    <radialGradient id="centerGlow" cx="50%" cy="48%" r="48%">
+      <stop offset="0%" stop-color="#6366F1" stop-opacity="0.45"/>
+      <stop offset="60%" stop-color="#06B6D4" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#0F172A" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Mortarboard Diamond Gradients -->
+    <linearGradient id="capTopLight" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="50%" stop-color="#F1F5F9"/>
+      <stop offset="100%" stop-color="#CBD5E1"/>
+    </linearGradient>
+
+    <linearGradient id="capTopShade" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#E2E8F0"/>
+      <stop offset="100%" stop-color="#94A3B8"/>
+    </linearGradient>
+
+    <!-- Skull Cap Under-Band -->
+    <linearGradient id="capBandGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#4F46E5"/>
+      <stop offset="100%" stop-color="#312E81"/>
+    </linearGradient>
+
+    <!-- Verified Checkmark Gradient -->
+    <linearGradient id="checkGrad" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#059669"/>
+      <stop offset="30%" stop-color="#10B981"/>
+      <stop offset="70%" stop-color="#34D399"/>
+      <stop offset="100%" stop-color="#38BDF8"/>
+    </linearGradient>
+
+    <!-- Academic Tassel Gradient -->
+    <linearGradient id="tasselGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FDE047"/>
+      <stop offset="50%" stop-color="#F59E0B"/>
+      <stop offset="100%" stop-color="#B45309"/>
+    </linearGradient>
+
+    <!-- Deep Drop Shadow -->
+    <filter id="capShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#000000" flood-opacity="0.65"/>
+    </filter>
+
+    <!-- Neon Glow for Checkmark -->
+    <filter id="checkGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="6" stdDeviation="14" flood-color="#10B981" flood-opacity="0.6"/>
+      <feDropShadow dx="0" dy="2" stdDeviation="24" flood-color="#06B6D4" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+
+  <!-- 1. Background Squircle -->
+  <rect x="18" y="18" width="476" height="476" rx="112" fill="url(#bgGrad)"/>
+  <rect x="18" y="18" width="476" height="476" rx="112" fill="none" stroke="url(#rimGrad)" stroke-width="4"/>
+
+  <!-- 2. Ambient Cyber Center Glow -->
+  <circle cx="256" cy="256" r="195" fill="url(#centerGlow)"/>
+
+  <!-- 3. Smart Radar / Biometric Presence Arcs -->
+  <g opacity="0.32" stroke="#38BDF8" stroke-linecap="round" fill="none">
+    <!-- Top-Left & Top-Right outer scan arcs -->
+    <path d="M 88 190 A 184 184 0 0 1 138 116" stroke-width="3" stroke-dasharray="10 12"/>
+    <path d="M 424 190 A 184 184 0 0 0 374 116" stroke-width="3" stroke-dasharray="10 12"/>
+    <!-- Bottom geofence horizon arc -->
+    <path d="M 120 380 A 184 184 0 0 0 392 380" stroke-width="2.5" stroke-dasharray="8 10" opacity="0.65"/>
+  </g>
+
+  <!-- High-Tech Scan Reticle Corners -->
+  <g stroke="#818CF8" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.45">
+    <path d="M 68 114 L 68 84 L 98 84"/>
+    <path d="M 444 114 L 444 84 L 414 84"/>
+    <path d="M 68 398 L 68 428 L 98 428"/>
+    <path d="M 444 398 L 444 428 L 414 428"/>
+  </g>
+
+  <!-- 4. Academic Mortarboard Cap (Student Symbol) -->
+  <g filter="url(#capShadow)">
+    <!-- Skull Cap Under-Band (Geometric Headpiece) -->
+    <path d="M 172 188 Q 256 236 340 188 L 340 226 Q 340 274 256 296 Q 172 274 172 226 Z" fill="url(#capBandGrad)"/>
+    <path d="M 184 224 Q 256 256 328 224" fill="none" stroke="#A5B4FC" stroke-width="3" opacity="0.6" stroke-linecap="round"/>
+
+    <!-- Mortarboard Diamond (Perspective) -->
+    <!-- Left Facet (Shaded) -->
+    <polygon points="256,96 86,168 256,238" fill="url(#capTopShade)"/>
+    <!-- Right Facet (Lighted) -->
+    <polygon points="256,96 426,168 256,238" fill="url(#capTopLight)"/>
+    <!-- Top Crest Specular Rim -->
+    <line x1="86" y1="168" x2="256" y2="96" stroke="#FFFFFF" stroke-width="2.5" opacity="0.8"/>
+    <line x1="256" y1="96" x2="426" y2="168" stroke="#FFFFFF" stroke-width="2.5" opacity="0.9"/>
+
+    <!-- Center Button -->
+    <ellipse cx="256" cy="167" rx="9" ry="6" fill="#1E1B4B"/>
+    <ellipse cx="256" cy="166" rx="7" ry="4.5" fill="#818CF8"/>
+
+    <!-- Academic Tassel (Flows Gracefully to the Left) -->
+    <path d="M 256 167 Q 192 174 158 208 Q 140 232 136 270" fill="none" stroke="url(#tasselGrad)" stroke-width="5" stroke-linecap="round"/>
+    <!-- Tassel Ring -->
+    <circle cx="136" cy="272" r="5" fill="#F59E0B"/>
+    <!-- Tassel Fringe Pendant -->
+    <path d="M 129 275 L 143 275 L 148 312 L 124 312 Z" fill="url(#tasselGrad)" rx="2.5"/>
+    <line x1="136" y1="277" x2="136" y2="310" stroke="#78350F" stroke-width="1.5" opacity="0.45"/>
+  </g>
+
+  <!-- 5. Hero Verified Attendance Checkmark (Symbol of Present & Recorded) -->
+  <g filter="url(#checkGlow)">
+    <!-- Base Checkmark Body -->
+    <path d="M 180 326 L 238 384 L 356 256" 
+          fill="none" 
+          stroke="url(#checkGrad)" 
+          stroke-width="36" 
+          stroke-linecap="round" 
+          stroke-linejoin="round"/>
+    <!-- Glossy Specular Core Line -->
+    <path d="M 180 326 L 238 384 L 356 256" 
+          fill="none" 
+          stroke="#F0FDFA" 
+          stroke-width="12" 
+          stroke-linecap="round" 
+          stroke-linejoin="round"
+          opacity="0.9"/>
+  </g>
+</svg>

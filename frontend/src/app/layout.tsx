@@ -27,6 +27,8 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/favicon.svg", type: "image/svg+xml" },
       { url: "/icons/icon-192x192.png", sizes: "192x192", type: "image/png" },
       { url: "/icons/icon-512x512.png", sizes: "512x512", type: "image/png" },
     ],
@@ -57,6 +59,8 @@ export default function RootLayout({
     >
       <head>
         <link rel="manifest" href="/manifest.json" />
+        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+        <link rel="alternate icon" href="/favicon.ico" />
         <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />

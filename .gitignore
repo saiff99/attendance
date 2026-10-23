@@ -66,3 +66,6 @@ backend/bin/cloudflared
 whatsapp-service/session/
 whatsapp-service/session*
 whatsapp_session/
+
+# Local Scratch
+scratch/
