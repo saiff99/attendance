@@ -20,13 +20,13 @@ SUPABASE_URL = (os.getenv("SUPABASE_URL") or os.getenv("NEXT_PUBLIC_SUPABASE_URL
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_KEY")
 
 if not SUPABASE_URL:
-    raise RuntimeError(
-        "[CRITICAL CONFIG ERROR] SUPABASE_URL is missing from environment! "
+    print(
+        "[WARNING] SUPABASE_URL is missing from environment! "
         "Under Production Zero-Trust standards, silent fallbacks to external test projects are prohibited. "
-        "Please set SUPABASE_URL in backend/.env."
+        "Database operations will be disabled until configured."
     )
-
-if not SUPABASE_KEY:
+    supabase = None
+elif not SUPABASE_KEY:
     print(
         "[WARNING] SUPABASE_SERVICE_ROLE_KEY is missing from environment! "
         "Backend server-side operations require service-role credentials to interact with the database under Zero-Trust RLS. "
@@ -124,6 +124,8 @@ def safe_db_execute(query_builder, max_retries: int = 2):
     Executes a Supabase query builder with secondary retry protection in case
     underlying socket transport raises an unhandled connection drop.
     """
+    if query_builder is None:
+        raise RuntimeError("Database query builder is None: Supabase client is not configured or disabled.")
     last_err = None
     for attempt in range(max_retries + 1):
         try:

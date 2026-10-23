@@ -43,6 +43,10 @@ jobs:
   backend-checks:
     name: Backend Security, Liveness & Unit Tests
     runs-on: ubuntu-latest
+    env:
+      SUPABASE_URL: https://ci-test-mock.supabase.co
+      SUPABASE_SERVICE_ROLE_KEY: ci_mock_service_role_key_for_build_testing
+      INTERNAL_API_KEY: f49c83a8f77acd625223d740ae06db19a679df1904aa1b4df924c24e0c234573
 
     steps:
       - name: Checkout Code
