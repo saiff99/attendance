@@ -5,9 +5,14 @@ import React from "react";
 interface AppLogoProps {
   className?: string;
   size?: number;
+  variant?: "badge" | "glyph";
 }
 
-export function AppLogo({ className = "w-8 h-8", size = 32 }: AppLogoProps) {
+export function AppLogo({
+  className = "w-8 h-8",
+  size = 36,
+  variant = "badge",
+}: AppLogoProps) {
   return (
     <svg
       viewBox="0 0 512 512"
@@ -19,92 +24,130 @@ export function AppLogo({ className = "w-8 h-8", size = 32 }: AppLogoProps) {
       aria-label="MedAttend Student Attendance Logo"
     >
       <defs>
-        <linearGradient id="appLogoBg" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#0F172A" />
-          <stop offset="50%" stopColor="#1E1B4B" />
-          <stop offset="100%" stopColor="#312E81" />
+        <!-- Vibrant Royal Indigo-Violet Badge Gradient -->
+        <linearGradient id="medAttendBadgeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#4F46E5" />
+          <stop offset="45%" stopColor="#6366F1" />
+          <stop offset="100%" stopColor="#7C3AED" />
         </linearGradient>
 
-        <linearGradient id="appLogoRim" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#A5B4FC" stopOpacity="0.7" />
-          <stop offset="50%" stopColor="#6366F1" stopOpacity="0.3" />
-          <stop offset="100%" stopColor="#38BDF8" stopOpacity="0.6" />
+        <!-- Specular Highlight Rim -->
+        <linearGradient id="medAttendRim" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#E0E7FF" stopOpacity="0.95" />
+          <stop offset="40%" stopColor="#A5B4FC" stopOpacity="0.5" />
+          <stop offset="100%" stopColor="#818CF8" stopOpacity="0.2" />
         </linearGradient>
 
-        <radialGradient id="appLogoGlow" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stopColor="#6366F1" stopOpacity="0.5" />
-          <stop offset="100%" stopColor="#0F172A" stopOpacity="0" />
+        <!-- Inner Ambient Center Glow -->
+        <radialGradient id="medAttendCenterLight" cx="50%" cy="40%" r="55%">
+          <stop offset="0%" stopColor="#A5B4FC" stopOpacity="0.4" />
+          <stop offset="100%" stopColor="#4F46E5" stopOpacity="0" />
         </radialGradient>
 
-        <linearGradient id="appLogoCapLight" x1="0%" y1="0%" x2="100%" y2="100%">
+        <!-- Mortarboard Diamond Gradients -->
+        <linearGradient id="medAttendCapLight" x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%" stopColor="#FFFFFF" />
+          <stop offset="55%" stopColor="#F8FAFC" />
+          <stop offset="100%" stopColor="#E2E8F0" />
+        </linearGradient>
+
+        <linearGradient id="medAttendCapShade" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#F1F5F9" />
           <stop offset="100%" stopColor="#CBD5E1" />
         </linearGradient>
 
-        <linearGradient id="appLogoCapShade" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#E2E8F0" />
-          <stop offset="100%" stopColor="#94A3B8" />
+        <!-- Skull Cap Under-Band -->
+        <linearGradient id="medAttendCapBand" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#312E81" />
+          <stop offset="100%" stopColor="#1E1B4B" />
         </linearGradient>
 
-        <linearGradient id="appLogoCheck" x1="0%" y1="100%" x2="100%" y2="0%">
+        <!-- Verified Checkmark Gradient -->
+        <linearGradient id="medAttendCheckGrad" x1="0%" y1="100%" x2="100%" y2="0%">
           <stop offset="0%" stopColor="#059669" />
           <stop offset="35%" stopColor="#10B981" />
-          <stop offset="70%" stopColor="#34D399" />
-          <stop offset="100%" stopColor="#38BDF8" />
+          <stop offset="75%" stopColor="#34D399" />
+          <stop offset="100%" stopColor="#22D3EE" />
         </linearGradient>
 
-        <linearGradient id="appLogoTassel" x1="0%" y1="0%" x2="100%" y2="100%">
+        <!-- Tassel Gradient -->
+        <linearGradient id="medAttendTassel" x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%" stopColor="#FDE047" />
-          <stop offset="60%" stopColor="#F59E0B" />
-          <stop offset="100%" stopColor="#B45309" />
+          <stop offset="50%" stopColor="#F59E0B" />
+          <stop offset="100%" stopColor="#D97706" />
         </linearGradient>
+
+        <!-- Realistic Soft Drop Shadows -->
+        <filter id="medAttendCapShadow" x="-20%" y="-20%" width="140%" height="140%">
+          <feDropShadow dx="0" dy="10" stdDeviation="12" floodColor="#0F172A" floodOpacity="0.55" />
+        </filter>
+
+        <filter id="medAttendCheckShadow" x="-25%" y="-25%" width="150%" height="150%">
+          <feDropShadow dx="0" dy="8" stdDeviation="12" floodColor="#090D1A" floodOpacity="0.5" />
+        </filter>
       </defs>
 
-      {/* Squircle container */}
-      <rect x="20" y="20" width="472" height="472" rx="112" fill="url(#appLogoBg)" />
-      <rect x="20" y="20" width="472" height="472" rx="112" fill="none" stroke="url(#appLogoRim)" strokeWidth="6" />
+      {variant === "badge" && (
+        <>
+          {/* 1. Squircle Badge Base */}
+          <rect x="20" y="20" width="472" height="472" rx="116" fill="url(#medAttendBadgeGrad)" />
+          <rect x="20" y="20" width="472" height="472" rx="116" stroke="url(#medAttendRim)" strokeWidth="6" />
 
-      {/* Ambient center glow */}
-      <circle cx="256" cy="256" r="180" fill="url(#appLogoGlow)" />
+          {/* 2. Ambient Light Core */}
+          <circle cx="256" cy="240" r="180" fill="url(#medAttendCenterLight)" />
+        </>
+      )}
 
-      {/* Radar scanning arcs */}
-      <g opacity="0.35" stroke="#38BDF8" strokeWidth="3.5" strokeLinecap="round">
-        <path d="M 92 195 A 180 180 0 0 1 140 125" strokeDasharray="10 12" />
-        <path d="M 420 195 A 180 180 0 0 0 372 125" strokeDasharray="10 12" />
+      {/* 3. Academic Mortarboard Cap (Student Symbol) */}
+      <g filter="url(#medAttendCapShadow)">
+        {/* Skull Cap Under-Band */}
+        <path d="M 166 196 Q 256 244 346 196 L 346 238 Q 346 290 256 314 Q 166 290 166 238 Z" fill="url(#medAttendCapBand)" />
+        <path d="M 178 236 Q 256 268 334 236" fill="none" stroke="#A5B4FC" strokeWidth="3.5" opacity="0.8" strokeLinecap="round" />
+
+        {/* Mortarboard Diamond (Perspective) */}
+        <polygon points="256,86 78,166 256,244" fill="url(#medAttendCapShade)" />
+        <polygon points="256,86 434,166 256,244" fill="url(#medAttendCapLight)" />
+
+        {/* Crisp White Bevel Lines */}
+        <line x1="78" y1="166" x2="256" y2="86" stroke="#FFFFFF" strokeWidth="3" opacity="0.9" strokeLinecap="round" />
+        <line x1="256" y1="86" x2="434" y2="166" stroke="#FFFFFF" strokeWidth="3" opacity="0.95" strokeLinecap="round" />
+
+        {/* Center Button */}
+        <ellipse cx="256" cy="165" rx="10" ry="6.5" fill="#1E1B4B" />
+        <ellipse cx="256" cy="164" rx="8" ry="5" fill="#C7D2FE" />
+
+        {/* Academic Tassel (Drapes Gracefully to Left) */}
+        <path d="M 256 165 Q 186 174 148 212 Q 128 238 124 280" fill="none" stroke="url(#medAttendTassel)" strokeWidth="6" strokeLinecap="round" />
+        <circle cx="124" cy="282" r="6" fill="#F59E0B" />
+        <path d="M 115 286 L 133 286 L 138 330 L 110 330 Z" fill="url(#medAttendTassel)" />
+        <line x1="124" y1="288" x2="124" y2="328" stroke="#78350F" strokeWidth="2" opacity="0.4" />
       </g>
 
-      {/* Graduation Cap */}
-      <g>
-        {/* Skull band */}
-        <path d="M 172 188 Q 256 236 340 188 L 340 226 Q 340 274 256 296 Q 172 274 172 226 Z" fill="#4338CA" />
-        <path d="M 184 224 Q 256 256 328 224" fill="none" stroke="#A5B4FC" strokeWidth="3" opacity="0.6" strokeLinecap="round" />
-
-        {/* Diamond top */}
-        <polygon points="256,96 86,168 256,238" fill="url(#appLogoCapShade)" />
-        <polygon points="256,96 426,168 256,238" fill="url(#appLogoCapLight)" />
-
-        {/* Center button */}
-        <ellipse cx="256" cy="167" rx="8" ry="5.5" fill="#1E1B4B" />
-        <ellipse cx="256" cy="166" rx="6" ry="4" fill="#818CF8" />
-
-        {/* Tassel */}
-        <path d="M 256 167 Q 192 174 158 208 Q 140 232 136 270" fill="none" stroke="url(#appLogoTassel)" strokeWidth="5.5" strokeLinecap="round" />
-        <circle cx="136" cy="272" r="5" fill="#F59E0B" />
-        <path d="M 129 275 L 143 275 L 148 312 L 124 312 Z" fill="url(#appLogoTassel)" rx="2.5" />
-      </g>
-
-      {/* Hero Attendance Verified Checkmark */}
-      <g>
+      {/* 4. Hero Verified Attendance Checkmark (Presence Verified) */}
+      <g filter="url(#medAttendCheckShadow)">
+        {/* High-Contrast White Halo for 100% separation & clarity */}
         <path
-          d="M 180 326 L 238 384 L 356 256"
+          d="M 172 328 L 238 394 L 372 254"
           fill="none"
-          stroke="url(#appLogoCheck)"
-          strokeWidth="38"
+          stroke="#FFFFFF"
+          strokeWidth="54"
           strokeLinecap="round"
           strokeLinejoin="round"
         />
+
+        {/* Vibrant Emerald-Cyan Checkmark Body */}
         <path
-          d="M 180 326 L 238 384 L 356 256"
+          d="M 172 328 L 238 394 L 372 254"
+          fill="none"
+          stroke="url(#medAttendCheckGrad)"
+          strokeWidth="36"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+
+        {/* Specular Gloss Core */}
+        <path
+          d="M 172 328 L 238 394 L 372 254"
           fill="none"
           stroke="#F0FDFA"
           strokeWidth="12"

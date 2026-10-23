@@ -92,7 +92,7 @@ export default function Sidebar() {
       {!isStudentPortal && (
         <div className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-white/95 dark:bg-gray-900/95 backdrop-blur-md border-b border-gray-200 dark:border-gray-800 flex items-center justify-between px-4 sm:px-6 z-40 shadow-sm transition-colors duration-300">
           <div className="flex items-center">
-            <AppLogo className="h-8 w-8 mr-2.5 shrink-0" size={32} />
+            <AppLogo className="h-9 w-9 mr-2.5 shrink-0 drop-shadow-sm" size={36} />
             <span className="text-xl font-bold tracking-tight text-gray-900 dark:text-white">
               MedAttend
             </span>
@@ -135,7 +135,7 @@ export default function Sidebar() {
       )}>
       <div className="flex h-16 shrink-0 items-center justify-between px-6 border-b border-gray-100 dark:border-gray-800">
         <div className="flex items-center">
-          <AppLogo className="h-8 w-8 mr-2.5 shrink-0" size={34} />
+          <AppLogo className="h-9 w-9 mr-3 shrink-0 drop-shadow-md" size={38} />
           <span className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">
             MedAttend
           </span>
