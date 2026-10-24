@@ -410,6 +410,47 @@ console.log('\n--- 10. Audit Log Forensic Ledger Immutability & Least Privilege 
   assert(hasSelectRls && hasInsertRls && !hasOldGenericRls, 'Audit logs RLS policies separated into SELECT and INSERT only (no generic ALL)');
 }
 
+// --- 11. Attendance Foreign Key Non-Cascading Retention Lockdown ---
+console.log('\n--- 11. Attendance Foreign Key Non-Cascading Retention Lockdown ---');
+{
+  const schemaPath = path.resolve(__dirname, '../../database/schema.sql');
+  const migration17Path = path.resolve(__dirname, '../../database/migrations/17_attendance_restrict_foreign_keys.sql');
+  const policyDocPath = path.resolve(__dirname, '../../docs/DATA_GOVERNANCE_AND_RETENTION_POLICY.md');
+
+  const schemaSql = fs.existsSync(schemaPath) ? fs.readFileSync(schemaPath, 'utf8') : '';
+  const migrationSql = fs.existsSync(migration17Path) ? fs.readFileSync(migration17Path, 'utf8') : '';
+  const policyDoc = fs.existsSync(policyDocPath) ? fs.readFileSync(policyDocPath, 'utf8') : '';
+
+  // 1. Verify schema.sql uses ON DELETE RESTRICT on attendance foreign keys
+  const hasSessionRestrict = /session_id\s+UUID\s+NOT\s+NULL\s+REFERENCES\s+public\.sessions\(id\)\s+ON\s+DELETE\s+RESTRICT/i.test(schemaSql);
+  assert(hasSessionRestrict, 'schema.sql defines attendance.session_id with ON DELETE RESTRICT');
+
+  const hasStudentRestrict = /student_id\s+UUID\s+NOT\s+NULL\s+REFERENCES\s+public\.students\(id\)\s+ON\s+DELETE\s+RESTRICT/i.test(schemaSql);
+  assert(hasStudentRestrict, 'schema.sql defines attendance.student_id with ON DELETE RESTRICT');
+
+  // 2. Verify NO ON DELETE CASCADE remains in schema.sql
+  const hasNoCascade = !/ON\s+DELETE\s+CASCADE/i.test(schemaSql);
+  assert(hasNoCascade, 'Zero instances of ON DELETE CASCADE found in schema.sql');
+
+  // 3. Verify Migration 17 enforces data integrity pre-check and ON DELETE RESTRICT
+  const hasMigrationFile = fs.existsSync(migration17Path);
+  assert(hasMigrationFile, 'Migration 17 (17_attendance_restrict_foreign_keys.sql) exists');
+
+  const hasPreflight = migrationSql.includes('Pre-flight data integrity validation') && migrationSql.includes('orphan_session_count');
+  assert(hasPreflight, 'Migration 17 includes pre-flight orphaned record validation');
+
+  const hasMigrationRestrict = 
+    migrationSql.includes('FOREIGN KEY (session_id)') &&
+    migrationSql.includes('ON DELETE RESTRICT') &&
+    migrationSql.includes('FOREIGN KEY (student_id)') &&
+    migrationSql.includes('ON DELETE RESTRICT');
+  assert(hasMigrationRestrict, 'Migration 17 re-creates foreign keys with ON DELETE RESTRICT');
+
+  // 4. Verify explicit retention policy documentation
+  const hasPolicyDocSection = policyDoc.includes('Database-Enforced Non-Cascading Retention (`ON DELETE RESTRICT`)');
+  assert(hasPolicyDocSection, 'DATA_GOVERNANCE_AND_RETENTION_POLICY.md documents database-enforced non-cascading retention');
+}
+
 // Summary
 console.log('\n' + '=' .repeat(65));
 console.log(`📊 Offline Unit Test Summary: ${passed} Passed, ${failed} Failed`);

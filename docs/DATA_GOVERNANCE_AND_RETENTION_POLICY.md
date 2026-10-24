@@ -45,6 +45,20 @@ MedAttend AI is an intelligent attendance and academic tracking platform deploye
 | **Parent Phone Numbers** | **Active Course Duration** | Graduation of student or formal update request | Overwritten or deleted from active database. |
 | **Security Audit Logs** | **3 Years** | 36 months rolling window | Append-only ledger; archived to read-only cold storage for regulatory review. |
 
+### 4.1 Database-Enforced Non-Cascading Retention (`ON DELETE RESTRICT`)
+
+To ensure compliance with the **National Medical Commission (NMC)** 5-year academic audit mandate and the **DPDP Act 2023** non-repudiation principles, attendance records are safeguarded at the relational database engine layer:
+
+1. **Schema-Level Invariant**:
+   - `public.attendance.session_id` ➔ `REFERENCES public.sessions(id) ON DELETE RESTRICT`
+   - `public.attendance.student_id` ➔ `REFERENCES public.students(id) ON DELETE RESTRICT`
+   - **`ON DELETE CASCADE` is strictly prohibited.** Under no circumstances may an operation on a parent table cascade into automatic deletion of historical attendance records.
+2. **Database Engine Rejection**:
+   - Any raw SQL query, database migration, automated maintenance script, or API call attempting a `DELETE FROM sessions` or `DELETE FROM students` where attendance records exist will be rejected immediately by PostgreSQL with error code `23503` (`foreign_key_violation`).
+3. **Institutional Archival & Deletion SOP**:
+   - **Records with Attendance History (> 0 records)**: Must be archived using Soft-Delete. The system marks `is_archived = true` or `academic_year = '[ARCHIVED]'`, cryptographically erases biometric templates (`face_encoding = NULL`), and leaves the complete attendance audit trail 100% intact.
+   - **Empty Records (0 attendance history)**: Authorized administrators may perform a clean hard-delete only on unlinked records created by clerical mistake.
+
 ---
 
 ## 5. Right to Withdraw Consent & Erasure SOP (Section 12 DPDP Act)

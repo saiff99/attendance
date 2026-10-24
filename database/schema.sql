@@ -71,8 +71,8 @@ ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ;
 -- ==============================================================================
 CREATE TABLE IF NOT EXISTS public.attendance (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    session_id UUID NOT NULL REFERENCES public.sessions(id) ON DELETE CASCADE,
-    student_id UUID NOT NULL REFERENCES public.students(id) ON DELETE CASCADE,
+    session_id UUID NOT NULL REFERENCES public.sessions(id) ON DELETE RESTRICT,
+    student_id UUID NOT NULL REFERENCES public.students(id) ON DELETE RESTRICT,
     status VARCHAR(50) NOT NULL CHECK (status IN ('Present', 'Absent')),
     capture_mode VARCHAR(50) NOT NULL CHECK (capture_mode IN ('Live Scan', 'Manual Upload', 'Selfie Scan', 'Manual Entry', 'Selfie Check-in')),
     confidence_score FLOAT,

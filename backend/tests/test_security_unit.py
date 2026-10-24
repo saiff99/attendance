@@ -314,20 +314,27 @@ class TestProcessAttributionUnit(unittest.TestCase):
 
     def test_single_launcher_lock_behavior(self):
         """Verifies that single-instance launcher lock file logic is functional and prevents duplicate runs."""
+        import tempfile
         repo_root = os.path.dirname(backend_dir)
         if repo_root not in sys.path:
             sys.path.insert(0, repo_root)
-        from start import enforce_single_launcher_instance, LAUNCHER_LOCK_FILE
+        from start import enforce_single_launcher_instance
 
-        enforce_single_launcher_instance()
-        self.assertTrue(os.path.exists(LAUNCHER_LOCK_FILE))
-        with open(LAUNCHER_LOCK_FILE, "r") as f:
-            pid_str = f.read().strip()
-            self.assertEqual(pid_str, str(os.getpid()))
+        with tempfile.NamedTemporaryFile(prefix=".test_launcher_", suffix=".lock", delete=False) as tf:
+            test_lock_path = tf.name
+
         try:
-            os.remove(LAUNCHER_LOCK_FILE)
-        except Exception:
-            pass
+            enforce_single_launcher_instance(lock_file_path=test_lock_path)
+            self.assertTrue(os.path.exists(test_lock_path))
+            with open(test_lock_path, "r") as f:
+                pid_str = f.read().strip()
+                self.assertEqual(pid_str, str(os.getpid()))
+        finally:
+            if os.path.exists(test_lock_path):
+                try:
+                    os.remove(test_lock_path)
+                except Exception:
+                    pass
 
 
 class TestConfigFailFastUnit(unittest.TestCase):

@@ -204,7 +204,7 @@ LAUNCHER_LOCK_FILE = os.path.join(BASE_DIR, ".medattend_launcher.lock")
 _launcher_lock_fd = None
 
 
-def enforce_single_launcher_instance():
+def enforce_single_launcher_instance(lock_file_path: str = None):
     """
     Guarantees that only a single instance of start.py (and its Watchdog) can run at any given time.
     If a previous instance is found running in another terminal window or background session,
@@ -219,8 +219,10 @@ def enforce_single_launcher_instance():
     if fcntl is None:
         return
 
+    target_lock = lock_file_path or LAUNCHER_LOCK_FILE
+
     try:
-        _launcher_lock_fd = open(LAUNCHER_LOCK_FILE, "a+")
+        _launcher_lock_fd = open(target_lock, "a+")
         try:
             fcntl.flock(_launcher_lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
             # Successfully acquired exclusive lock
