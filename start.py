@@ -200,15 +200,94 @@ def pid_int_running(pid: int) -> bool:
         return False
 
 
+LAUNCHER_LOCK_FILE = os.path.join(BASE_DIR, ".medattend_launcher.lock")
+_launcher_lock_fd = None
+
+
+def enforce_single_launcher_instance():
+    """
+    Guarantees that only a single instance of start.py (and its Watchdog) can run at any given time.
+    If a previous instance is found running in another terminal window or background session,
+    it cleanly terminates that stale instance and frees all ports before proceeding.
+    """
+    global _launcher_lock_fd
+    try:
+        import fcntl
+    except ImportError:
+        fcntl = None
+
+    if fcntl is None:
+        return
+
+    try:
+        _launcher_lock_fd = open(LAUNCHER_LOCK_FILE, "a+")
+        try:
+            fcntl.flock(_launcher_lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            # Successfully acquired exclusive lock
+            _launcher_lock_fd.seek(0)
+            _launcher_lock_fd.truncate()
+            _launcher_lock_fd.write(str(os.getpid()))
+            _launcher_lock_fd.flush()
+        except (BlockingIOError, IOError):
+            # Another start.py instance is holding the exclusive lock!
+            _launcher_lock_fd.seek(0)
+            content = _launcher_lock_fd.read().strip()
+            running_pid = None
+            if content.isdigit():
+                running_pid = int(content)
+
+            print(f"  {YELLOW}ℹ [SINGLE-INSTANCE] Another active MedAttend launcher is running{f' (PID {running_pid})' if running_pid else ''}.{RESET}")
+            print(f"  {YELLOW}🔄 Stopping previous instance gracefully to take over...{RESET}")
+
+            if running_pid and running_pid != os.getpid() and pid_int_running(running_pid):
+                try:
+                    os.kill(running_pid, signal.SIGTERM)
+                    time.sleep(1.0)
+                    if pid_int_running(running_pid):
+                        os.kill(running_pid, signal.SIGKILL)
+                except Exception:
+                    pass
+
+            # Also ensure target ports are freed
+            free_port_safely(3000)
+            free_port_safely(8000)
+            free_port_safely(5005)
+            time.sleep(0.5)
+
+            # Retry acquiring exclusive lock
+            try:
+                fcntl.flock(_launcher_lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                _launcher_lock_fd.seek(0)
+                _launcher_lock_fd.truncate()
+                _launcher_lock_fd.write(str(os.getpid()))
+                _launcher_lock_fd.flush()
+                print(f"  {GREEN}✓ Previous instance stopped cleanly. Starting new session.{RESET}\n")
+            except Exception:
+                print(f"  {RED}! Could not acquire launcher lock. Please close other terminal tabs manually.{RESET}\n")
+    except Exception as e:
+        pass
+
+
 def cleanup(signum=None, frame=None):
     """Clean exit handler for Ctrl+C and SIGTERM."""
-    global watchdog_running
+    global watchdog_running, _launcher_lock_fd
     watchdog_running = False
     print(f"\n{YELLOW}Shutting down MedAttend services...{RESET}")
     with watchdog_lock:
         for name, proc in managed_procs.items():
             if proc:
                 terminate_process(proc, name)
+    # Release launcher lock
+    try:
+        if _launcher_lock_fd:
+            import fcntl
+            fcntl.flock(_launcher_lock_fd, fcntl.LOCK_UN)
+            _launcher_lock_fd.close()
+            _launcher_lock_fd = None
+        if os.path.exists(LAUNCHER_LOCK_FILE):
+            os.remove(LAUNCHER_LOCK_FILE)
+    except Exception:
+        pass
     # Automatically restore 24/7 Cloud Backend so Vercel never goes offline
     cloud_backend_url = os.getenv("BACKEND_URL", "https://saiwebss-medattend-backend.hf.space").strip()
     try:
@@ -543,6 +622,9 @@ def main():
     print("\n" + "="*70)
     print(f"{BOLD}{CYAN}   🚀 MedAttend AI Hub — Production Accelerated Launcher + Watchdog{RESET}")
     print("="*70 + "\n")
+
+    # 0. Enforce single launcher instance (prevents multi-terminal watchdog race conflicts)
+    enforce_single_launcher_instance()
 
     # 1. Clean previous lingering processes safely on target ports
     free_port_safely(3000)

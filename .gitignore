@@ -67,5 +67,7 @@ whatsapp-service/session/
 whatsapp-service/session*
 whatsapp_session/
 
-# Local Scratch
+# Local Scratch & Process Locks
 scratch/
+.medattend_launcher.lock
+*.lock

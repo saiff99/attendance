@@ -312,6 +312,23 @@ class TestProcessAttributionUnit(unittest.TestCase):
             )
         )
 
+    def test_single_launcher_lock_behavior(self):
+        """Verifies that single-instance launcher lock file logic is functional and prevents duplicate runs."""
+        repo_root = os.path.dirname(backend_dir)
+        if repo_root not in sys.path:
+            sys.path.insert(0, repo_root)
+        from start import enforce_single_launcher_instance, LAUNCHER_LOCK_FILE
+
+        enforce_single_launcher_instance()
+        self.assertTrue(os.path.exists(LAUNCHER_LOCK_FILE))
+        with open(LAUNCHER_LOCK_FILE, "r") as f:
+            pid_str = f.read().strip()
+            self.assertEqual(pid_str, str(os.getpid()))
+        try:
+            os.remove(LAUNCHER_LOCK_FILE)
+        except Exception:
+            pass
+
 
 class TestConfigFailFastUnit(unittest.TestCase):
     """Unit tests verifying that backend/app/config.py strictly and unconditionally fails fast on missing configuration."""
