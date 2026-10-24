@@ -144,7 +144,7 @@ async function processAndFilterSessions(
       const dec = decodeSessionMetadata(s.instructor_name || '');
       return {
         ...s,
-        instructor_name: dec.topic || dec.cleanName || s.class_name,
+        instructor_name: dec.topic || s.class_name,
         created_by: undefined,
         attendance_count: undefined,
       };
@@ -156,7 +156,7 @@ async function processAndFilterSessions(
     const dec = decodeSessionMetadata(s.instructor_name || '');
     return {
       ...s,
-      instructor_name: dec.topic || dec.cleanName || 'Faculty Member',
+      instructor_name: dec.topic || 'Faculty Member',
       created_by: undefined,
       creator_name: 'Faculty Member',
       created_by_name: 'Faculty Member',

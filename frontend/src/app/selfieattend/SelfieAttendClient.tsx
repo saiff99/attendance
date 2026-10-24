@@ -1335,6 +1335,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                 </form>
 
                 {/* Verified Student Profile Preview */}
+                {student && (() => {
                   const isCohortMismatch = Boolean(
                     student.cohort_mismatch ??
                     !isCohortMatching(selectedSession?.target_academic_year, student.academic_year)
