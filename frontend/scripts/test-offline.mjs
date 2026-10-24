@@ -170,6 +170,35 @@ console.log('\n--- 5. RTSP URL Credential Redaction ---');
   assert(redactStreamUrl('') === '', 'Empty URL handled safely');
 }
 
+// --- 6. Student Name Privacy Masking (Anti-Scraping Data Minimization) ---
+console.log('\n--- 6. Student Name Privacy Masking (Anti-Scraping Data Minimization) ---');
+{
+  function maskStudentName(fullName) {
+    if (!fullName || typeof fullName !== 'string') return '';
+    const parts = fullName.trim().split(/\s+/);
+    return parts.map(part => {
+      if (part.length <= 2) {
+        return part;
+      } else if (part.length === 3) {
+        return `${part[0]}*${part[2]}`;
+      } else {
+        const visibleStart = Math.min(2, Math.floor(part.length / 3));
+        const start = part.slice(0, visibleStart);
+        const end = part.slice(-1);
+        const maskedCount = Math.max(1, part.length - visibleStart - 1);
+        return `${start}${'*'.repeat(maskedCount)}${end}`;
+      }
+    }).join(' ');
+  }
+
+  assert(maskStudentName('Sk Saifuddin') === 'Sk Sa******n', 'Mask multi-word name preserving initials & ending');
+  assert(maskStudentName('Rahul') === 'R***l', 'Mask single word name preserving start & ending');
+  assert(maskStudentName('A') === 'A', 'Single character preserved');
+  assert(maskStudentName('Dr. Arindam Das') === 'D*. Ar****m D*s', 'Mask 3-word title and name');
+  assert(maskStudentName('') === '', 'Empty string handled safely');
+  assert(maskStudentName(null) === '', 'Null input handled safely');
+}
+
 // Summary
 console.log('\n' + '=' .repeat(65));
 console.log(`📊 Offline Unit Test Summary: ${passed} Passed, ${failed} Failed`);
@@ -180,3 +209,4 @@ if (failed > 0) {
 } else {
   process.exit(0);
 }
+

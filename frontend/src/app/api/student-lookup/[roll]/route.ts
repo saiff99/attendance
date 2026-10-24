@@ -1,14 +1,37 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, NextRequest } from 'next/server';
 import { supabaseServer } from '@/lib/supabaseServer';
 import { isCohortMatching } from '@/lib/cohort';
 import { fetchBackend } from '@/lib/serverBackend';
 import { isValidUuid } from '@/lib/attendanceAuth';
 import { getTrustedClientIp, checkStudentLookupRateLimit } from '@/lib/rateLimiter';
+import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/serverAuth';
 
 export const dynamic = 'force-dynamic';
 
+/**
+ * Masks student full name for public unauthenticated endpoints to prevent roster scraping.
+ * Example: "Sk Saifuddin" -> "Sk Sa******n", "Rahul Roy" -> "R***l R*y"
+ */
+export function maskStudentName(fullName: string): string {
+  if (!fullName || typeof fullName !== 'string') return '';
+  const parts = fullName.trim().split(/\s+/);
+  return parts.map(part => {
+    if (part.length <= 2) {
+      return part;
+    } else if (part.length === 3) {
+      return `${part[0]}*${part[2]}`;
+    } else {
+      const visibleStart = Math.min(2, Math.floor(part.length / 3));
+      const start = part.slice(0, visibleStart);
+      const end = part.slice(-1);
+      const maskedCount = Math.max(1, part.length - visibleStart - 1);
+      return `${start}${'*'.repeat(maskedCount)}${end}`;
+    }
+  }).join(' ');
+}
+
 export async function GET(
-  request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ roll: string }> }
 ) {
   try {
@@ -47,6 +70,18 @@ export async function GET(
       );
     }
 
+    // Check caller authorization: Staff or the student themselves can see unmasked profile and timestamps
+    const sessionCookie = request.cookies.get(SESSION_COOKIE_NAME)?.value;
+    const authUser = sessionCookie ? await verifySessionToken(sessionCookie) : null;
+    const isStaff = Boolean(authUser && ['Super Admin', 'Admin', 'Faculty'].includes(authUser.role));
+    const isOwnStudent = Boolean(
+      authUser &&
+      authUser.role === 'Student' &&
+      (authUser.studentRoll?.trim().toLowerCase() === roll.trim().toLowerCase() ||
+       authUser.username?.trim().toLowerCase() === roll.trim().toLowerCase())
+    );
+    const canSeeFullProfile = isStaff || isOwnStudent;
+
     // 3. Try backend fast-path
     try {
       const queryParam = `?session_id=${encodeURIComponent(cleanSessId)}`;
@@ -60,7 +95,10 @@ export async function GET(
         if (data?.student) {
           delete data.student.id;
           delete data.student.face_encoding;
-          if (data.student.attendance_info) {
+          if (!canSeeFullProfile) {
+            data.student.full_name = maskStudentName(data.student.full_name);
+            delete data.student.attendance_info;
+          } else if (data.student.attendance_info) {
             data.student.attendance_info = {
               status: data.student.attendance_info.status || 'Present',
               recorded_at: data.student.attendance_info.recorded_at || 'Earlier Today',
@@ -151,11 +189,11 @@ export async function GET(
       success: true,
       student: {
         student_roll: stud.student_roll,
-        full_name: stud.full_name,
+        full_name: canSeeFullProfile ? stud.full_name : maskStudentName(stud.full_name),
         academic_year: stud.academic_year || '1st Year',
         has_face_enrolled: hasFace,
         is_already_present: isAlreadyPresent,
-        attendance_info: attendanceInfo,
+        attendance_info: canSeeFullProfile ? attendanceInfo : null,
         cohort_mismatch: cohortMismatch,
         target_academic_year: targetAcademicYear,
       }

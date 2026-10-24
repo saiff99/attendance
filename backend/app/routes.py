@@ -6,6 +6,7 @@ import re
 import urllib.parse
 import random
 import asyncio
+import hmac
 from datetime import datetime, timezone
 import dateutil.parser
 import numpy as np
@@ -885,6 +886,26 @@ async def get_active_sessions():
         raise HTTPException(status_code=500, detail="Failed to fetch active sessions")
 
 
+def mask_student_name(full_name: str) -> str:
+    """Masks student full name for public endpoints to prevent roster scraping."""
+    if not full_name or not isinstance(full_name, str):
+        return ""
+    parts = full_name.strip().split()
+    masked_parts = []
+    for part in parts:
+        if len(part) <= 2:
+            masked_parts.append(part)
+        elif len(part) == 3:
+            masked_parts.append(f"{part[0]}*{part[2]}")
+        else:
+            visible_start = min(2, len(part) // 3)
+            start = part[:visible_start]
+            end = part[-1]
+            masked_count = max(1, len(part) - visible_start - 1)
+            masked_parts.append(f"{start}{'*' * masked_count}{end}")
+    return " ".join(masked_parts)
+
+
 @router.get("/api/student-lookup/{student_roll}")
 async def student_lookup(request: Request, student_roll: str, session_id: Optional[str] = None):
     """
@@ -970,16 +991,21 @@ async def student_lookup(request: Request, student_roll: str, session_id: Option
                 "status": att_record.get("status", "Present"),
                 "recorded_at": att_record.get("recorded_at", "Earlier Today")
             }
+
+        # Check if request has internal authorization (e.g. Next.js server proxy)
+        api_key_header = request.headers.get("x-internal-api-key") or request.headers.get("X-Internal-API-Key")
+        internal_key = os.getenv("INTERNAL_API_KEY", "").strip()
+        is_internal_auth = bool(internal_key and api_key_header and hmac.compare_digest(api_key_header.strip(), internal_key))
         
         return {
             "success": True,
             "student": {
                 "student_roll": student["student_roll"],
-                "full_name": student["full_name"],
+                "full_name": student["full_name"] if is_internal_auth else mask_student_name(student["full_name"]),
                 "academic_year": student.get("academic_year") or "MBBS",
                 "has_face_enrolled": has_face,
                 "is_already_present": is_already_present,
-                "attendance_info": attendance_info,
+                "attendance_info": attendance_info if is_internal_auth else None,
                 "cohort_mismatch": cohort_mismatch,
                 "target_academic_year": target_academic_year
             }

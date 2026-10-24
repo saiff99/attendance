@@ -123,8 +123,26 @@ async function processAndFilterSessions(
     });
   }
 
-  // Super Admin, Student, or public receives all sessions
-  return enriched;
+  // Super Admin or Admin receives all sessions with full creator/audit information
+  if (authUser && ['Super Admin', 'Admin'].includes(authUser.role)) {
+    return enriched;
+  }
+
+  // Logged-in Students receive active sessions with general creator info (strip internal creator username)
+  if (authUser && authUser.role === 'Student') {
+    return enriched.map((s: any) => ({
+      ...s,
+      created_by: undefined,
+    }));
+  }
+
+  // Public / Unauthenticated callers: strictly minimize sensitive creator and internal audit info
+  return enriched.map((s: any) => ({
+    ...s,
+    created_by: undefined,
+    creator_name: 'Faculty Member',
+    created_by_name: 'Faculty Member',
+  }));
 }
 
 export async function GET(request: NextRequest) {
