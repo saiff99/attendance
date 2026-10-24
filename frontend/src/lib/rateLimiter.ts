@@ -444,34 +444,28 @@ export async function checkStudentLookupRateLimit(
   const windowSeconds = 60.0;
   const maxAttempts = 10;
 
+  // 1. Authoritative L2 Atomic Transaction via PostgreSQL stored procedure (ACID + row/advisory locking)
+  try {
+    const { data, error } = await supabaseServer.rpc('atomic_check_rate_limit', {
+      p_key: dbKey,
+      p_max_attempts: maxAttempts,
+      p_window_seconds: windowSeconds,
+      p_now_ts: nowSec,
+    });
+
+    if (!error && data && typeof data === 'object' && 'allowed' in data) {
+      const allowed = Boolean(data.allowed);
+      const remainingSeconds = Number(data.retry_after) || 0;
+      return { allowed, remainingSeconds };
+    }
+  } catch (err) {
+    console.warn('[LookupRateLimit Warning] L2 DB atomic RPC fallback:', err);
+  }
+
+  // 2. Degraded In-Memory Fail-Closed Fallback (If RPC or database is offline/unreachable)
   let attempts: number[] = (memoryLookupLimits[clientIp] || []).filter(
     (ts) => nowSec - ts < windowSeconds
   );
-
-  // Sync with L2 Database
-  try {
-    const { data, error } = await supabaseServer
-      .from('settings')
-      .select('value')
-      .eq('key', dbKey)
-      .maybeSingle();
-
-    if (!error && data?.value) {
-      const dbAttempts = data.value.attempts;
-      if (Array.isArray(dbAttempts)) {
-        const combined = new Set([
-          ...attempts,
-          ...dbAttempts.map((t: any) => Number(t)).filter((t: number) => !isNaN(t) && t > 0)
-        ]);
-        attempts = Array.from(combined).sort((a, b) => a - b);
-      }
-    }
-  } catch (err) {
-    console.warn('[LookupRateLimit Warning] L2 DB lookup fallback:', err);
-  }
-
-  // Prune timestamps older than window
-  attempts = attempts.filter((ts) => nowSec - ts < windowSeconds);
 
   if (attempts.length >= maxAttempts) {
     memoryLookupLimits[clientIp] = attempts;
@@ -480,24 +474,8 @@ export async function checkStudentLookupRateLimit(
     return { allowed: false, remainingSeconds };
   }
 
-  // Record attempt in memory
   attempts.push(nowSec);
   memoryLookupLimits[clientIp] = attempts;
-
-  // Persist asynchronously to L2 Database
-  try {
-    Promise.resolve(
-      supabaseServer.from('settings').upsert({
-        key: dbKey,
-        value: {
-          attempts: attempts,
-          updated_at: nowSec,
-        },
-      })
-    ).catch(() => {});
-  } catch (err) {
-    console.warn('[LookupRateLimit Warning] L2 DB upsert fallback:', err);
-  }
 
   return { allowed: true, remainingSeconds: 0 };
 }

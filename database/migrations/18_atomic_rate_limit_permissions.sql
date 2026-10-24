@@ -30,7 +30,16 @@ DECLARE
     v_oldest NUMERIC;
     v_retry_after INT;
 BEGIN
-    -- Acquire exclusive row-level lock on the rate limit key
+    -- 1. Acquire transaction-level advisory lock on the hashed key
+    -- Guarantees strict serialization across concurrent requests even if the row does not exist yet
+    PERFORM pg_advisory_xact_lock(hashtext(p_key));
+
+    -- 2. Ensure row exists so subsequent row-level lock (FOR UPDATE) is unconditionally guaranteed
+    INSERT INTO public.settings (key, value, updated_at)
+    VALUES (p_key, '{"attempts":[]}'::jsonb, CURRENT_TIMESTAMP)
+    ON CONFLICT (key) DO NOTHING;
+
+    -- 3. Acquire exclusive row-level lock on the rate limit key
     SELECT value INTO v_val
     FROM public.settings
     WHERE key = p_key
@@ -61,11 +70,10 @@ BEGIN
     -- Append current timestamp to pruned attempts
     v_pruned := array_append(v_pruned, p_now_ts);
 
-    INSERT INTO public.settings (key, value, updated_at)
-    VALUES (p_key, jsonb_build_object('attempts', to_jsonb(v_pruned), 'updated_at', p_now_ts), CURRENT_TIMESTAMP)
-    ON CONFLICT (key) DO UPDATE
+    UPDATE public.settings
     SET value = jsonb_build_object('attempts', to_jsonb(v_pruned), 'updated_at', p_now_ts),
-        updated_at = CURRENT_TIMESTAMP;
+        updated_at = CURRENT_TIMESTAMP
+    WHERE key = p_key;
 
     RETURN jsonb_build_object(
         'allowed', true,

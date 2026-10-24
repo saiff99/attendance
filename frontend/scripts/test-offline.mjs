@@ -602,6 +602,30 @@ console.log('\n--- 13. Atomic Rate Limiter Privilege Lockdown & Search Path Isol
   const mig18RevokesAndGrants = /REVOKE\s+EXECUTE\s+ON\s+FUNCTION\s+public\.atomic_check_rate_limit/i.test(migration18Sql) &&
                                /GRANT\s+EXECUTE\s+ON\s+FUNCTION\s+public\.atomic_check_rate_limit[\s\S]*?TO\s+service_role/i.test(migration18Sql);
   assert(mig18RevokesAndGrants, 'Migration 18 executes REVOKE from unauthenticated roles and GRANT to service_role');
+
+  // 6. Verify Advisory Lock and Pre-Insert (Race Condition Prevention on Empty/New Keys)
+  const schemaHasAdvisoryLock = schemaSql.includes('pg_advisory_xact_lock(hashtext(p_key))');
+  const schemaHasPreInsert = /INSERT\s+INTO\s+public\.settings\s*\(key,\s*value,\s*updated_at\)\s*VALUES\s*\(p_key,\s*'\{"attempts":\[\]\}'::jsonb,\s*CURRENT_TIMESTAMP\)\s*ON\s+CONFLICT\s*\(key\)\s*DO\s+NOTHING/i.test(schemaSql);
+  assert(schemaHasAdvisoryLock, 'schema.sql defines pg_advisory_xact_lock for strict transaction serialization');
+  assert(schemaHasPreInsert, 'schema.sql pre-inserts empty settings row to guarantee row-level lock on new keys');
+
+  const mig15HasAdvisoryLock = migration15Sql.includes('pg_advisory_xact_lock(hashtext(p_key))');
+  assert(mig15HasAdvisoryLock, 'Migration 15 defines pg_advisory_xact_lock on p_key');
+
+  const mig18HasAdvisoryLock = migration18Sql.includes('pg_advisory_xact_lock(hashtext(p_key))');
+  assert(mig18HasAdvisoryLock, 'Migration 18 defines pg_advisory_xact_lock on p_key');
+
+  // 7. Verify Frontend Rate Limiter uses atomic_check_rate_limit RPC
+  const frontendLimiterPath = path.resolve(__dirname, '../src/lib/rateLimiter.ts');
+  const frontendLimiterContent = fs.existsSync(frontendLimiterPath) ? fs.readFileSync(frontendLimiterPath, 'utf8') : '';
+  const frontendCallsRpc = frontendLimiterContent.includes("supabaseServer.rpc('atomic_check_rate_limit'");
+  assert(frontendCallsRpc, 'Frontend checkStudentLookupRateLimit calls atomic_check_rate_limit RPC');
+
+  // 8. Verify Backend Rate Limiter uses atomic_check_rate_limit RPC
+  const backendLimiterPath = path.resolve(__dirname, '../../backend/app/rate_limiter.py');
+  const backendLimiterContent = fs.existsSync(backendLimiterPath) ? fs.readFileSync(backendLimiterPath, 'utf8') : '';
+  const backendCallsRpc = backendLimiterContent.includes('supabase.rpc("atomic_check_rate_limit"');
+  assert(backendCallsRpc, 'Backend check_lookup_rate_limit harmonized to call atomic_check_rate_limit RPC');
 }
 
 // Summary
