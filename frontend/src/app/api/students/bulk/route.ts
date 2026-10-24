@@ -49,12 +49,15 @@ export async function POST(request: NextRequest) {
           .select('id, academic_year')
           .in('id', toArchiveIds);
 
+        const archiveNow = new Date().toISOString();
         for (const row of archiveRows || []) {
           const origYear = row.academic_year || '1st Year';
           const archivedYear = origYear.startsWith('[ARCHIVED]') ? origYear : `[ARCHIVED] ${origYear}`;
           await supabaseServer
             .from('students')
             .update({
+              is_active: false,
+              archived_at: archiveNow,
               academic_year: archivedYear,
               face_encoding: null,
               biometric_consent: false,

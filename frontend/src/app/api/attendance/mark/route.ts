@@ -62,12 +62,12 @@ export async function POST(request: NextRequest) {
     const [sessionRes, studentRes] = await Promise.all([
       supabaseServer
         .from('sessions')
-        .select('id, class_name, instructor_name, target_academic_year, start_time, end_time')
+        .select('id, class_name, instructor_name, target_academic_year, is_archived, start_time, end_time')
         .eq('id', session_id)
         .maybeSingle(),
       supabaseServer
         .from('students')
-        .select('id, full_name, student_roll, academic_year')
+        .select('id, full_name, student_roll, academic_year, is_active')
         .eq('id', student_id)
         .maybeSingle(),
     ]);
@@ -82,10 +82,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (sessionInfo.is_archived || String(sessionInfo.class_name || '').startsWith('[ARCHIVED]')) {
+      return NextResponse.json(
+        { success: false, error: 'Cannot record attendance for an archived session.' },
+        { status: 403 }
+      );
+    }
+
     if (!studentInfo) {
       return NextResponse.json(
         { success: false, error: 'Student not found.' },
         { status: 404 }
+      );
+    }
+
+    if (studentInfo.is_active === false || String(studentInfo.academic_year || '').startsWith('[ARCHIVED]')) {
+      return NextResponse.json(
+        { success: false, error: 'Cannot record attendance for an archived student profile.' },
+        { status: 403 }
       );
     }
 

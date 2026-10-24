@@ -67,7 +67,7 @@ export async function GET(request: NextRequest) {
 
     const { data, error, count } = await supabaseServer
       .from('sessions')
-      .select('id, class_name, date, start_time, end_time, instructor_name, target_academic_year, created_at, attendance(count)', { count: 'exact' })
+      .select('id, class_name, date, start_time, end_time, instructor_name, target_academic_year, is_archived, archived_at, created_at, attendance(count)', { count: 'exact' })
       .neq('class_name', '__SYSTEM_CONFIG__')
       .neq('class_name', '__GEOFENCE_CONFIG__')
       .neq('id', '00000000-0000-0000-0000-000000000001')
@@ -81,7 +81,7 @@ export async function GET(request: NextRequest) {
     const includeArchived = searchParams.get('include_archived') === 'true';
     let filteredSessions = (data || []).filter((s: any) => {
       if (s.class_name?.startsWith('__')) return false;
-      if (!includeArchived && (s.class_name?.startsWith('[ARCHIVED]') || s.target_academic_year === 'Archived')) return false;
+      if (!includeArchived && (s.is_archived === true || s.class_name?.startsWith('[ARCHIVED]') || s.target_academic_year === 'Archived')) return false;
       return true;
     });
     if (session.role === 'Faculty') {

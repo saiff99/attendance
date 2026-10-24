@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
     if (targetStudentId) {
       const { data, error } = await supabaseServer
         .from('students')
-        .select('id, full_name, student_roll, face_encoding, biometric_consent')
+        .select('id, full_name, student_roll, academic_year, is_active, face_encoding, biometric_consent')
         .eq('id', targetStudentId)
         .maybeSingle();
 
@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
     if (!student && session.studentRoll) {
       const { data, error } = await supabaseServer
         .from('students')
-        .select('id, full_name, student_roll, face_encoding, biometric_consent')
+        .select('id, full_name, student_roll, academic_year, is_active, face_encoding, biometric_consent')
         .ilike('student_roll', session.studentRoll.trim())
         .maybeSingle();
 
@@ -70,6 +70,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { detail: 'Student record could not be found in the registry.' },
         { status: 404 }
+      );
+    }
+
+    if (student.is_active === false || String(student.academic_year || '').startsWith('[ARCHIVED]')) {
+      return NextResponse.json(
+        { detail: 'Archived student accounts cannot enroll biometric facial profiles.' },
+        { status: 403 }
       );
     }
 

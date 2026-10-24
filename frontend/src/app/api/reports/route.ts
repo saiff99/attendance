@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
     // 1. Fetch sessions
     const { data: allSessions, error: sessErr } = await supabaseServer
       .from('sessions')
-      .select('id, class_name, target_academic_year')
+      .select('id, class_name, target_academic_year, is_archived, archived_at')
       .neq('class_name', '__SYSTEM_CONFIG__')
       .neq('class_name', '__GEOFENCE_CONFIG__');
     if (sessErr) throw sessErr;
@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
     // 2. Fetch students
     const { data: students, error: stuErr } = await supabaseServer
       .from('students')
-      .select('id, student_roll, full_name, email, academic_year')
+      .select('id, student_roll, full_name, email, academic_year, is_active, archived_at')
       .order('student_roll', { ascending: true });
     if (stuErr) throw stuErr;
 

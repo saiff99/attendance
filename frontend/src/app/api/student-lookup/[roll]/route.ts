@@ -148,12 +148,19 @@ export async function GET(
     // 4. Verify Session is active & unexpired (< 5.5 min)
     const { data: sessData, error: sessErr } = await supabaseServer
       .from('sessions')
-      .select('id, class_name, start_time, created_at, target_academic_year')
+      .select('id, class_name, start_time, created_at, target_academic_year, is_archived')
       .eq('id', cleanSessId)
       .maybeSingle();
 
     if (sessErr || !sessData) {
       return NextResponse.json({ detail: 'Lecture session not found.' }, { status: 404 });
+    }
+
+    if (sessData.is_archived || String(sessData.class_name || '').startsWith('[ARCHIVED]')) {
+      return NextResponse.json(
+        { detail: 'This lecture session has been archived. Attendance lookup is not permitted.' },
+        { status: 403 }
+      );
     }
 
     const timeStr = sessData.start_time || sessData.created_at;
@@ -171,13 +178,13 @@ export async function GET(
     // 5. Query student profile and face template status (face_encoding vector omitted from client response)
     let { data: studentData } = await supabaseServer
       .from('students')
-      .select('id, student_roll, full_name, academic_year, biometric_consent, face_encoding')
+      .select('id, student_roll, full_name, academic_year, is_active, biometric_consent, face_encoding')
       .ilike('student_roll', roll.trim());
 
     if (!studentData || studentData.length === 0) {
       const resEq = await supabaseServer
         .from('students')
-        .select('id, student_roll, full_name, academic_year, biometric_consent, face_encoding')
+        .select('id, student_roll, full_name, academic_year, is_active, biometric_consent, face_encoding')
         .eq('student_roll', roll.trim());
       studentData = resEq.data;
     }
@@ -190,6 +197,13 @@ export async function GET(
     }
 
     const stud = studentData[0];
+    if (stud.is_active === false || String(stud.academic_year || '').startsWith('[ARCHIVED]')) {
+      return NextResponse.json(
+        { detail: 'This student record has been archived and is not eligible for attendance check-in.' },
+        { status: 403 }
+      );
+    }
+
     const hasFace = Boolean(stud.biometric_consent) && hasValidFaceEncoding(stud.face_encoding);
 
     const targetAcademicYear = sessData.target_academic_year;

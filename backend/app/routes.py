@@ -607,18 +607,27 @@ async def process_attendance(file: UploadFile = File(...), session_id: str = For
     if not session_id:
         raise HTTPException(status_code=400, detail="session_id is required.")
 
-    # 1. Fetch Session to get target_academic_year
-    session_res = supabase.table("sessions").select("target_academic_year").eq("id", session_id).execute()
+    # 1. Fetch Session to get target_academic_year and verify active status
+    session_res = supabase.table("sessions").select("target_academic_year, is_archived, class_name").eq("id", session_id).execute()
     target_year = "All"
-    if session_res.data and session_res.data[0].get("target_academic_year"):
-        target_year = session_res.data[0]["target_academic_year"]
+    if session_res.data:
+        sess_item = session_res.data[0]
+        if sess_item.get("is_archived") or str(sess_item.get("class_name", "")).startswith("[ARCHIVED]"):
+            raise HTTPException(status_code=403, detail="Cannot process attendance for an archived session.")
+        if sess_item.get("target_academic_year"):
+            target_year = sess_item["target_academic_year"]
 
-    # 2. Fetch enrolled students (restricted by cohort and sub-batch if applicable)
-    query = supabase.table("students").select("id, full_name, face_encoding, academic_year").not_.is_("face_encoding", "null")
+    # 2. Fetch active enrolled students (restricted by cohort and sub-batch if applicable)
+    query = supabase.table("students").select("id, full_name, face_encoding, academic_year, is_active").not_.is_("face_encoding", "null")
     students_res = query.execute()
     all_enrolled = students_res.data or []
 
-    enrolled_students = [s for s in all_enrolled if is_cohort_matching(target_year, s.get("academic_year"))]
+    enrolled_students = [
+        s for s in all_enrolled 
+        if s.get("is_active") is not False 
+        and not str(s.get("academic_year", "")).startswith("[ARCHIVED]")
+        and is_cohort_matching(target_year, s.get("academic_year"))
+    ]
     
     if not enrolled_students:
         raise HTTPException(status_code=400, detail="No students have enrolled face data yet.")
@@ -879,14 +888,18 @@ async def get_active_sessions(request: Request):
         is_internal_auth = bool(internal_key and api_key_header and hmac.compare_digest(api_key_header.strip(), internal_key))
 
         res = supabase.table("sessions").select(
-            "id, class_name, date, start_time, end_time, instructor_name, target_academic_year, created_at"
+            "id, class_name, date, start_time, end_time, instructor_name, target_academic_year, is_archived, archived_at, created_at"
         ).order("created_at", desc=True).limit(50).execute()
         
         all_sessions = res.data or []
-        # Filter strictly for today's sessions and exclude system configs
+        # Filter strictly for today's sessions and exclude system configs and archived sessions
         sessions = [
             s for s in all_sessions 
-            if not s.get("class_name", "").startswith("__") and (
+            if not s.get("class_name", "").startswith("__")
+            and not s.get("is_archived")
+            and not s.get("class_name", "").startswith("[ARCHIVED]")
+            and s.get("target_academic_year") != "Archived"
+            and (
                 s.get("date") == today_local 
                 or (s.get("created_at") and s["created_at"].startswith(today_local)) 
                 or (s.get("created_at") and s["created_at"] >= start_of_today_iso)
@@ -1012,11 +1025,17 @@ async def student_lookup(
             detail="Valid signed check-in token or authenticated session required. Unauthenticated student lookup is prohibited."
         )
 
-    sess_res = safe_db_execute(supabase.table("sessions").select("id, class_name, start_time, created_at, target_academic_year").eq("id", clean_sess_id))
+    sess_res = safe_db_execute(supabase.table("sessions").select("id, class_name, start_time, created_at, target_academic_year, is_archived").eq("id", clean_sess_id))
     if not sess_res.data:
         raise HTTPException(status_code=404, detail="Lecture session not found.")
         
     sess_obj = sess_res.data[0]
+    if sess_obj.get("is_archived") or str(sess_obj.get("class_name", "")).startswith("[ARCHIVED]"):
+        raise HTTPException(
+            status_code=403,
+            detail="This lecture session has been archived. Attendance lookup is not permitted."
+        )
+
     time_str = sess_obj.get("start_time") or sess_obj.get("created_at")
     if time_str:
         try:
@@ -1036,18 +1055,23 @@ async def student_lookup(
         clean_roll = student_roll.strip()
         # Query student profile and face template status (raw biometric vectors are evaluated server-side and omitted from API response)
         res = safe_db_execute(supabase.table("students").select(
-            "id, student_roll, full_name, academic_year, biometric_consent, face_encoding"
+            "id, student_roll, full_name, academic_year, is_active, biometric_consent, face_encoding"
         ).ilike("student_roll", clean_roll))
         
         if not res.data:
             res = safe_db_execute(supabase.table("students").select(
-                "id, student_roll, full_name, academic_year, biometric_consent, face_encoding"
+                "id, student_roll, full_name, academic_year, is_active, biometric_consent, face_encoding"
             ).eq("student_roll", clean_roll))
             
         if not res.data:
             raise HTTPException(status_code=404, detail=f"No student found with Roll Number '{clean_roll}'. Please check and try again.")
             
         student = res.data[0]
+        if student.get("is_active") is False or str(student.get("academic_year", "")).startswith("[ARCHIVED]"):
+            raise HTTPException(
+                status_code=403,
+                detail="This student record has been archived and is not eligible for attendance check-in."
+            )
         has_face = bool(student.get("biometric_consent")) and has_valid_face_encoding(student.get("face_encoding"))
         
         # Check target cohort

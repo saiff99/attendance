@@ -17,6 +17,7 @@ const activeSessionsRateLimits: Record<string, number[]> = {};
  */
 export function isInternalSession(s: any): boolean {
   if (!s || typeof s !== 'object') return true;
+  if (s.is_archived === true) return true;
   const name = String(s.class_name || '').trim();
   const year = String(s.target_academic_year || '').trim();
   const id = String(s.id || '').trim();
@@ -210,7 +211,7 @@ export async function GET(request: NextRequest) {
 
     const { data: sessionData, error } = await supabaseServer
       .from('sessions')
-      .select('id, class_name, date, start_time, end_time, instructor_name, target_academic_year, created_at')
+      .select('id, class_name, date, start_time, end_time, instructor_name, target_academic_year, is_archived, archived_at, created_at')
       .neq('class_name', '__SYSTEM_CONFIG__')
       .neq('class_name', '__GEOFENCE_CONFIG__')
       .neq('id', '00000000-0000-0000-0000-000000000001')

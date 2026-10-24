@@ -231,9 +231,12 @@ export async function DELETE(
 
       // Soft-delete: Erase biometrics (DPDP Act compliance), revoke portal credentials, and archive student
       // Historical attendance records in 'attendance' table remain 100% UNTOUCHED!
+      const archiveNow = new Date().toISOString();
       const { error: archiveErr } = await supabaseServer
         .from('students')
         .update({
+          is_active: false,
+          archived_at: archiveNow,
           academic_year: archivedYear,
           face_encoding: null,
           biometric_consent: false,

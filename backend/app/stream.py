@@ -47,20 +47,23 @@ def get_enrolled_data(session_id: str):
         # Strict DPDP Act Compliance: Query ONLY students with non-null face_encoding AND explicit biometric_consent=True
         try:
             query = supabase.table("students").select(
-                "id, full_name, face_encoding, student_roll, academic_year, biometric_consent"
+                "id, full_name, face_encoding, student_roll, academic_year, is_active, biometric_consent"
             ).not_.is_("face_encoding", "null").eq("biometric_consent", True)
             students_res = query.execute()
             all_enrolled = students_res.data or []
         except Exception as q_err:
             print(f"[WARN] Failed to filter by biometric_consent in DB: {q_err}. Falling back to safe in-memory filter.")
-            query = supabase.table("students").select("id, full_name, face_encoding, student_roll, academic_year, biometric_consent").not_.is_("face_encoding", "null")
+            query = supabase.table("students").select("id, full_name, face_encoding, student_roll, academic_year, is_active, biometric_consent").not_.is_("face_encoding", "null")
             students_res = query.execute()
             all_enrolled = [s for s in (students_res.data or []) if s.get("biometric_consent") is True]
         
-        # Filter enrolled list: must have biometric_consent is True AND match target academic year
+        # Filter enrolled list: must have biometric_consent is True, active status, and match target academic year
         enrolled = [
             s for s in all_enrolled 
-            if s.get("biometric_consent") is True and is_cohort_matching(target_year, s.get("academic_year"))
+            if s.get("biometric_consent") is True 
+            and s.get("is_active") is not False
+            and not str(s.get("academic_year", "")).startswith("[ARCHIVED]")
+            and is_cohort_matching(target_year, s.get("academic_year"))
         ]
 
         matrix = None

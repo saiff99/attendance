@@ -214,9 +214,12 @@ export async function DELETE(
       const origClassName = sessRow?.class_name || 'Class Session';
       const archivedClassName = origClassName.startsWith('[ARCHIVED]') ? origClassName : `[ARCHIVED] ${origClassName}`;
 
+      const archiveNow = new Date().toISOString();
       const { error: archiveErr } = await supabaseServer
         .from('sessions')
         .update({
+          is_archived: true,
+          archived_at: archiveNow,
           class_name: archivedClassName,
           target_academic_year: 'Archived',
         })

@@ -128,6 +128,25 @@ export async function POST(request: Request) {
           .maybeSingle();
 
         if (!stuErr && student) {
+          if (student.is_active === false || String(student.academic_year || '').startsWith('[ARCHIVED]')) {
+            logAuditEvent({
+              action: 'BLOCKED_ARCHIVED_STUDENT_LOGIN',
+              targetType: 'student',
+              targetId: student.id,
+              actorId: student.student_roll || username,
+              request,
+              details: {
+                student_roll: student.student_roll,
+                reason: 'Login attempt by archived/inactive student profile',
+                ip: clientIp,
+              },
+            });
+            return NextResponse.json(
+              { error: 'This student profile has been archived and portal access is deactivated.' },
+              { status: 403 }
+            );
+          }
+
           let isStudentMatch = false;
 
           // Strict Zero-Trust PIN Verification:

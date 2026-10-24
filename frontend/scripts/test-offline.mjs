@@ -215,6 +215,7 @@ console.log('\n--- 7. Soft-Delete & Historical Attendance Retention Logic ---');
     const name = String(s.class_name || '').trim();
     const year = String(s.target_academic_year || '').trim();
     return (
+      s.is_archived === true ||
       name.startsWith('__') ||
       name.startsWith('[ARCHIVED]') ||
       name === '__SYSTEM_CONFIG__' ||
@@ -231,6 +232,8 @@ console.log('\n--- 7. Soft-Delete & Historical Attendance Retention Logic ---');
   function softDeleteStudent(studentProfile) {
     return {
       ...studentProfile,
+      is_active: false,
+      archived_at: new Date().toISOString(),
       academic_year: studentProfile.academic_year?.startsWith('[ARCHIVED]')
         ? studentProfile.academic_year
         : `[ARCHIVED] ${studentProfile.academic_year || '1st Year'}`,
@@ -242,6 +245,7 @@ console.log('\n--- 7. Soft-Delete & Historical Attendance Retention Logic ---');
     };
   }
 
+  assert(isInternalOrArchivedSession({ is_archived: true, class_name: 'Biochemistry' }), 'Archived session by is_archived flag detected');
   assert(isInternalOrArchivedSession({ class_name: '[ARCHIVED] Anatomy Lecture 1', target_academic_year: '1st Year' }), 'Archived session by class_name flagged');
   assert(isInternalOrArchivedSession({ class_name: 'Physiology Lab', target_academic_year: 'Archived' }), 'Archived session by target_academic_year flagged');
   assert(!isInternalOrArchivedSession({ class_name: 'Pathology Lecture 3', target_academic_year: '2nd Year' }), 'Active session not flagged as archived');
@@ -258,9 +262,24 @@ console.log('\n--- 7. Soft-Delete & Historical Attendance Retention Logic ---');
     biometric_consent: true,
   };
   const archived = softDeleteStudent(activeStudent);
+  assert(archived.is_active === false, 'Student is_active set to false on archival');
+  assert(typeof archived.archived_at === 'string' && archived.archived_at.length > 0, 'Student archived_at timestamp recorded on archival');
   assert(archived.face_encoding === null, 'Biometric face encoding purged on archival');
   assert(archived.biometric_consent === false, 'Biometric consent revoked on archival');
   assert(archived.academic_year === '[ARCHIVED] 1st Year', 'Academic year tagged with [ARCHIVED]');
+
+  // Verify API routes set is_active and is_archived
+  const studentDeleteRoute = fs.readFileSync(path.resolve(__dirname, '../src/app/api/students/[id]/route.ts'), 'utf8');
+  assert(studentDeleteRoute.includes('is_active: false') && studentDeleteRoute.includes('archived_at: archiveNow'), 'students/[id]/route.ts sets authoritative is_active: false and archived_at');
+
+  const sessionDeleteRoute = fs.readFileSync(path.resolve(__dirname, '../src/app/api/sessions/[id]/route.ts'), 'utf8');
+  assert(sessionDeleteRoute.includes('is_archived: true') && sessionDeleteRoute.includes('archived_at: archiveNow'), 'sessions/[id]/route.ts sets authoritative is_archived: true and archived_at');
+
+  const studentLoginRoute = fs.readFileSync(path.resolve(__dirname, '../src/app/api/auth/login/route.ts'), 'utf8');
+  assert(studentLoginRoute.includes('student.is_active === false'), 'auth/login/route.ts rejects inactive/archived student logins');
+
+  const migration19Path = path.resolve(__dirname, '../../database/migrations/19_backfill_and_align_archive_flags.sql');
+  assert(fs.existsSync(migration19Path), 'Migration 19 (19_backfill_and_align_archive_flags.sql) exists');
 }
 
 // --- 8. Face Enrollment Status (Consent vs Biometric Template Separation) ---

@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
 
     const { data, error } = await supabaseServer
       .from('students')
-      .select('id, student_roll, full_name, email, academic_year, face_encoding, created_at')
+      .select('id, student_roll, full_name, email, academic_year, is_active, archived_at, face_encoding, created_at')
       .order('student_roll', { ascending: true });
 
     if (error) throw error;
@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
     let rawStudents = data || [];
     const includeArchived = searchParams.get('include_archived') === 'true';
     if (!includeArchived) {
-      rawStudents = rawStudents.filter((s: any) => !String(s.academic_year || '').startsWith('[ARCHIVED]'));
+      rawStudents = rawStudents.filter((s: any) => s.is_active !== false && !String(s.academic_year || '').startsWith('[ARCHIVED]'));
     }
     if (cohort && cohort !== 'All') {
       rawStudents = rawStudents.filter(s => isCohortMatching(cohort, s.academic_year));
