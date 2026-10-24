@@ -208,6 +208,8 @@ export default function LoginPage() {
               <input
                 ref={inputRef}
                 type="text"
+                inputMode={loginMode === "student" ? "numeric" : undefined}
+                pattern={loginMode === "student" ? "[0-9]*" : undefined}
                 required
                 disabled={loading}
                 value={username}
@@ -234,6 +236,10 @@ export default function LoginPage() {
               </div>
               <input
                 type={showPassword ? "text" : "password"}
+                inputMode={loginMode === "student" ? "numeric" : undefined}
+                pattern={loginMode === "student" ? "[0-9]*" : undefined}
+                maxLength={loginMode === "student" ? 6 : undefined}
+                autoComplete={loginMode === "student" ? "one-time-code" : "current-password"}
                 required
                 disabled={loading}
                 value={password}
