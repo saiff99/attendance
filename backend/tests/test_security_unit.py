@@ -224,5 +224,89 @@ class TestAtomicRateLimiterConcurrencyUnit(unittest.TestCase):
         self.assertEqual(errors[0].status_code, 403)
 
 
+class TestProcessAttributionUnit(unittest.TestCase):
+    """Unit tests for deterministic process identification and foreign process immunity."""
+
+    def test_foreign_processes_rejected(self):
+        """Verifies that generic node, python, or other processes outside MedAttend are never matched."""
+        repo_root = os.path.dirname(backend_dir)
+        if repo_root not in sys.path:
+            sys.path.insert(0, repo_root)
+        from start import is_medattend_process
+
+        # Foreign python process
+        self.assertFalse(
+            is_medattend_process(
+                pid=99999,
+                cmd_override="python3 /Users/someone/data_pipeline/main.py",
+                cwd_override="/Users/someone/data_pipeline"
+            ),
+            "Foreign python process must not be flagged as MedAttend"
+        )
+
+        # Foreign node process
+        self.assertFalse(
+            is_medattend_process(
+                pid=99998,
+                cmd_override="node /var/www/other_site/server.js",
+                cwd_override="/var/www/other_site"
+            ),
+            "Foreign node process must not be flagged as MedAttend"
+        )
+
+        # Foreign next-server process
+        self.assertFalse(
+            is_medattend_process(
+                pid=99997,
+                cmd_override="next-server (v14.0.0)",
+                cwd_override="/Users/someone/personal_blog"
+            ),
+            "Foreign next-server process must not be flagged as MedAttend"
+        )
+
+    def test_medattend_processes_accepted(self):
+        """Verifies that genuine MedAttend processes are positively identified."""
+        repo_root = os.path.dirname(backend_dir)
+        if repo_root not in sys.path:
+            sys.path.insert(0, repo_root)
+        from start import is_medattend_process, BASE_DIR
+
+        # MedAttend backend via CWD
+        self.assertTrue(
+            is_medattend_process(
+                pid=99996,
+                cmd_override="uvicorn app.main:app --port 8000",
+                cwd_override=os.path.join(BASE_DIR, "backend")
+            )
+        )
+
+        # MedAttend frontend via CWD
+        self.assertTrue(
+            is_medattend_process(
+                pid=99995,
+                cmd_override="next-server (v16.2.4)",
+                cwd_override=os.path.join(BASE_DIR, "frontend")
+            )
+        )
+
+        # MedAttend whatsapp via CWD
+        self.assertTrue(
+            is_medattend_process(
+                pid=99994,
+                cmd_override="node server.js",
+                cwd_override=os.path.join(BASE_DIR, "whatsapp-service")
+            )
+        )
+
+        # MedAttend backend via command line path
+        self.assertTrue(
+            is_medattend_process(
+                pid=99993,
+                cmd_override=f"{BASE_DIR}/backend/.venv/bin/python3 -m uvicorn app.main:app",
+                cwd_override="/tmp"
+            )
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

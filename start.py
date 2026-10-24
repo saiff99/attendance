@@ -88,23 +88,74 @@ def terminate_process(proc, name="process", timeout=2.0):
         pass
 
 
-def is_medattend_process(pid: int) -> bool:
-    """Verifies that a PID belongs to MedAttend stack before terminating."""
+def is_medattend_process(pid: int, cmd_override: str = None, cwd_override: str = None) -> bool:
+    """
+    Verifies with strict provenance that a PID belongs exclusively to the MedAttend stack
+    before terminating, preventing collateral disruption of foreign node/python processes.
+    """
     try:
-        cmd = subprocess.check_output(["ps", "-p", str(pid), "-o", "args="], text=True, stderr=subprocess.DEVNULL).strip()
+        base_dir_clean = os.path.realpath(BASE_DIR).lower()
+
+        # 1. Inspect Process Working Directory (CWD)
+        proc_cwd = (cwd_override or "").strip().lower()
+        if not proc_cwd:
+            # Linux /proc lookup
+            proc_cwd_link = f"/proc/{pid}/cwd"
+            if os.path.exists(proc_cwd_link):
+                try:
+                    proc_cwd = os.path.realpath(proc_cwd_link).lower()
+                except Exception:
+                    pass
+
+            # macOS / Unix fallback via lsof
+            if not proc_cwd:
+                try:
+                    lsof_cwd = subprocess.check_output(
+                        ["lsof", "-a", "-p", str(pid), "-d", "cwd", "-Fn"],
+                        text=True,
+                        stderr=subprocess.DEVNULL
+                    ).strip()
+                    for line in lsof_cwd.splitlines():
+                        if line.startswith("n/"):
+                            proc_cwd = os.path.realpath(line[1:].strip()).lower()
+                            break
+                except Exception:
+                    pass
+
+        # If CWD is inside MedAttend repository root, it is unambiguously ours
+        if proc_cwd and (proc_cwd == base_dir_clean or proc_cwd.startswith(base_dir_clean + os.sep)):
+            return True
+
+        # 2. Inspect Full Command Line Arguments
+        cmd = cmd_override
+        if cmd is None:
+            cmd = subprocess.check_output(
+                ["ps", "-p", str(pid), "-o", "args="],
+                text=True,
+                stderr=subprocess.DEVNULL
+            ).strip()
+
         cmd_lower = cmd.lower()
-        allowed_signatures = [
-            "attendance-app",
-            "uvicorn",
-            "main:app",
-            "next",
-            "next-server",
-            "whatsapp",
-            "node",
-            "cloudflared",
-            "python",
+
+        # Direct path match to repository directory
+        if base_dir_clean in cmd_lower:
+            return True
+
+        # Specific repository submodule markers (Never match generic "node", "python", or "next")
+        specific_repo_markers = [
+            os.path.join("backend", ".venv").lower(),
+            os.path.join("whatsapp-service", "server.js").lower(),
+            "app.main:app",
+            os.path.join("frontend", ".next").lower(),
         ]
-        return any(sig in cmd_lower for sig in allowed_signatures)
+        if any(marker in cmd_lower for marker in specific_repo_markers):
+            return True
+
+        # Cloudflared tunnel specifically invoked for this project's ports
+        if "cloudflared" in cmd_lower and ("8000" in cmd_lower or "3000" in cmd_lower or "backend/bin/cloudflared" in cmd_lower):
+            return True
+
+        return False
     except Exception:
         return False
 
@@ -112,8 +163,15 @@ def is_medattend_process(pid: int) -> bool:
 def free_port_safely(port: int):
     """Safely frees a local port only if occupied by a dangling MedAttend process from previous run."""
     try:
-        cmd = f"lsof -ti:{port}"
-        output = subprocess.check_output(cmd, shell=True, text=True, stderr=subprocess.DEVNULL).strip()
+        # Strictly target LISTENING server sockets, ignoring client connections (browsers, curl, test runners)
+        cmd = f"lsof -tiTCP:{port} -sTCP:LISTEN"
+        try:
+            output = subprocess.check_output(cmd, shell=True, text=True, stderr=subprocess.DEVNULL).strip()
+        except subprocess.CalledProcessError:
+            # Fallback if -sTCP:LISTEN flag is not available on older lsof
+            cmd = f"lsof -ti:{port}"
+            output = subprocess.check_output(cmd, shell=True, text=True, stderr=subprocess.DEVNULL).strip()
+
         pids = output.split()
         for pid in pids:
             if pid and pid.isdigit():
