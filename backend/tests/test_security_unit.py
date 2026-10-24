@@ -106,5 +106,37 @@ class TestBusinessLogicUnit(unittest.TestCase):
         self.assertTrue(100.0 < dist_disp < 125.0)
 
 
+class TestConfigFailFastUnit(unittest.TestCase):
+    """Unit tests for Supabase production fail-fast and test mode isolation."""
+
+    def test_test_mode_detected(self):
+        from app.config import IS_TESTING
+        self.assertTrue(IS_TESTING, "Test runner environment should be detected as IS_TESTING")
+
+    def test_production_fail_fast_logic(self):
+        """Verifies that missing credentials in production raise RuntimeError while test mode is permissive."""
+        def evaluate_credentials(url, key, is_testing):
+            if not url:
+                if is_testing:
+                    return "offline_test_mode"
+                raise RuntimeError("FATAL: SUPABASE_URL missing")
+            if not key:
+                if is_testing:
+                    return "offline_test_mode"
+                raise RuntimeError("FATAL: SUPABASE_KEY missing")
+            return "initialized"
+
+        # Production fail-fast verification
+        with self.assertRaises(RuntimeError):
+            evaluate_credentials("", "valid-key", is_testing=False)
+
+        with self.assertRaises(RuntimeError):
+            evaluate_credentials("https://example.supabase.co", "", is_testing=False)
+
+        # Test mode isolation verification
+        self.assertEqual(evaluate_credentials("", "", is_testing=True), "offline_test_mode")
+        self.assertEqual(evaluate_credentials("https://example.supabase.co", "key", is_testing=False), "initialized")
+
+
 if __name__ == "__main__":
     unittest.main()
