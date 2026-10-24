@@ -138,5 +138,43 @@ class TestConfigFailFastUnit(unittest.TestCase):
         self.assertEqual(evaluate_credentials("https://example.supabase.co", "key", is_testing=False), "initialized")
 
 
+class TestFaceEnrollmentVerificationUnit(unittest.TestCase):
+    """Unit tests for has_valid_face_encoding and dual-condition enrollment check."""
+
+    def test_has_valid_face_encoding(self):
+        from app.config import has_valid_face_encoding
+        # Genuine 512D ArcFace vector
+        mock_512 = [0.05] * 512
+        self.assertTrue(has_valid_face_encoding(mock_512))
+
+        # 128D minimum vector
+        mock_128 = [0.01] * 128
+        self.assertTrue(has_valid_face_encoding(mock_128))
+
+        # None / empty / short
+        self.assertFalse(has_valid_face_encoding(None))
+        self.assertFalse(has_valid_face_encoding([]))
+        self.assertFalse(has_valid_face_encoding([0.1, 0.2]))  # too short
+
+        # Legacy metadata dictionary without vector
+        self.assertFalse(has_valid_face_encoding({"parent_phone": "9876543210"}))
+        self.assertFalse(has_valid_face_encoding({}))
+
+    def test_dual_condition_has_face_enrolled(self):
+        """has_face_enrolled MUST be False if consent is given but template is not enrolled."""
+        from app.config import has_valid_face_encoding
+        # Consent=True, Template=None -> False (Consent alone is not template)
+        consent_only = bool(True) and has_valid_face_encoding(None)
+        self.assertFalse(consent_only)
+
+        # Consent=False, Template=512D -> False (revoked consent)
+        revoked = bool(False) and has_valid_face_encoding([0.05] * 512)
+        self.assertFalse(revoked)
+
+        # Consent=True, Template=512D -> True (properly enrolled)
+        valid_enrolled = bool(True) and has_valid_face_encoding([0.05] * 512)
+        self.assertTrue(valid_enrolled)
+
+
 if __name__ == "__main__":
     unittest.main()

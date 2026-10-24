@@ -239,6 +239,21 @@ def get_ptz_urls():
     return [url.strip() for url in urls_str.split(",") if url.strip()]
 
 
+def has_valid_face_encoding(face_encoding) -> bool:
+    """
+    Verifies that face_encoding is a genuine ArcFace/InsightFace biometric vector template
+    (typically 512 dimensions) rather than None, empty, or metadata.
+    """
+    if not face_encoding:
+        return False
+    if isinstance(face_encoding, list):
+        return len(face_encoding) >= 128
+    if isinstance(face_encoding, dict):
+        keys = set(face_encoding.keys())
+        return len(keys) > 0 and keys != {"parent_phone"}
+    return False
+
+
 def is_cohort_matching(target_cohort: Optional[str], student_year: Optional[str]) -> bool:
     """
     Checks if a student's academic year / sub-group is permitted for a session's target cohort.

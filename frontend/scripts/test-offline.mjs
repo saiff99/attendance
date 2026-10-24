@@ -255,6 +255,53 @@ console.log('\n--- 7. Soft-Delete & Historical Attendance Retention Logic ---');
   assert(archived.academic_year === '[ARCHIVED] 1st Year', 'Academic year tagged with [ARCHIVED]');
 }
 
+// --- 8. Face Enrollment Status (Consent vs Biometric Template Separation) ---
+console.log('\n--- 8. Face Enrollment Status (Consent vs Biometric Template Separation) ---');
+{
+  function hasValidFaceEncoding(faceEncoding) {
+    if (!faceEncoding) return false;
+    if (Array.isArray(faceEncoding)) {
+      return faceEncoding.length >= 128;
+    }
+    if (typeof faceEncoding === 'object') {
+      const keys = Object.keys(faceEncoding);
+      return keys.length > 0 && !(keys.length === 1 && 'parent_phone' in faceEncoding);
+    }
+    return false;
+  }
+
+  function resolveFaceEnrolledStatus(biometricConsent, faceEncoding) {
+    return Boolean(biometricConsent) && hasValidFaceEncoding(faceEncoding);
+  }
+
+  // 1. Consent alone without face template MUST NOT count as enrolled
+  assert(
+    resolveFaceEnrolledStatus(true, null) === false,
+    'Consent alone (face_encoding=null) correctly evaluates has_face_enrolled=false'
+  );
+  assert(
+    resolveFaceEnrolledStatus(true, []) === false,
+    'Consent with empty face_encoding array evaluates has_face_enrolled=false'
+  );
+  assert(
+    resolveFaceEnrolledStatus(true, { parent_phone: '9876543210' }) === false,
+    'Consent with legacy phone object in face_encoding evaluates has_face_enrolled=false'
+  );
+
+  // 2. Revoked consent with enrolled vector MUST evaluate as false
+  const validVector = new Array(512).fill(0.02);
+  assert(
+    resolveFaceEnrolledStatus(false, validVector) === false,
+    'Revoked consent (biometric_consent=false) blocks has_face_enrolled even if vector exists'
+  );
+
+  // 3. Dual condition met (Consent=true AND valid 512D vector) -> true
+  assert(
+    resolveFaceEnrolledStatus(true, validVector) === true,
+    'Both consent and valid 512D vector present evaluates has_face_enrolled=true'
+  );
+}
+
 // Summary
 console.log('\n' + '=' .repeat(65));
 console.log(`📊 Offline Unit Test Summary: ${passed} Passed, ${failed} Failed`);

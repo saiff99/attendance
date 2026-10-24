@@ -26,6 +26,7 @@ from app.config import (
     is_cohort_matching,
     get_server_geofence_config,
     calculate_haversine_distance,
+    has_valid_face_encoding,
 )
 from app.ai import app_fa, AI_ENABLED, calculate_confidence_score
 from app.antispoof import verify_face_liveness
@@ -954,22 +955,21 @@ async def student_lookup(request: Request, student_roll: str, session_id: Option
             pass
 
     try:
-        clean_roll = student_roll.strip()
-        # Query only necessary non-sensitive fields; omit biometric face_encoding vectors completely
+        # Query student profile and face template status (raw biometric vectors are evaluated server-side and omitted from API response)
         res = safe_db_execute(supabase.table("students").select(
-            "id, student_roll, full_name, academic_year, biometric_consent"
+            "id, student_roll, full_name, academic_year, biometric_consent, face_encoding"
         ).ilike("student_roll", clean_roll))
         
         if not res.data:
             res = safe_db_execute(supabase.table("students").select(
-                "id, student_roll, full_name, academic_year, biometric_consent"
+                "id, student_roll, full_name, academic_year, biometric_consent, face_encoding"
             ).eq("student_roll", clean_roll))
             
         if not res.data:
             raise HTTPException(status_code=404, detail=f"No student found with Roll Number '{clean_roll}'. Please check and try again.")
             
         student = res.data[0]
-        has_face = bool(student.get("biometric_consent"))
+        has_face = bool(student.get("biometric_consent")) and has_valid_face_encoding(student.get("face_encoding"))
         
         # Check target cohort
         target_academic_year = sess_obj.get("target_academic_year")

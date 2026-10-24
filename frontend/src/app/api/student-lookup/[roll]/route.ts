@@ -30,6 +30,18 @@ export function maskStudentName(fullName: string): string {
   }).join(' ');
 }
 
+export function hasValidFaceEncoding(faceEncoding: any): boolean {
+  if (!faceEncoding) return false;
+  if (Array.isArray(faceEncoding)) {
+    return faceEncoding.length >= 128;
+  }
+  if (typeof faceEncoding === 'object') {
+    const keys = Object.keys(faceEncoding);
+    return keys.length > 0 && !(keys.length === 1 && 'parent_phone' in faceEncoding);
+  }
+  return false;
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ roll: string }> }
@@ -140,16 +152,16 @@ export async function GET(
       }
     }
 
-    // 5. Query student strictly non-sensitive fields (omit face_encoding vectors)
+    // 5. Query student profile and face template status (face_encoding vector omitted from client response)
     let { data: studentData } = await supabaseServer
       .from('students')
-      .select('id, student_roll, full_name, academic_year, biometric_consent')
+      .select('id, student_roll, full_name, academic_year, biometric_consent, face_encoding')
       .ilike('student_roll', roll.trim());
 
     if (!studentData || studentData.length === 0) {
       const resEq = await supabaseServer
         .from('students')
-        .select('id, student_roll, full_name, academic_year, biometric_consent')
+        .select('id, student_roll, full_name, academic_year, biometric_consent, face_encoding')
         .eq('student_roll', roll.trim());
       studentData = resEq.data;
     }
@@ -162,7 +174,7 @@ export async function GET(
     }
 
     const stud = studentData[0];
-    const hasFace = Boolean(stud.biometric_consent);
+    const hasFace = Boolean(stud.biometric_consent) && hasValidFaceEncoding(stud.face_encoding);
 
     const targetAcademicYear = sessData.target_academic_year;
     const studYear = stud.academic_year || '1st Year';
