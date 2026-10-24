@@ -834,6 +834,82 @@ console.log('\n--- 15. Shared Atomic Rate Limiting & Trusted IP Extraction ---')
   );
 }
 
+// --- 16. Inactive / Archived Student Protection Across All Pathways ---
+console.log('\n--- 16. Inactive / Archived Student Protection Across All Pathways ---');
+{
+  const loginPath = path.resolve(__dirname, '../src/app/api/auth/login/route.ts');
+  const loginContent = fs.readFileSync(loginPath, 'utf8');
+  const selfEnrollPath = path.resolve(__dirname, '../src/app/api/student/self-enroll-face/route.ts');
+  const selfEnrollContent = fs.readFileSync(selfEnrollPath, 'utf8');
+  const enrollPath = path.resolve(__dirname, '../src/app/api/enroll-face/[studentId]/route.ts');
+  const enrollContent = fs.readFileSync(enrollPath, 'utf8');
+  const burstPath = path.resolve(__dirname, '../src/app/api/enroll-face-burst/[studentId]/route.ts');
+  const burstContent = fs.readFileSync(burstPath, 'utf8');
+  const markPath = path.resolve(__dirname, '../src/app/api/attendance/mark/route.ts');
+  const markContent = fs.readFileSync(markPath, 'utf8');
+  const lookupPath = path.resolve(__dirname, '../src/app/api/student-lookup/[roll]/route.ts');
+  const lookupContent = fs.readFileSync(lookupPath, 'utf8');
+  const backendRoutesPath = path.resolve(__dirname, '../../backend/app/routes.py');
+  const backendRoutesContent = fs.readFileSync(backendRoutesPath, 'utf8');
+
+  // 1. Student Login pathway
+  assert(
+    loginContent.includes('student.is_active === false') &&
+    loginContent.includes('BLOCKED_ARCHIVED_STUDENT_LOGIN'),
+    'Student login route rejects inactive/archived student accounts and records audit event'
+  );
+
+  // 2. Student Self Biometric Enrollment pathway
+  assert(
+    selfEnrollContent.includes('student.is_active === false') &&
+    selfEnrollContent.includes('[ARCHIVED]'),
+    'Student self-enrollment route rejects inactive/archived student accounts'
+  );
+
+  // 3. Admin Biometric Enrollment pathways (single & burst)
+  assert(
+    enrollContent.includes('studentInfo.is_active === false') &&
+    enrollContent.includes('[ARCHIVED]'),
+    'Frontend /api/enroll-face/[studentId] blocks face registration for archived/inactive students'
+  );
+  assert(
+    burstContent.includes('studentInfo.is_active === false') &&
+    burstContent.includes('[ARCHIVED]'),
+    'Frontend /api/enroll-face-burst/[studentId] blocks face registration for archived/inactive students'
+  );
+
+  // 4. Attendance Marking pathways
+  assert(
+    markContent.includes('studentInfo.is_active === false') &&
+    markContent.includes('Cannot record attendance for an archived student profile'),
+    'Manual attendance marking route blocks attendance for archived/inactive student profiles'
+  );
+
+  // 5. Student Lookup pathway
+  assert(
+    lookupContent.includes('stud.is_active === false') &&
+    lookupContent.includes('[ARCHIVED]'),
+    'Student lookup route blocks lookup for archived/inactive student profiles'
+  );
+
+  // 6. Backend routes pathways (enroll, burst, selfie, classroom process)
+  assert(
+    backendRoutesContent.includes('student_info.get("is_active") is False') &&
+    backendRoutesContent.includes('Cannot register or modify facial biometrics for an archived or inactive student profile'),
+    'Backend /api/enroll-face routes strictly block biometrics for archived/inactive students'
+  );
+  assert(
+    backendRoutesContent.includes('student.get("is_active") is False') &&
+    backendRoutesContent.includes('This student account has been archived or deactivated'),
+    'Backend /api/selfie-attendance strictly blocks attendance for archived/inactive students'
+  );
+  assert(
+    backendRoutesContent.includes('s.get("is_active") is not False') &&
+    backendRoutesContent.includes('s.get("academic_year", "")).startswith("[ARCHIVED]")'),
+    'Backend /api/process-attendance excludes archived/inactive students from batch photo matching'
+  );
+}
+
 // Summary
 console.log('\n' + '=' .repeat(65));
 console.log(`📊 Offline Unit Test Summary: ${passed} Passed, ${failed} Failed`);
@@ -844,6 +920,7 @@ if (failed > 0) {
 } else {
   process.exit(0);
 }
+
 
 
 

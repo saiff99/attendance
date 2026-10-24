@@ -2,6 +2,7 @@ import { NextResponse, NextRequest } from 'next/server';
 import { fetchBackend } from '@/lib/serverBackend';
 import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/serverAuth';
 import { logAuditEvent } from '@/lib/auditLog';
+import { supabaseServer } from '@/lib/supabaseServer';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -28,6 +29,21 @@ export async function POST(
     }
 
     const { studentId } = await params;
+
+    // Check student existence and active status
+    const { data: studentInfo } = await supabaseServer
+      .from('students')
+      .select('id, student_roll, academic_year, is_active')
+      .eq('id', studentId)
+      .maybeSingle();
+
+    if (studentInfo && (studentInfo.is_active === false || String(studentInfo.academic_year || '').startsWith('[ARCHIVED]'))) {
+      return NextResponse.json(
+        { detail: 'Cannot register or modify facial biometrics for an archived or inactive student profile.' },
+        { status: 403 }
+      );
+    }
+
     const formData = await request.formData();
 
     // Strict DPDP Act 2023 Compliance: Validate affirmative biometric consent

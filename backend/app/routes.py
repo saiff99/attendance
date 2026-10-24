@@ -282,12 +282,17 @@ async def enroll_face(
             detail="Biometric consent is mandatory before enrolling facial template (DPDP Act 2023). Explicit affirmative consent must be confirmed."
         )
 
-    # 3. Verify student exists in database before proceeding with AI extraction
+    # 3. Verify student exists in database and is active before proceeding with AI extraction
     try:
-        check = supabase.table("students").select("id, student_roll, full_name, biometric_consent").eq("id", student_id).execute()
+        check = supabase.table("students").select("id, student_roll, full_name, academic_year, is_active, biometric_consent").eq("id", student_id).execute()
         if not check.data:
             raise HTTPException(status_code=404, detail=f"Student {student_id} not found.")
         student_info = check.data[0]
+        if student_info.get("is_active") is False or str(student_info.get("academic_year", "")).startswith("[ARCHIVED]"):
+            raise HTTPException(
+                status_code=403,
+                detail="Cannot register or modify facial biometrics for an archived or inactive student profile."
+            )
     except HTTPException:
         raise
     except Exception as e:
@@ -416,12 +421,17 @@ async def enroll_face_burst(
             detail="Biometric consent is mandatory before enrolling facial template (DPDP Act 2023). Explicit affirmative consent must be confirmed."
         )
 
-    # 3. Verify student exists in database before proceeding with AI extraction
+    # 3. Verify student exists in database and is active before proceeding with AI extraction
     try:
-        check = supabase.table("students").select("id, student_roll, full_name, biometric_consent").eq("id", student_id).execute()
+        check = supabase.table("students").select("id, student_roll, full_name, academic_year, is_active, biometric_consent").eq("id", student_id).execute()
         if not check.data:
             raise HTTPException(status_code=404, detail=f"Student {student_id} not found.")
         student_info = check.data[0]
+        if student_info.get("is_active") is False or str(student_info.get("academic_year", "")).startswith("[ARCHIVED]"):
+            raise HTTPException(
+                status_code=403,
+                detail="Cannot register or modify facial biometrics for an archived or inactive student profile."
+            )
     except HTTPException:
         raise
     except Exception as e:
@@ -1390,12 +1400,12 @@ async def selfie_attendance(
 
     # 5. Fetch Student from DB
     res = safe_db_execute(supabase.table("students").select(
-        "id, student_roll, full_name, academic_year, face_encoding"
+        "id, student_roll, full_name, academic_year, is_active, face_encoding"
     ).ilike("student_roll", clean_roll))
     
     if not res.data:
         res = safe_db_execute(supabase.table("students").select(
-            "id, student_roll, full_name, academic_year, face_encoding"
+            "id, student_roll, full_name, academic_year, is_active, face_encoding"
         ).eq("student_roll", clean_roll))
         
     if not res.data:
@@ -1403,9 +1413,16 @@ async def selfie_attendance(
         
     student = res.data[0]
 
+    # Check Active / Non-archived status
+    student_year = student.get("academic_year") or ""
+    if student.get("is_active") is False or str(student_year).startswith("[ARCHIVED]"):
+        raise HTTPException(
+            status_code=403,
+            detail="This student account has been archived or deactivated. Attendance cannot be submitted."
+        )
+
     # 6. Check Academic Year / Cohort / Sub-Batch Match
     target_year = sess_obj.get("target_academic_year")
-    student_year = student.get("academic_year") or ""
     if not is_cohort_matching(target_year, student_year):
         raise HTTPException(
             status_code=403,
