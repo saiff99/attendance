@@ -955,6 +955,7 @@ async def student_lookup(request: Request, student_roll: str, session_id: Option
             pass
 
     try:
+        clean_roll = student_roll.strip()
         # Query student profile and face template status (raw biometric vectors are evaluated server-side and omitted from API response)
         res = safe_db_execute(supabase.table("students").select(
             "id, student_roll, full_name, academic_year, biometric_consent, face_encoding"
