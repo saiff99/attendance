@@ -398,9 +398,26 @@ def get_cloudflared_binary():
 
 
 def ensure_frontend_build():
-    """Checks if Next.js production build exists; if missing, compiles an optimized bundle."""
+    """Checks if Next.js production build exists and is up-to-date; if missing or stale, compiles an optimized bundle."""
     dot_next = os.path.join(FRONTEND_DIR, ".next")
-    if not os.path.exists(dot_next) or not os.path.isdir(dot_next):
+    build_id = os.path.join(dot_next, "BUILD_ID")
+    
+    needs_build = not os.path.exists(dot_next) or not os.path.isdir(dot_next) or not os.path.exists(build_id)
+    if not needs_build:
+        build_mtime = os.path.getmtime(build_id)
+        src_dir = os.path.join(FRONTEND_DIR, "src")
+        if os.path.exists(src_dir):
+            for root, _, files in os.walk(src_dir):
+                for f in files:
+                    if f.endswith((".ts", ".tsx", ".js", ".jsx", ".json", ".css")):
+                        file_path = os.path.join(root, f)
+                        if os.path.getmtime(file_path) > build_mtime:
+                            needs_build = True
+                            break
+                if needs_build:
+                    break
+
+    if needs_build:
         print(f"  {YELLOW}Compiling optimized production build for Next.js frontend...{RESET}")
         build_proc = subprocess.run(["npm", "run", "build"], cwd=FRONTEND_DIR, capture_output=True, text=True)
         if build_proc.returncode != 0:
