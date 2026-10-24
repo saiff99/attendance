@@ -176,5 +176,53 @@ class TestFaceEnrollmentVerificationUnit(unittest.TestCase):
         self.assertTrue(valid_enrolled)
 
 
+class TestAtomicRateLimiterConcurrencyUnit(unittest.TestCase):
+    """Unit tests for thread-safe atomic rate limiting and race condition prevention."""
+
+    def test_key_lock_singleton_per_key(self):
+        from app.rate_limiter import _get_key_lock
+        lock1 = _get_key_lock("test:key:1")
+        lock2 = _get_key_lock("test:key:1")
+        lock3 = _get_key_lock("test:key:2")
+        self.assertIs(lock1, lock2, "Same key MUST return identical Lock instance for serialization")
+        self.assertIsNot(lock1, lock3, "Different keys should have independent locks")
+
+    def test_concurrent_device_lock_race_prevention(self):
+        """Verifies that simultaneous check_device_lock for differing rolls on same device is rejected."""
+        import threading
+        from app.rate_limiter import check_device_lock, _memory_dev_locks
+        from fastapi import HTTPException
+
+        sess = "test-sess-99"
+        dev = "dev-shared-xyz"
+        mem_key = f"{sess}:{dev}"
+        _memory_dev_locks.pop(mem_key, None)
+
+        errors = []
+
+        def student_a():
+            try:
+                check_device_lock(sess, dev, "ROLL-101")
+            except HTTPException as e:
+                errors.append(e)
+
+        def student_b():
+            try:
+                check_device_lock(sess, dev, "ROLL-102")
+            except HTTPException as e:
+                errors.append(e)
+
+        t1 = threading.Thread(target=student_a)
+        t2 = threading.Thread(target=student_b)
+        t1.start()
+        t2.start()
+        t1.join()
+        t2.join()
+
+        # Exactly one student should be rejected with 403
+        self.assertEqual(len(errors), 1, "Simultaneous check from two different rolls MUST reject the second roll")
+        self.assertEqual(errors[0].status_code, 403)
+
+
 if __name__ == "__main__":
     unittest.main()
