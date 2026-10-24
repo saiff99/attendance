@@ -2,6 +2,7 @@ import { NextResponse, NextRequest } from 'next/server';
 import { supabaseServer } from '@/lib/supabaseServer';
 import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/serverAuth';
 import { isFacultyAuthorizedForSession } from '@/lib/attendanceAuth';
+import { decodeSessionMetadata } from '@/lib/geofence';
 import { logAuditEvent } from '@/lib/auditLog';
 
 export const dynamic = 'force-dynamic';
@@ -79,6 +80,8 @@ export async function PATCH(
     }
 
     const { id } = await params;
+    let existingSession: any = null;
+
     if (session.role === 'Faculty') {
       const { data: existing } = await supabaseServer
         .from('sessions')
@@ -92,14 +95,45 @@ export async function PATCH(
           { status: 403 }
         );
       }
+      existingSession = existing;
     }
 
     const body = await request.json();
 
     const updatePayload: any = {};
-    if (body.instructor_name !== undefined) updatePayload.instructor_name = body.instructor_name;
     if (body.class_name !== undefined) updatePayload.class_name = body.class_name;
     if (body.end_time !== undefined) updatePayload.end_time = body.end_time;
+
+    if (body.instructor_name !== undefined) {
+      if (session.role === 'Faculty') {
+        // Strict Session Ownership Protection:
+        // Faculty members cannot transfer session ownership to another user or strip the ownership tag.
+        const existingMeta = decodeSessionMetadata(existingSession?.instructor_name || '');
+        const authoritativeCreator = (existingMeta.facultyUsername || session.username || session.name || '').trim();
+
+        const incomingMeta = decodeSessionMetadata(body.instructor_name || '');
+        if (
+          incomingMeta.facultyUsername &&
+          authoritativeCreator &&
+          incomingMeta.facultyUsername.toLowerCase() !== authoritativeCreator.toLowerCase()
+        ) {
+          return NextResponse.json(
+            { success: false, error: "Forbidden. Faculty members are not permitted to transfer session ownership to another user." },
+            { status: 403 }
+          );
+        }
+
+        // Clean out any raw [BY:...] tag from incoming string and re-attach the authoritative immutable creator tag
+        let cleanInstructor = (body.instructor_name || '').trim().replace(/\[BY:[^\]]*\]/g, '').trim();
+        if (authoritativeCreator) {
+          cleanInstructor = `${cleanInstructor} [BY:${encodeURIComponent(authoritativeCreator)}]`.trim();
+        }
+        updatePayload.instructor_name = cleanInstructor;
+      } else {
+        // Super Admin & Admin have full authority to reassign session ownership or edit instructor attribution
+        updatePayload.instructor_name = body.instructor_name;
+      }
+    }
 
     const { data, error } = await supabaseServer
       .from('sessions')
@@ -111,10 +145,25 @@ export async function PATCH(
 
     if (error) throw error;
 
+    logAuditEvent({
+      action: 'UPDATE_SESSION',
+      targetType: 'session',
+      targetId: id,
+      actorId: session.username || session.name || 'admin',
+      request,
+      details: {
+        updated_fields: Object.keys(updatePayload),
+        class_name: data?.class_name,
+        actor_name: session.name,
+        actor_role: session.role,
+      },
+    });
+
     return NextResponse.json({
       success: true,
       session: data,
     });
+
   } catch (err: any) {
     console.error('Error updating session:', err);
     return NextResponse.json({ success: false, error: err.message || 'Failed to update session' }, { status: 500 });

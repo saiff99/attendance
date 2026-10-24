@@ -302,6 +302,63 @@ console.log('\n--- 8. Face Enrollment Status (Consent vs Biometric Template Sepa
   );
 }
 
+// --- 9. Session Ownership Sanitization & Faculty Immutability ---
+console.log('\n--- 9. Session Ownership Sanitization & Faculty Immutability ---');
+{
+  function sanitizeFacultyInstructorUpdate(incomingInstructor, existingInstructor, facultyUsername) {
+    // 1. Decode incoming and authoritative
+    const byRegex = /\[BY:([^\]]+)\]/;
+    const incomingMatch = (incomingInstructor || '').match(byRegex);
+    const existingMatch = (existingInstructor || '').match(byRegex);
+
+    const authoritativeCreator = (existingMatch ? decodeURIComponent(existingMatch[1]) : facultyUsername).trim();
+    const incomingCreator = incomingMatch ? decodeURIComponent(incomingMatch[1]).trim() : null;
+
+    // 2. Reject transfer to another user
+    if (incomingCreator && authoritativeCreator && incomingCreator.toLowerCase() !== authoritativeCreator.toLowerCase()) {
+      return { allowed: false, status: 403, error: "Forbidden. Faculty members are not permitted to transfer session ownership to another user." };
+    }
+
+    // 3. Strip forged/incoming tags and enforce authoritative tag
+    let cleanInstructor = (incomingInstructor || '').trim().replace(/\[BY:[^\]]*\]/g, '').trim();
+    if (authoritativeCreator) {
+      cleanInstructor = `${cleanInstructor} [BY:${encodeURIComponent(authoritativeCreator)}]`.trim();
+    }
+
+    return { allowed: true, instructor_name: cleanInstructor };
+  }
+
+  // Test 9.1: Faculty attempting to transfer session to another faculty is blocked
+  const attackTransfer = sanitizeFacultyInstructorUpdate(
+    'Computer Science 101 [BY:hacker_prof]',
+    'Computer Science 101 [BY:prof_smith]',
+    'prof_smith'
+  );
+  assert(!attackTransfer.allowed && attackTransfer.status === 403, 'Faculty transfer of ownership to another user blocked with 403');
+
+  // Test 9.2: Faculty stripping [BY:...] tag still has authoritative creator tag re-attached
+  const stripAttempt = sanitizeFacultyInstructorUpdate(
+    'Computer Science 101 - Updated Topic',
+    'Computer Science 101 [BY:prof_smith]',
+    'prof_smith'
+  );
+  assert(
+    stripAttempt.allowed && stripAttempt.instructor_name === 'Computer Science 101 - Updated Topic [BY:prof_smith]',
+    'Stripped [BY:...] tag automatically re-attaches authoritative creator'
+  );
+
+  // Test 9.3: Preserving geofence tags while enforcing ownership
+  const geofenceUpdate = sanitizeFacultyInstructorUpdate(
+    'Data Structures [GPS:22.572600,88.363900,100,1,Main%20Campus]',
+    'Data Structures [GPS:22.572600,88.363900,100,1,Main%20Campus] [BY:prof_smith]',
+    'prof_smith'
+  );
+  assert(
+    geofenceUpdate.allowed && geofenceUpdate.instructor_name.endsWith('[BY:prof_smith]'),
+    'Geofence update preserves authoritative [BY:prof_smith] creator tag'
+  );
+}
+
 // Summary
 console.log('\n' + '=' .repeat(65));
 console.log(`📊 Offline Unit Test Summary: ${passed} Passed, ${failed} Failed`);

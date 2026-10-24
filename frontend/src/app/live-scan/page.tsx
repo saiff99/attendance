@@ -319,8 +319,8 @@ export default function LiveScan() {
 
     if (activeSession) {
       try {
-        const cleanTopic = decodeSessionMetadata(activeSession.instructor_name).topic;
-        const updatedInstructor = encodeSessionMetadata(cleanTopic, newConfig);
+        const meta = decodeSessionMetadata(activeSession.instructor_name);
+        const updatedInstructor = encodeSessionMetadata(meta.topic, newConfig, meta.facultyUsername);
 
         const res = await fetch(`/api/sessions/${activeSession.id}`, {
           method: 'PATCH',
@@ -329,7 +329,9 @@ export default function LiveScan() {
         });
 
         if (res.ok) {
-          setActiveSession((prev: any) => prev ? { ...prev, instructor_name: updatedInstructor } : null);
+          const json = await res.json();
+          const savedInstructor = json?.session?.instructor_name || updatedInstructor;
+          setActiveSession((prev: any) => prev ? { ...prev, instructor_name: savedInstructor } : null);
         } else {
           console.error("Failed to update active session geofence:", await res.text());
         }
