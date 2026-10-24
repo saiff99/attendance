@@ -5,11 +5,9 @@ import { getTodayDateStr, getStartOfTodayISO } from '@/lib/dateUtils';
 import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/serverAuth';
 import { decodeSessionMetadata } from '@/lib/geofence';
 import { generateCheckinToken } from '@/lib/attendanceAuth';
+import { getTrustedClientIp, checkActiveSessionsRateLimit } from '@/lib/rateLimiter';
 
 export const dynamic = 'force-dynamic';
-
-// Rate Limiter for active sessions list: {clientIp: [timestamp, ...]}
-const activeSessionsRateLimits: Record<string, number[]> = {};
 
 /**
  * Checks whether a given session object is an internal system/configuration row.
@@ -183,20 +181,20 @@ async function processAndFilterSessions(
 
 export async function GET(request: NextRequest) {
   try {
-    // 1. IP Rate Limiting (Max 30 requests per minute per IP)
-    const forwarded = request.headers.get('x-forwarded-for') || request.headers.get('cf-connecting-ip') || 'unknown';
-    const clientIp = forwarded.split(',')[0].trim();
-    const nowMs = Date.now();
-    const timestamps = (activeSessionsRateLimits[clientIp] || []).filter(t => nowMs - t < 60000);
-    if (timestamps.length >= 30) {
-      activeSessionsRateLimits[clientIp] = timestamps;
+    // 1. Trusted Client IP Verification & Shared Atomic Persistent Rate Limiting (Max 30 requests/min per IP)
+    const clientIp = getTrustedClientIp(request);
+    const rlStatus = await checkActiveSessionsRateLimit(clientIp);
+    if (!rlStatus.allowed) {
       return NextResponse.json(
         { success: false, detail: 'Too many requests. Please wait a moment.' },
-        { status: 429 }
+        {
+          status: 429,
+          headers: {
+            'Retry-After': String(rlStatus.remainingSeconds),
+          },
+        }
       );
     }
-    timestamps.push(nowMs);
-    activeSessionsRateLimits[clientIp] = timestamps;
 
     // 2. Identify Authenticated User (if any)
     const sessionCookie = request.cookies.get(SESSION_COOKIE_NAME)?.value;

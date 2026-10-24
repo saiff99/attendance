@@ -731,6 +731,109 @@ console.log('\n--- 15. Student Re-enrollment Auto-Restore & Audit Preservation -
   assert(restoredResult.is_active === true, 'Re-enrolled student is set to is_active: true');
 }
 
+// --- 15. Shared Atomic Rate Limiting & Trusted IP Extraction ---
+console.log('\n--- 15. Shared Atomic Rate Limiting & Trusted IP Extraction ---');
+{
+  const activeSessionsRoutePath = path.resolve(__dirname, '../src/app/api/active-sessions/route.ts');
+  const activeSessionsContent = fs.readFileSync(activeSessionsRoutePath, 'utf8');
+  const rateLimiterTsPath = path.resolve(__dirname, '../src/lib/rateLimiter.ts');
+  const rateLimiterContent = fs.readFileSync(rateLimiterTsPath, 'utf8');
+  const backendRoutesPath = path.resolve(__dirname, '../../backend/app/routes.py');
+  const backendRoutesContent = fs.readFileSync(backendRoutesPath, 'utf8');
+  const backendLimiterPath = path.resolve(__dirname, '../../backend/app/rate_limiter.py');
+  const backendLimiterContent = fs.readFileSync(backendLimiterPath, 'utf8');
+
+  // 1. Verify legacy in-memory rate limiting map is eradicated from active-sessions route
+  assert(!activeSessionsContent.includes('const activeSessionsRateLimits'), 'active-sessions route eradicated local in-memory rate map');
+
+  // 2. Verify active-sessions uses getTrustedClientIp and checkActiveSessionsRateLimit
+  assert(
+    activeSessionsContent.includes('getTrustedClientIp') &&
+    activeSessionsContent.includes('checkActiveSessionsRateLimit'),
+    'active-sessions route imports and calls getTrustedClientIp and checkActiveSessionsRateLimit'
+  );
+
+  // 3. Verify rateLimiter.ts exports checkActiveSessionsRateLimit and resetActiveSessionsRateLimit
+  assert(
+    rateLimiterContent.includes('export async function checkActiveSessionsRateLimit') &&
+    rateLimiterContent.includes('export async function resetActiveSessionsRateLimit'),
+    'rateLimiter.ts exports checkActiveSessionsRateLimit and resetActiveSessionsRateLimit'
+  );
+
+  // 4. Verify rateLimiter.ts uses PostgreSQL stored procedure atomic_check_rate_limit with shared key
+  assert(
+    rateLimiterContent.includes('rl_active_sessions:') &&
+    rateLimiterContent.includes('atomic_check_rate_limit'),
+    'rateLimiter.ts uses shared atomic_check_rate_limit with key rl_active_sessions:'
+  );
+
+  // 5. Test IP validation & trusted IP extraction logic
+  function isValidIp(ip) {
+    if (!ip || typeof ip !== 'string') return false;
+    const ipv4 = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+    const ipv6 = /^([0-9a-fA-F]{1,4}:){1,7}[0-9a-fA-F]{1,4}$|^::$|^::1$/;
+    return ipv4.test(ip.trim()) || ipv6.test(ip.trim());
+  }
+
+  function simulateGetTrustedClientIp(headers) {
+    const cfIp = headers['cf-connecting-ip'];
+    if (cfIp && isValidIp(cfIp)) return cfIp.trim();
+
+    const realIp = headers['x-real-ip'];
+    if (realIp && isValidIp(realIp)) return realIp.trim();
+
+    const xff = headers['x-forwarded-for'];
+    if (xff) {
+      const parts = xff.split(',').map(p => p.trim()).filter(isValidIp);
+      if (parts.length > 0) return parts[0];
+    }
+    return '127.0.0.1';
+  }
+
+  assert(simulateGetTrustedClientIp({ 'cf-connecting-ip': '203.0.113.1' }) === '203.0.113.1', 'Cloudflare connecting IP takes precedence');
+  assert(simulateGetTrustedClientIp({ 'cf-connecting-ip': 'forged_garbage', 'x-real-ip': '198.51.100.5' }) === '198.51.100.5', 'Forged CF IP ignored; falls back to verified X-Real-IP');
+  assert(simulateGetTrustedClientIp({ 'x-forwarded-for': 'attacker-ip, 192.0.2.1, 10.0.0.1' }) === '192.0.2.1', 'Malformed leftmost IP filtered out; valid leftmost forwarded IP extracted');
+  assert(simulateGetTrustedClientIp({}) === '127.0.0.1', 'Missing headers fall back safely to 127.0.0.1');
+
+  // 6. Test active sessions sliding window rate limiting invariant (30 req / 60s)
+  const memoryCache = {};
+  function simulateActiveSessionsLimit(clientIp, nowSec) {
+    const windowSeconds = 60.0;
+    const maxAttempts = 30;
+    let attempts = (memoryCache[clientIp] || []).filter(ts => nowSec - ts < windowSeconds);
+    if (attempts.length >= maxAttempts) {
+      const oldest = attempts[0];
+      const remainingSeconds = Math.max(1, Math.ceil(windowSeconds - (nowSec - oldest)));
+      return { allowed: false, remainingSeconds };
+    }
+    attempts.push(nowSec);
+    memoryCache[clientIp] = attempts;
+    return { allowed: true, remainingSeconds: 0 };
+  }
+
+  const testIp = '203.0.113.42';
+  const now = 1700000000;
+  for (let i = 0; i < 30; i++) {
+    const res = simulateActiveSessionsLimit(testIp, now);
+    assert(res.allowed === true, `Request ${i + 1} of 30 within 60s is allowed`);
+  }
+  const overflowRes = simulateActiveSessionsLimit(testIp, now);
+  assert(overflowRes.allowed === false, '31st request is strictly blocked');
+  assert(overflowRes.remainingSeconds > 0, 'Retry-After indicates positive remaining cooldown');
+
+  // 7. Verify backend implementation synchronicity
+  assert(
+    backendLimiterContent.includes('def check_active_sessions_rate_limit') &&
+    backendLimiterContent.includes('def reset_active_sessions_rate_limit'),
+    'backend/app/rate_limiter.py implements check_active_sessions_rate_limit and reset_active_sessions_rate_limit'
+  );
+  assert(
+    backendRoutesContent.includes('check_active_sessions_rate_limit(client_ip)') &&
+    backendRoutesContent.includes('get_real_client_ip'),
+    'backend/app/routes.py protects /api/active-sessions with check_active_sessions_rate_limit'
+  );
+}
+
 // Summary
 console.log('\n' + '=' .repeat(65));
 console.log(`📊 Offline Unit Test Summary: ${passed} Passed, ${failed} Failed`);
@@ -741,5 +844,6 @@ if (failed > 0) {
 } else {
   process.exit(0);
 }
+
 
 

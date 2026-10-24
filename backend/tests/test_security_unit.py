@@ -449,5 +449,102 @@ class TestCheckinCapabilityTokenUnit(unittest.TestCase):
         self.assertEqual(clean_public_instructor_name(""), "Faculty Member")
 
 
+class TestActiveSessionsRateLimiterUnit(unittest.TestCase):
+    """Unit tests for public active sessions shared rate limiter."""
+
+    def test_active_sessions_rate_limit_and_reset(self):
+        from app.rate_limiter import (
+            check_active_sessions_rate_limit,
+            reset_active_sessions_rate_limit
+        )
+        from fastapi import HTTPException
+
+        test_ip = "192.0.2.77"
+        reset_active_sessions_rate_limit(test_ip)
+
+        # 30 allowed calls
+        for i in range(30):
+            try:
+                check_active_sessions_rate_limit(test_ip)
+            except HTTPException:
+                self.fail(f"Call {i+1} should have been allowed within 30-call limit")
+
+        # 31st call must trigger 429 Too Many Requests
+        with self.assertRaises(HTTPException) as ctx:
+            check_active_sessions_rate_limit(test_ip)
+        self.assertEqual(ctx.exception.status_code, 429)
+        self.assertIn("Retry-After", ctx.exception.headers)
+
+        # Reset clears the limit
+        reset_active_sessions_rate_limit(test_ip)
+        try:
+            check_active_sessions_rate_limit(test_ip)
+        except HTTPException:
+            self.fail("Call after reset should have been allowed")
+        reset_active_sessions_rate_limit(test_ip)
+
+
+class TestTrustedIPUnit(unittest.TestCase):
+    """Unit tests for IP validation and trusted client IP extraction."""
+
+    def test_is_valid_ip(self):
+        try:
+            from app.routes import is_valid_ip
+        except ImportError as e:
+            self.skipTest(f"Skipping routes import: {e}")
+
+        # Valid IPv4 & IPv6
+        self.assertTrue(is_valid_ip("192.168.1.1"))
+        self.assertTrue(is_valid_ip("8.8.8.8"))
+        self.assertTrue(is_valid_ip("127.0.0.1"))
+        self.assertTrue(is_valid_ip("::1"))
+        self.assertTrue(is_valid_ip("2001:db8::1"))
+
+        # Invalid / Malformed / Injection attempts
+        self.assertFalse(is_valid_ip("invalid-ip"))
+        self.assertFalse(is_valid_ip("256.0.0.1"))
+        self.assertFalse(is_valid_ip("1.2.3.4.5"))
+        self.assertFalse(is_valid_ip("<script>alert(1)</script>"))
+        self.assertFalse(is_valid_ip("'; DROP TABLE users;--"))
+        self.assertFalse(is_valid_ip(""))
+        self.assertFalse(is_valid_ip(None))
+
+    def test_get_real_client_ip(self):
+        try:
+            from app.routes import get_real_client_ip
+        except ImportError as e:
+            self.skipTest(f"Skipping routes import: {e}")
+
+        class MockClient:
+            def __init__(self, host):
+                self.host = host
+
+        class MockRequest:
+            def __init__(self, headers, client_host=None):
+                self.headers = headers
+                self.client = MockClient(client_host) if client_host else None
+
+        # 1. Cloudflare header precedence
+        req = MockRequest({"cf-connecting-ip": "1.1.1.1", "x-real-ip": "2.2.2.2"})
+        self.assertEqual(get_real_client_ip(req), "1.1.1.1")
+
+        # 2. Malformed CF header falls back to X-Real-IP
+        req = MockRequest({"cf-connecting-ip": "malformed", "x-real-ip": "2.2.2.2"})
+        self.assertEqual(get_real_client_ip(req), "2.2.2.2")
+
+        # 3. X-Forwarded-For extracts leftmost valid IP
+        req = MockRequest({"x-forwarded-for": "bad-ip, 3.3.3.3, 4.4.4.4"})
+        self.assertEqual(get_real_client_ip(req), "3.3.3.3")
+
+        # 4. Fallback to socket client host
+        req = MockRequest({}, client_host="5.5.5.5")
+        self.assertEqual(get_real_client_ip(req), "5.5.5.5")
+
+        # 5. Safe default fallback
+        req = MockRequest({})
+        self.assertEqual(get_real_client_ip(req), "127.0.0.1")
+
+
 if __name__ == "__main__":
     unittest.main()
+

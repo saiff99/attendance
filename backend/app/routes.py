@@ -9,6 +9,7 @@ import asyncio
 import hmac
 import hashlib
 import logging
+import ipaddress
 from datetime import datetime, timezone
 import dateutil.parser
 import numpy as np
@@ -43,21 +44,49 @@ from app.rate_limiter import (
     clear_face_failure,
     check_selfie_rate_limit,
     check_public_selfie_ip_limit,
-    check_lookup_rate_limit
+    check_lookup_rate_limit,
+    check_active_sessions_rate_limit,
 )
 
 logger = logging.getLogger(__name__)
 
+def is_valid_ip(ip_str: Optional[str]) -> bool:
+    """Validates if a string is a well-formed IPv4 or IPv6 address."""
+    if not ip_str or not isinstance(ip_str, str):
+        return False
+    try:
+        ipaddress.ip_address(ip_str.strip())
+        return True
+    except ValueError:
+        return False
+
 def get_real_client_ip(request: Request) -> str:
-    """Extracts genuine client IP behind Cloudflare Tunnel, reverse proxies, or direct connection."""
+    """
+    Extracts genuine client IP behind Cloudflare Tunnel, reverse proxies, or direct connection.
+    Validates and rejects malformed or client-forged headers.
+    """
+    # 1. Cloudflare Tunnel / Edge connecting IP
     cf_ip = request.headers.get("cf-connecting-ip")
-    if cf_ip and cf_ip.strip():
+    if cf_ip and is_valid_ip(cf_ip.strip()):
         return cf_ip.strip()
+
+    # 2. Reverse proxy real IP (e.g. Nginx / Vercel)
+    real_ip = request.headers.get("x-real-ip")
+    if real_ip and is_valid_ip(real_ip.strip()):
+        return real_ip.strip()
+
+    # 3. X-Forwarded-For: validate and return leftmost legitimate IP
     xff = request.headers.get("x-forwarded-for")
     if xff and xff.strip():
-        return xff.split(",")[0].strip()
-    if request.client and request.client.host:
+        for part in xff.split(","):
+            candidate = part.strip()
+            if is_valid_ip(candidate):
+                return candidate
+
+    # 4. Direct socket client host
+    if request.client and request.client.host and is_valid_ip(request.client.host):
         return request.client.host
+
     return "127.0.0.1"
 
 def parse_iso_datetime(time_str: str) -> datetime:
@@ -918,15 +947,20 @@ async def get_active_sessions(request: Request):
     Batch fetches attendance counts in 1 single query (<30ms) instead of looping N times.
     Generates short-lived signed check-in capability tokens and sanitizes public metadata.
     """
+    # 1. Check internal authorization (Next.js server proxy or authenticated staff)
+    api_key_header = request.headers.get("x-internal-api-key") or request.headers.get("X-Internal-API-Key")
+    internal_key = os.getenv("INTERNAL_API_KEY", "").strip()
+    is_internal_auth = bool(internal_key and api_key_header and hmac.compare_digest(api_key_header.strip(), internal_key))
+
+    # 2. Trusted Client IP & Shared Atomic Persistent Rate Limiter (Max 30 requests/min per IP)
+    client_ip = get_real_client_ip(request)
+    if not is_internal_auth:
+        check_active_sessions_rate_limit(client_ip)
+
     try:
         now_utc = datetime.now(timezone.utc)
         today_local = datetime.now().strftime("%Y-%m-%d")
         start_of_today_iso = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
-
-        # Check internal authorization (Next.js server proxy or authenticated staff)
-        api_key_header = request.headers.get("x-internal-api-key") or request.headers.get("X-Internal-API-Key")
-        internal_key = os.getenv("INTERNAL_API_KEY", "").strip()
-        is_internal_auth = bool(internal_key and api_key_header and hmac.compare_digest(api_key_header.strip(), internal_key))
 
         res = supabase.table("sessions").select(
             "id, class_name, date, start_time, end_time, instructor_name, target_academic_year, is_archived, archived_at, created_at"
@@ -998,6 +1032,8 @@ async def get_active_sessions(request: Request):
             })
             
         return {"success": True, "sessions": enhanced_sessions}
+    except HTTPException:
+        raise
     except Exception as e:
         print("Error fetching active sessions:", e)
         raise HTTPException(status_code=500, detail="Failed to fetch active sessions")

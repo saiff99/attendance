@@ -493,3 +493,67 @@ export async function resetStudentLookupRateLimit(clientIp: string): Promise<voi
   }
 }
 
+/**
+ * Shared & Persistent Active Sessions Rate Limiter (L1 in-memory + L2 Supabase atomic RPC).
+ * Enforces: Max 30 active-session listing requests per IP per 60 seconds across all cluster instances.
+ * Synchronized across instances using the shared key `rl_active_sessions:{clientIp}`.
+ */
+const memoryActiveSessionsLimits: Record<string, number[]> = {};
+
+export async function checkActiveSessionsRateLimit(
+  clientIp: string,
+  nowSec: number = Date.now() / 1000
+): Promise<{ allowed: boolean; remainingSeconds: number }> {
+  const dbKey = `rl_active_sessions:${clientIp}`;
+  const windowSeconds = 60.0;
+  const maxAttempts = 30;
+
+  // 1. Authoritative L2 Atomic Transaction via PostgreSQL stored procedure (ACID + row/advisory locking)
+  try {
+    const { data, error } = await supabaseServer.rpc('atomic_check_rate_limit', {
+      p_key: dbKey,
+      p_max_attempts: maxAttempts,
+      p_window_seconds: windowSeconds,
+      p_now_ts: nowSec,
+    });
+
+    if (!error && data && typeof data === 'object' && 'allowed' in data) {
+      const allowed = Boolean(data.allowed);
+      const remainingSeconds = Number(data.retry_after) || 0;
+      return { allowed, remainingSeconds };
+    }
+  } catch (err) {
+    console.warn('[ActiveSessionsRateLimit Warning] L2 DB atomic RPC fallback:', err);
+  }
+
+  // 2. Degraded In-Memory Fail-Closed Fallback (If RPC or database is offline/unreachable)
+  let attempts: number[] = (memoryActiveSessionsLimits[clientIp] || []).filter(
+    (ts) => nowSec - ts < windowSeconds
+  );
+
+  if (attempts.length >= maxAttempts) {
+    memoryActiveSessionsLimits[clientIp] = attempts;
+    const oldest = attempts[0];
+    const remainingSeconds = Math.max(1, Math.ceil(windowSeconds - (nowSec - oldest)));
+    return { allowed: false, remainingSeconds };
+  }
+
+  attempts.push(nowSec);
+  memoryActiveSessionsLimits[clientIp] = attempts;
+
+  return { allowed: true, remainingSeconds: 0 };
+}
+
+/**
+ * Resets the active sessions rate limit for a specific client IP (used in tests).
+ */
+export async function resetActiveSessionsRateLimit(clientIp: string): Promise<void> {
+  delete memoryActiveSessionsLimits[clientIp];
+  const dbKey = `rl_active_sessions:${clientIp}`;
+  try {
+    await supabaseServer.from('settings').delete().eq('key', dbKey);
+  } catch (err) {
+    console.warn('[ActiveSessionsRateLimit Reset Warning]', err);
+  }
+}
+

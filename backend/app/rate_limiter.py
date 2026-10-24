@@ -427,3 +427,46 @@ def check_public_selfie_ip_limit(client_ip: str) -> None:
         error_message="Too many selfie verification requests from this IP address. Please wait 60 seconds.",
         include_retry_after=True
     )
+
+
+# ==============================================================================
+# 6. Public Active Sessions Rate Limiter (Atomic Concurrency Protected)
+# Enforces: Max 30 active-session listing calls per IP within 60 seconds.
+# ==============================================================================
+
+_memory_active_sessions_limits: Dict[str, List[float]] = {}
+
+def check_active_sessions_rate_limit(client_ip: str) -> None:
+    """
+    Limits active sessions listing to 30 calls per IP per 60 seconds.
+    Synchronized across cluster instances via PostgreSQL stored procedure or CAS mutex.
+    """
+    rate_key = client_ip.strip()
+    db_key = f"rl_active_sessions:{rate_key}"
+    now_ts = time.time()
+
+    _atomic_sliding_window_check_and_record(
+        rate_key=rate_key,
+        db_key=db_key,
+        max_attempts=30,
+        window_seconds=60.0,
+        now_ts=now_ts,
+        memory_cache=_memory_active_sessions_limits,
+        error_message="Too many active session requests. Please wait a moment.",
+        include_retry_after=True
+    )
+
+
+def reset_active_sessions_rate_limit(client_ip: str) -> None:
+    """Resets the active sessions rate limit for a specific client IP."""
+    rate_key = client_ip.strip()
+    db_key = f"rl_active_sessions:{rate_key}"
+
+    lock = _get_key_lock(db_key)
+    with lock:
+        _memory_active_sessions_limits.pop(rate_key, None)
+        if supabase:
+            try:
+                supabase.table("settings").delete().eq("key", db_key).execute()
+            except Exception as e:
+                print(f"[ActiveSessionsRateLimit Reset Warning] L2 DB clear fallback: {e}")
