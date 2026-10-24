@@ -7,6 +7,7 @@ import urllib.parse
 import random
 import asyncio
 import hmac
+import hashlib
 from datetime import datetime, timezone
 import dateutil.parser
 import numpy as np
@@ -811,18 +812,71 @@ async def ptz_control(cmd: PTZCommand):
 # Student Mobile Selfie Attendance API
 # ==========================================
 
+def get_checkin_secret() -> str:
+    secret = (os.getenv("INTERNAL_API_KEY") or os.getenv("AUTH_SECRET") or "").strip()
+    return secret if len(secret) >= 16 else "medattend_default_secure_checkin_secret_2026"
+
+
+def generate_checkin_token(session_id: str, valid_seconds: int = 300) -> str:
+    try:
+        uuid.UUID(str(session_id).strip())
+    except Exception:
+        return ""
+    expires_at = int(time.time()) + min(max(valid_seconds, 30), 330)
+    payload = f"{session_id}:{expires_at}"
+    secret = get_checkin_secret()
+    sig = hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
+    return f"{payload}:{sig}"
+
+
+def verify_checkin_token(token: Optional[str], expected_session_id: str) -> bool:
+    if not token or not isinstance(token, str) or not token.strip():
+        return False
+    parts = token.strip().split(":")
+    if len(parts) != 3:
+        return False
+    sess_id, expires_str, sig = parts
+    if sess_id.lower() != str(expected_session_id).lower().strip():
+        return False
+    try:
+        expires_at = int(expires_str)
+    except ValueError:
+        return False
+    if int(time.time()) > expires_at:
+        return False
+    payload = f"{sess_id}:{expires_str}"
+    secret = get_checkin_secret()
+    expected_sig = hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
+    return hmac.compare_digest(sig, expected_sig)
+
+
+def clean_public_instructor_name(name: Optional[str]) -> str:
+    """Strips internal [GPS:...] coordinates and [BY:...] faculty attribution tags for public responses."""
+    if not name or not isinstance(name, str):
+        return "Faculty Member"
+    cleaned = re.sub(r'\[GPS:[^\]]+\]', '', name)
+    cleaned = re.sub(r'\[BY:[^\]]+\]', '', cleaned)
+    cleaned = cleaned.strip()
+    return cleaned if cleaned else "Faculty Member"
+
+
 @router.get("/api/active-sessions")
-async def get_active_sessions():
+async def get_active_sessions(request: Request):
     """
     Fetches today's active class sessions with remaining 5-minute window for student self-attendance.
     Only sessions created today are returned; older dates are automatically excluded.
     Batch fetches attendance counts in 1 single query (<30ms) instead of looping N times.
+    Generates short-lived signed check-in capability tokens and sanitizes public metadata.
     """
     try:
-        from datetime import datetime, timezone
         now_utc = datetime.now(timezone.utc)
         today_local = datetime.now().strftime("%Y-%m-%d")
         start_of_today_iso = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+
+        # Check internal authorization (Next.js server proxy or authenticated staff)
+        api_key_header = request.headers.get("x-internal-api-key") or request.headers.get("X-Internal-API-Key")
+        internal_key = os.getenv("INTERNAL_API_KEY", "").strip()
+        is_internal_auth = bool(internal_key and api_key_header and hmac.compare_digest(api_key_header.strip(), internal_key))
 
         res = supabase.table("sessions").select(
             "id, class_name, date, start_time, end_time, instructor_name, target_academic_year, created_at"
@@ -842,7 +896,7 @@ async def get_active_sessions():
         # Batch fetch attendance counts in a single query (1 network call vs 50)
         session_ids = [s["id"] for s in sessions if s.get("id")]
         attendance_counts = {}
-        if session_ids:
+        if session_ids and is_internal_auth:
             try:
                 att_res = supabase.table("attendance").select("session_id").in_("session_id", session_ids).execute()
                 for row in (att_res.data or []):
@@ -854,7 +908,7 @@ async def get_active_sessions():
 
         enhanced_sessions = []
         for s in sessions:
-            count = attendance_counts.get(s["id"], 0)
+            count = attendance_counts.get(s["id"], 0) if is_internal_auth else None
             
             time_str = s.get("start_time") or s.get("created_at")
             remaining_seconds = 0
@@ -873,9 +927,13 @@ async def get_active_sessions():
                     remaining_seconds = 0
                     is_expired = True
 
+            checkin_token = generate_checkin_token(s["id"], remaining_seconds) if not is_expired and remaining_seconds > 0 else None
+
             enhanced_sessions.append({
                 **s,
+                "instructor_name": s.get("instructor_name") if is_internal_auth else clean_public_instructor_name(s.get("instructor_name")),
                 "attendance_count": count,
+                "checkin_token": checkin_token,
                 "remaining_seconds": remaining_seconds,
                 "is_expired": is_expired,
                 "window_duration_seconds": 300
@@ -908,10 +966,16 @@ def mask_student_name(full_name: str) -> str:
 
 
 @router.get("/api/student-lookup/{student_roll}")
-async def student_lookup(request: Request, student_roll: str, session_id: Optional[str] = None):
+async def student_lookup(
+    request: Request,
+    student_roll: str,
+    session_id: Optional[str] = None,
+    token: Optional[str] = None
+):
     """
     Looks up student details by roll number for an active session.
-    Protected against scraping / roster enumeration via IP rate limits and active session requirements.
+    Protected against scraping / roster enumeration via IP rate limits, active session requirements,
+    and mandatory short-lived signed check-in capability tokens.
     """
     client_ip = get_real_client_ip(request)
 
@@ -932,6 +996,20 @@ async def student_lookup(request: Request, student_roll: str, session_id: Option
         raise HTTPException(
             status_code=400,
             detail="Invalid session_id format: Must be a valid UUID."
+        )
+
+    # 3. Check Authorization: Internal Proxy OR Valid Signed Check-In Capability Token
+    api_key_header = request.headers.get("x-internal-api-key") or request.headers.get("X-Internal-API-Key")
+    internal_key = os.getenv("INTERNAL_API_KEY", "").strip()
+    is_internal_auth = bool(internal_key and api_key_header and hmac.compare_digest(api_key_header.strip(), internal_key))
+
+    checkin_token = token or request.headers.get("x-checkin-token") or request.query_params.get("token")
+    has_valid_checkin_token = verify_checkin_token(checkin_token, clean_sess_id)
+
+    if not is_internal_auth and not has_valid_checkin_token:
+        raise HTTPException(
+            status_code=403,
+            detail="Valid signed check-in token or authenticated session required. Unauthenticated student lookup is prohibited."
         )
 
     sess_res = safe_db_execute(supabase.table("sessions").select("id, class_name, start_time, created_at, target_academic_year").eq("id", clean_sess_id))
@@ -993,22 +1071,20 @@ async def student_lookup(request: Request, student_roll: str, session_id: Option
                 "recorded_at": att_record.get("recorded_at", "Earlier Today")
             }
 
-        # Check if request has internal authorization (e.g. Next.js server proxy)
-        api_key_header = request.headers.get("x-internal-api-key") or request.headers.get("X-Internal-API-Key")
-        internal_key = os.getenv("INTERNAL_API_KEY", "").strip()
-        is_internal_auth = bool(internal_key and api_key_header and hmac.compare_digest(api_key_header.strip(), internal_key))
-        
+        can_checkin = bool(not cohort_mismatch and not is_already_present and has_face)
+
         return {
             "success": True,
             "student": {
                 "student_roll": student["student_roll"],
                 "full_name": student["full_name"] if is_internal_auth else mask_student_name(student["full_name"]),
-                "academic_year": student.get("academic_year") or "MBBS",
+                "academic_year": student.get("academic_year") if is_internal_auth else "Enrolled Student",
                 "has_face_enrolled": has_face,
                 "is_already_present": is_already_present,
+                "can_checkin": can_checkin,
                 "attendance_info": attendance_info if is_internal_auth else None,
                 "cohort_mismatch": cohort_mismatch,
-                "target_academic_year": target_academic_year
+                "target_academic_year": target_academic_year if is_internal_auth else None
             }
         }
     except HTTPException:

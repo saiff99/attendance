@@ -2,7 +2,7 @@ import { NextResponse, NextRequest } from 'next/server';
 import { supabaseServer } from '@/lib/supabaseServer';
 import { isCohortMatching } from '@/lib/cohort';
 import { fetchBackend } from '@/lib/serverBackend';
-import { isValidUuid } from '@/lib/attendanceAuth';
+import { isValidUuid, verifyCheckinToken } from '@/lib/attendanceAuth';
 import { getTrustedClientIp, checkStudentLookupRateLimit } from '@/lib/rateLimiter';
 import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/serverAuth';
 
@@ -50,6 +50,7 @@ export async function GET(
     const { roll } = await params;
     const { searchParams } = new URL(request.url);
     const sessionId = searchParams.get('session_id') || '';
+    const token = searchParams.get('token') || request.headers.get('x-checkin-token') || '';
 
     // 1. Require an active session ID to prevent general roster scraping
     if (!sessionId.trim()) {
@@ -93,12 +94,25 @@ export async function GET(
        authUser.username?.trim().toLowerCase() === roll.trim().toLowerCase())
     );
     const canSeeFullProfile = isStaff || isOwnStudent;
+    const hasValidCheckinToken = verifyCheckinToken(token, cleanSessId);
+
+    // Unauthenticated requests MUST carry a cryptographically signed, unexpired checkin capability token
+    if (!canSeeFullProfile && !hasValidCheckinToken) {
+      return NextResponse.json(
+        { detail: 'Valid signed check-in token or authenticated session required. Direct unauthenticated student lookup is prohibited.' },
+        { status: 403 }
+      );
+    }
 
     // 3. Try backend fast-path
     try {
-      const queryParam = `?session_id=${encodeURIComponent(cleanSessId)}`;
+      const tokenParam = token ? `&token=${encodeURIComponent(token)}` : '';
+      const queryParam = `?session_id=${encodeURIComponent(cleanSessId)}${tokenParam}`;
       const res = await fetchBackend(`/api/student-lookup/${encodeURIComponent(roll)}${queryParam}`, {
-        headers: { 'ngrok-skip-browser-warning': '69420' },
+        headers: {
+          'ngrok-skip-browser-warning': '69420',
+          ...(token ? { 'x-checkin-token': token } : {}),
+        },
         cache: 'no-store',
       });
       if (res.ok) {
@@ -110,6 +124,8 @@ export async function GET(
           if (!canSeeFullProfile) {
             data.student.full_name = maskStudentName(data.student.full_name);
             delete data.student.attendance_info;
+            data.student.academic_year = 'Enrolled Student';
+            delete data.student.target_academic_year;
           } else if (data.student.attendance_info) {
             data.student.attendance_info = {
               status: data.student.attendance_info.status || 'Present',
@@ -197,17 +213,20 @@ export async function GET(
       };
     }
 
+    const canCheckin = Boolean(!cohortMismatch && !isAlreadyPresent && hasFace);
+
     return NextResponse.json({
       success: true,
       student: {
         student_roll: stud.student_roll,
         full_name: canSeeFullProfile ? stud.full_name : maskStudentName(stud.full_name),
-        academic_year: stud.academic_year || '1st Year',
+        academic_year: canSeeFullProfile ? (stud.academic_year || '1st Year') : 'Enrolled Student',
         has_face_enrolled: hasFace,
         is_already_present: isAlreadyPresent,
+        can_checkin: canCheckin,
         attendance_info: canSeeFullProfile ? attendanceInfo : null,
         cohort_mismatch: cohortMismatch,
-        target_academic_year: targetAcademicYear,
+        target_academic_year: canSeeFullProfile ? targetAcademicYear : null,
       }
     });
   } catch (err: any) {

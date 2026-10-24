@@ -42,6 +42,7 @@ export interface ActiveSession {
   remaining_seconds?: number;
   is_expired?: boolean;
   window_duration_seconds?: number;
+  checkin_token?: string | null;
 }
 
 export interface StudentProfile {
@@ -51,6 +52,7 @@ export interface StudentProfile {
   academic_year: string;
   has_face_enrolled: boolean;
   is_already_present?: boolean;
+  can_checkin?: boolean;
   cohort_mismatch?: boolean;
   target_academic_year?: string | null;
   attendance_info?: {
@@ -487,11 +489,17 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
 
     try {
       // 1. Try Same-Origin Next.js API route first (returns strictly non-sensitive fields: has_face_enrolled, etc.)
-      const sessionIdParam = activeSess ? `?session_id=${encodeURIComponent(activeSess.id)}` : "";
+      const tokenParam = activeSess?.checkin_token ? `&token=${encodeURIComponent(activeSess.checkin_token)}` : "";
+      const sessionIdParam = activeSess ? `?session_id=${encodeURIComponent(activeSess.id)}${tokenParam}` : "";
+      const checkinHeaders: Record<string, string> = {
+        "ngrok-skip-browser-warning": "69420",
+        ...(activeSess?.checkin_token ? { "x-checkin-token": activeSess.checkin_token } : {})
+      };
+
       try {
         const localRes = await fetch(`/api/student-lookup/${encodeURIComponent(cleanRoll)}${sessionIdParam}`, {
           cache: "no-store",
-          headers: { "ngrok-skip-browser-warning": "69420" }
+          headers: checkinHeaders
         });
         const data = await localRes.json().catch(() => ({}));
         if (localRes.ok && data.student) {
@@ -512,7 +520,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
 
       // 2. Fallback to backend API
       const res = await fetch(`${backendUrl}/api/student-lookup/${encodeURIComponent(cleanRoll)}${sessionIdParam}`, {
-        headers: { "ngrok-skip-browser-warning": "69420" }
+        headers: checkinHeaders
       });
       const data = await res.json();
 
@@ -1327,11 +1335,14 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                 </form>
 
                 {/* Verified Student Profile Preview */}
-                {student && (() => {
-                  const isCohortMismatch = !isCohortMatching(
-                    selectedSession?.target_academic_year,
-                    student.academic_year
+                  const isCohortMismatch = Boolean(
+                    student.cohort_mismatch ??
+                    !isCohortMatching(selectedSession?.target_academic_year, student.academic_year)
                   );
+
+                  const displayYear = student.academic_year && student.academic_year !== "Enrolled Student"
+                    ? student.academic_year
+                    : (selectedSession?.target_academic_year || "Enrolled Student");
 
                   return (
                     <div className={`mt-4 p-4 rounded-2xl border flex flex-col gap-3 animate-in fade-in zoom-in-95 duration-150 ${isCohortMismatch
@@ -1359,7 +1370,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                                 ? "bg-rose-500/20 border-rose-500/40 text-rose-300 font-bold"
                                 : "bg-slate-800 border-slate-700 text-slate-300"
                                 }`}>
-                                {student.academic_year}
+                                {displayYear}
                               </span>
                             </div>
                           </div>

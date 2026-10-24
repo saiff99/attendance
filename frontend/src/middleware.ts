@@ -3,6 +3,8 @@ import type { NextRequest } from 'next/server';
 import { verifySessionToken, SESSION_COOKIE_NAME } from './lib/serverAuth';
 
 // Public routes accessible without logging in
+// Note: /api/student-lookup is capability-guarded (requires a valid, short-lived signed check-in token or session auth)
+// Note: /api/active-sessions provides sanitized public metadata and issues signed check-in tokens
 const PUBLIC_PATHS = [
   '/login',
   '/self-attendance',

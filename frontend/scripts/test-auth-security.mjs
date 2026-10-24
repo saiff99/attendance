@@ -964,43 +964,55 @@ async function runTests() {
       'Created active session for live student lookup verification');
     const liveSessionId = createLiveSess.data?.session?.id;
 
-    // 6. Nonexistent student roll returns HTTP 404
-    const nonExistStudentRes = await request(`/api/student-lookup/999999?session_id=${liveSessionId}`, {
+    // Fetch active session with its capability token from /api/active-sessions
+    const activeSessList = await request('/api/active-sessions');
+    const matchedSess = (activeSessList.data?.sessions || []).find(s => s.id === liveSessionId);
+    const testCheckinToken = matchedSess?.checkin_token || '';
+    assert(Boolean(testCheckinToken), 'active-sessions returned signed checkin_token for active lecture');
+
+    // 6. Unauthenticated lookup without checkin_token is strictly rejected (HTTP 403)
+    const noTokenRes = await request(`/api/student-lookup/25001?session_id=${liveSessionId}`, {
+      headers: { 'cf-connecting-ip': testLookupIp }
+    });
+    assert(noTokenRes.status === 403, 'Unauthenticated student lookup without checkin token strictly REJECTED (HTTP 403)');
+
+    // 7. Nonexistent student roll returns HTTP 404 (with valid checkin_token)
+    const nonExistStudentRes = await request(`/api/student-lookup/999999?session_id=${liveSessionId}&token=${encodeURIComponent(testCheckinToken)}`, {
       headers: { 'cf-connecting-ip': testLookupIp }
     });
     assert(nonExistStudentRes.status === 404, 'Lookup for nonexistent student roll returns HTTP 404');
 
-    // 7. Legitimate student lookup succeeds (HTTP 200)
-    const validLookupRes = await request(`/api/student-lookup/25001?session_id=${liveSessionId}`, {
+    // 8. Legitimate student lookup with checkin_token succeeds (HTTP 200)
+    const validLookupRes = await request(`/api/student-lookup/25001?session_id=${liveSessionId}&token=${encodeURIComponent(testCheckinToken)}`, {
       headers: { 'cf-connecting-ip': testLookupIp }
     });
     assert(validLookupRes.status === 200 && validLookupRes.data?.success === true,
-      'Legitimate student lookup in active session succeeded (HTTP 200)');
+      'Legitimate student lookup in active session with signed capability token succeeded (HTTP 200)');
 
     const stud = validLookupRes.data?.student || {};
-    // 8. Strict Data Minimization Assertions
+    // 9. Strict Data Minimization Assertions
     assert(stud.face_encoding === undefined, 'Data Minimization: face_encoding is NEVER returned in response');
     assert(stud.id === undefined, 'Data Minimization: student database internal UUID is NEVER returned');
     assert(stud.student_roll === '25001', 'Sanitized student record contains expected student_roll');
     assert(typeof stud.full_name === 'string' && stud.full_name.length > 0, 'Sanitized student record contains full_name');
     assert(typeof stud.has_face_enrolled === 'boolean', 'Sanitized student record contains boolean has_face_enrolled flag');
     assert(typeof stud.cohort_mismatch === 'boolean', 'Sanitized student record contains cohort_mismatch flag');
-    assert(stud.target_academic_year === '1st Year', 'Sanitized student record specifies target_academic_year');
+    assert(typeof stud.can_checkin === 'boolean', 'Sanitized student record contains boolean can_checkin capability');
 
-    // 9. Direct Backend Student Lookup Verification (FastAPI Port 8000)
-    const backendLookupRes = await backendRequest(`/api/student-lookup/25001?session_id=${liveSessionId}`);
-    assert(backendLookupRes.status === 200, 'Direct backend student lookup succeeds (HTTP 200)');
+    // 10. Direct Backend Student Lookup Verification (FastAPI Port 8000 with token)
+    const backendLookupRes = await backendRequest(`/api/student-lookup/25001?session_id=${liveSessionId}&token=${encodeURIComponent(testCheckinToken)}`);
+    assert(backendLookupRes.status === 200, 'Direct backend student lookup succeeds with capability token (HTTP 200)');
     const backendStud = backendLookupRes.data?.student || {};
     assert(backendStud.face_encoding === undefined, 'Backend Data Minimization: face_encoding is NEVER returned');
     assert(backendStud.id === undefined, 'Backend Data Minimization: student UUID is NEVER returned');
     assert(typeof backendStud.has_face_enrolled === 'boolean', 'Backend returns boolean has_face_enrolled flag');
 
-    // 10. Anti-Scraping / Persistent IP Rate Limiting Verification
+    // 11. Anti-Scraping / Persistent IP Rate Limiting Verification
     const scrapeTestIp = '198.51.100.88';
     let lookupRateLimited = false;
     let rlRetryHeader = null;
     for (let i = 1; i <= 12; i++) {
-      const rlRes = await request(`/api/student-lookup/25001?session_id=${liveSessionId}`, {
+      const rlRes = await request(`/api/student-lookup/25001?session_id=${liveSessionId}&token=${encodeURIComponent(testCheckinToken)}`, {
         headers: { 'cf-connecting-ip': scrapeTestIp }
       });
       if (rlRes.status === 429) {

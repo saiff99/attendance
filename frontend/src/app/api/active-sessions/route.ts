@@ -4,6 +4,7 @@ import { fetchBackend } from '@/lib/serverBackend';
 import { getTodayDateStr, getStartOfTodayISO } from '@/lib/dateUtils';
 import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/serverAuth';
 import { decodeSessionMetadata } from '@/lib/geofence';
+import { generateCheckinToken } from '@/lib/attendanceAuth';
 
 export const dynamic = 'force-dynamic';
 
@@ -89,7 +90,7 @@ async function processAndFilterSessions(
     // Non-blocking
   }
 
-  // Enrich each session with creator info
+  // Enrich each session with creator info and check-in token
   const enriched = validSessions.map((s: any) => {
     const rawInstructor = s.instructor_name || '';
     const dec = decodeSessionMetadata(rawInstructor);
@@ -98,8 +99,15 @@ async function processAndFilterSessions(
     const creatorClean = creator.startsWith('@') ? creator.slice(1) : creator;
     const fullName = userMap[creatorClean.toLowerCase()] || creatorClean || 'Faculty Member';
 
+    // Generate signed, time-limited checkin capability token if window is active
+    const remSec = Number(s.remaining_seconds) || 0;
+    const checkinToken = (!s.is_expired && remSec > 0)
+      ? generateCheckinToken(s.id, remSec)
+      : null;
+
     return {
       ...s,
+      checkin_token: checkinToken,
       created_by: creator,
       creator_name: fullName,
       created_by_name: fullName,
@@ -130,21 +138,31 @@ async function processAndFilterSessions(
     return enriched;
   }
 
-  // Logged-in Students receive active sessions with general creator info (strip internal creator username)
+  // Logged-in Students receive active sessions with general creator info (strip internal creator username & live attendance headcount)
   if (authUser && authUser.role === 'Student') {
-    return enriched.map((s: any) => ({
-      ...s,
-      created_by: undefined,
-    }));
+    return enriched.map((s: any) => {
+      const dec = decodeSessionMetadata(s.instructor_name || '');
+      return {
+        ...s,
+        instructor_name: dec.topic || dec.cleanName || s.class_name,
+        created_by: undefined,
+        attendance_count: undefined,
+      };
+    });
   }
 
-  // Public / Unauthenticated callers: strictly minimize sensitive creator and internal audit info
-  return enriched.map((s: any) => ({
-    ...s,
-    created_by: undefined,
-    creator_name: 'Faculty Member',
-    created_by_name: 'Faculty Member',
-  }));
+  // Public / Unauthenticated callers: strictly minimize sensitive creator, internal faculty tags, and live headcount
+  return enriched.map((s: any) => {
+    const dec = decodeSessionMetadata(s.instructor_name || '');
+    return {
+      ...s,
+      instructor_name: dec.topic || dec.cleanName || 'Faculty Member',
+      created_by: undefined,
+      creator_name: 'Faculty Member',
+      created_by_name: 'Faculty Member',
+      attendance_count: undefined, // Hidden from unauthenticated public scrapers
+    };
+  });
 }
 
 export async function GET(request: NextRequest) {

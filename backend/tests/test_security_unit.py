@@ -389,5 +389,51 @@ class TestConfigFailFastUnit(unittest.TestCase):
         self.assertIn("SUPABASE_SERVICE_ROLE_KEY is missing", res.stderr)
 
 
+class TestCheckinCapabilityTokenUnit(unittest.TestCase):
+    """Unit tests for check-in capability token generation, verification, and metadata sanitization."""
+
+    def test_checkin_token_lifecycle(self):
+        try:
+            from app.routes import generate_checkin_token, verify_checkin_token
+        except ImportError as e:
+            self.skipTest(f"Skipping routes import: heavy AI dependencies require virtualenv ({e})")
+
+        sess_id = "e0a1b2c3-d4e5-4a6b-8c7d-0e1f2a3b4c5d"
+        token = generate_checkin_token(sess_id, valid_seconds=300)
+        self.assertTrue(bool(token))
+        self.assertEqual(len(token.split(":")), 3)
+
+        # Valid token passes
+        self.assertTrue(verify_checkin_token(token, sess_id))
+
+        # Mismatched session ID fails
+        self.assertFalse(verify_checkin_token(token, "00000000-0000-0000-0000-000000000001"))
+
+        # Tampered token fails
+        tampered = token[:-2] + ("11" if token[-2:] != "11" else "22")
+        self.assertFalse(verify_checkin_token(tampered, sess_id))
+
+        # Malformed / empty fails
+        self.assertFalse(verify_checkin_token("", sess_id))
+        self.assertFalse(verify_checkin_token(None, sess_id))
+        self.assertFalse(verify_checkin_token("invalid:token", sess_id))
+
+    def test_clean_public_instructor_name(self):
+        try:
+            from app.routes import clean_public_instructor_name
+        except ImportError as e:
+            self.skipTest(f"Skipping routes import: heavy AI dependencies require virtualenv ({e})")
+
+        raw = "Anatomy 101 [GPS:22.5726,88.3639,100,1,Campus] [BY:prof_smith]"
+        cleaned = clean_public_instructor_name(raw)
+        self.assertEqual(cleaned, "Anatomy 101")
+        self.assertNotIn("GPS", cleaned)
+        self.assertNotIn("prof_smith", cleaned)
+
+        # None / empty fallback
+        self.assertEqual(clean_public_instructor_name(None), "Faculty Member")
+        self.assertEqual(clean_public_instructor_name(""), "Faculty Member")
+
+
 if __name__ == "__main__":
     unittest.main()

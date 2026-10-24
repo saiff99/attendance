@@ -13,6 +13,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -449,6 +450,107 @@ console.log('\n--- 11. Attendance Foreign Key Non-Cascading Retention Lockdown -
   // 4. Verify explicit retention policy documentation
   const hasPolicyDocSection = policyDoc.includes('Database-Enforced Non-Cascading Retention (`ON DELETE RESTRICT`)');
   assert(hasPolicyDocSection, 'DATA_GOVERNANCE_AND_RETENTION_POLICY.md documents database-enforced non-cascading retention');
+}
+
+// --- 12. Check-In Capability Token & Public Lookup Protection ---
+console.log('\n--- 12. Check-In Capability Token & Public Lookup Protection ---');
+{
+  function getCheckinSigningSecret() {
+    const secret = (process.env.INTERNAL_API_KEY || process.env.AUTH_SECRET || '').trim();
+    if (secret.length >= 16) return secret;
+    return 'medattend_default_secure_checkin_secret_2026';
+  }
+
+  function generateCheckinToken(sessionId, validSeconds = 300) {
+    const expiresAt = Math.floor(Date.now() / 1000) + Math.min(Math.max(validSeconds, 30), 330);
+    const payload = `${sessionId}:${expiresAt}`;
+    const secret = getCheckinSigningSecret();
+    const signature = crypto.createHmac('sha256', secret).update(payload).digest('hex');
+    return `${payload}:${signature}`;
+  }
+
+  function verifyCheckinToken(token, expectedSessionId) {
+    if (typeof token !== 'string' || !token.trim()) return false;
+    const parts = token.trim().split(':');
+    if (parts.length !== 3) return false;
+    const [sessId, expiresAtStr, signature] = parts;
+    if (sessId.toLowerCase() !== expectedSessionId.toLowerCase()) return false;
+    const expiresAt = parseInt(expiresAtStr, 10);
+    if (isNaN(expiresAt)) return false;
+    if (Math.floor(Date.now() / 1000) > expiresAt) return false;
+    const secret = getCheckinSigningSecret();
+    const expectedSig = crypto.createHmac('sha256', secret).update(`${sessId}:${expiresAtStr}`).digest('hex');
+    try {
+      const sigBuf = Buffer.from(signature, 'hex');
+      const expBuf = Buffer.from(expectedSig, 'hex');
+      if (sigBuf.length !== expBuf.length) return false;
+      return crypto.timingSafeEqual(sigBuf, expBuf);
+    } catch {
+      return false;
+    }
+  }
+
+  const testSessionUuid = 'a1b2c3d4-e5f6-4a1b-8c2d-3e4f5a6b7c8d';
+  const otherSessionUuid = 'b2c3d4e5-f6a1-4b2c-9d3e-4f5a6b7c8d9e';
+
+  // 1. Token generation format
+  const token = generateCheckinToken(testSessionUuid, 300);
+  assert(Boolean(token) && token.split(':').length === 3, 'generateCheckinToken produces 3-part signed token (uuid:expires:hmac)');
+
+  // 2. Fresh token verification
+  assert(verifyCheckinToken(token, testSessionUuid), 'Fresh valid token verifies successfully against matching session UUID');
+
+  // 3. Mismatched session rejection (prevent token theft across lectures)
+  assert(!verifyCheckinToken(token, otherSessionUuid), 'Token presented for mismatched session UUID is strictly REJECTED');
+
+  // 4. Tampered signature rejection
+  const [sessId, expires, sig] = token.split(':');
+  const tamperedSig = sig.slice(0, -2) + (sig.slice(-2) === 'aa' ? 'bb' : 'aa');
+  const tamperedToken = `${sessId}:${expires}:${tamperedSig}`;
+  assert(!verifyCheckinToken(tamperedToken, testSessionUuid), 'Token with tampered signature is strictly REJECTED');
+
+  // 5. Expired token rejection
+  const expiredPayload = `${testSessionUuid}:${Math.floor(Date.now() / 1000) - 10}`;
+  const secret = getCheckinSigningSecret();
+  const expiredSig = crypto.createHmac('sha256', secret).update(expiredPayload).digest('hex');
+  const expiredToken = `${expiredPayload}:${expiredSig}`;
+  assert(!verifyCheckinToken(expiredToken, testSessionUuid), 'Expired capability token is strictly REJECTED');
+
+  // 6. Malformed token strings
+  assert(!verifyCheckinToken('not-a-token', testSessionUuid), 'Malformed token string rejected');
+  assert(!verifyCheckinToken(null, testSessionUuid), 'Null token rejected');
+  assert(!verifyCheckinToken('', testSessionUuid), 'Empty token string rejected');
+
+  // 7. Verify active-sessions route issues checkin_token and hides headcount
+  const activeSessionsRoutePath = path.resolve(__dirname, '../src/app/api/active-sessions/route.ts');
+  const activeSessionsContent = fs.existsSync(activeSessionsRoutePath) ? fs.readFileSync(activeSessionsRoutePath, 'utf8') : '';
+  assert(
+    activeSessionsContent.includes('generateCheckinToken') &&
+    activeSessionsContent.includes('checkin_token'),
+    'active-sessions route issues signed checkin_token for active sessions'
+  );
+  assert(
+    activeSessionsContent.includes('attendance_count: undefined'),
+    'active-sessions route hides live attendance headcount from unauthenticated public scrapers'
+  );
+
+  // 8. Verify student-lookup route enforces checkin_token or session auth
+  const studentLookupRoutePath = path.resolve(__dirname, '../src/app/api/student-lookup/[roll]/route.ts');
+  const studentLookupContent = fs.existsSync(studentLookupRoutePath) ? fs.readFileSync(studentLookupRoutePath, 'utf8') : '';
+  assert(
+    studentLookupContent.includes('verifyCheckinToken') &&
+    studentLookupContent.includes('!canSeeFullProfile && !hasValidCheckinToken'),
+    'student-lookup route enforces check-in capability token or authenticated session'
+  );
+
+  // 9. Verify Python backend route synchronization
+  const backendRoutesPath = path.resolve(__dirname, '../../backend/app/routes.py');
+  const backendRoutesContent = fs.existsSync(backendRoutesPath) ? fs.readFileSync(backendRoutesPath, 'utf8') : '';
+  assert(
+    backendRoutesContent.includes('def verify_checkin_token') &&
+    backendRoutesContent.includes('clean_public_instructor_name'),
+    'backend/app/routes.py defines synchronized verify_checkin_token and clean_public_instructor_name'
+  );
 }
 
 // Summary

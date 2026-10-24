@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { supabaseServer } from '@/lib/supabaseServer';
 import { decodeSessionMetadata } from '@/lib/geofence';
 
@@ -261,4 +262,64 @@ export async function filterSessionsForFaculty<
   const matchedIdSet = new Set(matched.map((s) => s.id));
   return sessions.filter((s) => matchedIdSet.has(s.id));
 }
+
+function getCheckinSigningSecret(): string {
+  const secret = (process.env.INTERNAL_API_KEY || process.env.AUTH_SECRET || '').trim();
+  if (secret.length >= 16) {
+    return secret;
+  }
+  return 'medattend_default_secure_checkin_secret_2026';
+}
+
+/**
+ * Generates a signed, short-lived check-in capability token for an active lecture session.
+ * Validity is bounded to remaining seconds of the check-in window (max 330 seconds).
+ */
+export function generateCheckinToken(sessionId: string, validSeconds = 300): string {
+  if (!isValidUuid(sessionId)) return '';
+  const expiresAt = Math.floor(Date.now() / 1000) + Math.min(Math.max(validSeconds, 30), 330);
+  const payload = `${sessionId}:${expiresAt}`;
+  const secret = getCheckinSigningSecret();
+  const signature = crypto.createHmac('sha256', secret).update(payload).digest('hex');
+  return `${payload}:${signature}`;
+}
+
+/**
+ * Validates a check-in capability token for a specific session ID.
+ * Rejects expired tokens, forged signatures, or session ID mismatches.
+ */
+export function verifyCheckinToken(token: unknown, expectedSessionId: string): boolean {
+  if (typeof token !== 'string' || !token.trim() || !isValidUuid(expectedSessionId)) {
+    return false;
+  }
+  const parts = token.trim().split(':');
+  if (parts.length !== 3) return false;
+
+  const [sessId, expiresAtStr, signature] = parts;
+  if (sessId.toLowerCase() !== expectedSessionId.toLowerCase()) {
+    return false;
+  }
+
+  const expiresAt = parseInt(expiresAtStr, 10);
+  if (isNaN(expiresAt)) return false;
+
+  const nowSec = Math.floor(Date.now() / 1000);
+  if (nowSec > expiresAt) {
+    return false; // Expired
+  }
+
+  const secret = getCheckinSigningSecret();
+  const payload = `${sessId}:${expiresAtStr}`;
+  const expectedSig = crypto.createHmac('sha256', secret).update(payload).digest('hex');
+
+  try {
+    const sigBuf = Buffer.from(signature, 'hex');
+    const expBuf = Buffer.from(expectedSig, 'hex');
+    if (sigBuf.length !== expBuf.length) return false;
+    return crypto.timingSafeEqual(sigBuf, expBuf);
+  } catch {
+    return false;
+  }
+}
+
 
