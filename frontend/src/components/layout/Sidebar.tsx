@@ -3,7 +3,11 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, ScanLine, Radio, Users, FileBarChart, Activity, Menu, X, Smartphone, LogOut, Sun, Moon, ShieldCheck, UserCog, GraduationCap } from "lucide-react";
+import {
+  LayoutDashboard, ScanLine, Radio, Users, FileBarChart, Activity,
+  Menu, X, Smartphone, LogOut, Sun, Moon, ShieldCheck, UserCog,
+  GraduationCap, BookOpen, Database
+} from "lucide-react";
 import { SystemHealth } from "@/components/SystemHealth";
 import { useAuth } from "@/lib/auth";
 import { useTheme } from "next-themes";
@@ -17,7 +21,9 @@ const navigation = [
   { name: "All Sessions", href: "/selfieattend", icon: Smartphone },
   { name: "Reports", href: "/reports", icon: FileBarChart },
   { name: "Faculty & Staff", href: "/users", icon: UserCog, superAdminOnly: true },
+  { name: "Academic Subjects", href: "/subjects", icon: BookOpen, superAdminOnly: true },
   { name: "Audit Trail", href: "/audit-logs", icon: ShieldCheck, superAdminOnly: true },
+  { name: "Database Backup", href: "/backup", icon: Database, superAdminOnly: true },
 ];
 
 const studentNavigation = [
@@ -151,10 +157,22 @@ export default function Sidebar() {
           {(user?.role === "Student"
             ? studentNavigation
             : navigation.filter((item: any) => {
-                if (item.superAdminOnly && user?.role !== "Super Admin" && !(item.href === "/users" && user?.role === "Admin")) {
+                if (
+                  item.superAdminOnly &&
+                  user?.role !== "Super Admin" &&
+                  !((item.href === "/users" || item.href === "/subjects") && user?.role === "Admin")
+                ) {
                   return false;
                 }
-                if (user?.role === "Faculty" && (item.href === "/students" || item.href === "/reports")) {
+                if (
+                  user?.role === "Faculty" &&
+                  (item.href === "/students" ||
+                    item.href === "/reports" ||
+                    item.href === "/users" ||
+                    item.href === "/subjects" ||
+                    item.href === "/backup" ||
+                    item.href === "/audit-logs")
+                ) {
                   return false;
                 }
                 return true;
