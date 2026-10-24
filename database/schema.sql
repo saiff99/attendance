@@ -193,7 +193,8 @@ END $$;
 CREATE POLICY "service_role_full_students" ON public.students FOR ALL TO service_role USING (true) WITH CHECK (true);
 CREATE POLICY "service_role_full_sessions" ON public.sessions FOR ALL TO service_role USING (true) WITH CHECK (true);
 CREATE POLICY "service_role_full_attendance" ON public.attendance FOR ALL TO service_role USING (true) WITH CHECK (true);
-CREATE POLICY "service_role_full_audit_logs" ON public.audit_logs FOR ALL TO service_role USING (true) WITH CHECK (true);
+CREATE POLICY "service_role_select_audit_logs" ON public.audit_logs FOR SELECT TO service_role USING (true);
+CREATE POLICY "service_role_insert_audit_logs" ON public.audit_logs FOR INSERT TO service_role WITH CHECK (true);
 CREATE POLICY "service_role_full_app_users" ON public.app_users FOR ALL TO service_role USING (true) WITH CHECK (true);
 CREATE POLICY "service_role_full_settings" ON public.settings FOR ALL TO service_role USING (true) WITH CHECK (true);
 CREATE POLICY "service_role_full_academic_subjects" ON public.academic_subjects FOR ALL TO service_role USING (true) WITH CHECK (true);
@@ -236,17 +237,27 @@ WHERE NOT EXISTS (
 CREATE OR REPLACE FUNCTION public.enforce_audit_log_immutability()
 RETURNS TRIGGER AS $$
 BEGIN
-    RAISE EXCEPTION 'SECURITY VIOLATION: audit_logs entries are immutable and cannot be updated, modified, or deleted.';
+    RAISE EXCEPTION 'SECURITY VIOLATION: audit_logs entries are immutable and cannot be updated, modified, deleted, or truncated.';
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+-- Row-level trigger for UPDATE and DELETE
 DROP TRIGGER IF EXISTS trg_audit_logs_immutable ON public.audit_logs;
 CREATE TRIGGER trg_audit_logs_immutable
 BEFORE UPDATE OR DELETE ON public.audit_logs
 FOR EACH ROW
 EXECUTE FUNCTION public.enforce_audit_log_immutability();
 
-REVOKE UPDATE, DELETE, TRUNCATE ON public.audit_logs FROM public, anon, authenticated;
+-- Statement-level trigger for TRUNCATE (row-level triggers bypass TRUNCATE in PostgreSQL)
+DROP TRIGGER IF EXISTS trg_audit_logs_immutable_truncate ON public.audit_logs;
+CREATE TRIGGER trg_audit_logs_immutable_truncate
+BEFORE TRUNCATE ON public.audit_logs
+FOR EACH STATEMENT
+EXECUTE FUNCTION public.enforce_audit_log_immutability();
+
+-- Revoke mutation privileges from ALL roles including service_role
+REVOKE UPDATE, DELETE, TRUNCATE ON public.audit_logs FROM public, anon, authenticated, service_role;
+GRANT SELECT, INSERT ON public.audit_logs TO service_role;
 
 -- ==============================================================================
 -- 13. Settings Table & Atomic Rate Limiting Stored Procedure

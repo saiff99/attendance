@@ -15,19 +15,28 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- 2. Attach trigger to audit_logs table
+-- 2. Attach row-level trigger to audit_logs table for UPDATE and DELETE
 DROP TRIGGER IF EXISTS trg_audit_logs_immutable ON public.audit_logs;
 CREATE TRIGGER trg_audit_logs_immutable
 BEFORE UPDATE OR DELETE ON public.audit_logs
 FOR EACH ROW
 EXECUTE FUNCTION public.enforce_audit_log_immutability();
 
--- 3. Revoke dangerous table mutation privileges
-REVOKE UPDATE, DELETE, TRUNCATE ON public.audit_logs FROM public, anon, authenticated;
+-- 3. Attach statement-level trigger to audit_logs table for TRUNCATE
+DROP TRIGGER IF EXISTS trg_audit_logs_immutable_truncate ON public.audit_logs;
+CREATE TRIGGER trg_audit_logs_immutable_truncate
+BEFORE TRUNCATE ON public.audit_logs
+FOR EACH STATEMENT
+EXECUTE FUNCTION public.enforce_audit_log_immutability();
 
--- 4. Reaffirm Service-Role append-only / read-only RLS policy
+-- 4. Revoke dangerous table mutation privileges from all roles, including service_role
+REVOKE UPDATE, DELETE, TRUNCATE ON public.audit_logs FROM public, anon, authenticated, service_role;
+GRANT SELECT, INSERT ON public.audit_logs TO service_role;
+
+-- 5. Reaffirm Service-Role append-only / read-only RLS policy
 ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audit_logs FORCE ROW LEVEL SECURITY;
 
-COMMENT ON TABLE public.audit_logs IS 'Immutable forensic audit ledger. Rows cannot be updated or deleted.';
+COMMENT ON TABLE public.audit_logs IS 'Immutable forensic audit ledger. Rows cannot be updated, modified, deleted, or truncated.';
 COMMENT ON TRIGGER trg_audit_logs_immutable ON public.audit_logs IS 'Enforces non-repudiation by rejecting UPDATE and DELETE on audit_logs.';
+COMMENT ON TRIGGER trg_audit_logs_immutable_truncate ON public.audit_logs IS 'Enforces non-repudiation by rejecting statement-level TRUNCATE on audit_logs.';

@@ -11,6 +11,13 @@
  * - RTSP credential masking
  */
 
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 let passed = 0;
 let failed = 0;
 
@@ -357,6 +364,50 @@ console.log('\n--- 9. Session Ownership Sanitization & Faculty Immutability ---'
     geofenceUpdate.allowed && geofenceUpdate.instructor_name.endsWith('[BY:prof_smith]'),
     'Geofence update preserves authoritative [BY:prof_smith] creator tag'
   );
+}
+
+// --- 10. Audit Log Forensic Ledger Immutability & Least Privilege ---
+console.log('\n--- 10. Audit Log Forensic Ledger Immutability & Least Privilege ---');
+{
+  const schemaPath = path.resolve(__dirname, '../../database/schema.sql');
+  const migration16Path = path.resolve(__dirname, '../../database/migrations/16_audit_logs_strict_immutability.sql');
+
+  const schemaSql = fs.existsSync(schemaPath) ? fs.readFileSync(schemaPath, 'utf8') : '';
+  const migrationSql = fs.existsSync(migration16Path) ? fs.readFileSync(migration16Path, 'utf8') : '';
+
+  // 1. Verify Statement-Level TRUNCATE Trigger exists in schema and migration
+  const hasTruncateTrigger = 
+    schemaSql.includes('BEFORE TRUNCATE ON public.audit_logs') && 
+    schemaSql.includes('FOR EACH STATEMENT') &&
+    schemaSql.includes('trg_audit_logs_immutable_truncate');
+  assert(hasTruncateTrigger, 'PostgreSQL statement-level BEFORE TRUNCATE trigger defined in schema.sql');
+
+  const hasMigrationTruncate = 
+    migrationSql.includes('BEFORE TRUNCATE ON public.audit_logs') &&
+    migrationSql.includes('FOR EACH STATEMENT');
+  assert(hasMigrationTruncate, 'Migration 16 includes statement-level BEFORE TRUNCATE trigger');
+
+  // 2. Verify Row-Level UPDATE & DELETE trigger exists
+  const hasRowTrigger = 
+    schemaSql.includes('BEFORE UPDATE OR DELETE ON public.audit_logs') && 
+    schemaSql.includes('FOR EACH ROW');
+  assert(hasRowTrigger, 'Row-level BEFORE UPDATE OR DELETE trigger defined on audit_logs');
+
+  // 3. Verify Revocation of UPDATE, DELETE, TRUNCATE from service_role
+  const revokesMutationFromServiceRole = 
+    /REVOKE\s+UPDATE,\s*DELETE,\s*TRUNCATE\s+ON\s+public\.audit_logs\s+FROM[\s\w,]*service_role/i.test(schemaSql);
+  assert(revokesMutationFromServiceRole, 'UPDATE, DELETE, TRUNCATE privileges revoked from service_role in schema.sql');
+
+  // 4. Verify Explicit Least-Privilege GRANT (SELECT, INSERT only) to service_role
+  const grantsOnlyReadAppend = 
+    /GRANT\s+SELECT,\s*INSERT\s+ON\s+public\.audit_logs\s+TO\s+service_role/i.test(schemaSql);
+  assert(grantsOnlyReadAppend, 'Strict least privilege (SELECT, INSERT only) granted to service_role in schema.sql');
+
+  // 5. Verify RLS policies separate SELECT and INSERT without generic FOR ALL
+  const hasSelectRls = schemaSql.includes('CREATE POLICY "service_role_select_audit_logs"');
+  const hasInsertRls = schemaSql.includes('CREATE POLICY "service_role_insert_audit_logs"');
+  const hasOldGenericRls = schemaSql.includes('CREATE POLICY "service_role_full_audit_logs"');
+  assert(hasSelectRls && hasInsertRls && !hasOldGenericRls, 'Audit logs RLS policies separated into SELECT and INSERT only (no generic ALL)');
 }
 
 // Summary
