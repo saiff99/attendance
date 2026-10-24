@@ -1917,9 +1917,11 @@ export default function LiveScan() {
 
               {/* Large High-Contrast QR Code */}
               {(() => {
-                const qrTarget = typeof window !== "undefined" && window.location.hostname && !window.location.hostname.includes("localhost") && !window.location.hostname.includes("127.0.0.1")
+                const tokenParam = (activeSession as any).checkin_token ? `&token=${encodeURIComponent((activeSession as any).checkin_token)}` : "";
+                const baseUrl = typeof window !== "undefined" && window.location.hostname && !window.location.hostname.includes("localhost") && !window.location.hostname.includes("127.0.0.1")
                   ? `${window.location.origin}/selfieattend?session_id=${activeSession.id}`
                   : `https://attendance-cd0ishn9x-jims-hospital.vercel.app/selfieattend?session_id=${activeSession.id}`;
+                const qrTarget = `${baseUrl}${tokenParam}`;
 
                 const qrSize = isQrFullscreen ? 460 : 340;
 

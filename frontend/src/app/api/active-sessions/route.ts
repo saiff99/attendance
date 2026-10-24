@@ -38,7 +38,7 @@ export function isInternalSession(s: any): boolean {
  */
 async function processAndFilterSessions(
   rawSessions: any[],
-  authUser: { role: string; username: string; name?: string } | null
+  authUser: { role: string; username: string; name?: string; studentRoll?: string } | null
 ): Promise<any[]> {
   if (!rawSessions || !Array.isArray(rawSessions)) return [];
 
@@ -100,51 +100,65 @@ async function processAndFilterSessions(
     const creatorClean = creator.startsWith('@') ? creator.slice(1) : creator;
     const fullName = userMap[creatorClean.toLowerCase()] || creatorClean || 'Faculty Member';
 
-    // Generate signed, time-limited checkin capability token if window is active
-    const remSec = Number(s.remaining_seconds) || 0;
-    const checkinToken = (!s.is_expired && remSec > 0)
-      ? generateCheckinToken(s.id, remSec)
-      : null;
-
     return {
       ...s,
-      checkin_token: checkinToken,
+      checkin_token: null, // Default to null for unauthenticated safety
       created_by: creator,
       creator_name: fullName,
       created_by_name: fullName,
     };
   });
 
-  // If user is logged in as Faculty, filter to only their own sessions
+  // If user is logged in as Faculty, filter to only their own sessions and include classroom checkin token
   if (authUser && authUser.role === 'Faculty') {
     const facultyUser = (authUser.username || '').trim().toLowerCase();
     const facultyName = (authUser.name || '').trim().toLowerCase();
 
-    return enriched.filter((s: any) => {
-      const cb = (s.created_by || '').trim().toLowerCase();
-      const dec = decodeSessionMetadata(s.instructor_name || '');
-      const byTag = (dec.facultyUsername || '').trim().toLowerCase();
-      const topic = (dec.topic || '').trim().toLowerCase();
+    return enriched
+      .filter((s: any) => {
+        const cb = (s.created_by || '').trim().toLowerCase();
+        const dec = decodeSessionMetadata(s.instructor_name || '');
+        const byTag = (dec.facultyUsername || '').trim().toLowerCase();
+        const topic = (dec.topic || '').trim().toLowerCase();
 
-      return (
-        (byTag && (byTag === facultyUser || byTag === facultyName)) ||
-        (cb && (cb === facultyUser || cb === facultyName)) ||
-        (topic && (topic === facultyUser || topic === facultyName))
-      );
+        return (
+          (byTag && (byTag === facultyUser || byTag === facultyName)) ||
+          (cb && (cb === facultyUser || cb === facultyName)) ||
+          (topic && (topic === facultyUser || topic === facultyName))
+        );
+      })
+      .map((s: any) => {
+        const remSec = Number(s.remaining_seconds) || 0;
+        return {
+          ...s,
+          checkin_token: (!s.is_expired && remSec > 0) ? generateCheckinToken(s.id, remSec) : null,
+        };
+      });
+  }
+
+  // Super Admin or Admin receives all sessions with full creator/audit information and classroom checkin token
+  if (authUser && ['Super Admin', 'Admin'].includes(authUser.role)) {
+    return enriched.map((s: any) => {
+      const remSec = Number(s.remaining_seconds) || 0;
+      return {
+        ...s,
+        checkin_token: (!s.is_expired && remSec > 0) ? generateCheckinToken(s.id, remSec) : null,
+      };
     });
   }
 
-  // Super Admin or Admin receives all sessions with full creator/audit information
-  if (authUser && ['Super Admin', 'Admin'].includes(authUser.role)) {
-    return enriched;
-  }
-
-  // Logged-in Students receive active sessions with general creator info (strip internal creator username & live attendance headcount)
+  // Logged-in Students receive active sessions with roll-bound checkin token (bound to student's own roll)
   if (authUser && authUser.role === 'Student') {
     return enriched.map((s: any) => {
       const dec = decodeSessionMetadata(s.instructor_name || '');
+      const remSec = Number(s.remaining_seconds) || 0;
+      const rollBoundToken = (!s.is_expired && remSec > 0 && authUser.studentRoll)
+        ? generateCheckinToken(s.id, remSec, authUser.studentRoll)
+        : null;
+
       return {
         ...s,
+        checkin_token: rollBoundToken,
         instructor_name: dec.topic || s.class_name,
         created_by: undefined,
         attendance_count: undefined,
@@ -152,11 +166,12 @@ async function processAndFilterSessions(
     });
   }
 
-  // Public / Unauthenticated callers: strictly minimize sensitive creator, internal faculty tags, and live headcount
+  // Public / Unauthenticated callers: strictly minimize sensitive creator, internal faculty tags, live headcount, and zero check-in token exposure
   return enriched.map((s: any) => {
     const dec = decodeSessionMetadata(s.instructor_name || '');
     return {
       ...s,
+      checkin_token: null, // Hidden from unauthenticated public scrapers
       instructor_name: dec.topic || 'Faculty Member',
       created_by: undefined,
       creator_name: 'Faculty Member',

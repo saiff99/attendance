@@ -2,7 +2,7 @@ import { NextResponse, NextRequest } from 'next/server';
 import { supabaseServer } from '@/lib/supabaseServer';
 import { isCohortMatching } from '@/lib/cohort';
 import { fetchBackend } from '@/lib/serverBackend';
-import { isValidUuid, verifyCheckinToken } from '@/lib/attendanceAuth';
+import { isValidUuid, verifyCheckinToken, generateCheckinToken } from '@/lib/attendanceAuth';
 import { getTrustedClientIp, checkStudentLookupRateLimit } from '@/lib/rateLimiter';
 import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/serverAuth';
 
@@ -93,13 +93,33 @@ export async function GET(
       (authUser.studentRoll?.trim().toLowerCase() === roll.trim().toLowerCase() ||
        authUser.username?.trim().toLowerCase() === roll.trim().toLowerCase())
     );
+    const cleanRoll = roll.trim();
     const canSeeFullProfile = isStaff || isOwnStudent;
-    const hasValidCheckinToken = verifyCheckinToken(token, cleanSessId);
+    let hasValidCheckinToken = verifyCheckinToken(token, cleanSessId, cleanRoll);
 
-    // Unauthenticated requests MUST carry a cryptographically signed, unexpired checkin capability token
-    if (!canSeeFullProfile && !hasValidCheckinToken) {
+    // Optional Verification Challenge: If unauthenticated caller doesn't have a QR token, allow verifying via Student PIN
+    const studentPin = (searchParams.get('pin') || request.headers.get('x-student-pin') || '').trim();
+    let isChallengeVerified = false;
+    if (!canSeeFullProfile && !hasValidCheckinToken && studentPin) {
+      try {
+        const { data: stuPinRecord } = await supabaseServer
+          .from('students')
+          .select('portal_password_hash')
+          .ilike('student_roll', cleanRoll)
+          .maybeSingle();
+        if (stuPinRecord?.portal_password_hash && stuPinRecord.portal_password_hash.startsWith('$2')) {
+          const bcrypt = (await import('bcryptjs')).default;
+          isChallengeVerified = await bcrypt.compare(studentPin, stuPinRecord.portal_password_hash);
+        }
+      } catch {
+        isChallengeVerified = false;
+      }
+    }
+
+    // Unauthenticated requests MUST carry a cryptographically signed checkin token (classroom or student-bound) or pass PIN challenge
+    if (!canSeeFullProfile && !hasValidCheckinToken && !isChallengeVerified) {
       return NextResponse.json(
-        { detail: 'Valid signed check-in token or authenticated session required. Direct unauthenticated student lookup is prohibited.' },
+        { detail: 'Valid signed check-in token, student PIN challenge, or authenticated session required. Direct unauthenticated student lookup is prohibited.' },
         { status: 403 }
       );
     }
@@ -107,11 +127,13 @@ export async function GET(
     // 3. Try backend fast-path
     try {
       const tokenParam = token ? `&token=${encodeURIComponent(token)}` : '';
-      const queryParam = `?session_id=${encodeURIComponent(cleanSessId)}${tokenParam}`;
-      const res = await fetchBackend(`/api/student-lookup/${encodeURIComponent(roll)}${queryParam}`, {
+      const pinParam = studentPin ? `&pin=${encodeURIComponent(studentPin)}` : '';
+      const queryParam = `?session_id=${encodeURIComponent(cleanSessId)}${tokenParam}${pinParam}`;
+      const res = await fetchBackend(`/api/student-lookup/${encodeURIComponent(cleanRoll)}${queryParam}`, {
         headers: {
           'ngrok-skip-browser-warning': '69420',
           ...(token ? { 'x-checkin-token': token } : {}),
+          ...(studentPin ? { 'x-student-pin': studentPin } : {}),
         },
         cache: 'no-store',
       });
@@ -126,6 +148,11 @@ export async function GET(
             delete data.student.attendance_info;
             data.student.academic_year = 'Enrolled Student';
             delete data.student.target_academic_year;
+            // Prevent enumeration of biometric status and presence status
+            data.student.has_face_enrolled = true;
+            data.student.is_already_present = false;
+            data.student.cohort_mismatch = false;
+            data.student.can_checkin = true;
           } else if (data.student.attendance_info) {
             data.student.attendance_info = {
               status: data.student.attendance_info.status || 'Present',
@@ -228,18 +255,20 @@ export async function GET(
     }
 
     const canCheckin = Boolean(!cohortMismatch && !isAlreadyPresent && hasFace);
+    const rollBoundToken = generateCheckinToken(cleanSessId, 300, stud.student_roll);
 
     return NextResponse.json({
       success: true,
+      checkin_token: rollBoundToken,
       student: {
         student_roll: stud.student_roll,
         full_name: canSeeFullProfile ? stud.full_name : maskStudentName(stud.full_name),
         academic_year: canSeeFullProfile ? (stud.academic_year || '1st Year') : 'Enrolled Student',
-        has_face_enrolled: hasFace,
-        is_already_present: isAlreadyPresent,
-        can_checkin: canCheckin,
+        has_face_enrolled: canSeeFullProfile ? hasFace : true,
+        is_already_present: canSeeFullProfile ? isAlreadyPresent : false,
+        can_checkin: canSeeFullProfile ? canCheckin : true,
         attendance_info: canSeeFullProfile ? attendanceInfo : null,
-        cohort_mismatch: cohortMismatch,
+        cohort_mismatch: canSeeFullProfile ? cohortMismatch : false,
         target_academic_year: canSeeFullProfile ? targetAcademicYear : null,
       }
     });

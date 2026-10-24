@@ -71,7 +71,10 @@ interface SelfieAttendClientProps {
 export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClientProps) {
   const searchParams = useSearchParams();
   const initialSessionId = searchParams.get("session_id");
+  const initialToken = searchParams.get("token");
   const hasAutoSelectedRef = useRef<boolean>(false);
+  const [checkinToken, setCheckinToken] = useState<string | null>(() => initialToken || null);
+  const [pinInput, setPinInput] = useState<string>("");
 
   // Step Machine: 1: select_session, 2: enter_roll, 3: capture_selfie, 4: result
   const [step, setStep] = useState<"select_session" | "enter_roll" | "capture_selfie" | "result">(() => {
@@ -125,7 +128,10 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
     if (initialSessionId && initialSessions.length > 0) {
       const found = initialSessions.find(s => s.id === initialSessionId);
       if (found && (found.remaining_seconds ?? 0) > 0 && !found.is_expired) {
-        return found;
+        return {
+          ...found,
+          checkin_token: initialToken || found.checkin_token || null,
+        };
       }
     }
     return null;
@@ -519,11 +525,14 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
 
     try {
       // 1. Try Same-Origin Next.js API route first (returns strictly non-sensitive fields: has_face_enrolled, etc.)
-      const tokenParam = activeSess?.checkin_token ? `&token=${encodeURIComponent(activeSess.checkin_token)}` : "";
-      const sessionIdParam = activeSess ? `?session_id=${encodeURIComponent(activeSess.id)}${tokenParam}` : "";
+      const effectiveToken = checkinToken || activeSess?.checkin_token || initialToken || "";
+      const tokenParam = effectiveToken ? `&token=${encodeURIComponent(effectiveToken)}` : "";
+      const pinParam = pinInput.trim() ? `&pin=${encodeURIComponent(pinInput.trim())}` : "";
+      const sessionIdParam = activeSess ? `?session_id=${encodeURIComponent(activeSess.id)}${tokenParam}${pinParam}` : "";
       const checkinHeaders: Record<string, string> = {
         "ngrok-skip-browser-warning": "69420",
-        ...(activeSess?.checkin_token ? { "x-checkin-token": activeSess.checkin_token } : {})
+        ...(effectiveToken ? { "x-checkin-token": effectiveToken } : {}),
+        ...(pinInput.trim() ? { "x-student-pin": pinInput.trim() } : {}),
       };
 
       try {
@@ -534,6 +543,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
         const data = await localRes.json().catch(() => ({}));
         if (localRes.ok && data.student) {
           setStudent(data.student);
+          if (data.checkin_token) setCheckinToken(data.checkin_token);
           if (overrideRoll) setRollInput(overrideRoll);
           if (effectiveGeofence.enabled && geofenceStatus !== "allowed") {
             verifyUserLocation();
@@ -559,6 +569,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
       }
 
       setStudent(data.student);
+      if (data.checkin_token) setCheckinToken(data.checkin_token);
       if (overrideRoll) setRollInput(overrideRoll);
       if (effectiveGeofence.enabled && geofenceStatus !== "allowed") {
         verifyUserLocation();
@@ -863,9 +874,14 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
         formData.append("latitude", userCoords.latitude.toString());
         formData.append("longitude", userCoords.longitude.toString());
       }
-      if (geofenceDistance !== null) {
-        formData.append("distance_meters", geofenceDistance.toString());
+      if (checkinToken) {
+        formData.append("checkin_token", checkinToken);
       }
+
+      const selfieHeaders: Record<string, string> = {
+        "ngrok-skip-browser-warning": "69420",
+        ...(checkinToken ? { "x-checkin-token": checkinToken } : {}),
+      };
 
       let response: Response | null = null;
 
@@ -873,9 +889,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
       if (backendUrl) {
         response = await fetch(`${backendUrl}/api/selfie-attendance`, {
           method: "POST",
-          headers: {
-            "ngrok-skip-browser-warning": "69420",
-          },
+          headers: selfieHeaders,
           body: formData,
           signal: controller.signal,
         }).catch(() => null);
@@ -885,9 +899,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
       if (!response) {
         const proxyRes = await fetch("/api/selfie-attendance", {
           method: "POST",
-          headers: {
-            "ngrok-skip-browser-warning": "69420",
-          },
+          headers: selfieHeaders,
           body: formData,
           signal: controller.signal,
         }).catch(() => null);
@@ -1337,6 +1349,33 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                       className="w-full bg-slate-950 border border-slate-700 focus:border-indigo-500 rounded-xl px-4 py-3 text-base text-white font-mono tracking-wider placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all"
                     />
                   </div>
+
+                  {checkinToken ? (
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/25 text-emerald-300 text-xs font-medium">
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      <span>Classroom QR Verified — Instant check-in active</span>
+                    </div>
+                  ) : !isStudentUser ? (
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[11px] font-semibold text-slate-300 flex items-center justify-between">
+                        <span>Student Portal PIN (Challenge Verification)</span>
+                        <span className="text-[10px] text-slate-500">Not needed if scanned QR</span>
+                      </label>
+                      <input
+                        type="password"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        maxLength={6}
+                        placeholder="Enter your 4-6 digit PIN"
+                        value={pinInput}
+                        onChange={(e) => {
+                          setPinInput(e.target.value.replace(/\D/g, ""));
+                          setLookupError(null);
+                        }}
+                        className="w-full bg-slate-950 border border-slate-700 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-white font-mono placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all"
+                      />
+                    </div>
+                  ) : null}
 
                   {lookupError && (
                     <div className="p-2.5 rounded-lg bg-red-950/50 border border-red-500/30 text-xs text-red-300 flex items-center gap-2">

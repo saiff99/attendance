@@ -288,28 +288,46 @@ export function getCheckinSigningSecret(): string {
  * Generates a signed, short-lived check-in capability token for an active lecture session.
  * Validity is bounded to remaining seconds of the check-in window (max 330 seconds).
  */
-export function generateCheckinToken(sessionId: string, validSeconds = 300): string {
+export function generateCheckinToken(sessionId: string, validSeconds = 300, studentRoll?: string): string {
   if (!isValidUuid(sessionId)) return '';
   const expiresAt = Math.floor(Date.now() / 1000) + Math.min(Math.max(validSeconds, 30), 330);
-  const payload = `${sessionId}:${expiresAt}`;
+  const cleanRoll = studentRoll ? String(studentRoll).trim().toLowerCase() : '';
+  const payload = cleanRoll ? `${sessionId}:${cleanRoll}:${expiresAt}` : `${sessionId}:${expiresAt}`;
   const secret = getCheckinSigningSecret();
   const signature = crypto.createHmac('sha256', secret).update(payload).digest('hex');
   return `${payload}:${signature}`;
 }
 
 /**
- * Validates a check-in capability token for a specific session ID.
- * Rejects expired tokens, forged signatures, or session ID mismatches.
+ * Validates a check-in capability token for a specific session ID and optional student roll.
+ * Supports both 4-part roll-bound tokens and 3-part classroom session tokens.
+ * Rejects expired tokens, forged signatures, or session/roll mismatches.
  */
-export function verifyCheckinToken(token: unknown, expectedSessionId: string): boolean {
+export function verifyCheckinToken(
+  token: unknown,
+  expectedSessionId: string,
+  expectedStudentRoll?: string
+): boolean {
   if (typeof token !== 'string' || !token.trim() || !isValidUuid(expectedSessionId)) {
     return false;
   }
   const parts = token.trim().split(':');
-  if (parts.length !== 3) return false;
+  let sessId = '';
+  let roll = '';
+  let expiresAtStr = '';
+  let signature = '';
+  let payload = '';
 
-  const [sessId, expiresAtStr, signature] = parts;
-  if (sessId.toLowerCase() !== expectedSessionId.toLowerCase()) {
+  if (parts.length === 4) {
+    [sessId, roll, expiresAtStr, signature] = parts;
+    if (sessId.toLowerCase() !== expectedSessionId.toLowerCase()) return false;
+    if (expectedStudentRoll && roll.toLowerCase() !== String(expectedStudentRoll).trim().toLowerCase()) return false;
+    payload = `${sessId}:${roll}:${expiresAtStr}`;
+  } else if (parts.length === 3) {
+    [sessId, expiresAtStr, signature] = parts;
+    if (sessId.toLowerCase() !== expectedSessionId.toLowerCase()) return false;
+    payload = `${sessId}:${expiresAtStr}`;
+  } else {
     return false;
   }
 
@@ -323,7 +341,6 @@ export function verifyCheckinToken(token: unknown, expectedSessionId: string): b
 
   try {
     const secret = getCheckinSigningSecret();
-    const payload = `${sessId}:${expiresAtStr}`;
     const expectedSig = crypto.createHmac('sha256', secret).update(payload).digest('hex');
 
     const sigBuf = Buffer.from(signature, 'hex');

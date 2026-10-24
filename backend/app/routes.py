@@ -842,13 +842,17 @@ def get_checkin_secret() -> str:
     return secret
 
 
-def generate_checkin_token(session_id: str, valid_seconds: int = 300) -> str:
+def generate_checkin_token(session_id: str, valid_seconds: int = 300, student_roll: Optional[str] = None) -> str:
     try:
         uuid.UUID(str(session_id).strip())
     except Exception:
         return ""
     expires_at = int(time.time()) + min(max(valid_seconds, 30), 330)
-    payload = f"{session_id}:{expires_at}"
+    clean_roll = str(student_roll).strip().lower() if student_roll and str(student_roll).strip() else None
+    if clean_roll:
+        payload = f"{session_id}:{clean_roll}:{expires_at}"
+    else:
+        payload = f"{session_id}:{expires_at}"
     try:
         secret = get_checkin_secret()
     except Exception as e:
@@ -858,15 +862,29 @@ def generate_checkin_token(session_id: str, valid_seconds: int = 300) -> str:
     return f"{payload}:{sig}"
 
 
-def verify_checkin_token(token: Optional[str], expected_session_id: str) -> bool:
+def verify_checkin_token(
+    token: Optional[str],
+    expected_session_id: str,
+    expected_student_roll: Optional[str] = None
+) -> bool:
     if not token or not isinstance(token, str) or not token.strip():
         return False
     parts = token.strip().split(":")
-    if len(parts) != 3:
+    if len(parts) == 4:
+        sess_id, roll, expires_str, sig = parts
+        if sess_id.lower() != str(expected_session_id).lower().strip():
+            return False
+        if expected_student_roll and roll.lower() != str(expected_student_roll).lower().strip():
+            return False
+        payload = f"{sess_id}:{roll}:{expires_str}"
+    elif len(parts) == 3:
+        sess_id, expires_str, sig = parts
+        if sess_id.lower() != str(expected_session_id).lower().strip():
+            return False
+        payload = f"{sess_id}:{expires_str}"
+    else:
         return False
-    sess_id, expires_str, sig = parts
-    if sess_id.lower() != str(expected_session_id).lower().strip():
-        return False
+
     try:
         expires_at = int(expires_str)
     except ValueError:
@@ -878,7 +896,6 @@ def verify_checkin_token(token: Optional[str], expected_session_id: str) -> bool
     except Exception as e:
         logger.error(f"[Checkin Token] Cannot verify token: {e}")
         return False
-    payload = f"{sess_id}:{expires_str}"
     expected_sig = hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
     return hmac.compare_digest(sig, expected_sig)
 
@@ -964,7 +981,11 @@ async def get_active_sessions(request: Request):
                     remaining_seconds = 0
                     is_expired = True
 
-            checkin_token = generate_checkin_token(s["id"], remaining_seconds) if not is_expired and remaining_seconds > 0 else None
+            checkin_token = (
+                generate_checkin_token(s["id"], remaining_seconds)
+                if is_internal_auth and not is_expired and remaining_seconds > 0
+                else None
+            )
 
             enhanced_sessions.append({
                 **s,
@@ -1040,8 +1061,9 @@ async def student_lookup(
     internal_key = os.getenv("INTERNAL_API_KEY", "").strip()
     is_internal_auth = bool(internal_key and api_key_header and hmac.compare_digest(api_key_header.strip(), internal_key))
 
+    clean_roll = student_roll.strip()
     checkin_token = token or request.headers.get("x-checkin-token") or request.query_params.get("token")
-    has_valid_checkin_token = verify_checkin_token(checkin_token, clean_sess_id)
+    has_valid_checkin_token = verify_checkin_token(checkin_token, clean_sess_id, clean_roll)
 
     if not is_internal_auth and not has_valid_checkin_token:
         raise HTTPException(
@@ -1061,6 +1083,7 @@ async def student_lookup(
         )
 
     time_str = sess_obj.get("start_time") or sess_obj.get("created_at")
+    remaining_validity = 300
     if time_str:
         try:
             start_dt = parse_iso_datetime(time_str)
@@ -1070,13 +1093,13 @@ async def student_lookup(
                     status_code=403,
                     detail=f"Attendance window closed! The 5-minute check-in time for '{sess_obj.get('class_name')}' has expired."
                 )
+            remaining_validity = max(30, min(330, int(300 - elapsed)))
         except HTTPException:
             raise
         except Exception:
             pass
 
     try:
-        clean_roll = student_roll.strip()
         # Query student profile and face template status (raw biometric vectors are evaluated server-side and omitted from API response)
         res = safe_db_execute(supabase.table("students").select(
             "id, student_roll, full_name, academic_year, is_active, biometric_consent, face_encoding"
@@ -1120,19 +1143,39 @@ async def student_lookup(
             }
 
         can_checkin = bool(not cohort_mismatch and not is_already_present and has_face)
+        roll_token = generate_checkin_token(clean_sess_id, remaining_validity, clean_roll)
+
+        if not is_internal_auth:
+            # Public caller: Extreme Data Minimization to eliminate roster scraping, biometric status leakage, and presence tracking
+            return {
+                "success": True,
+                "checkin_token": roll_token,
+                "student": {
+                    "student_roll": student["student_roll"],
+                    "full_name": mask_student_name(student["full_name"]),
+                    "academic_year": "Enrolled Student",
+                    "has_face_enrolled": True,
+                    "is_already_present": False,
+                    "can_checkin": True,
+                    "attendance_info": None,
+                    "cohort_mismatch": False,
+                    "target_academic_year": None
+                }
+            }
 
         return {
             "success": True,
+            "checkin_token": roll_token,
             "student": {
                 "student_roll": student["student_roll"],
-                "full_name": student["full_name"] if is_internal_auth else mask_student_name(student["full_name"]),
-                "academic_year": student.get("academic_year") if is_internal_auth else "Enrolled Student",
+                "full_name": student["full_name"],
+                "academic_year": student.get("academic_year"),
                 "has_face_enrolled": has_face,
                 "is_already_present": is_already_present,
                 "can_checkin": can_checkin,
-                "attendance_info": attendance_info if is_internal_auth else None,
+                "attendance_info": attendance_info,
                 "cohort_mismatch": cohort_mismatch,
-                "target_academic_year": target_academic_year if is_internal_auth else None
+                "target_academic_year": target_academic_year
             }
         }
     except HTTPException:
@@ -1151,7 +1194,8 @@ async def selfie_attendance(
     latitude: Optional[float] = Form(None),
     longitude: Optional[float] = Form(None),
     distance_meters: Optional[float] = Form(None),
-    device_id: Optional[str] = Form(None)
+    device_id: Optional[str] = Form(None),
+    checkin_token: Optional[str] = Form(None)
 ):
     """
     Processes a student's mobile selfie, verifies face against student's enrolled embedding using InsightFace AI,
@@ -1171,6 +1215,15 @@ async def selfie_attendance(
     clean_roll = student_roll.strip()
     if len(clean_roll) > 50:
         raise HTTPException(status_code=400, detail="student_roll is too long (Max 50 characters).")
+
+    # Cryptographic check-in capability verification (strictly bounds session + student roll)
+    token_val = checkin_token or request.headers.get("x-checkin-token")
+    if token_val:
+        if not verify_checkin_token(token_val, clean_sess_id, clean_roll):
+            raise HTTPException(
+                status_code=403,
+                detail="Invalid, expired, or roll-mismatched check-in token for this student."
+            )
 
     clean_dev_id = None
     if device_id and device_id.strip():

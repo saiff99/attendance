@@ -964,11 +964,18 @@ async function runTests() {
       'Created active session for live student lookup verification');
     const liveSessionId = createLiveSess.data?.session?.id;
 
-    // Fetch active session with its capability token from /api/active-sessions
-    const activeSessList = await request('/api/active-sessions');
-    const matchedSess = (activeSessList.data?.sessions || []).find(s => s.id === liveSessionId);
+    // Verify public unauthenticated /api/active-sessions strictly hides checkin_token from scrapers
+    const publicSessList = await request('/api/active-sessions');
+    const publicMatched = (publicSessList.data?.sessions || []).find(s => s.id === liveSessionId);
+    assert(!publicMatched?.checkin_token, 'Public unauthenticated active-sessions strictly hides checkin_token from scrapers');
+
+    // Fetch active session with staff authorization to receive authorized classroom QR checkin token
+    const staffSessList = await request('/api/active-sessions', {
+      headers: { Cookie: adminSessionCookie }
+    });
+    const matchedSess = (staffSessList.data?.sessions || []).find(s => s.id === liveSessionId);
     const testCheckinToken = matchedSess?.checkin_token || '';
-    assert(Boolean(testCheckinToken), 'active-sessions returned signed checkin_token for active lecture');
+    assert(Boolean(testCheckinToken), 'Staff-authorized active-sessions returned signed checkin_token for classroom QR');
 
     // 6. Unauthenticated lookup without checkin_token is strictly rejected (HTTP 403)
     const noTokenRes = await request(`/api/student-lookup/25001?session_id=${liveSessionId}`, {

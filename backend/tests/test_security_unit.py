@@ -403,11 +403,25 @@ class TestCheckinCapabilityTokenUnit(unittest.TestCase):
         self.assertTrue(bool(token))
         self.assertEqual(len(token.split(":")), 3)
 
-        # Valid token passes
+        # Valid session token passes with or without roll
         self.assertTrue(verify_checkin_token(token, sess_id))
+        self.assertTrue(verify_checkin_token(token, sess_id, "24001"))
+
+        # Roll-bound token lifecycle
+        roll_token = generate_checkin_token(sess_id, valid_seconds=300, student_roll="24001")
+        self.assertTrue(bool(roll_token))
+        self.assertEqual(len(roll_token.split(":")), 4)
+
+        # Correct roll passes
+        self.assertTrue(verify_checkin_token(roll_token, sess_id, "24001"))
+        self.assertTrue(verify_checkin_token(roll_token, sess_id, " 24001 "))
+
+        # Mismatched roll fails
+        self.assertFalse(verify_checkin_token(roll_token, sess_id, "24002"))
 
         # Mismatched session ID fails
         self.assertFalse(verify_checkin_token(token, "00000000-0000-0000-0000-000000000001"))
+        self.assertFalse(verify_checkin_token(roll_token, "00000000-0000-0000-0000-000000000001", "24001"))
 
         # Tampered token fails
         tampered = token[:-2] + ("11" if token[-2:] != "11" else "22")

@@ -29,6 +29,7 @@ interface ActiveSessionItem {
   remaining_seconds: number;
   is_expired: boolean;
   window_duration_seconds: number;
+  checkin_token?: string | null;
 }
 
 export default function OngoingSessionsPage() {
@@ -170,11 +171,12 @@ export default function OngoingSessionsPage() {
     }
   };
 
-  const copySelfieLink = (sessionId: string) => {
+  const copySelfieLink = (sess: ActiveSessionItem | { id: string; checkin_token?: string | null }) => {
     const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
-    const url = `${baseUrl}/selfieattend?session_id=${sessionId}`;
+    const tokenParam = (sess as any).checkin_token ? `&token=${encodeURIComponent((sess as any).checkin_token)}` : "";
+    const url = `${baseUrl}/selfieattend?session_id=${sess.id}${tokenParam}`;
     navigator.clipboard.writeText(url);
-    setCopiedId(sessionId);
+    setCopiedId(sess.id);
     setTimeout(() => setCopiedId(null), 2000);
   };
 
@@ -444,7 +446,11 @@ export default function OngoingSessionsPage() {
 
               <div className="bg-white p-4 rounded-2xl shadow-inner border border-gray-200 inline-block mb-4">
                 <QRCodeSVG
-                  value={typeof window !== "undefined" ? `${window.location.origin}/selfieattend?session_id=${qrModalSession.id}` : ""}
+                  value={(() => {
+                    if (typeof window === "undefined") return "";
+                    const tokenParam = (qrModalSession as any)?.checkin_token ? `&token=${encodeURIComponent((qrModalSession as any).checkin_token)}` : "";
+                    return `${window.location.origin}/selfieattend?session_id=${qrModalSession.id}${tokenParam}`;
+                  })()}
                   size={200}
                   level="H"
                   includeMargin={true}
@@ -460,7 +466,7 @@ export default function OngoingSessionsPage() {
 
               <div className="space-y-2">
                 <button
-                  onClick={() => copySelfieLink(qrModalSession.id)}
+                  onClick={() => copySelfieLink(qrModalSession)}
                   className="w-full py-2 px-3 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 text-xs font-bold border border-indigo-200 dark:border-indigo-800 flex items-center justify-center gap-1.5 transition-all"
                 >
                   <ExternalLink className="w-3.5 h-3.5" />
