@@ -822,8 +822,21 @@ async def ptz_control(cmd: PTZCommand):
 # ==========================================
 
 def get_checkin_secret() -> str:
-    secret = (os.getenv("INTERNAL_API_KEY") or os.getenv("AUTH_SECRET") or "").strip()
-    return secret if len(secret) >= 16 else "medattend_default_secure_checkin_secret_2026"
+    """Retrieves the cryptographic secret for check-in capability tokens.
+    Strictly requires CHECKIN_SIGNING_SECRET, INTERNAL_API_KEY, or AUTH_SECRET with >= 32 characters.
+    Raises RuntimeError if absent or weak. No insecure default fallbacks allowed.
+    """
+    secret = (
+        os.getenv("CHECKIN_SIGNING_SECRET")
+        or os.getenv("INTERNAL_API_KEY")
+        or os.getenv("AUTH_SECRET")
+        or ""
+    ).strip()
+    if len(secret) < 32:
+        raise RuntimeError(
+            "Missing or insecure check-in token secret. Set CHECKIN_SIGNING_SECRET, INTERNAL_API_KEY, or AUTH_SECRET with at least 32 characters in your environment."
+        )
+    return secret
 
 
 def generate_checkin_token(session_id: str, valid_seconds: int = 300) -> str:
@@ -833,7 +846,11 @@ def generate_checkin_token(session_id: str, valid_seconds: int = 300) -> str:
         return ""
     expires_at = int(time.time()) + min(max(valid_seconds, 30), 330)
     payload = f"{session_id}:{expires_at}"
-    secret = get_checkin_secret()
+    try:
+        secret = get_checkin_secret()
+    except Exception as e:
+        logger.error(f"[Checkin Token] Cannot sign token: {e}")
+        return ""
     sig = hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
     return f"{payload}:{sig}"
 
@@ -853,8 +870,12 @@ def verify_checkin_token(token: Optional[str], expected_session_id: str) -> bool
         return False
     if int(time.time()) > expires_at:
         return False
+    try:
+        secret = get_checkin_secret()
+    except Exception as e:
+        logger.error(f"[Checkin Token] Cannot verify token: {e}")
+        return False
     payload = f"{sess_id}:{expires_str}"
-    secret = get_checkin_secret()
     expected_sig = hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
     return hmac.compare_digest(sig, expected_sig)
 

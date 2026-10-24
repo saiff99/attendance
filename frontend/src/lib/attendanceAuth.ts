@@ -263,12 +263,25 @@ export async function filterSessionsForFaculty<
   return sessions.filter((s) => matchedIdSet.has(s.id));
 }
 
-function getCheckinSigningSecret(): string {
-  const secret = (process.env.INTERNAL_API_KEY || process.env.AUTH_SECRET || '').trim();
-  if (secret.length >= 16) {
-    return secret;
+/**
+ * Retrieves the cryptographic secret for check-in capability token signing.
+ * Strictly requires CHECKIN_SIGNING_SECRET, INTERNAL_API_KEY, or AUTH_SECRET with at least 32 characters.
+ * Throws a server-side error if the secret is absent or weak. No insecure fallbacks permitted.
+ */
+export function getCheckinSigningSecret(): string {
+  const secret = (
+    process.env.CHECKIN_SIGNING_SECRET ||
+    process.env.INTERNAL_API_KEY ||
+    process.env.AUTH_SECRET ||
+    ''
+  ).trim();
+
+  if (secret.length < 32) {
+    throw new Error(
+      'Missing or insecure check-in token secret. Set CHECKIN_SIGNING_SECRET, INTERNAL_API_KEY, or AUTH_SECRET with at least 32 characters in your environment.'
+    );
   }
-  return 'medattend_default_secure_checkin_secret_2026';
+  return secret;
 }
 
 /**
@@ -308,16 +321,17 @@ export function verifyCheckinToken(token: unknown, expectedSessionId: string): b
     return false; // Expired
   }
 
-  const secret = getCheckinSigningSecret();
-  const payload = `${sessId}:${expiresAtStr}`;
-  const expectedSig = crypto.createHmac('sha256', secret).update(payload).digest('hex');
-
   try {
+    const secret = getCheckinSigningSecret();
+    const payload = `${sessId}:${expiresAtStr}`;
+    const expectedSig = crypto.createHmac('sha256', secret).update(payload).digest('hex');
+
     const sigBuf = Buffer.from(signature, 'hex');
     const expBuf = Buffer.from(expectedSig, 'hex');
     if (sigBuf.length !== expBuf.length) return false;
     return crypto.timingSafeEqual(sigBuf, expBuf);
-  } catch {
+  } catch (err) {
+    console.error('Checkin token verification failed:', err);
     return false;
   }
 }

@@ -474,10 +474,15 @@ console.log('\n--- 11. Attendance Foreign Key Non-Cascading Retention Lockdown -
 // --- 12. Check-In Capability Token & Public Lookup Protection ---
 console.log('\n--- 12. Check-In Capability Token & Public Lookup Protection ---');
 {
-  function getCheckinSigningSecret() {
-    const secret = (process.env.INTERNAL_API_KEY || process.env.AUTH_SECRET || '').trim();
-    if (secret.length >= 16) return secret;
-    return 'medattend_default_secure_checkin_secret_2026';
+  const testKey = 'test_64_char_cryptographic_secret_for_unit_tests_medattend_secure_12345';
+  process.env.INTERNAL_API_KEY = testKey;
+
+  function getCheckinSigningSecret(customSecret) {
+    const secret = (customSecret !== undefined ? customSecret : (process.env.CHECKIN_SIGNING_SECRET || process.env.INTERNAL_API_KEY || process.env.AUTH_SECRET || '')).trim();
+    if (secret.length < 32) {
+      throw new Error('Missing or insecure check-in token secret. Set CHECKIN_SIGNING_SECRET or INTERNAL_API_KEY with at least 32 characters.');
+    }
+    return secret;
   }
 
   function generateCheckinToken(sessionId, validSeconds = 300) {
@@ -497,9 +502,9 @@ console.log('\n--- 12. Check-In Capability Token & Public Lookup Protection ---'
     const expiresAt = parseInt(expiresAtStr, 10);
     if (isNaN(expiresAt)) return false;
     if (Math.floor(Date.now() / 1000) > expiresAt) return false;
-    const secret = getCheckinSigningSecret();
-    const expectedSig = crypto.createHmac('sha256', secret).update(`${sessId}:${expiresAtStr}`).digest('hex');
     try {
+      const secret = getCheckinSigningSecret();
+      const expectedSig = crypto.createHmac('sha256', secret).update(`${sessId}:${expiresAtStr}`).digest('hex');
       const sigBuf = Buffer.from(signature, 'hex');
       const expBuf = Buffer.from(expectedSig, 'hex');
       if (sigBuf.length !== expBuf.length) return false;
@@ -509,38 +514,57 @@ console.log('\n--- 12. Check-In Capability Token & Public Lookup Protection ---'
     }
   }
 
+  // 1. Verify weak/absent secret rejection (no hardcoded fallback)
+  let weakSecretRejected = false;
+  try {
+    getCheckinSigningSecret('short_secret');
+  } catch {
+    weakSecretRejected = true;
+  }
+  assert(weakSecretRejected, 'Weak or absent secret (<32 chars) strictly throws server-side error with no fallback');
+
   const testSessionUuid = 'a1b2c3d4-e5f6-4a1b-8c2d-3e4f5a6b7c8d';
   const otherSessionUuid = 'b2c3d4e5-f6a1-4b2c-9d3e-4f5a6b7c8d9e';
 
-  // 1. Token generation format
+  // 2. Token generation format
   const token = generateCheckinToken(testSessionUuid, 300);
   assert(Boolean(token) && token.split(':').length === 3, 'generateCheckinToken produces 3-part signed token (uuid:expires:hmac)');
 
-  // 2. Fresh token verification
+  // 3. Fresh token verification
   assert(verifyCheckinToken(token, testSessionUuid), 'Fresh valid token verifies successfully against matching session UUID');
 
-  // 3. Mismatched session rejection (prevent token theft across lectures)
+  // 4. Mismatched session rejection (prevent token theft across lectures)
   assert(!verifyCheckinToken(token, otherSessionUuid), 'Token presented for mismatched session UUID is strictly REJECTED');
 
-  // 4. Tampered signature rejection
+  // 5. Tampered signature rejection
   const [sessId, expires, sig] = token.split(':');
   const tamperedSig = sig.slice(0, -2) + (sig.slice(-2) === 'aa' ? 'bb' : 'aa');
   const tamperedToken = `${sessId}:${expires}:${tamperedSig}`;
   assert(!verifyCheckinToken(tamperedToken, testSessionUuid), 'Token with tampered signature is strictly REJECTED');
 
-  // 5. Expired token rejection
+  // 6. Expired token rejection
   const expiredPayload = `${testSessionUuid}:${Math.floor(Date.now() / 1000) - 10}`;
   const secret = getCheckinSigningSecret();
   const expiredSig = crypto.createHmac('sha256', secret).update(expiredPayload).digest('hex');
   const expiredToken = `${expiredPayload}:${expiredSig}`;
   assert(!verifyCheckinToken(expiredToken, testSessionUuid), 'Expired capability token is strictly REJECTED');
 
-  // 6. Malformed token strings
+  // 7. Malformed token strings
   assert(!verifyCheckinToken('not-a-token', testSessionUuid), 'Malformed token string rejected');
   assert(!verifyCheckinToken(null, testSessionUuid), 'Null token rejected');
   assert(!verifyCheckinToken('', testSessionUuid), 'Empty token string rejected');
 
-  // 7. Verify active-sessions route issues checkin_token and hides headcount
+  // 8. Verify hard-coded fallback string is completely eradicated from codebase
+  const authTsPath = path.resolve(__dirname, '../src/lib/attendanceAuth.ts');
+  const authTsContent = fs.readFileSync(authTsPath, 'utf8');
+  const backendRoutesPath = path.resolve(__dirname, '../../backend/app/routes.py');
+  const backendRoutesContent = fs.readFileSync(backendRoutesPath, 'utf8');
+
+  const fallbackStr = 'medattend_default_secure_checkin_secret_2026';
+  assert(!authTsContent.includes(fallbackStr), 'frontend/src/lib/attendanceAuth.ts has zero instances of hard-coded fallback secret');
+  assert(!backendRoutesContent.includes(fallbackStr), 'backend/app/routes.py has zero instances of hard-coded fallback secret');
+
+  // 9. Verify active-sessions route issues checkin_token and hides headcount
   const activeSessionsRoutePath = path.resolve(__dirname, '../src/app/api/active-sessions/route.ts');
   const activeSessionsContent = fs.existsSync(activeSessionsRoutePath) ? fs.readFileSync(activeSessionsRoutePath, 'utf8') : '';
   assert(
@@ -553,7 +577,7 @@ console.log('\n--- 12. Check-In Capability Token & Public Lookup Protection ---'
     'active-sessions route hides live attendance headcount from unauthenticated public scrapers'
   );
 
-  // 8. Verify student-lookup route enforces checkin_token or session auth
+  // 10. Verify student-lookup route enforces checkin_token or session auth
   const studentLookupRoutePath = path.resolve(__dirname, '../src/app/api/student-lookup/[roll]/route.ts');
   const studentLookupContent = fs.existsSync(studentLookupRoutePath) ? fs.readFileSync(studentLookupRoutePath, 'utf8') : '';
   assert(
@@ -562,9 +586,7 @@ console.log('\n--- 12. Check-In Capability Token & Public Lookup Protection ---'
     'student-lookup route enforces check-in capability token or authenticated session'
   );
 
-  // 9. Verify Python backend route synchronization
-  const backendRoutesPath = path.resolve(__dirname, '../../backend/app/routes.py');
-  const backendRoutesContent = fs.existsSync(backendRoutesPath) ? fs.readFileSync(backendRoutesPath, 'utf8') : '';
+  // 11. Verify Python backend route synchronization
   assert(
     backendRoutesContent.includes('def verify_checkin_token') &&
     backendRoutesContent.includes('clean_public_instructor_name'),
