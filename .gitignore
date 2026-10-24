@@ -71,3 +71,6 @@ whatsapp_session/
 scratch/
 .medattend_launcher.lock
 *.lock
+
+# Database Backups (Contains student personal & biometric data)
+backups/*.json
