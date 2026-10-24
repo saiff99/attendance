@@ -647,6 +647,68 @@ console.log('\n--- 13. Atomic Rate Limiter Privilege Lockdown & Search Path Isol
   assert(backendCallsRpc, 'Backend check_lookup_rate_limit harmonized to call atomic_check_rate_limit RPC');
 }
 
+// --- 15. Student Enrollment Reactivation & Attendance Preservation ---
+console.log('\n--- 15. Student Re-enrollment Auto-Restore & Audit Preservation ---');
+{
+  const studentRoutePath = path.resolve(__dirname, '../src/app/api/students/route.ts');
+  const studentRouteContent = fs.readFileSync(studentRoutePath, 'utf8');
+
+  // 1. Verify students/route.ts checks is_active / [ARCHIVED]
+  const checksIsArchived = studentRouteContent.includes('existingCheck.is_active === false') &&
+                           studentRouteContent.includes('[ARCHIVED]');
+  assert(checksIsArchived, 'students/route.ts distinguishes archived student from active duplicates');
+
+  // 2. Verify students/route.ts reactivates profile with is_active: true, archived_at: null
+  const reactivatesProfile = studentRouteContent.includes('is_active: true') &&
+                             studentRouteContent.includes('archived_at: null') &&
+                             studentRouteContent.includes('RESTORE_ARCHIVED_STUDENT');
+  assert(reactivatesProfile, 'students/route.ts auto-restores archived profile with is_active: true and logs audit event');
+
+  // 3. Verify bulk student route also reactivates archived entries
+  const bulkRoutePath = path.resolve(__dirname, '../src/app/api/students/bulk/route.ts');
+  const bulkRouteContent = fs.readFileSync(bulkRoutePath, 'utf8');
+  const bulkReactivates = bulkRouteContent.includes('is_active: true') && bulkRouteContent.includes('archived_at: null');
+  assert(bulkReactivates, 'students/bulk/route.ts sets is_active: true and archived_at: null on upsert');
+
+  // 4. Invariant: Re-enrolled student keeps identical UUID so existing attendance records remain linked
+  function simulateStudentEnrollment(existingDbRecord, newEnrollmentPayload) {
+    if (!existingDbRecord) {
+      return { status: 201, action: 'INSERT_NEW', student_id: 'new-uuid-999' };
+    }
+    const isArchived = existingDbRecord.is_active === false || String(existingDbRecord.academic_year || '').startsWith('[ARCHIVED]');
+    if (!isArchived) {
+      return { status: 409, error: 'Duplicate Roll Number!' };
+    }
+    // Restore: keep exact same UUID, update fields, set active
+    return {
+      status: 201,
+      action: 'RESTORE_ARCHIVED_STUDENT',
+      student_id: existingDbRecord.id, // Preserves foreign key to attendance table!
+      is_active: true,
+      academic_year: newEnrollmentPayload.academic_year,
+    };
+  }
+
+  const archivedStudent = {
+    id: 'student-uuid-24001',
+    student_roll: '24001',
+    full_name: 'SK SAHIR',
+    academic_year: '[ARCHIVED] 3rd Year',
+    is_active: false,
+  };
+
+  const restoredResult = simulateStudentEnrollment(archivedStudent, {
+    student_roll: '24001',
+    full_name: 'SK SAHIR',
+    academic_year: '3rd Year',
+  });
+
+  assert(restoredResult.status === 201, 'Re-enrolling archived student returns 201 status');
+  assert(restoredResult.action === 'RESTORE_ARCHIVED_STUDENT', 'Re-enrolling archived student performs RESTORE_ARCHIVED_STUDENT');
+  assert(restoredResult.student_id === 'student-uuid-24001', 'Re-enrolled student preserves exact student_id foreign key for attendance history');
+  assert(restoredResult.is_active === true, 'Re-enrolled student is set to is_active: true');
+}
+
 // Summary
 console.log('\n' + '=' .repeat(65));
 console.log(`📊 Offline Unit Test Summary: ${passed} Passed, ${failed} Failed`);

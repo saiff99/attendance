@@ -142,6 +142,8 @@ export async function POST(request: NextRequest) {
             email: generatedEmail,
             academic_year: academicYear,
             parent_phone: student.parent_phone ? student.parent_phone.trim() : null,
+            is_active: true,
+            archived_at: null,
           });
         } else {
           toInsert.push({
@@ -150,6 +152,8 @@ export async function POST(request: NextRequest) {
             email: generatedEmail,
             academic_year: academicYear,
             parent_phone: student.parent_phone ? student.parent_phone.trim() : null,
+            is_active: true,
+            archived_at: null,
             face_encoding: null,
           });
         }

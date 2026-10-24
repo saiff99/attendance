@@ -106,15 +106,98 @@ export async function POST(request: NextRequest) {
     // Check duplicate roll number (case-insensitive)
     const { data: existingCheck } = await supabaseServer
       .from('students')
-      .select('id, student_roll, full_name, academic_year')
+      .select('id, student_roll, full_name, academic_year, is_active')
       .ilike('student_roll', cleanRoll)
       .maybeSingle();
 
+    const selectFields = 'id, student_roll, full_name, email, academic_year, created_at';
+
     if (existingCheck) {
+      const isArchived = existingCheck.is_active === false || String(existingCheck.academic_year || '').startsWith('[ARCHIVED]');
+      if (!isArchived) {
+        return NextResponse.json({
+          success: false,
+          error: `Duplicate Roll Number! Roll "${existingCheck.student_roll}" is already registered to "${existingCheck.full_name}".`
+        }, { status: 409 });
+      }
+
+      // Seamlessly reactivate and restore archived student
+      const encodedEmail = encodeStudentEmail(cleanRoll, cleanPhone || undefined);
+      const updatePayload: any = {
+        full_name: cleanName,
+        academic_year: cleanYear,
+        email: encodedEmail,
+        is_active: true,
+        archived_at: null,
+        face_encoding: cleanPhone ? { parent_phone: cleanPhone } : null,
+        biometric_consent: false,
+        biometric_consent_date: null,
+        portal_pin: null,
+        portal_password_hash: null,
+      };
+      if (cleanPhone) updatePayload.parent_phone = cleanPhone;
+
+      let { data: reactivated, error: reactivateErr } = await supabaseServer
+        .from('students')
+        .update(updatePayload)
+        .eq('id', existingCheck.id)
+        .select(selectFields)
+        .single();
+
+      if (reactivateErr && (reactivateErr.code === 'PGRST204' || reactivateErr.message?.includes('parent_phone') || reactivateErr.message?.includes('biometric_consent') || reactivateErr.message?.includes('is_active'))) {
+        const fallbackPayload: any = {
+          full_name: cleanName,
+          academic_year: cleanYear,
+          email: encodedEmail,
+          is_active: true,
+          archived_at: null,
+          face_encoding: cleanPhone ? { parent_phone: cleanPhone } : null,
+        };
+        const retry = await supabaseServer
+          .from('students')
+          .update(fallbackPayload)
+          .eq('id', existingCheck.id)
+          .select(selectFields)
+          .single();
+        if (retry.error) throw retry.error;
+        reactivated = retry.data;
+      } else if (reactivateErr) {
+        throw reactivateErr;
+      }
+
+      logAuditEvent({
+        action: 'RESTORE_ARCHIVED_STUDENT',
+        targetType: 'student',
+        targetId: existingCheck.id,
+        actorId: session.username || session.name || 'admin',
+        request,
+        details: {
+          student_roll: cleanRoll,
+          full_name: cleanName,
+          academic_year: cleanYear,
+          actor_name: session.name,
+          actor_role: session.role,
+          restored_from_archive: true,
+        },
+      });
+
+      const sanitizedStudent = reactivated ? {
+        id: reactivated.id,
+        student_roll: reactivated.student_roll,
+        full_name: reactivated.full_name,
+        email: reactivated.email,
+        academic_year: reactivated.academic_year,
+        parent_phone: cleanPhone || null,
+        created_at: reactivated.created_at,
+        has_face: false,
+        face_encoding: null,
+      } : null;
+
       return NextResponse.json({
-        success: false,
-        error: `Duplicate Roll Number! Roll "${existingCheck.student_roll}" is already registered to "${existingCheck.full_name}".`
-      }, { status: 409 });
+        success: true,
+        student: sanitizedStudent,
+        message: `Student '${cleanName}' (Roll ${cleanRoll}) was restored from archive and reactivated successfully!`,
+      }, { status: 201 });
     }
 
     // Persistently encode WhatsApp phone into student.local email
@@ -134,8 +217,6 @@ export async function POST(request: NextRequest) {
       biometric_consent_date: null,
     };
     if (cleanPhone) fullPayload.parent_phone = cleanPhone;
-
-    const selectFields = 'id, student_roll, full_name, email, academic_year, created_at';
 
     let { data, error } = await supabaseServer
       .from('students')
