@@ -12,56 +12,33 @@ except ImportError:
 # Load environment variables explicitly from backend/.env or parent
 _backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _env_path = os.path.join(_backend_dir, ".env")
-if os.path.exists(_env_path):
-    load_dotenv(_env_path)
-load_dotenv()
-
-# Detect if running under automated test suite or offline unit tests
-IS_TESTING = (
-    os.getenv("TESTING", "").lower() in ("1", "true", "yes")
-    or os.getenv("ENVIRONMENT", "").lower() == "test"
-    or "pytest" in sys.modules
-    or "unittest" in sys.modules
-    or (len(sys.argv) > 0 and (
-        os.path.basename(sys.argv[0]).startswith("test")
-        or "pytest" in sys.argv[0]
-        or "unittest" in sys.argv[0]
-    ))
-)
+if os.getenv("SKIP_DOTENV") != "1":
+    if os.path.exists(_env_path):
+        load_dotenv(_env_path)
+    load_dotenv()
 
 # Supabase Initialization
 SUPABASE_URL = (os.getenv("SUPABASE_URL") or os.getenv("NEXT_PUBLIC_SUPABASE_URL") or "").strip()
-SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_KEY")
+SUPABASE_KEY = (os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_KEY") or "").strip()
 
 if not SUPABASE_URL:
-    if IS_TESTING:
-        print("[INFO] Offline Test Mode: SUPABASE_URL omitted; database operations disabled for isolated unit testing.")
-        supabase = None
-    else:
-        raise RuntimeError(
-            "FATAL CONFIGURATION ERROR: SUPABASE_URL is missing from environment! "
-            "Production server cannot start without an authoritative Supabase database connection. "
-            "Please configure SUPABASE_URL in backend/.env under Zero-Trust standards."
-        )
-elif not SUPABASE_KEY:
-    if IS_TESTING:
-        print("[INFO] Offline Test Mode: SUPABASE_SERVICE_ROLE_KEY omitted; database operations disabled for isolated unit testing.")
-        supabase = None
-    else:
-        raise RuntimeError(
-            "FATAL CONFIGURATION ERROR: SUPABASE_SERVICE_ROLE_KEY is missing from environment! "
-            "Backend server-side operations require service-role credentials to interact with the database under Zero-Trust RLS. "
-            "Please configure SUPABASE_SERVICE_ROLE_KEY in backend/.env."
-        )
-else:
-    try:
-        supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY) if create_client else None
-    except Exception as e:
-        if IS_TESTING:
-            print(f"[INFO] Offline Test Mode: Failed to initialize Supabase client ({e}); continuing in offline mode.")
-            supabase = None
-        else:
-            raise RuntimeError(f"FATAL DATABASE ERROR: Failed to initialize Supabase client: {e}")
+    raise RuntimeError(
+        "FATAL CONFIGURATION ERROR: SUPABASE_URL is missing from environment! "
+        "Production server cannot start without an authoritative Supabase database connection. "
+        "Please configure SUPABASE_URL in backend/.env under Zero-Trust standards."
+    )
+
+if not SUPABASE_KEY:
+    raise RuntimeError(
+        "FATAL CONFIGURATION ERROR: SUPABASE_SERVICE_ROLE_KEY is missing from environment! "
+        "Backend server-side operations require service-role credentials to interact with the database under Zero-Trust RLS. "
+        "Please configure SUPABASE_SERVICE_ROLE_KEY in backend/.env."
+    )
+
+try:
+    supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY) if create_client else None
+except Exception as e:
+    raise RuntimeError(f"FATAL DATABASE ERROR: Failed to initialize Supabase client: {e}")
 
 def attach_supabase_resilience(client):
     """
@@ -132,18 +109,13 @@ def get_supabase_client(force_new: bool = False):
     """Returns the resilient Supabase client instance, recreating if requested."""
     global supabase
     if not SUPABASE_KEY or not create_client:
-        if not IS_TESTING:
-            raise RuntimeError("FATAL CONFIGURATION ERROR: Supabase client requested but SUPABASE_SERVICE_ROLE_KEY or supabase-py library is missing.")
-        return None
+        raise RuntimeError("FATAL CONFIGURATION ERROR: Supabase client requested but SUPABASE_SERVICE_ROLE_KEY or supabase-py library is missing.")
     if supabase is None or force_new:
         try:
             supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
             attach_supabase_resilience(supabase)
         except Exception as e:
-            if not IS_TESTING:
-                raise RuntimeError(f"FATAL DATABASE ERROR: Failed to initialize Supabase client: {e}")
-            print(f"Failed to initialize Supabase client: {e}")
-            supabase = None
+            raise RuntimeError(f"FATAL DATABASE ERROR: Failed to initialize Supabase client: {e}")
     return supabase
 
 def safe_db_execute(query_builder, max_retries: int = 2):

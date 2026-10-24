@@ -11,6 +11,11 @@ backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if backend_dir not in sys.path:
     sys.path.insert(0, backend_dir)
 
+# Supply deterministic mock environment defaults for isolated offline test runner
+os.environ.setdefault("SUPABASE_URL", "https://ci-test-mock.supabase.co")
+os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "ci_mock_service_role_key_for_offline_unit_tests")
+os.environ.setdefault("INTERNAL_API_KEY", "ci_mock_internal_key_for_offline_unit_tests")
+
 from app.security import is_public_path, PUBLIC_EXACT_PATHS
 from app.config import redact_stream_url, is_cohort_matching, calculate_haversine_distance
 
@@ -306,6 +311,58 @@ class TestProcessAttributionUnit(unittest.TestCase):
                 cwd_override="/tmp"
             )
         )
+
+
+class TestConfigFailFastUnit(unittest.TestCase):
+    """Unit tests verifying that backend/app/config.py strictly and unconditionally fails fast on missing configuration."""
+
+    def test_missing_supabase_url_raises_runtime_error(self):
+        """Verifies that launching without SUPABASE_URL unconditionally raises RuntimeError."""
+        import subprocess
+        code = (
+            "import os, sys; "
+            "sys.path.insert(0, '.'); "
+            "os.environ.pop('SUPABASE_URL', None); "
+            "os.environ.pop('NEXT_PUBLIC_SUPABASE_URL', None); "
+            "from app import config"
+        )
+        clean_env = {k: v for k, v in os.environ.items() if k not in ("SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_URL")}
+        clean_env["SKIP_DOTENV"] = "1"
+        res = subprocess.run(
+            [sys.executable, "-c", code],
+            cwd=backend_dir,
+            env=clean_env,
+            capture_output=True,
+            text=True
+        )
+        self.assertNotEqual(res.returncode, 0, "Missing SUPABASE_URL must halt process with non-zero exit")
+        self.assertIn("RuntimeError", res.stderr)
+        self.assertIn("SUPABASE_URL is missing", res.stderr)
+
+    def test_missing_supabase_key_raises_runtime_error(self):
+        """Verifies that launching without SUPABASE_SERVICE_ROLE_KEY unconditionally raises RuntimeError."""
+        import subprocess
+        code = (
+            "import os, sys; "
+            "sys.path.insert(0, '.'); "
+            "os.environ['SUPABASE_URL'] = 'https://ci-test-mock.supabase.co'; "
+            "os.environ.pop('SUPABASE_SERVICE_ROLE_KEY', None); "
+            "os.environ.pop('SUPABASE_KEY', None); "
+            "from app import config"
+        )
+        clean_env = {k: v for k, v in os.environ.items() if k not in ("SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_KEY")}
+        clean_env["SUPABASE_URL"] = "https://ci-test-mock.supabase.co"
+        clean_env["SKIP_DOTENV"] = "1"
+        res = subprocess.run(
+            [sys.executable, "-c", code],
+            cwd=backend_dir,
+            env=clean_env,
+            capture_output=True,
+            text=True
+        )
+        self.assertNotEqual(res.returncode, 0, "Missing SUPABASE_SERVICE_ROLE_KEY must halt process with non-zero exit")
+        self.assertIn("RuntimeError", res.stderr)
+        self.assertIn("SUPABASE_SERVICE_ROLE_KEY is missing", res.stderr)
 
 
 if __name__ == "__main__":
