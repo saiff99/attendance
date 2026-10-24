@@ -286,17 +286,7 @@ async def enroll_face(
         
         # Sort by bounding box area to get the primary face
         faces.sort(key=lambda f: (f.bbox[2]-f.bbox[0])*(f.bbox[3]-f.bbox[1]), reverse=True)
-        primary = faces[0]
-
-        # Anti-Spoofing: Verify liveness during enrollment
-        if hasattr(primary, 'bbox') and primary.bbox is not None:
-            is_live, spoof_reason, diag = verify_face_liveness(image_bgr, primary.bbox)
-            if not is_live:
-                print(f"[AntiSpoof REJECT Enrollment] Student ID: {student_id} | Reason: {spoof_reason} | Diag: {diag}")
-                raise HTTPException(status_code=400, detail=f"Biometric enrollment rejected: {spoof_reason}")
-
-        return primary.embedding.tolist()
-
+        return faces[0].embedding.tolist()
 
     try:
         encoding = await asyncio.to_thread(_extract_single_face)
@@ -444,16 +434,10 @@ async def enroll_face_burst(
             if faces:
                 # Pick largest face in the frame
                 faces.sort(key=lambda f: (f.bbox[2]-f.bbox[0])*(f.bbox[3]-f.bbox[1]), reverse=True)
-                primary = faces[0]
-                if hasattr(primary, 'bbox') and primary.bbox is not None:
-                    is_live, _, _ = verify_face_liveness(image_bgr, primary.bbox)
-                    if is_live:
-                        encs.append(primary.embedding)
-                else:
-                    encs.append(primary.embedding)
+                encs.append(faces[0].embedding)
         
         if not encs:
-            raise HTTPException(status_code=400, detail="Could not detect a live, clear face in any of the captured frames. Please ensure your face is well-lit, directly facing the camera, and not displayed on a screen.")
+            raise HTTPException(status_code=400, detail="Could not detect a clear face in any of the captured frames. Please ensure your face is well-lit and directly facing the camera.")
             
         # Average the encodings for a highly robust 3D representation
         avg_encoding = np.mean(encs, axis=0)
@@ -659,14 +643,7 @@ async def process_attendance(file: UploadFile = File(...), session_id: str = For
         for face in faces:
             if hasattr(face, 'det_score') and face.det_score < 0.20:
                 continue
-
-            # Anti-Spoofing: Presentation Attack (Screen / Print) Check
-            if hasattr(face, 'bbox') and face.bbox is not None:
-                is_live, spoof_reason, diag = verify_face_liveness(image_bgr, face.bbox)
-                if not is_live:
-                    print(f"[AntiSpoof REJECT Batch Photo] Reason: {spoof_reason} | Diag: {diag}")
-                    continue
-
+                
             unknown_encoding = face.embedding
             best_match_student = None
             highest_sim = 0.42 # High-precision calibrated similarity threshold (cosine similarity >= 0.42)

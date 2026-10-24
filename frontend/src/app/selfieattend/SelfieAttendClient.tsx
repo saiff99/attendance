@@ -160,16 +160,12 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
   const [submittingAttendance, setSubmittingAttendance] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
 
-  // Active Liveness & Dynamic Spoof Detection States
-  const [livenessPhase, setLivenessPhase] = useState<"positioning" | "ready" | "challenging" | "flashing" | "verified" | "failed">("positioning");
-  const [challengeType, setChallengeType] = useState<"blink" | "smile">("smile");
+  // Active Liveness & Blink Detection States
+  const [livenessPhase, setLivenessPhase] = useState<"positioning" | "ready" | "blinking" | "verified">("positioning");
   const [livenessPrompt, setLivenessPrompt] = useState<string>("Center your face inside the oval");
   const [blinkDetected, setBlinkDetected] = useState<boolean>(false);
-  const [flashActive, setFlashActive] = useState<boolean>(false);
-  const [flashColor, setFlashColor] = useState<string>("#00E5FF");
   const livenessCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const livenessHistoryRef = useRef<{ eye: number; forehead: number; mouth: number; mouthHigh: number }[]>([]);
-  const isExecutingFlashRef = useRef<boolean>(false);
+  const livenessHistoryRef = useRef<number[]>([]);
 
   // Result States
   const [resultData, setResultData] = useState<{
@@ -574,171 +570,21 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
     setStep("capture_selfie");
   };
 
-  // Real-time Active Three-Layer Liveness Engine (Dynamic Challenge + Screen Color Flash Reflection)
+  // Real-time Active Liveness & Blink Detection Engine
   useEffect(() => {
     if (step !== "capture_selfie" || capturedImage || cameraError) {
       setLivenessPhase("positioning");
       setBlinkDetected(false);
-      setFlashActive(false);
-      isExecutingFlashRef.current = false;
       livenessHistoryRef.current = [];
       return;
     }
 
     let intervalId: any = null;
     let stableFrames = 0;
-    let smileCount = 0;
-    let blinkStage = 0; // 0 = waiting, 1 = eye dip detected, 2 = eye reopened
-
-    const analyzeSkinReflection = async (
-      baselineDataUrl: string,
-      flashDataUrl: string,
-      targetDiff: (dr: number, dg: number, db: number) => number
-    ): Promise<boolean> => {
-      return new Promise((resolve) => {
-        try {
-          const imgBase = new Image();
-          const imgFlash = new Image();
-          let loaded = 0;
-
-          const onBothLoaded = () => {
-            try {
-              const cvs = document.createElement("canvas");
-              cvs.width = 32;
-              cvs.height = 32;
-              const ctx = cvs.getContext("2d", { willReadFrequently: true });
-              if (!ctx) return resolve(true);
-
-              const bw = imgBase.width;
-              const bh = imgBase.height;
-              const cx = Math.round(bw * 0.35);
-              const cy = Math.round(bh * 0.30);
-              const cw = Math.max(1, Math.round(bw * 0.30));
-              const ch = Math.max(1, Math.round(bh * 0.35));
-
-              ctx.drawImage(imgBase, cx, cy, cw, ch, 0, 0, 32, 32);
-              const dataBase = ctx.getImageData(0, 0, 32, 32).data;
-              let rBase = 0, gBase = 0, bBase = 0;
-              for (let i = 0; i < dataBase.length; i += 4) {
-                rBase += dataBase[i];
-                gBase += dataBase[i + 1];
-                bBase += dataBase[i + 2];
-              }
-              const totalPix = dataBase.length / 4;
-              rBase /= totalPix;
-              gBase /= totalPix;
-              bBase /= totalPix;
-
-              ctx.clearRect(0, 0, 32, 32);
-              ctx.drawImage(imgFlash, cx, cy, cw, ch, 0, 0, 32, 32);
-              const dataFlash = ctx.getImageData(0, 0, 32, 32).data;
-              let rFlash = 0, gFlash = 0, bFlash = 0;
-              for (let i = 0; i < dataFlash.length; i += 4) {
-                rFlash += dataFlash[i];
-                gFlash += dataFlash[i + 1];
-                bFlash += dataFlash[i + 2];
-              }
-              rFlash /= totalPix;
-              gFlash /= totalPix;
-              bFlash /= totalPix;
-
-              const dR = rFlash - rBase;
-              const dG = gFlash - gBase;
-              const dB = bFlash - bBase;
-
-              const shift = targetDiff(dR, dG, dB);
-              const hasColorResponse = (dR + dG + dB) > 1.2 || shift >= 0.8;
-
-              console.log(`[AntiSpoof Optical Flash] dR: ${dR.toFixed(1)}, dG: ${dG.toFixed(1)}, dB: ${dB.toFixed(1)} | Shift: ${shift.toFixed(2)}`);
-              resolve(hasColorResponse);
-            } catch {
-              resolve(true);
-            }
-          };
-
-          imgBase.onload = () => { loaded++; if (loaded === 2) onBothLoaded(); };
-          imgFlash.onload = () => { loaded++; if (loaded === 2) onBothLoaded(); };
-          imgBase.onerror = () => resolve(true);
-          imgFlash.onerror = () => resolve(true);
-          imgBase.src = baselineDataUrl;
-          imgFlash.src = flashDataUrl;
-        } catch {
-          resolve(true);
-        }
-      });
-    };
-
-    const triggerFlashAndCapture = async () => {
-      if (isExecutingFlashRef.current) return;
-      isExecutingFlashRef.current = true;
-      setLivenessPhase("flashing");
-      setLivenessPrompt("⚡ Verifying Live Skin Reflection...");
-
-      const flashOptions = [
-        { name: "CYAN", hex: "#00E5FF", targetDiff: (dr: number, dg: number, db: number) => (dg + db) / 2.0 - dr },
-        { name: "AMBER", hex: "#FFD700", targetDiff: (dr: number, dg: number, db: number) => (dr + dg) / 2.0 - db },
-        { name: "MAGENTA", hex: "#FF1493", targetDiff: (dr: number, dg: number, db: number) => (dr + db) / 2.0 - dg }
-      ];
-      const selectedFlash = flashOptions[Math.floor(Math.random() * flashOptions.length)];
-      setFlashColor(selectedFlash.hex);
-
-      const baselineShot = webcamRef.current?.getScreenshot();
-      if (!baselineShot) {
-        isExecutingFlashRef.current = false;
-        setLivenessPhase("positioning");
-        return;
-      }
-
-      setFlashActive(true);
-      await new Promise((r) => setTimeout(r, 180));
-
-      const flashShot = webcamRef.current?.getScreenshot();
-      setFlashActive(false);
-
-      if (!flashShot) {
-        isExecutingFlashRef.current = false;
-        setLivenessPhase("positioning");
-        return;
-      }
-
-      const isRealSkin = await analyzeSkinReflection(baselineShot, flashShot, selectedFlash.targetDiff);
-
-      if (!isRealSkin) {
-        setLivenessPhase("failed");
-        setLivenessPrompt("❌ Screen / Photo Rejected! Present your live face.");
-        try {
-          if (typeof window !== "undefined" && window.navigator && window.navigator.vibrate) {
-            window.navigator.vibrate([120, 60, 120]);
-          }
-        } catch (e) { }
-
-        setTimeout(() => {
-          isExecutingFlashRef.current = false;
-          setLivenessPhase("positioning");
-          setLivenessPrompt("Center face inside oval");
-        }, 2800);
-        return;
-      }
-
-      // Success: verified live human
-      setLivenessPhase("verified");
-      setBlinkDetected(true);
-      setLivenessPrompt("✅ Live Human Verified! Capturing...");
-
-      try {
-        if (typeof window !== "undefined" && window.navigator && window.navigator.vibrate) {
-          window.navigator.vibrate([40, 30, 80]);
-        }
-      } catch (e) { }
-
-      setTimeout(() => {
-        setCapturedImage(baselineShot);
-        isExecutingFlashRef.current = false;
-      }, 150);
-    };
+    let blinkStage = 0; // 0 = waiting for blink, 1 = eye dip detected, 2 = eye reopened (completed)
 
     const processLivenessFrame = () => {
-      if (isExecutingFlashRef.current || !webcamRef.current) return;
+      if (!webcamRef.current) return;
       const video = webcamRef.current.video;
       if (!video || video.readyState < 2 || video.videoWidth === 0 || video.videoHeight === 0) return;
 
@@ -763,10 +609,8 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
       const data = imgData.data;
 
       let totalLum = 0;
-      let foreheadLum = 0, foreheadCount = 0;
-      let eyeLum = 0, eyeCount = 0;
-      let mouthLum = 0, mouthCount = 0;
-      let mouthHighCount = 0;
+      let eyeLum = 0;
+      let eyeCount = 0;
       let faceCount = 0;
 
       for (let y = 0; y < 64; y++) {
@@ -779,40 +623,25 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
           totalLum += lum;
           faceCount++;
 
-          // Forehead band (y: 6..16, x: 18..46)
-          if (y >= 6 && y <= 16 && x >= 18 && x <= 46) {
-            foreheadLum += lum;
-            foreheadCount++;
-          }
-          // Eyes band (y: 18..34, x: 14..50)
-          if (y >= 18 && y <= 34 && x >= 14 && x <= 50) {
+          if (y >= 18 && y <= 36 && x >= 14 && x <= 50) {
             eyeLum += lum;
             eyeCount++;
-          }
-          // Mouth band (y: 42..58, x: 18..46)
-          if (y >= 42 && y <= 58 && x >= 18 && x <= 46) {
-            mouthLum += lum;
-            mouthCount++;
-            if (lum > 135) mouthHighCount++;
           }
         }
       }
 
       const avgFaceLum = totalLum / faceCount;
-      const avgForeheadLum = foreheadLum / (foreheadCount || 1);
       const avgEyeLum = eyeLum / (eyeCount || 1);
-      const avgMouthLum = mouthLum / (mouthCount || 1);
-      const mouthHighRatio = mouthHighCount / (mouthCount || 1);
 
+      // Check brightness bounds
       if (avgFaceLum < 18 || avgFaceLum > 242) {
         setLivenessPrompt("Center face in good lighting");
         setLivenessPhase("positioning");
-        stableFrames = 0;
         return;
       }
 
       const history = livenessHistoryRef.current;
-      history.push({ eye: avgEyeLum, forehead: avgForeheadLum, mouth: avgMouthLum, mouthHigh: mouthHighRatio });
+      history.push(avgEyeLum);
       if (history.length > 25) history.shift();
 
       if (history.length < 5) {
@@ -823,47 +652,42 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
 
       if (stableFrames < 4) {
         stableFrames++;
-        const initialChallenge = Math.random() > 0.5 ? "smile" : "blink";
-        setChallengeType(initialChallenge);
-        setLivenessPhase("challenging");
-        setLivenessPrompt(initialChallenge === "smile" ? "😊 Please Smile at the Camera" : "👁️ Please Blink Your Eyes Naturally");
+        setLivenessPrompt("👁️ Please Blink Your Eyes Naturally");
+        setLivenessPhase("ready");
         return;
       }
 
-      // Baselines from initial 5 neutral frames
-      const baseEye = history.slice(0, 5).reduce((a, b) => a + b.eye, 0) / 5;
-      const baseForehead = history.slice(0, 5).reduce((a, b) => a + b.forehead, 0) / 5;
-      const baseMouth = history.slice(0, 5).reduce((a, b) => a + b.mouth, 0) / 5;
-
+      const baseline = history.slice(0, 5).reduce((a, b) => a + b, 0) / 5;
       const curr = history[history.length - 1];
+      const deviation = Math.abs(curr - baseline);
 
-      if (challengeType === "smile") {
-        // Dynamic Smile Detection: Mouth widening & teeth exposure elevates mouth luminance and contrast
-        const mouthElevation = curr.mouth - baseMouth;
-        const isSmiling = (mouthElevation >= 4.5) || (curr.mouth / Math.max(1, baseMouth) >= 1.12);
+      // Blink dynamic: eyelid closure creates a temporary luminance dip/shift of 3.0 to 35.0
+      if (deviation >= 3.0 && deviation <= 38.0 && blinkStage === 0) {
+        blinkStage = 1;
+        setLivenessPhase("blinking");
+        setLivenessPrompt("Blinking detected... Reopen eyes");
+      } else if (blinkStage === 1 && Math.abs(curr - baseline) < 2.5) {
+        // Blink verified!
+        blinkStage = 2;
+        setLivenessPhase("verified");
+        setBlinkDetected(true);
+        setLivenessPrompt("✅ Live Human Verified! Capturing...");
 
-        if (isSmiling) {
-          smileCount++;
-          setLivenessPrompt("😊 Smile Detected! Verifying reflection...");
-          if (smileCount >= 2) {
-            triggerFlashAndCapture();
+        try {
+          if (typeof window !== "undefined" && window.navigator && window.navigator.vibrate) {
+            window.navigator.vibrate([40, 30, 80]);
           }
-        } else {
-          smileCount = 0;
-          setLivenessPrompt("😊 Please Smile at the Camera");
-        }
-      } else {
-        // Dynamic Blink Detection: Eyelid closure causes localized dip in eye box while forehead remains steady
-        const eyeDip = baseEye - curr.eye;
-        const foreheadDiff = Math.abs(curr.forehead - baseForehead);
+        } catch (e) { }
 
-        if (eyeDip >= 4.0 && foreheadDiff < 4.0 && blinkStage === 0) {
-          blinkStage = 1;
-          setLivenessPrompt("Blinking detected... Reopen eyes");
-        } else if (blinkStage === 1 && Math.abs(curr.eye - baseEye) < 2.8) {
-          blinkStage = 2;
-          triggerFlashAndCapture();
-        }
+        // Automatically capture high-res frame 150ms after blink
+        setTimeout(() => {
+          if (webcamRef.current) {
+            const shot = webcamRef.current.getScreenshot();
+            if (shot) {
+              setCapturedImage(shot);
+            }
+          }
+        }, 180);
       }
     };
 
@@ -871,7 +695,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
     return () => {
       if (intervalId) clearInterval(intervalId);
     };
-  }, [step, capturedImage, cameraError, challengeType]);
+  }, [step, capturedImage, cameraError]);
 
 
   // Resize and compress base64 data URL to optimized Blob (Crisp 960px @ 0.88 quality, ~60-80KB)
@@ -1863,64 +1687,45 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                             className="w-full h-full object-cover"
                           />
 
-                          {/* High-intensity screen flash overlay for optical skin reflection verification */}
-                          {flashActive && (
-                            <div
-                              className="absolute inset-0 z-40 pointer-events-none transition-all duration-75"
-                              style={{ backgroundColor: flashColor, opacity: 0.95 }}
-                            />
-                          )}
-
                           <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center">
                             <div className={`w-[68%] h-[68%] border-2 rounded-[50%] relative flex items-center justify-center transition-all duration-300 ${livenessPhase === "verified"
-                              ? "border-emerald-400 shadow-[0_0_50px_rgba(52,211,153,0.5)]"
-                              : livenessPhase === "flashing"
-                                ? "border-white shadow-[0_0_60px_rgba(255,255,255,0.7)] animate-pulse"
-                                : livenessPhase === "failed"
-                                  ? "border-red-500 shadow-[0_0_50px_rgba(239,68,68,0.5)]"
-                                  : challengeType === "smile"
-                                    ? "border-amber-400/90 shadow-[0_0_50px_rgba(251,191,36,0.3)] animate-pulse"
-                                    : "border-cyan-400/90 shadow-[0_0_50px_rgba(34,211,238,0.3)] animate-pulse"
+                              ? "border-emerald-400 shadow-[0_0_50px_rgba(52,211,153,0.4)]"
+                              : livenessPhase === "blinking"
+                                ? "border-cyan-400 shadow-[0_0_50px_rgba(34,211,238,0.3)] animate-pulse"
+                                : livenessPhase === "ready"
+                                  ? "border-amber-400/90 shadow-[0_0_50px_rgba(251,191,36,0.25)]"
+                                  : "border-dashed border-indigo-400/70 shadow-[0_0_50px_rgba(99,102,241,0.15)]"
                               }`}>
                               <div className={`absolute left-0 right-0 h-0.5 bg-gradient-to-r from-transparent ${livenessPhase === "verified" ? "via-emerald-400" :
-                                livenessPhase === "flashing" ? "via-white" :
-                                  livenessPhase === "failed" ? "via-red-400" :
-                                    challengeType === "smile" ? "via-amber-400" : "via-cyan-400"
+                                livenessPhase === "blinking" ? "via-cyan-400" :
+                                  livenessPhase === "ready" ? "via-amber-400" : "via-indigo-400"
                                 } to-transparent animate-scan`} />
                               <div className={`absolute top-2 w-4 h-1 rounded-full ${livenessPhase === "verified" ? "bg-emerald-400" :
-                                livenessPhase === "flashing" ? "bg-white" :
-                                  livenessPhase === "failed" ? "bg-red-400" :
-                                    challengeType === "smile" ? "bg-amber-400" : "bg-cyan-400"
+                                livenessPhase === "ready" || livenessPhase === "blinking" ? "bg-amber-400" : "bg-indigo-400"
                                 }`} />
                               <div className={`absolute bottom-2 w-4 h-1 rounded-full ${livenessPhase === "verified" ? "bg-emerald-400" :
-                                livenessPhase === "flashing" ? "bg-white" :
-                                  livenessPhase === "failed" ? "bg-red-400" :
-                                    challengeType === "smile" ? "bg-amber-400" : "bg-cyan-400"
+                                livenessPhase === "ready" || livenessPhase === "blinking" ? "bg-amber-400" : "bg-indigo-400"
                                 }`} />
                             </div>
 
-                            <div className="mt-3 flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-black/80 backdrop-blur-md border text-xs font-semibold shadow-lg transition-all duration-200"
+                            <div className="mt-3 flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-black/75 backdrop-blur-md border text-xs font-semibold shadow-lg transition-all duration-200"
                               style={{
                                 borderColor: livenessPhase === "verified" ? "rgba(52,211,153,0.5)" :
-                                  livenessPhase === "flashing" ? "rgba(255,255,255,0.7)" :
-                                    livenessPhase === "failed" ? "rgba(239,68,68,0.6)" :
-                                      challengeType === "smile" ? "rgba(251,191,36,0.5)" : "rgba(34,211,238,0.5)",
+                                  livenessPhase === "blinking" ? "rgba(34,211,238,0.5)" :
+                                    livenessPhase === "ready" ? "rgba(251,191,36,0.5)" : "rgba(255,255,255,0.15)",
                                 color: livenessPhase === "verified" ? "#6ee7b7" :
-                                  livenessPhase === "flashing" ? "#ffffff" :
-                                    livenessPhase === "failed" ? "#fca5a5" :
-                                      challengeType === "smile" ? "#fde68a" : "#67e8f9"
+                                  livenessPhase === "blinking" ? "#67e8f9" :
+                                    livenessPhase === "ready" ? "#fde68a" : "#ffffff"
                               }}
                             >
                               {livenessPhase === "verified" ? (
                                 <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                              ) : livenessPhase === "flashing" ? (
-                                <Sparkles className="w-4 h-4 text-white animate-spin shrink-0" />
-                              ) : livenessPhase === "failed" ? (
-                                <ShieldAlert className="w-4 h-4 text-red-400 shrink-0" />
-                              ) : challengeType === "smile" ? (
-                                <Smile className="w-4 h-4 text-amber-400 animate-bounce shrink-0" />
+                              ) : livenessPhase === "blinking" ? (
+                                <EyeOff className="w-4 h-4 text-cyan-400 animate-pulse shrink-0" />
+                              ) : livenessPhase === "ready" ? (
+                                <Eye className="w-4 h-4 text-amber-400 animate-bounce shrink-0" />
                               ) : (
-                                <Eye className="w-4 h-4 text-cyan-400 animate-bounce shrink-0" />
+                                <Activity className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
                               )}
                               <span>{livenessPrompt}</span>
                             </div>
@@ -1937,7 +1742,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                       />
                       <div className="absolute bottom-4 sm:bottom-5 left-1/2 -translate-x-1/2 bg-black/80 backdrop-blur-md px-3.5 py-1.5 rounded-full border border-emerald-500/40 text-xs text-emerald-300 font-bold flex items-center gap-1.5 shadow-xl z-20 whitespace-nowrap pointer-events-none select-none">
                         <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                        <span>{challengeType === "smile" ? "Live Smile & Reflection Verified" : "Live Blink & Reflection Verified"}</span>
+                        <span>{blinkDetected ? "Live Blink Verified" : "Photo Captured"}</span>
                       </div>
                     </>
                   )}
@@ -1951,7 +1756,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                         <span>AI Biometric Auto-Capture Active</span>
                       </div>
                       <p className="text-[11px] text-center text-slate-400">
-                        Position face inside the oval and <span className="text-amber-300 font-semibold">{challengeType === "smile" ? "smile naturally at the camera" : "blink your eyes naturally"}</span> for optical reflection verification.
+                        Position face inside the oval and <span className="text-amber-300 font-semibold">blink your eyes naturally</span>.
                       </p>
                     </div>
                   ) : (
