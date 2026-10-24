@@ -24,19 +24,53 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const action = body.action;
 
-    // --- CASE 1: BULK DELETE ---
+    // --- CASE 1: BULK DELETE / SAFE ARCHIVE ---
     if (action === 'delete') {
       const ids: string[] = body.ids || [];
       if (!Array.isArray(ids) || ids.length === 0) {
         return NextResponse.json({ success: false, error: 'No student IDs provided for deletion.' }, { status: 400 });
       }
 
-      // Delete attendance records first
-      await supabaseServer.from('attendance').delete().in('student_id', ids);
+      // Step 1: Query which students have historical attendance records
+      const { data: attRecords } = await supabaseServer
+        .from('attendance')
+        .select('student_id')
+        .in('student_id', ids);
 
-      // Delete students
-      const { error } = await supabaseServer.from('students').delete().in('id', ids);
-      if (error) throw error;
+      const studentIdsWithAttendance = new Set((attRecords || []).map((r: any) => r.student_id));
+      const toArchiveIds = ids.filter(id => studentIdsWithAttendance.has(id));
+      const toDeleteIds = ids.filter(id => !studentIdsWithAttendance.has(id));
+
+      // Step 2: Soft-delete students with attendance: erase biometrics and credentials, archive student
+      // Historical attendance records in 'attendance' table remain 100% UNTOUCHED!
+      if (toArchiveIds.length > 0) {
+        const { data: archiveRows } = await supabaseServer
+          .from('students')
+          .select('id, academic_year')
+          .in('id', toArchiveIds);
+
+        for (const row of archiveRows || []) {
+          const origYear = row.academic_year || '1st Year';
+          const archivedYear = origYear.startsWith('[ARCHIVED]') ? origYear : `[ARCHIVED] ${origYear}`;
+          await supabaseServer
+            .from('students')
+            .update({
+              academic_year: archivedYear,
+              face_encoding: null,
+              biometric_consent: false,
+              biometric_consent_date: null,
+              portal_pin: null,
+              portal_password_hash: null,
+            })
+            .eq('id', row.id);
+        }
+      }
+
+      // Step 3: Hard-delete ONLY students with 0 attendance records
+      if (toDeleteIds.length > 0) {
+        const { error } = await supabaseServer.from('students').delete().in('id', toDeleteIds);
+        if (error) throw error;
+      }
 
       logAuditEvent({
         action: 'BULK_DELETE_STUDENTS',
@@ -45,14 +79,22 @@ export async function POST(request: NextRequest) {
         actorId: session.username || session.name || 'admin',
         request,
         details: {
-          count: ids.length,
+          total_requested: ids.length,
+          archived_count: toArchiveIds.length,
+          deleted_count: toDeleteIds.length,
+          attendance_preserved: true,
           deleted_at: new Date().toISOString(),
           actor_name: session.name,
           actor_role: session.role,
         },
       });
 
-      return NextResponse.json({ success: true, deletedCount: ids.length });
+      return NextResponse.json({
+        success: true,
+        archivedCount: toArchiveIds.length,
+        deletedCount: toDeleteIds.length,
+        message: `${toArchiveIds.length} students archived (attendance records preserved), ${toDeleteIds.length} empty students deleted.`,
+      });
     }
 
     // --- CASE 2: BULK IMPORT ---

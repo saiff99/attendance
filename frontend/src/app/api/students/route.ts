@@ -33,6 +33,10 @@ export async function GET(request: NextRequest) {
     if (error) throw error;
 
     let rawStudents = data || [];
+    const includeArchived = searchParams.get('include_archived') === 'true';
+    if (!includeArchived) {
+      rawStudents = rawStudents.filter((s: any) => !String(s.academic_year || '').startsWith('[ARCHIVED]'));
+    }
     if (cohort && cohort !== 'All') {
       rawStudents = rawStudents.filter(s => isCohortMatching(cohort, s.academic_year));
     }

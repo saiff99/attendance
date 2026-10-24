@@ -199,6 +199,62 @@ console.log('\n--- 6. Student Name Privacy Masking (Anti-Scraping Data Minimizat
   assert(maskStudentName(null) === '', 'Null input handled safely');
 }
 
+// --- 7. Soft-Delete & Historical Attendance Retention Logic ---
+console.log('\n--- 7. Soft-Delete & Historical Attendance Retention Logic ---');
+{
+  function isInternalOrArchivedSession(s) {
+    if (!s || typeof s !== 'object') return true;
+    const name = String(s.class_name || '').trim();
+    const year = String(s.target_academic_year || '').trim();
+    return (
+      name.startsWith('__') ||
+      name.startsWith('[ARCHIVED]') ||
+      name === '__SYSTEM_CONFIG__' ||
+      year.toLowerCase() === 'system' ||
+      year.toLowerCase() === 'archived'
+    );
+  }
+
+  function resolveSessionDeleteAction(attendanceCount) {
+    if (attendanceCount > 0) return 'ARCHIVE';
+    return 'HARD_DELETE';
+  }
+
+  function softDeleteStudent(studentProfile) {
+    return {
+      ...studentProfile,
+      academic_year: studentProfile.academic_year?.startsWith('[ARCHIVED]')
+        ? studentProfile.academic_year
+        : `[ARCHIVED] ${studentProfile.academic_year || '1st Year'}`,
+      face_encoding: null,
+      biometric_consent: false,
+      biometric_consent_date: null,
+      portal_pin: null,
+      portal_password_hash: null,
+    };
+  }
+
+  assert(isInternalOrArchivedSession({ class_name: '[ARCHIVED] Anatomy Lecture 1', target_academic_year: '1st Year' }), 'Archived session by class_name flagged');
+  assert(isInternalOrArchivedSession({ class_name: 'Physiology Lab', target_academic_year: 'Archived' }), 'Archived session by target_academic_year flagged');
+  assert(!isInternalOrArchivedSession({ class_name: 'Pathology Lecture 3', target_academic_year: '2nd Year' }), 'Active session not flagged as archived');
+
+  assert(resolveSessionDeleteAction(150) === 'ARCHIVE', 'Session with 150 attendance records protected from hard-delete');
+  assert(resolveSessionDeleteAction(1) === 'ARCHIVE', 'Session with 1 attendance record protected from hard-delete');
+  assert(resolveSessionDeleteAction(0) === 'HARD_DELETE', 'Empty session (0 attendance) allowed for clean deletion');
+
+  const activeStudent = {
+    student_roll: '101',
+    full_name: 'Aman Roy',
+    academic_year: '1st Year',
+    face_encoding: [0.1, 0.2, 0.3],
+    biometric_consent: true,
+  };
+  const archived = softDeleteStudent(activeStudent);
+  assert(archived.face_encoding === null, 'Biometric face encoding purged on archival');
+  assert(archived.biometric_consent === false, 'Biometric consent revoked on archival');
+  assert(archived.academic_year === '[ARCHIVED] 1st Year', 'Academic year tagged with [ARCHIVED]');
+}
+
 // Summary
 console.log('\n' + '=' .repeat(65));
 console.log(`📊 Offline Unit Test Summary: ${passed} Passed, ${failed} Failed`);
@@ -209,4 +265,5 @@ if (failed > 0) {
 } else {
   process.exit(0);
 }
+
 

@@ -21,9 +21,11 @@ export function isInternalSession(s: any): boolean {
   const id = String(s.id || '').trim();
   return (
     name.startsWith('__') ||
+    name.startsWith('[ARCHIVED]') ||
     name === '__SYSTEM_CONFIG__' ||
     name === '__GEOFENCE_CONFIG__' ||
     year.toLowerCase() === 'system' ||
+    year.toLowerCase() === 'archived' ||
     id === '00000000-0000-0000-0000-000000000001' ||
     id === '00000000-0000-0000-0000-000000000000'
   );

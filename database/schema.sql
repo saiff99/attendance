@@ -27,6 +27,8 @@ CREATE TABLE IF NOT EXISTS public.students (
     biometric_consent BOOLEAN DEFAULT false, -- DPDP Act 2023: Explicit consent (opt-in only)
     biometric_consent_date TIMESTAMPTZ, -- Timestamp recorded upon explicit enrollment
     manual_marked_count INTEGER DEFAULT 0,
+    is_active BOOLEAN DEFAULT true, -- Active roster flag; false indicates archived student
+    archived_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -38,7 +40,9 @@ ADD COLUMN IF NOT EXISTS last_portal_login TIMESTAMPTZ,
 ADD COLUMN IF NOT EXISTS parent_phone VARCHAR(50),
 ADD COLUMN IF NOT EXISTS biometric_consent BOOLEAN DEFAULT false,
 ADD COLUMN IF NOT EXISTS biometric_consent_date TIMESTAMPTZ,
-ADD COLUMN IF NOT EXISTS manual_marked_count INTEGER DEFAULT 0;
+ADD COLUMN IF NOT EXISTS manual_marked_count INTEGER DEFAULT 0,
+ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true,
+ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ;
 
 -- ==============================================================================
 -- 3. Table: sessions
@@ -52,8 +56,14 @@ CREATE TABLE IF NOT EXISTS public.sessions (
     end_time TIMESTAMPTZ NOT NULL,
     instructor_name VARCHAR(255) NOT NULL,
     target_academic_year VARCHAR(50) DEFAULT 'All',
+    is_archived BOOLEAN DEFAULT false, -- Soft-delete archive flag preserving linked attendance
+    archived_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
+
+ALTER TABLE public.sessions
+ADD COLUMN IF NOT EXISTS is_archived BOOLEAN DEFAULT false,
+ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ;
 
 -- ==============================================================================
 -- 4. Table: attendance

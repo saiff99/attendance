@@ -78,7 +78,12 @@ export async function GET(request: NextRequest) {
 
     if (error) throw error;
 
-    let filteredSessions = (data || []).filter((s: any) => !s.class_name?.startsWith('__'));
+    const includeArchived = searchParams.get('include_archived') === 'true';
+    let filteredSessions = (data || []).filter((s: any) => {
+      if (s.class_name?.startsWith('__')) return false;
+      if (!includeArchived && (s.class_name?.startsWith('[ARCHIVED]') || s.target_academic_year === 'Archived')) return false;
+      return true;
+    });
     if (session.role === 'Faculty') {
       const u = (session.username || '').toLowerCase();
       const n = (session.name || '').toLowerCase();

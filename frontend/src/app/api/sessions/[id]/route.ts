@@ -2,6 +2,7 @@ import { NextResponse, NextRequest } from 'next/server';
 import { supabaseServer } from '@/lib/supabaseServer';
 import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/serverAuth';
 import { isFacultyAuthorizedForSession } from '@/lib/attendanceAuth';
+import { logAuditEvent } from '@/lib/auditLog';
 
 export const dynamic = 'force-dynamic';
 
@@ -143,6 +144,62 @@ export async function DELETE(
       return NextResponse.json({ success: false, error: 'Session ID required.' }, { status: 400 });
     }
 
+    // Step 1: Check if the session has any linked attendance records
+    const { count: attendanceCount, error: countErr } = await supabaseServer
+      .from('attendance')
+      .select('*', { count: 'exact', head: true })
+      .eq('session_id', id);
+
+    if (countErr) {
+      console.warn('Could not verify attendance record count before delete:', countErr);
+    }
+
+    // Step 2: Prevent hard-delete if attendance records exist! Soft-delete / Archive instead!
+    if (attendanceCount && attendanceCount > 0) {
+      const { data: sessRow } = await supabaseServer
+        .from('sessions')
+        .select('class_name, target_academic_year')
+        .eq('id', id)
+        .maybeSingle();
+
+      const origClassName = sessRow?.class_name || 'Class Session';
+      const archivedClassName = origClassName.startsWith('[ARCHIVED]') ? origClassName : `[ARCHIVED] ${origClassName}`;
+
+      const { error: archiveErr } = await supabaseServer
+        .from('sessions')
+        .update({
+          class_name: archivedClassName,
+          target_academic_year: 'Archived',
+        })
+        .eq('id', id);
+
+      if (archiveErr) throw archiveErr;
+
+      logAuditEvent({
+        action: 'ARCHIVE_SESSION',
+        targetType: 'session',
+        targetId: id,
+        actorId: session.username || session.name || 'admin',
+        request,
+        details: {
+          reason: 'Hard-delete prevented: Preserved historical student attendance records',
+          attendance_count: attendanceCount,
+          original_class_name: origClassName,
+          archived_class_name: archivedClassName,
+          archived_at: new Date().toISOString(),
+          actor_name: session.name,
+          actor_role: session.role,
+        },
+      });
+
+      return NextResponse.json({
+        success: true,
+        archived: true,
+        message: `Session has ${attendanceCount} student attendance records and was safely archived to prevent data loss. Historical attendance records are preserved.`,
+      });
+    }
+
+    // Step 3: If session is completely empty (0 attendance records), safe to hard-delete
     const { error } = await supabaseServer
       .from('sessions')
       .delete()
@@ -151,7 +208,21 @@ export async function DELETE(
 
     if (error) throw error;
 
-    return NextResponse.json({ success: true, message: 'Session deleted successfully.' });
+    logAuditEvent({
+      action: 'DELETE_SESSION',
+      targetType: 'session',
+      targetId: id,
+      actorId: session.username || session.name || 'admin',
+      request,
+      details: {
+        reason: 'Empty session deleted (0 attendance records)',
+        deleted_at: new Date().toISOString(),
+        actor_name: session.name,
+        actor_role: session.role,
+      },
+    });
+
+    return NextResponse.json({ success: true, message: 'Empty session deleted successfully.' });
   } catch (err: any) {
     console.error('Error deleting session:', err);
     return NextResponse.json({ success: false, error: err.message || 'Failed to delete session' }, { status: 500 });
