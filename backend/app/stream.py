@@ -17,6 +17,7 @@ from app.config import (
     redact_stream_url,
 )
 from app.ai import app_fa, AI_ENABLED, AI_DET_THRESH, AI_DET_SIZE, calculate_confidence_score
+from app.antispoof import verify_face_liveness
 
 # High-Performance Robust FFmpeg RTSP Flags (stable over Tailscale VPN without dropped frames or freezes)
 os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = (
@@ -534,7 +535,15 @@ class ThreadedRTSPStream:
             x2 = int(orig_x2 * scale_x)
             y2 = int(orig_y2 * scale_y)
 
-            if student:
+            if f_info.get("is_spoof"):
+                # Red/Crimson Alert Box & Presentation Attack Warning
+                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
+                label = "SPOOF / SCREEN REJECTED"
+                label_size, _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.45, 1)
+                badge_h = 20
+                cv2.rectangle(frame, (x1, max(0, y1 - badge_h)), (x1 + label_size[0] + 6, max(0, y1)), (0, 0, 220), -1)
+                cv2.putText(frame, label, (x1 + 3, max(0, y1 - 5)), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1)
+            elif student:
                 # Green Box & Name + Roll
                 cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
                 conf_pct = int(calculate_confidence_score(float(sim)) * 100)
@@ -686,28 +695,49 @@ class ThreadedRTSPStream:
                                 "reuse_count": 0
                             })
 
-                    current_faces.append({
-                        "coords": (x1, y1, x2, y2),
-                        "student": best_match_student,
-                        "sim": highest_sim,
-                        "in_cooldown": in_cooldown
-                    })
-
-                    # Record attendance via dedicated queue (100% thread-safe, 0 OS thread explosion overhead)
-                    if best_match_student:
-                        student_id = best_match_student['id']
+                    # Anti-Spoofing & Liveness: Block presentation attacks (phone screens, paper prints, replay attacks)
+                    is_spoof = False
+                    spoof_reason = ""
+                    if best_match_student and (student_id := best_match_student.get('id')):
                         if student_id not in recognized_set:
-                            recognized_set.add(student_id)
-                            try:
-                                attendance_event_queue.put_nowait({
-                                    "session_id": session_id,
-                                    "student_id": student_id,
-                                    "student_name": best_match_student['full_name'],
-                                    "highest_sim": highest_sim,
-                                    "camera_name": self.name
-                                })
-                            except queue.Full:
-                                pass
+                            is_live, spoof_reason, _ = verify_face_liveness(frame, np.array([x1, y1, x2, y2]))
+                            if not is_live:
+                                is_spoof = True
+                                print(f"  ⚠️  [AntiSpoof REJECT Live Scan] Blocked fake face / screen presentation for '{best_match_student['full_name']}': {spoof_reason}")
+
+                    if is_spoof:
+                        current_faces.append({
+                            "coords": (x1, y1, x2, y2),
+                            "student": None,
+                            "sim": highest_sim,
+                            "in_cooldown": False,
+                            "is_spoof": True,
+                            "spoof_reason": spoof_reason
+                        })
+                    else:
+                        current_faces.append({
+                            "coords": (x1, y1, x2, y2),
+                            "student": best_match_student,
+                            "sim": highest_sim,
+                            "in_cooldown": in_cooldown,
+                            "is_spoof": False
+                        })
+
+                        # Record attendance via dedicated queue (100% thread-safe, 0 OS thread explosion overhead)
+                        if best_match_student:
+                            student_id = best_match_student['id']
+                            if student_id not in recognized_set:
+                                recognized_set.add(student_id)
+                                try:
+                                    attendance_event_queue.put_nowait({
+                                        "session_id": session_id,
+                                        "student_id": student_id,
+                                        "student_name": best_match_student['full_name'],
+                                        "highest_sim": highest_sim,
+                                        "camera_name": self.name
+                                    })
+                                except queue.Full:
+                                    pass
 
             t_end = time.perf_counter()
             total_ai_ms = (t_end - t0) * 1000.0

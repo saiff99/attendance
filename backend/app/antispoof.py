@@ -1,10 +1,131 @@
 import os
-from typing import Optional, Tuple
+import sys
+from typing import Optional, Tuple, Dict, Any
 import cv2
 import numpy as np
 
 MIN_FACE_CROP_DIM = int(os.getenv("ANTISPOOF_MIN_CROP_DIM", "60"))
 MIN_FACE_CONTRAST_STD = float(os.getenv("ANTISPOOF_MIN_CONTRAST_STD", "4.0"))
+MINIFASNET_REAL_THRESHOLD = float(os.getenv("MINIFASNET_REAL_THRESHOLD", "0.60"))
+
+# Locate MiniFASNet ONNX model path
+_BASE_BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DEFAULT_MINIFASNET_PATH = os.path.join(_BASE_BACKEND_DIR, "models", "MiniFASNetV2.onnx")
+
+_minifasnet_session = None
+_minifasnet_initialized = False
+
+
+def get_minifasnet_session():
+    """
+    Initializes or returns cached ONNX session for MiniFASNet Face Anti-Spoofing.
+    Uses optimal hardware execution providers (CoreML / CUDA / DirectML / CPU).
+    Returns None gracefully if model file is not present (for zero-dependency offline resilience).
+    """
+    global _minifasnet_session, _minifasnet_initialized
+    if _minifasnet_initialized:
+        return _minifasnet_session
+
+    _minifasnet_initialized = True
+    model_path = os.getenv("MINIFASNET_MODEL_PATH", DEFAULT_MINIFASNET_PATH)
+    if not os.path.exists(model_path):
+        return None
+
+    try:
+        import onnxruntime as ort
+        available = ort.get_available_providers()
+        providers = []
+        if 'CoreMLExecutionProvider' in available:
+            providers.append(('CoreMLExecutionProvider', {'enable_on_subgraph': 1, 'coreml_flags': 0}))
+        if 'CUDAExecutionProvider' in available:
+            providers.append('CUDAExecutionProvider')
+        if 'DirectMLExecutionProvider' in available:
+            providers.append('DirectMLExecutionProvider')
+        providers.append('CPUExecutionProvider')
+
+        session = ort.InferenceSession(model_path, providers=providers)
+        _minifasnet_session = session
+        print(f"[AntiSpoof] MiniFASNet ONNX Anti-Spoofing engine loaded successfully from {model_path} (Provider: {session.get_providers()[0]})")
+        return _minifasnet_session
+    except Exception as e:
+        print(f"[AntiSpoof WARNING] Failed to initialize MiniFASNet ONNX session ({e}); falling back to optical FFT Moiré.")
+        _minifasnet_session = None
+        return None
+
+
+def predict_minifasnet_liveness(
+    image_bgr: np.ndarray,
+    face_bbox: np.ndarray,
+    scale: float = 2.7
+) -> Tuple[Optional[bool], float, str, Dict[str, Any]]:
+    """
+    Runs MiniFASNet deep-learning presentation attack detection.
+    Preprocesses face crop scaled by 2.7, resizes to (80, 80), CHW transpose.
+    Softmax outputs:
+      Index 0: Print Attack (Photo paper)
+      Index 1: Real / Live Face
+      Index 2: Replay Attack (Computer / Tablet / Phone screen)
+
+    Returns:
+        (is_real, real_prob, spoof_type, raw_probs)
+    """
+    session = get_minifasnet_session()
+    if session is None:
+        return None, 0.0, "unknown", {}
+
+    try:
+        src_h, src_w = image_bgr.shape[:2]
+        x1, y1, x2, y2 = [int(v) for v in face_bbox[:4]]
+        box_w = max(1, x2 - x1)
+        box_h = max(1, y2 - y1)
+
+        # Scale bounding box for full face context (Silent-Face-Anti-Spoofing scale 2.7)
+        crop_scale = min((src_h - 1) / float(box_h), (src_w - 1) / float(box_w), scale)
+        center_x = x1 + box_w / 2.0
+        center_y = y1 + box_h / 2.0
+
+        cx1 = max(0, int(center_x - (box_w * crop_scale) / 2.0))
+        cy1 = max(0, int(center_y - (box_h * crop_scale) / 2.0))
+        cx2 = min(src_w - 1, int(center_x + (box_w * crop_scale) / 2.0))
+        cy2 = min(src_h - 1, int(center_y + (box_h * crop_scale) / 2.0))
+
+        if cx2 <= cx1 or cy2 <= cy1:
+            return False, 0.0, "out_of_bounds", {}
+
+        cropped = image_bgr[cy1:cy2 + 1, cx1:cx2 + 1]
+        resized = cv2.resize(cropped, (80, 80), interpolation=cv2.INTER_AREA)
+
+        # Convert to float32 CHW tensor format [1, 3, 80, 80]
+        tensor = resized.astype(np.float32)
+        tensor = np.transpose(tensor, (2, 0, 1))
+        tensor = np.expand_dims(tensor, axis=0)
+
+        input_name = session.get_inputs()[0].name
+        output_name = session.get_outputs()[0].name
+        logits = session.run([output_name], {input_name: tensor})[0]
+
+        # Softmax over 3 classes
+        e_x = np.exp(logits - np.max(logits, axis=1, keepdims=True))
+        probs = e_x / np.sum(e_x, axis=1, keepdims=True)
+
+        prob_print = float(probs[0, 0])
+        prob_real = float(probs[0, 1])
+        prob_replay = float(probs[0, 2])
+
+        label_idx = int(np.argmax(probs))
+        spoof_type = "Replay Screen / Video Attack" if prob_replay >= prob_print else "Print Paper Photo Attack"
+
+        is_real = bool(label_idx == 1 and prob_real >= MINIFASNET_REAL_THRESHOLD)
+
+        return is_real, prob_real, spoof_type, {
+            "print_prob": round(prob_print, 4),
+            "real_prob": round(prob_real, 4),
+            "replay_prob": round(prob_replay, 4),
+            "predicted_label": "Real" if is_real else "Spoof"
+        }
+    except Exception as e:
+        print(f"[AntiSpoof MiniFASNet Error] {e}")
+        return None, 0.0, f"error: {e}", {}
 
 
 def detect_moire_patterns(face_bgr: np.ndarray) -> Tuple[bool, float, float]:
@@ -106,13 +227,18 @@ def detect_chromatic_subpixel_distortion(face_bgr: np.ndarray) -> Tuple[bool, fl
 def verify_face_liveness(image_bgr: np.ndarray, face_bbox: np.ndarray) -> Tuple[bool, str, dict]:
     """
     Zero-Trust Anti-Spoofing & Liveness Verification.
-    Enforces strict Fail-Closed security:
+    Enforces strict Fail-Closed security across 2 complementary tiers:
+    
+    [Tier 1: Morphological & Boundary Validation]
     1. Rejects invalid, empty, or degenerate images and bounding boxes.
     2. Rejects small face crops below MIN_FACE_CROP_DIM (default: 60x60).
     3. Rejects low-contrast/solid color crops.
-    4. Analyzes 2D FFT Moiré screen frequency harmonics.
-    5. Analyzes chromatic sub-pixel stripe distortion and backlight glare.
-    6. Fails closed on any analysis exception or uncertainty.
+    
+    [Tier 2: Deep Learning Anti-Spoofing & Physical Optical Analysis]
+    4. Evaluates MiniFASNet ONNX neural network for presentation attack detection.
+    5. Analyzes 2D FFT Moiré screen frequency harmonics (detects display raster grids).
+    6. Analyzes chromatic sub-pixel stripe distortion and backlight glare.
+    7. Fails closed on any analysis exception or uncertainty.
 
     Returns:
         (is_live: bool, rejection_reason: str, diagnostics: dict)
@@ -202,16 +328,24 @@ def verify_face_liveness(image_bgr: np.ndarray, face_bbox: np.ndarray) -> Tuple[
                 "min_required": MIN_FACE_CONTRAST_STD
             }
 
-        # 5. Check 1: 2D FFT Moiré pattern in frequency domain
+        # 5. Check 1: Deep-Learning MiniFASNet Anti-Spoofing (if available)
+        mf_real, mf_score, mf_spoof_type, mf_probs = predict_minifasnet_liveness(image_bgr, face_bbox)
+
+        # 6. Check 2: 2D FFT Moiré pattern in frequency domain
         is_moire, peak_ratio, hf_ratio = detect_moire_patterns(face_crop)
 
-        # 6. Check 2: Chromatic subpixel stripe distortion
+        # 7. Check 3: Chromatic subpixel stripe distortion
         is_chroma, chroma_ratio = detect_chromatic_subpixel_distortion(face_crop)
 
         diag = {
             "status": "evaluated",
             "crop_resolution": [crop_w, crop_h],
             "contrast_std": round(std_dev, 2),
+            "minifasnet_evaluated": bool(mf_real is not None),
+            "minifasnet_real": mf_real,
+            "minifasnet_score": round(mf_score, 4) if mf_real is not None else None,
+            "minifasnet_probs": mf_probs,
+            "minifasnet_spoof_type": mf_spoof_type if mf_real is False else None,
             "moire_detected": is_moire,
             "peak_ratio": round(peak_ratio, 3),
             "hf_energy_ratio": round(hf_ratio, 3),
@@ -219,11 +353,17 @@ def verify_face_liveness(image_bgr: np.ndarray, face_bbox: np.ndarray) -> Tuple[
             "chroma_ratio": round(chroma_ratio, 3)
         }
 
+        if mf_real is False:
+            diag["status"] = "rejected_minifasnet_spoof"
+            return False, f"Fake face presentation attack detected ({mf_spoof_type}). Please present your live face directly to camera.", diag
+
         # If Moiré screen patterns or severe subpixel chromatic artifacts are detected
         if is_moire:
+            diag["status"] = "rejected_moire_spoof"
             return False, "Screen / Moiré pattern detected! Please capture your live face directly, not a photo displayed on a computer or mobile screen.", diag
 
         if is_chroma:
+            diag["status"] = "rejected_chromatic_spoof"
             return False, "Digital screen reflection detected! Please take a direct live selfie.", diag
 
         return True, "", diag

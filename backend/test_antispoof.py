@@ -109,6 +109,21 @@ def test_suite():
     is_live, reason, diag = verify_face_liveness(real_face, np.array([50, 50, 350, 350]))
     assert_test(is_live is True and diag.get("status") == "evaluated", "Accept genuine live face with natural contrast & spectrum", f"Got is_live={is_live}, reason={reason}, diag={diag}")
 
+    # Test 11: MiniFASNet Deep-Learning Evaluation Verification
+    assert_test(
+        diag.get("minifasnet_evaluated") is True and diag.get("minifasnet_real") is True,
+        "MiniFASNet ONNX engine evaluates live face with high confidence (> 0.60)",
+        f"Diag: {diag}"
+    )
+
+    # Test 12: MiniFASNet Rejection on Replay Attack / Synthetic Screen Grating
+    is_live_moire, reason_moire, diag_moire = verify_face_liveness(moire_img, np.array([50, 50, 300, 300]))
+    assert_test(
+        not is_live_moire and diag_moire.get("minifasnet_real") is False,
+        "MiniFASNet ONNX engine strictly detects and blocks fake face presentation attack",
+        f"Diag: {diag_moire}"
+    )
+
     print("=" * 65)
     print(f"📊 Anti-Spoofing Test Summary: {passed}/{total} Passed")
     print("=" * 65)
