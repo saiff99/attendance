@@ -8,6 +8,7 @@ import random
 import asyncio
 import hmac
 import hashlib
+import logging
 from datetime import datetime, timezone
 import dateutil.parser
 import numpy as np
@@ -44,6 +45,8 @@ from app.rate_limiter import (
     check_public_selfie_ip_limit,
     check_lookup_rate_limit
 )
+
+logger = logging.getLogger(__name__)
 
 def get_real_client_ip(request: Request) -> str:
     """Extracts genuine client IP behind Cloudflare Tunnel, reverse proxies, or direct connection."""
