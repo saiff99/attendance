@@ -34,7 +34,16 @@ def load_env(path):
 load_env(os.path.join(BACKEND_DIR, ".env"))
 load_env(os.path.join(BASE_DIR, "frontend", ".env.local"))
 
-from app.config import supabase
+try:
+    from backend.app.config import supabase  # type: ignore
+except ImportError:
+    try:
+        from app.config import supabase  # type: ignore
+    except ImportError:
+        from supabase import create_client  # type: ignore
+        _url = os.getenv("SUPABASE_URL") or os.getenv("NEXT_PUBLIC_SUPABASE_URL") or ""
+        _key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_KEY") or ""
+        supabase = create_client(_url, _key)
 
 def batch_upsert(table_name, records, chunk_size=100, on_conflict="id"):
     if not records:
