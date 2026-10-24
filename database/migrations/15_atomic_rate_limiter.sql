@@ -26,6 +26,7 @@ CREATE OR REPLACE FUNCTION public.atomic_check_rate_limit(
 ) RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public, pg_temp
 AS $$
 DECLARE
     v_val JSONB;
@@ -80,3 +81,16 @@ BEGIN
     );
 END;
 $$;
+
+-- 3. Hardened Security, Function Execution Restrictions & Privilege Lockdown
+-- Revoke execution from untrusted client roles (preventing arbitrary key writes in settings)
+REVOKE EXECUTE ON FUNCTION public.atomic_check_rate_limit(TEXT, INT, NUMERIC, NUMERIC) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.atomic_check_rate_limit(TEXT, INT, NUMERIC, NUMERIC) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.atomic_check_rate_limit(TEXT, INT, NUMERIC, NUMERIC) FROM authenticated;
+
+-- Grant execution strictly to the backend server-side service_role
+GRANT EXECUTE ON FUNCTION public.atomic_check_rate_limit(TEXT, INT, NUMERIC, NUMERIC) TO service_role;
+
+COMMENT ON FUNCTION public.atomic_check_rate_limit(TEXT, INT, NUMERIC, NUMERIC) IS 
+'Security-hardened atomic sliding-window rate limiter with fixed search_path. Restricted exclusively to service_role.';
+

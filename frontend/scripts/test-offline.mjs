@@ -553,6 +553,57 @@ console.log('\n--- 12. Check-In Capability Token & Public Lookup Protection ---'
   );
 }
 
+// --- 13. Atomic Rate Limiter Privilege Lockdown & Search Path Isolation ---
+console.log('\n--- 13. Atomic Rate Limiter Privilege Lockdown & Search Path Isolation ---');
+{
+  const schemaPath = path.resolve(__dirname, '../../database/schema.sql');
+  const migration15Path = path.resolve(__dirname, '../../database/migrations/15_atomic_rate_limiter.sql');
+  const migration18Path = path.resolve(__dirname, '../../database/migrations/18_atomic_rate_limit_permissions.sql');
+
+  const schemaSql = fs.existsSync(schemaPath) ? fs.readFileSync(schemaPath, 'utf8') : '';
+  const migration15Sql = fs.existsSync(migration15Path) ? fs.readFileSync(migration15Path, 'utf8') : '';
+  const migration18Sql = fs.existsSync(migration18Path) ? fs.readFileSync(migration18Path, 'utf8') : '';
+
+  // 1. Verify schema.sql specifies immutable search_path on atomic_check_rate_limit
+  const schemaHasSearchPath = /CREATE\s+OR\s+REPLACE\s+FUNCTION\s+public\.atomic_check_rate_limit[\s\S]*?SECURITY\s+DEFINER\s+SET\s+search_path\s*=\s*public,\s*pg_temp/i.test(schemaSql);
+  assert(schemaHasSearchPath, 'schema.sql defines atomic_check_rate_limit with immutable search_path = public, pg_temp');
+
+  // 2. Verify schema.sql revokes EXECUTE from PUBLIC, anon, and authenticated
+  const schemaRevokesPublic = /REVOKE\s+EXECUTE\s+ON\s+FUNCTION\s+public\.atomic_check_rate_limit[\s\S]*?FROM[\s\w,]*PUBLIC/i.test(schemaSql);
+  assert(schemaRevokesPublic, 'schema.sql revokes EXECUTE on atomic_check_rate_limit from PUBLIC');
+
+  const schemaRevokesAnon = /REVOKE\s+EXECUTE\s+ON\s+FUNCTION\s+public\.atomic_check_rate_limit[\s\S]*?FROM[\s\w,]*anon/i.test(schemaSql);
+  assert(schemaRevokesAnon, 'schema.sql revokes EXECUTE on atomic_check_rate_limit from anon');
+
+  const schemaRevokesAuth = /REVOKE\s+EXECUTE\s+ON\s+FUNCTION\s+public\.atomic_check_rate_limit[\s\S]*?FROM[\s\w,]*authenticated/i.test(schemaSql);
+  assert(schemaRevokesAuth, 'schema.sql revokes EXECUTE on atomic_check_rate_limit from authenticated');
+
+  // 3. Verify schema.sql grants EXECUTE strictly to service_role
+  const schemaGrantsServiceRole = /GRANT\s+EXECUTE\s+ON\s+FUNCTION\s+public\.atomic_check_rate_limit[\s\S]*?TO\s+service_role/i.test(schemaSql);
+  assert(schemaGrantsServiceRole, 'schema.sql grants EXECUTE on atomic_check_rate_limit strictly to service_role');
+
+  // 4. Verify Migration 15 includes search_path and permission revocation
+  const mig15HasSearchPath = /SET\s+search_path\s*=\s*public,\s*pg_temp/i.test(migration15Sql);
+  assert(mig15HasSearchPath, 'Migration 15 includes SET search_path = public, pg_temp');
+
+  const mig15Revokes = /REVOKE\s+EXECUTE\s+ON\s+FUNCTION\s+public\.atomic_check_rate_limit[\s\S]*?FROM[\s\w,]*PUBLIC/i.test(migration15Sql) &&
+                       /REVOKE\s+EXECUTE\s+ON\s+FUNCTION\s+public\.atomic_check_rate_limit[\s\S]*?FROM[\s\w,]*anon/i.test(migration15Sql);
+  assert(mig15Revokes, 'Migration 15 revokes EXECUTE from PUBLIC, anon, authenticated');
+
+  const mig15Grants = /GRANT\s+EXECUTE\s+ON\s+FUNCTION\s+public\.atomic_check_rate_limit[\s\S]*?TO\s+service_role/i.test(migration15Sql);
+  assert(mig15Grants, 'Migration 15 grants EXECUTE strictly to service_role');
+
+  // 5. Verify Migration 18 exists for sequential migration pipelines
+  assert(fs.existsSync(migration18Path), 'Migration 18 (18_atomic_rate_limit_permissions.sql) exists');
+
+  const mig18HasSearchPath = /SET\s+search_path\s*=\s*public,\s*pg_temp/i.test(migration18Sql);
+  assert(mig18HasSearchPath, 'Migration 18 re-defines function with SET search_path = public, pg_temp');
+
+  const mig18RevokesAndGrants = /REVOKE\s+EXECUTE\s+ON\s+FUNCTION\s+public\.atomic_check_rate_limit/i.test(migration18Sql) &&
+                               /GRANT\s+EXECUTE\s+ON\s+FUNCTION\s+public\.atomic_check_rate_limit[\s\S]*?TO\s+service_role/i.test(migration18Sql);
+  assert(mig18RevokesAndGrants, 'Migration 18 executes REVOKE from unauthenticated roles and GRANT to service_role');
+}
+
 // Summary
 console.log('\n' + '=' .repeat(65));
 console.log(`📊 Offline Unit Test Summary: ${passed} Passed, ${failed} Failed`);
