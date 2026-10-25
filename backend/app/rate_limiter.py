@@ -368,9 +368,12 @@ def check_selfie_rate_limit(client_ip: str, clean_roll: str) -> None:
 
 def check_lookup_rate_limit(client_ip: str) -> None:
     """
-    Limits student roll lookup API to 10 calls per IP per 60 seconds to prevent scraping.
-    Atomically synchronizes state across workers via PostgreSQL stored procedure or CAS mutex.
+    Limits student roll lookup API to prevent scraping.
+    Campus Concurrency Safe: Bypassed by default so 300+ students on college Wi-Fi NAT can look up profiles concurrently.
     """
+    if os.getenv("STRICT_IP_RATE_LIMIT") != "1":
+        return
+
     rate_key = client_ip.strip()
     db_key = f"rl_lookup:{rate_key}"
     now_ts = time.time()
@@ -410,9 +413,12 @@ def reset_lookup_rate_limit(client_ip: str) -> None:
 
 def check_public_selfie_ip_limit(client_ip: str) -> None:
     """
-    Limits total selfie attendance submissions from any single IP to 20 calls per 60 seconds.
-    Prevents scripted flood attacks using randomized rolls against the AI vision model.
+    Limits total selfie attendance submissions.
+    Campus Concurrency Safe: Bypassed by default so 300+ students on college Wi-Fi NAT can submit selfies concurrently.
     """
+    if os.getenv("STRICT_IP_RATE_LIMIT") != "1":
+        return
+
     rate_key = client_ip.strip()
     db_key = f"rl_selfie_ip:{rate_key}"
     now_ts = time.time()

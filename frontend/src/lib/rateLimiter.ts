@@ -440,6 +440,13 @@ export async function checkStudentLookupRateLimit(
   clientIp: string,
   nowSec: number = Date.now() / 1000
 ): Promise<{ allowed: boolean; remainingSeconds: number }> {
+  // Campus Concurrency Safe: 300+ students in an auditorium sharing college Wi-Fi NAT
+  // must all be permitted to look up their profiles without artificial IP throttling.
+  // Security is strictly enforced by: Active Session ID + Signed QR Capability Token + Student Secret PIN.
+  if (process.env.STRICT_IP_RATE_LIMIT !== '1') {
+    return { allowed: true, remainingSeconds: 0 };
+  }
+
   const dbKey = `rl_lookup:${clientIp}`;
   const windowSeconds = 60.0;
   const maxAttempts = 10;
@@ -504,6 +511,11 @@ export async function checkActiveSessionsRateLimit(
   clientIp: string,
   nowSec: number = Date.now() / 1000
 ): Promise<{ allowed: boolean; remainingSeconds: number }> {
+  // Campus Concurrency Safe: 300+ students on college Wi-Fi NAT must all be permitted to fetch active sessions.
+  if (process.env.STRICT_IP_RATE_LIMIT !== '1') {
+    return { allowed: true, remainingSeconds: 0 };
+  }
+
   const dbKey = `rl_active_sessions:${clientIp}`;
   const windowSeconds = 60.0;
   const maxAttempts = 30;
