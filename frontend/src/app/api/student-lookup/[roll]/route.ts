@@ -95,9 +95,12 @@ export async function GET(
     );
     const cleanRoll = roll.trim();
     const canSeeFullProfile = isStaff || isOwnStudent;
-    let hasValidCheckinToken = verifyCheckinToken(token, cleanSessId, cleanRoll);
 
-    // Optional Verification Challenge: If unauthenticated caller doesn't have a QR token, allow verifying via Student PIN
+    // Strict check: verifyCheckinToken will only return true if token is a 4-part token matching cleanRoll
+    let hasValidCheckinToken = verifyCheckinToken(token, cleanSessId, cleanRoll);
+    let hasValidSessionToken = verifyCheckinToken(token, cleanSessId);
+
+    // Optional Verification Challenge: If unauthenticated caller doesn't have a roll-bound token, verify via Student PIN
     const studentPin = (searchParams.get('pin') || request.headers.get('x-student-pin') || '').trim();
     let isChallengeVerified = false;
     if (!canSeeFullProfile && !hasValidCheckinToken && studentPin) {
@@ -116,8 +119,15 @@ export async function GET(
       }
     }
 
-    // Unauthenticated requests MUST carry a cryptographically signed checkin token (classroom or student-bound) or pass PIN challenge
+    // Unauthenticated requests MUST carry a cryptographically signed roll-bound checkin token or pass PIN challenge.
+    // A raw 3-part classroom session token cannot be used to probe student profiles without identity verification.
     if (!canSeeFullProfile && !hasValidCheckinToken && !isChallengeVerified) {
+      if (hasValidSessionToken && !studentPin) {
+        return NextResponse.json(
+          { detail: 'Student Portal PIN required. Enter your 4-6 digit secret PIN to verify identity and generate check-in token.' },
+          { status: 403 }
+        );
+      }
       return NextResponse.json(
         { detail: 'Valid signed check-in token, student PIN challenge, or authenticated session required. Direct unauthenticated student lookup is prohibited.' },
         { status: 403 }

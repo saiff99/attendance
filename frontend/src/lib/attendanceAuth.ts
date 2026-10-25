@@ -318,17 +318,28 @@ export function verifyCheckinToken(
   let signature = '';
   let payload = '';
 
-  if (parts.length === 4) {
+  const cleanExpectedRoll = expectedStudentRoll ? String(expectedStudentRoll).trim().toLowerCase() : '';
+
+  if (cleanExpectedRoll) {
+    // Strict Roll-Bound Capability: 3-part classroom tokens are strictly rejected when student-specific capability is required
+    if (parts.length !== 4) return false;
     [sessId, roll, expiresAtStr, signature] = parts;
     if (sessId.toLowerCase() !== expectedSessionId.toLowerCase()) return false;
-    if (expectedStudentRoll && roll.toLowerCase() !== String(expectedStudentRoll).trim().toLowerCase()) return false;
+    if (roll.toLowerCase() !== cleanExpectedRoll) return false;
     payload = `${sessId}:${roll}:${expiresAtStr}`;
-  } else if (parts.length === 3) {
-    [sessId, expiresAtStr, signature] = parts;
-    if (sessId.toLowerCase() !== expectedSessionId.toLowerCase()) return false;
-    payload = `${sessId}:${expiresAtStr}`;
   } else {
-    return false;
+    // Session-Level Capability: permits 3-part classroom session tokens or 4-part roll tokens
+    if (parts.length === 3) {
+      [sessId, expiresAtStr, signature] = parts;
+      if (sessId.toLowerCase() !== expectedSessionId.toLowerCase()) return false;
+      payload = `${sessId}:${expiresAtStr}`;
+    } else if (parts.length === 4) {
+      [sessId, roll, expiresAtStr, signature] = parts;
+      if (sessId.toLowerCase() !== expectedSessionId.toLowerCase()) return false;
+      payload = `${sessId}:${roll}:${expiresAtStr}`;
+    } else {
+      return false;
+    }
   }
 
   const expiresAt = parseInt(expiresAtStr, 10);

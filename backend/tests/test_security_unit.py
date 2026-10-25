@@ -403,9 +403,9 @@ class TestCheckinCapabilityTokenUnit(unittest.TestCase):
         self.assertTrue(bool(token))
         self.assertEqual(len(token.split(":")), 3)
 
-        # Valid session token passes with or without roll
+        # Valid session token passes session check, but fails roll check (strictly requires roll-bound token)
         self.assertTrue(verify_checkin_token(token, sess_id))
-        self.assertTrue(verify_checkin_token(token, sess_id, "24001"))
+        self.assertFalse(verify_checkin_token(token, sess_id, "24001"))
 
         # Roll-bound token lifecycle
         roll_token = generate_checkin_token(sess_id, valid_seconds=300, student_roll="24001")

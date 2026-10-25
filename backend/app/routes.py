@@ -909,20 +909,32 @@ def verify_checkin_token(
     if not token or not isinstance(token, str) or not token.strip():
         return False
     parts = token.strip().split(":")
-    if len(parts) == 4:
+    clean_expected_roll = str(expected_student_roll).lower().strip() if expected_student_roll and str(expected_student_roll).strip() else ""
+
+    if clean_expected_roll:
+        # Strict Roll-Bound Capability: 3-part classroom tokens are strictly rejected when student-specific capability is required
+        if len(parts) != 4:
+            return False
         sess_id, roll, expires_str, sig = parts
         if sess_id.lower() != str(expected_session_id).lower().strip():
             return False
-        if expected_student_roll and roll.lower() != str(expected_student_roll).lower().strip():
+        if roll.lower() != clean_expected_roll:
             return False
         payload = f"{sess_id}:{roll}:{expires_str}"
-    elif len(parts) == 3:
-        sess_id, expires_str, sig = parts
-        if sess_id.lower() != str(expected_session_id).lower().strip():
-            return False
-        payload = f"{sess_id}:{expires_str}"
     else:
-        return False
+        # Session-Level Capability: permits 3-part classroom token or 4-part token
+        if len(parts) == 3:
+            sess_id, expires_str, sig = parts
+            if sess_id.lower() != str(expected_session_id).lower().strip():
+                return False
+            payload = f"{sess_id}:{expires_str}"
+        elif len(parts) == 4:
+            sess_id, roll, expires_str, sig = parts
+            if sess_id.lower() != str(expected_session_id).lower().strip():
+                return False
+            payload = f"{sess_id}:{roll}:{expires_str}"
+        else:
+            return False
 
     try:
         expires_at = int(expires_str)

@@ -485,26 +485,52 @@ console.log('\n--- 12. Check-In Capability Token & Public Lookup Protection ---'
     return secret;
   }
 
-  function generateCheckinToken(sessionId, validSeconds = 300) {
+  function generateCheckinToken(sessionId, validSeconds = 300, studentRoll) {
     const expiresAt = Math.floor(Date.now() / 1000) + Math.min(Math.max(validSeconds, 30), 330);
-    const payload = `${sessionId}:${expiresAt}`;
+    const cleanRoll = studentRoll ? String(studentRoll).trim().toLowerCase() : '';
+    const payload = cleanRoll ? `${sessionId}:${cleanRoll}:${expiresAt}` : `${sessionId}:${expiresAt}`;
     const secret = getCheckinSigningSecret();
     const signature = crypto.createHmac('sha256', secret).update(payload).digest('hex');
     return `${payload}:${signature}`;
   }
 
-  function verifyCheckinToken(token, expectedSessionId) {
+  function verifyCheckinToken(token, expectedSessionId, expectedStudentRoll) {
     if (typeof token !== 'string' || !token.trim()) return false;
     const parts = token.trim().split(':');
-    if (parts.length !== 3) return false;
-    const [sessId, expiresAtStr, signature] = parts;
-    if (sessId.toLowerCase() !== expectedSessionId.toLowerCase()) return false;
+    let sessId = '';
+    let roll = '';
+    let expiresAtStr = '';
+    let signature = '';
+    let payload = '';
+
+    const cleanExpectedRoll = expectedStudentRoll ? String(expectedStudentRoll).trim().toLowerCase() : '';
+
+    if (cleanExpectedRoll) {
+      if (parts.length !== 4) return false;
+      [sessId, roll, expiresAtStr, signature] = parts;
+      if (sessId.toLowerCase() !== expectedSessionId.toLowerCase()) return false;
+      if (roll.toLowerCase() !== cleanExpectedRoll) return false;
+      payload = `${sessId}:${roll}:${expiresAtStr}`;
+    } else {
+      if (parts.length === 3) {
+        [sessId, expiresAtStr, signature] = parts;
+        if (sessId.toLowerCase() !== expectedSessionId.toLowerCase()) return false;
+        payload = `${sessId}:${expiresAtStr}`;
+      } else if (parts.length === 4) {
+        [sessId, roll, expiresAtStr, signature] = parts;
+        if (sessId.toLowerCase() !== expectedSessionId.toLowerCase()) return false;
+        payload = `${sessId}:${roll}:${expiresAtStr}`;
+      } else {
+        return false;
+      }
+    }
+
     const expiresAt = parseInt(expiresAtStr, 10);
     if (isNaN(expiresAt)) return false;
     if (Math.floor(Date.now() / 1000) > expiresAt) return false;
     try {
       const secret = getCheckinSigningSecret();
-      const expectedSig = crypto.createHmac('sha256', secret).update(`${sessId}:${expiresAtStr}`).digest('hex');
+      const expectedSig = crypto.createHmac('sha256', secret).update(payload).digest('hex');
       const sigBuf = Buffer.from(signature, 'hex');
       const expBuf = Buffer.from(expectedSig, 'hex');
       if (sigBuf.length !== expBuf.length) return false;
@@ -532,6 +558,13 @@ console.log('\n--- 12. Check-In Capability Token & Public Lookup Protection ---'
 
   // 3. Fresh token verification
   assert(verifyCheckinToken(token, testSessionUuid), 'Fresh valid token verifies successfully against matching session UUID');
+
+  // 3b. Roll-bound token verification and strict enforcement
+  const rollToken = generateCheckinToken(testSessionUuid, 300, '25002');
+  assert(Boolean(rollToken) && rollToken.split(':').length === 4, 'generateCheckinToken produces 4-part roll-bound token');
+  assert(verifyCheckinToken(rollToken, testSessionUuid, '25002'), 'Roll-bound token verifies against matching session and roll');
+  assert(!verifyCheckinToken(rollToken, testSessionUuid, '99999'), 'Roll-bound token REJECTS mismatched student roll');
+  assert(!verifyCheckinToken(token, testSessionUuid, '25002'), '3-part session-only token is strictly REJECTED when student roll is required');
 
   // 4. Mismatched session rejection (prevent token theft across lectures)
   assert(!verifyCheckinToken(token, otherSessionUuid), 'Token presented for mismatched session UUID is strictly REJECTED');

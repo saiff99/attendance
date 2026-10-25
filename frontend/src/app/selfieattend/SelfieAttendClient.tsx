@@ -518,6 +518,11 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
       return;
     }
 
+    if (!isStudentUser && !pinInput.trim()) {
+      setLookupError("Please enter your 4-6 digit Student Portal PIN to verify identity.");
+      return;
+    }
+
     setLookingUpStudent(true);
     setLookupError(null);
 
@@ -1350,23 +1355,25 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                     />
                   </div>
 
-                  {checkinToken ? (
+                  {checkinToken && (
                     <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/25 text-emerald-300 text-xs font-medium">
                       <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                      <span>Classroom QR Verified — Instant check-in active</span>
+                      <span>Classroom QR Verified — Active Lecture Session</span>
                     </div>
-                  ) : !isStudentUser ? (
+                  )}
+
+                  {!isStudentUser && (
                     <div className="flex flex-col gap-1.5">
                       <label className="text-[11px] font-semibold text-slate-300 flex items-center justify-between">
-                        <span>Student Portal PIN (Challenge Verification)</span>
-                        <span className="text-[10px] text-slate-500">Not needed if scanned QR</span>
+                        <span>Student Portal PIN (Identity Verification)</span>
+                        <span className="text-[10px] text-indigo-400">4-6 digit secret PIN</span>
                       </label>
                       <input
                         type="password"
                         inputMode="numeric"
                         pattern="[0-9]*"
                         maxLength={6}
-                        placeholder="Enter your 4-6 digit PIN"
+                        placeholder="Enter your 4-6 digit Student PIN"
                         value={pinInput}
                         onChange={(e) => {
                           setPinInput(e.target.value.replace(/\D/g, ""));
@@ -1375,7 +1382,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                         className="w-full bg-slate-950 border border-slate-700 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-white font-mono placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all"
                       />
                     </div>
-                  ) : null}
+                  )}
 
                   {lookupError && (
                     <div className="p-2.5 rounded-lg bg-red-950/50 border border-red-500/30 text-xs text-red-300 flex items-center gap-2">
