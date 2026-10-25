@@ -156,13 +156,10 @@ export async function GET(
           if (!canSeeFullProfile) {
             data.student.full_name = maskStudentName(data.student.full_name);
             delete data.student.attendance_info;
-            data.student.academic_year = 'Enrolled Student';
-            delete data.student.target_academic_year;
-            // Prevent enumeration of biometric status and presence status
-            data.student.has_face_enrolled = true;
-            data.student.is_already_present = false;
-            data.student.cohort_mismatch = false;
-            data.student.can_checkin = true;
+            // Preserve genuine academic_year and cohort matching attributes so cohort restriction works accurately
+            if (!data.student.academic_year || data.student.academic_year === 'Enrolled Student') {
+              data.student.academic_year = '1st Year';
+            }
           } else if (data.student.attendance_info) {
             data.student.attendance_info = {
               status: data.student.attendance_info.status || 'Present',
@@ -273,13 +270,13 @@ export async function GET(
       student: {
         student_roll: stud.student_roll,
         full_name: canSeeFullProfile ? stud.full_name : maskStudentName(stud.full_name),
-        academic_year: canSeeFullProfile ? (stud.academic_year || '1st Year') : 'Enrolled Student',
-        has_face_enrolled: canSeeFullProfile ? hasFace : true,
-        is_already_present: canSeeFullProfile ? isAlreadyPresent : false,
-        can_checkin: canSeeFullProfile ? canCheckin : true,
+        academic_year: stud.academic_year || '1st Year',
+        has_face_enrolled: hasFace,
+        is_already_present: isAlreadyPresent,
+        can_checkin: canCheckin,
         attendance_info: canSeeFullProfile ? attendanceInfo : null,
-        cohort_mismatch: canSeeFullProfile ? cohortMismatch : false,
-        target_academic_year: canSeeFullProfile ? targetAcademicYear : null,
+        cohort_mismatch: cohortMismatch,
+        target_academic_year: targetAcademicYear,
       }
     });
   } catch (err: any) {

@@ -595,7 +595,9 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
     }
 
     const targetYear = selectedSession?.target_academic_year;
-    const studentYear = student?.academic_year;
+    const studentYear = student?.academic_year && student?.academic_year !== "Enrolled Student"
+      ? student.academic_year
+      : (selectedSession?.target_academic_year || "1st Year");
     if (!isCohortMatching(targetYear, studentYear)) {
       setLookupError(`Cohort Restriction: This session is strictly for ${targetYear} students. Your profile is registered as ${studentYear}.`);
       return;
@@ -821,7 +823,9 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
     }
 
     const targetYear = selectedSession.target_academic_year;
-    const studentYear = student.academic_year;
+    const studentYear = student.academic_year && student.academic_year !== "Enrolled Student"
+      ? student.academic_year
+      : (selectedSession.target_academic_year || "1st Year");
     if (!isCohortMatching(targetYear, studentYear)) {
       setResultData({
         success: false,
@@ -1412,14 +1416,16 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
 
                 {/* Verified Student Profile Preview */}
                 {student && (() => {
+                  const studentYear = student.academic_year && student.academic_year !== "Enrolled Student"
+                    ? student.academic_year
+                    : (selectedSession?.target_academic_year || "1st Year");
+
                   const isCohortMismatch = Boolean(
                     student.cohort_mismatch ??
-                    !isCohortMatching(selectedSession?.target_academic_year, student.academic_year)
+                    !isCohortMatching(selectedSession?.target_academic_year, studentYear)
                   );
 
-                  const displayYear = student.academic_year && student.academic_year !== "Enrolled Student"
-                    ? student.academic_year
-                    : (selectedSession?.target_academic_year || "Enrolled Student");
+                  const displayYear = studentYear;
 
                   return (
                     <div className={`mt-4 p-4 rounded-2xl border flex flex-col gap-3 animate-in fade-in zoom-in-95 duration-150 ${isCohortMismatch

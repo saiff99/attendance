@@ -1115,7 +1115,12 @@ async def student_lookup(
         )
 
     # 3. Check Authorization: Internal Proxy OR Valid Signed Check-In Capability Token
-    api_key_header = request.headers.get("x-internal-api-key") or request.headers.get("X-Internal-API-Key")
+    api_key_header = (
+        request.headers.get("x-internal-api-key")
+        or request.headers.get("X-Internal-API-Key")
+        or request.headers.get("x-api-key")
+        or request.headers.get("X-Api-Key")
+    )
     internal_key = os.getenv("INTERNAL_API_KEY", "").strip()
     is_internal_auth = bool(internal_key and api_key_header and hmac.compare_digest(api_key_header.strip(), internal_key))
 
@@ -1204,20 +1209,20 @@ async def student_lookup(
         roll_token = generate_checkin_token(clean_sess_id, remaining_validity, clean_roll)
 
         if not is_internal_auth:
-            # Public caller: Extreme Data Minimization to eliminate roster scraping, biometric status leakage, and presence tracking
+            # Mask student full name for privacy, but preserve true academic_year and cohort matching booleans
             return {
                 "success": True,
                 "checkin_token": roll_token,
                 "student": {
                     "student_roll": student["student_roll"],
                     "full_name": mask_student_name(student["full_name"]),
-                    "academic_year": "Enrolled Student",
-                    "has_face_enrolled": True,
-                    "is_already_present": False,
-                    "can_checkin": True,
-                    "attendance_info": None,
-                    "cohort_mismatch": False,
-                    "target_academic_year": None
+                    "academic_year": student.get("academic_year") or "1st Year",
+                    "has_face_enrolled": has_face,
+                    "is_already_present": is_already_present,
+                    "can_checkin": can_checkin,
+                    "attendance_info": attendance_info,
+                    "cohort_mismatch": cohort_mismatch,
+                    "target_academic_year": target_academic_year
                 }
             }
 
