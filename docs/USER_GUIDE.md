@@ -13,7 +13,7 @@ Welcome to the **MedAttend AI Faculty & User Operational Manual**. This guide pr
 5. [Guiding Students on Mobile GPS Selfie Attendance](#5-guiding-students-on-mobile-gps-selfie-attendance)
 6. [Managing Active Classes (`/ongoing`)](#6-managing-active-classes-ongoing)
 7. [Academic Attendance Reports & Excel Export (`/reports`)](#7-academic-attendance-reports--excel-export-reports)
-8. [Manual Overrides & WhatsApp Parent Absentee Alerts](#8-manual-overrides--whatsapp-parent-absentee-alerts)
+8. [Manual Overrides & Classroom GPS Shield Management](#8-manual-overrides--classroom-gps-shield-management)
 9. [Frequently Asked Questions (FAQs)](#9-frequently-asked-questions-faqs)
 
 ---
@@ -119,7 +119,7 @@ MedAttend provides formatted export tools to generate compliance reports for dep
 
 ---
 
-## 8. Manual Overrides & WhatsApp Parent Absentee Alerts
+## 8. Manual Overrides & Classroom GPS Shield Management
 
 ### Manual Attendance Adjustments
 If a student arrives late with faculty permission or experienced technical difficulties:
@@ -128,11 +128,12 @@ If a student arrives late with faculty permission or experienced technical diffi
 3. Click **Mark Present** or **Mark Absent**.
 4. Every manual adjustment is permanently recorded in the institutional **Security Audit Log** with your faculty identity and timestamp for transparency.
 
-### Sending WhatsApp Absentee Alerts to Parents
-1. On the completed session summary, click **Notify Parents of Absentees**.
-2. MedAttend connects to the Meta WhatsApp Cloud API queue.
-3. Automated official notices are dispatched to verified parent phone numbers (e.g., *"Dear Parent, Roll No. 24 was absent for Anatomy Lecture on 23-Oct-2026"*).
-4. The background queue dispatches alerts smoothly without impacting video streaming or server performance.
+### Classroom GPS Shield Controls
+When starting or managing an attendance session:
+1. **Toggle GPS Shield**: Keep the shield **Active** (default: 30m radius) to ensure students can only check in while physically inside the lecture hall.
+2. **Current Location Calibration**: Click **"Set Classroom GPS to Current Location"** to calibrate coordinates directly from your device.
+3. **Customize Radius**: Adjust radius tolerance (e.g., 20m–100m) for large auditoriums.
+4. **Reset Default**: If coordinates were changed during an outdoor session or demo, click **"Reset Default"** to immediately restore standard JIMSH classroom coordinates.
 
 ---
 

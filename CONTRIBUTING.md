@@ -56,7 +56,7 @@ pip install -r requirements.txt
 ```
 
 ### 3. Environment Variables
-Copy `.env.example` to `.env` in the root directory and configure your Supabase, RTSP, and Meta WhatsApp credentials:
+Copy `.env.example` to `.env` in the root directory and configure your Supabase, RTSP, and Cloudflare credentials:
 ```bash
 cp .env.example .env
 ```

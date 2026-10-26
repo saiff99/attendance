@@ -5,14 +5,13 @@
 [![InsightFace](https://img.shields.io/badge/InsightFace-ArcFace_512D-ff6f00?style=for-the-badge&logo=ai)](https://github.com/deepinsight/insightface)
 [![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL_Database-3ECF8E?style=for-the-badge&logo=supabase)](https://supabase.com/)
 [![Hugging Face](https://img.shields.io/badge/Hugging_Face-Spaces_24%2F7_Failover-ffd21e?style=for-the-badge&logo=huggingface)](https://huggingface.co/)
-[![Meta WhatsApp](https://img.shields.io/badge/WhatsApp-Cloud_API_v21.0-25D366?style=for-the-badge&logo=whatsapp)](https://developers.facebook.com/)
 [![Cloudflare](https://img.shields.io/badge/Cloudflare-Unlimited_Tunnels-F38020?style=for-the-badge&logo=cloudflare)](https://cloudflare.com/)
 [![TailwindCSS](https://img.shields.io/badge/Tailwind_CSS-v4-38B2AC?style=for-the-badge&logo=tailwind-css)](https://tailwindcss.com/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-3178C6?style=for-the-badge&logo=typescript)](https://www.typescriptlang.org/)
 
 > **MedAttend AI** is an enterprise-grade, end-to-end automated academic attendance and classroom surveillance system designed for large educational auditoriums, medical colleges, and institutions (**stress-tested for 300+ students across 6 simultaneous CCTV streams**).
 > 
-> It pairs ultra-fast biometric facial recognition (InsightFace ArcFace 512D) with dual-stream RTSP camera pipelines, ONVIF PTZ controls, isolated WhatsApp parent notifications, a dedicated **Medical Student Portal** (with 7-day attendance logs & curriculum eligibility), **3-Tier Role-Based Access Control (Super Admin / Admin / Faculty)** with **Bulletproof Lockout Guardrails**, **Staff & Faculty Account Management**, **Centralized MBBS Academic Curriculum Governance**, **Faculty Full Name Session Attribution**, **Geofenced GPS Selfie Check-In** with multi-tier hardware fallback, **24/7 Cloud Failover via Hugging Face Spaces**, and **Enterprise Audit Logging**.
+> It pairs ultra-fast biometric facial recognition (InsightFace ArcFace 512D) with dual-stream RTSP camera pipelines, ONVIF PTZ controls, a dedicated **Medical Student Portal** (with 7-day attendance logs & curriculum eligibility), **3-Tier Role-Based Access Control (Super Admin / Admin / Faculty)** with **Bulletproof Lockout Guardrails**, **Staff & Faculty Account Management**, **Centralized MBBS Academic Curriculum Governance**, **Faculty Full Name Session Attribution**, **Geofenced Classroom GPS Shield** with multi-tier hardware fallback, **24/7 Cloud Failover via Hugging Face Spaces**, and **Enterprise Audit Logging**.
 
 ---
 
@@ -61,7 +60,7 @@ For specialized operational, administrative, and compliance instructions, please
   - [6. Biometric Consent & Privacy Architecture (DPDP Act 2023)](#6-biometric-consent--privacy-architecture-dpdp-act-2023)
   - [7. Automated Testing, QA & Continuous Integration](#7--automated-testing-qa--continuous-integration)
   - [8. 24/7 Cloud Backend Sync (Hugging Face Spaces)](#8-247-cloud-backend-sync-hugging-face-spaces)
-  - [9. Meta WhatsApp Cloud API Setup](#9-meta-whatsapp-cloud-api-setup)
+  - [9. Classroom GPS Geofence & Shield Configuration](#9-classroom-gps-geofence--shield-configuration)
   - [10. Multi-Camera RTSP Grid Configuration](#10-multi-camera-rtsp-grid-configuration)
 - [🖥️ Production Watchdogs & Desktop Launchers](#️-production-watchdogs--desktop-launchers)
 - [📁 Project Directory Structure](#-project-directory-structure)
@@ -115,10 +114,10 @@ For specialized operational, administrative, and compliance instructions, please
 - **Dual Stream Topology**: High-res Main Stream for operators + 960×540 Sub-Stream for ultra-fast AI inference.
 - **ONVIF PTZ Motor Controls**: Real-time Pan, Tilt, and Zoom hardware control from the web dashboard.
 
-### 💬 8. Isolated Non-Blocking WhatsApp Parent Notifier
-- **Dedicated Queue Worker**: Runs in an isolated queue (`whatsapp_event_queue`), preventing notification spikes from slowing video streaming or AI processing.
-- **Meta Official Cloud API (Graph v21.0)**: Automatically dispatches official absentee notices with student name, roll number, subject, and timestamp.
-- **Live In-Modal Token Updater**: Update expired tokens and retry failed alerts on-the-fly without server restarts.
+### 🛡️ 8. High-Precision Classroom GPS Shield & Anti-Proxy Verification
+- **Strict Classroom Radius Enclosure**: Calculates real-time Haversine distance, automatically verifying student mobile selfies are taken strictly inside the active lecture hall (default: 30m radius).
+- **Institutional Campus Default Sync**: Pre-calibrated to institutional lecture complex coordinates (`22.451550, 88.172366`) with instant one-click "Reset Default" restoration.
+- **Mobile Anti-Zoom & Instant Touch UX**: Implements strict 16px mobile form controls and `touch-action: manipulation`, completely eliminating iOS Safari viewport auto-zoom and 300ms tap delay.
 
 ### 🔒 9. Enterprise Security & Audit Log Ledger
 - **Tamper-Evident Audit Trails**: Every manual attendance override, PIN reset, and administrative action is permanently logged with IP address, user agent, actor details, and timestamps.
@@ -197,7 +196,7 @@ MedAttend features a comprehensive three-tier hierarchy for institutional staff,
 | **Manual Attendance Marking & Deletion** | ✅ | ✅ | ❌ | ❌ |
 | **Student Enrollment & Biometric Registration** | ✅ | ✅ | ✅ | ❌ |
 | **Security Audit Logs Ledger (`/audit-logs`)** | ✅ | ❌ | ❌ | ❌ |
-| **WhatsApp Absentee Parent Alerts** | ✅ | ✅ | ✅ | ❌ |
+| **Classroom GPS Shield & Geofence Guard** | ✅ | ✅ | ✅ | ❌ |
 | **Export Academic Attendance Reports (Excel)** | ✅ | ✅ | ✅ (Own classes) | ❌ |
 | **Mobile Geofenced Selfie Check-In** | ❌ | ❌ | ❌ | ✅ |
 | **Personal 7-Day Log & Curriculum Eligibility**| ❌ | ❌ | ❌ | ✅ |
@@ -230,7 +229,7 @@ MedAttend features a comprehensive three-tier hierarchy for institutional staff,
         │  │ 6x RTSP Dual-Stream AI Grabbers│  │                │  │ Serverless AI Fallback Core    │  │
         │  │ ArcFace 512D CoreML / GPU      │  │                │  │ Student Face Vector Verifier   │  │
         │  │ ONVIF PTZ Hardware Controller  │  │                │  │ Health & Status Endpoints      │  │
-        │  │ WhatsApp Dedicated Worker      │  │                │  └────────────────────────────────┘  │
+        │  │ GPS Geofence Haversine Verifier│  │                │  └────────────────────────────────┘  │
         │  │ Cloudflare Dynamic HMAC Tunnel │  │                │                                      │
         │  └────────────────────────────────┘  │                │  Automatic failover if local machine │
         │                                      │                │  is shut down, sleeping, or offline. │
@@ -336,7 +335,7 @@ Full compliance and governance for institutional accountability:
 | **Frame Queuing** | Latest Frame Only | Zero buffer lag or ghost attendance |
 | **Spatial Tracking Cache** | Enabled (`60.0s`, `80px`) | Prevents repeated re-inference on stationary students |
 | **Session Cleanup** | Enabled (`gc.collect()`) | Purges cache upon session end to prevent memory creep |
-| **WhatsApp Worker** | Dedicated Queue Worker | Zero impact on camera streaming during absentee messaging |
+| **Classroom Geofencing** | Haversine Distance Engine | Sub-millisecond GPS verification on student check-in |
 
 ---
 
@@ -351,7 +350,7 @@ Full compliance and governance for institutional accountability:
 | **Camera Protocols** | RTSP (H.264 / H.265), ONVIF (`onvif-zeep`) |
 | **Database & Auth** | [Supabase](https://supabase.com/) (PostgreSQL with JSONB Vector Encodings, Row-Level Security & Audit Tables) |
 | **Cloud Failover** | [Hugging Face Spaces](https://huggingface.co/) (24/7 Serverless Containerized AI Fallback) |
-| **Notifications** | [Meta WhatsApp Cloud API](https://developers.facebook.com/) (Graph v21.0) |
+| **Security & Geofence** | Haversine Distance Formula, W3C Geolocation API, Rate Limiting RPC |
 | **Tunnels & Networking** | [Cloudflare Tunnels](https://cloudflare.com/) (Secure HMAC-authenticated zero-config remote check-in) |
 
 ---
@@ -491,9 +490,6 @@ PTZ_IP="192.168.1.120"
 PTZ_USER="admin"
 PTZ_PASSWORD="password"
 
-# WhatsApp Multi-Device Bridge
-WHATSAPP_SERVICE_URL="http://127.0.0.1:5005"
-
 # AI & Thermal Tuning
 AI_SCAN_INTERVAL_SEC=1.0
 AI_ADAPTIVE_LOAD_CONTROL=True
@@ -571,14 +567,14 @@ The system automatically synchronizes backend updates to Hugging Face Spaces via
 
 ---
 
-### 9. WhatsApp Multi-Device QR Bridge Setup
+### 9. Classroom GPS Geofence & Shield Configuration
 
-MedAttend features a zero-configuration WhatsApp Web QR scan bridge:
-1. No Meta Developer accounts, temporary tokens, or template approvals required.
-2. In the MedAttend Dashboard, click **"WhatsApp Alerts"** on any session.
-3. Open **WhatsApp** on your personal or college mobile phone > **Linked Devices** > **Link a Device**.
-4. Scan the QR code displayed in the modal.
-5. The session is saved persistently. Absentee student notifications will now be automatically dispatched from your scanned number with built-in anti-spam throttling (3s delay).
+MedAttend features a high-precision, zero-trust **Classroom GPS Shield** that restricts student mobile selfie attendance to the physical boundaries of the lecture hall:
+1. **Configurable Geofence Radius**: Enforces an active perimeter (default: 30m) around the classroom. Submissions originating from hostels or off-campus locations are strictly blocked.
+2. **Default Institutional Coordinates**: Pre-calibrated to JIMSH lecture hall coordinates (`22.451550, 88.172366`).
+3. **1-Click Device GPS Calibration**: Instructors can click **"Set Classroom GPS to Current Location"** on their mobile or laptop to immediately calibrate coordinates for outdoor clinics or alternate demo rooms.
+4. **Instant Default Reset**: Click **"Reset Default"** in the session setup card or Geofence Modal at any time to instantly restore the standard classroom location.
+5. **Mobile Anti-Zoom Optimization**: Fully optimized for mobile browsers (iOS Safari / Android Chrome) with strict 16px form inputs to prevent intrusive viewport zooming during session creation.
 
 ---
 
@@ -637,8 +633,8 @@ attendance/
 │   │   ├── config.py              # Supabase Client & Multi-Camera Config
 │   │   ├── stream.py              # Dual-Stream RTSP Grabbers & Adaptive Load Control
 │   │   ├── ptz.py                 # ONVIF PTZ Hardware Motor Controller
-│   │   ├── routes.py              # RESTful APIs (Attendance, Memory Purge, WhatsApp)
-│   │   └── whatsapp.py            # Dedicated Non-Blocking WhatsApp Worker
+│   │   ├── routes.py              # RESTful APIs (Attendance, Memory Purge, Biometrics)
+│   │   └── security.py            # Security & Rate Limiting Guardrails
 │   └── tests/                     # Unit Tests for AI, Anti-Spoofing & Business Logic
 │
 └── frontend/                      # Next.js 16 Web Application (App Router)
@@ -688,7 +684,7 @@ attendance/
 | :--- | :--- | :--- |
 | `/api/subjects` | `GET`, `POST`, `DELETE` | Manage dynamic academic curriculum subjects configured per MBBS year |
 | `/api/sessions` | `GET`, `POST` | List and create class sessions (faculty-isolated or institution-wide, with full faculty name resolution) |
-| `/api/active-sessions` | `GET` | Retrieve live active sessions with host faculty full name attribution |
+| `/api/active-sessions` | `GET` | Retrieve live active sessions with host faculty full name attribution, check-in tokens, and geofence parameters |
 | `/api/sessions/{id}` | `GET`, `PATCH`, `DELETE` | Retrieve session details, calibrate classroom GPS coordinates, or end session |
 
 ### 🛡️ Enterprise Audit Logs & Attendance
@@ -713,14 +709,12 @@ attendance/
 | `/api/upload-photo` | `POST` | Processes batch photo for server-side face enrollment |
 | `/api/students/{id}/revoke-biometrics` | `POST` | Irreversibly purges biometric face vectors under DPDP Act 2023 |
 
-### 💬 WhatsApp QR Bridge & Dispatcher
+### 📍 Classroom GPS Shield & Security Tokens
 | Endpoint | Method | Description |
 | :--- | :--- | :--- |
-| `/api/whatsapp/status` | `GET` | Returns live connection status, active QR code Data URL, and linked account |
-| `/api/whatsapp/disconnect` | `POST` | Disconnects the active WhatsApp session and triggers a fresh QR code |
-| `/api/whatsapp/send-absent-alerts` | `POST` | Dispatches absentee parent alerts from the connected number with 3s anti-spam delay |
-| `/api/whatsapp/job-status/{job_id}` | `GET` | Polls real-time progress counter and delivery report for batch jobs |
-| `/api/whatsapp/test` | `POST` | Sends a single test message from the connected WhatsApp account |
+| `/api/active-sessions` | `GET` | Issues cryptographic check-in capability tokens and geofence parameters for active sessions |
+| `/api/student-lookup` | `POST` | Token-protected student profile lookup preventing public scraping of rosters |
+| `/api/selfie-attendance` | `POST` | Validates mobile selfie face vector against 512D embeddings and verifies Haversine GPS radius |
 
 ---
 
@@ -744,8 +738,8 @@ attendance/
 ### Q5: How does the Student Portal protect student attendance privacy?
 > **Answer**: The portal features **Role-Based Isolation**. Students can only log in with their assigned Roll Number and personal 6-digit PIN, giving them access exclusively to their own curriculum stats and past 7 days of verified attendance. Faculty and Admins cannot tamper with student records without creating an immutable audit trail.
 
-### Q6: `Meta Access Token expired (OAuth 190)` error?
-> **Answer**: Meta developer tokens expire every 24 hours. Simply paste your new token directly into the **WhatsApp Alert Modal** in the web dashboard and click **"Save & Retry"**. It updates in memory and in `.env` automatically without restarting the server.
+### Q6: How does the Classroom GPS Shield prevent proxy attendance?
+> **Answer**: When enabled, the Classroom GPS Shield calculates the real-time Haversine distance between the student's device coordinates and the verified classroom location. If a student attempts to check in from a hostel, home, or outside the configured radius (default: 30m), attendance submission is strictly rejected. Instructors can calibrate coordinates or restore the default institutional location at any time with 1-click.
 
 ### Q7: Port 3000 or 8000 already in use?
 > **Answer**: Simply launch the app using `./start.sh`. The built-in process manager identifies and cleans only conflicting local processes before starting the production services.

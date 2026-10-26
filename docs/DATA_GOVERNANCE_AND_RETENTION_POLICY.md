@@ -19,7 +19,7 @@ MedAttend AI is an intelligent attendance and academic tracking platform deploye
 | :--- | :--- | :--- | :--- | :--- |
 | **Biometric Face Embeddings** | 512-dimensional ArcFace mathematical vectors (`float32[512]`) | **Sensitive Personal Data** | Explicit Consent (Sec 6) | Irreversible JSONB vector array. *No raw photographs stored.* |
 | **Student Identification** | Full name, Roll Number, Academic Year, College Email | **Personal Data** | Educational Contract & Legitimate Use | Encrypted text columns |
-| **Communication Data** | Parent/Guardian WhatsApp phone numbers | **Personal Data** | Legitimate Interest (Academic notifications & student safety) | E.164 formatted string |
+| **Communication Data** | Parent/Guardian emergency contact phone numbers | **Personal Data** | Legitimate Interest (Academic notifications & student safety) | E.164 formatted string |
 | **Attendance History** | Session ID, Subject, Timestamp, Capture Mode (CCTV/Selfie/Manual), Confidence | **Operational Record** | Regulatory Academic Compliance (NMC minimum attendance criteria) | Relational database with Foreign Keys |
 | **Authentication Credentials** | Portal PIN / Password, Session Tokens | **Confidential Security Data** | Identity Verification & Access Control | One-way salted Bcrypt hash (`$2b$10$...`), HMAC-SHA256 HttpOnly cookies |
 | **Audit Trails** | Actor username, IP address, Action timestamp, Target entity, HTTP metadata | **Forensic Audit Record** | Security Oversight & Legal Accountability | Append-only, trigger-protected immutable PostgreSQL table |
@@ -29,7 +29,7 @@ MedAttend AI is an intelligent attendance and academic tracking platform deploye
 ## 3. Purpose Limitation (Why Data Is Retained)
 
 1. **Biometric Face Embeddings**: Used solely for high-accuracy face matching during scheduled classroom lectures, clinical postings, and examination attendance via RTSP streams or verified mobile selfie checks. **Facial vectors are never monetized, cross-linked, or transferred to third parties.**
-2. **Parent Phone Numbers**: Exclusively used by the automated WhatsApp notification service to inform parents when their ward is absent or attendance falls below regulatory NMC thresholds.
+2. **Parent Phone Numbers**: Exclusively used for emergency contact and institutional communication regarding student attendance and academic safety.
 3. **Attendance Records**: Required to compute semester-end attendance percentages, qualify students for university professional examinations, and furnish official documentation for medical regulatory inspections.
 4. **Audit Logs**: Maintained to prove non-repudiation, detect brute-force attacks, verify faculty session boundaries, and provide an indisputable forensic trail.
 

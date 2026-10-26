@@ -18,7 +18,7 @@ This guide is designed for **College IT Engineers, System Administrators, and In
    - [Configuring `.env` Stream Endpoints](#configuring-env-stream-endpoints)
 5. [Classroom GPS Geofencing & Radar Calibration](#5-classroom-gps-geofencing--radar-calibration)
 6. [24/7 Cloud Failover & Hybrid Resilience (Hugging Face Spaces)](#6-247-cloud-failover--hybrid-resilience-hugging-face-spaces)
-7. [Meta WhatsApp Cloud API Configuration](#7-meta-whatsapp-cloud-api-configuration)
+7. [Production 4-Step Launcher & Zero-Maintenance Watchdog](#7-production-4-step-launcher--zero-maintenance-watchdog)
 8. [Security Audit Logs & Compliance Monitoring (`/audit-logs`)](#8-security-audit-logs--compliance-monitoring-audit-logs)
 
 ---
@@ -44,7 +44,7 @@ To guarantee high-recall face recognition across multiple simultaneous 4K/1080p 
 | :--- | :--- | :--- |
 | **Processor (CPU)** | 6-Core Intel Core i5 / AMD Ryzen 5 / Apple M1 | 8–16 Core Intel Core i7/i9 (12th Gen+) / AMD Ryzen 7/9 / Apple M2/M3/M4 |
 | **GPU Acceleration** | Integrated GPU / Neural Engine | **Dedicated NVIDIA GPU (RTX 3060 12GB / RTX 4060 / A2000+)** with CUDA 12.x or Apple Silicon Neural Engine |
-| **RAM** | 16 GB DDR4/LPDDR5 | **32 GB DDR5** (Ensures smooth concurrent Next.js, Uvicorn, and WhatsApp runtime) |
+| **RAM** | 16 GB DDR4/LPDDR5 | **32 GB DDR5** (Ensures smooth concurrent Next.js, FastAPI Uvicorn, and InsightFace AI runtime) |
 | **Networking** | 100 Mbps Fast Ethernet | **Dedicated Gigabit Ethernet Switch (Cat6 cabling)**. *RTSP video streams must not run over Wi-Fi to eliminate packet jitter.* |
 | **Storage** | 256 GB SSD | 512 GB NVMe PCIe 4.0 SSD |
 
@@ -193,22 +193,23 @@ MedAttend guarantees 24/7 uptime for students even when local classroom workstat
 
 ---
 
-## 7. Meta WhatsApp Cloud API Configuration
+## 7. Production 4-Step Launcher & Zero-Maintenance Watchdog
 
-MedAttend dispatches automated absentee alerts to parents using the official Meta WhatsApp Cloud API (Graph v21.0):
+MedAttend includes a fully automated production runner (`start.py` / `./start.sh`) that starts, monitors, and orchestrates all institutional services:
 
-1. **Prerequisites**: A verified Meta for Developers account, WhatsApp Business Account (WABA), and a registered institutional phone number.
-2. **Environment Variables**:
-   ```env
-   WHATSAPP_PHONE_NUMBER_ID="your_phone_number_id"
-   WHATSAPP_BUSINESS_ACCOUNT_ID="your_business_account_id"
-   WHATSAPP_ACCESS_TOKEN="EAAG..."
-   ```
-3. **Handling Token Renewal**:
-   - Meta temporary developer tokens expire every 24 hours.
-   - When a token expires, operators can click **WhatsApp Status** in the dashboard, paste the new token into the modal, and click **Save & Retry**.
-   - The token updates in memory and persists to `.env` without restarting services.
-4. **Dedicated Queue Worker**: Alerts are processed sequentially through `whatsapp_event_queue` with a 3-second anti-spam delay to adhere to WhatsApp rate limits.
+```
+[1/4] Starting Production Next.js Frontend (http://localhost:3000)...
+[2/4] Starting FastAPI Backend + InsightFace AI (Port 8000, Production Mode)...
+[3/4] Initializing Cloudflare Unlimited Bandwidth Tunnel...
+[4/4] Cloud Vercel Portal synced successfully!
+```
+
+1. **Step 1 — Optimized Production Next.js Bundle**: Automatically compiles and serves the Next.js frontend with low memory footprint and sub-100ms route response times.
+2. **Step 2 — FastAPI Production Engine**: Runs Uvicorn with full ArcFace 512D AI inference enabled and automated GPU/Neural Engine acceleration.
+3. **Step 3 — Cloudflare Unlimited Bandwidth Tunnel**: Spawns an encrypted, zero-configuration tunnel that securely routes student mobile requests directly to the local AI backend without requiring open router ports or static IPs.
+4. **Step 4 — Automated Vercel Portal Sync**: Cryptographically signs the dynamic tunnel URL with HMAC-SHA256 and syncs it to Supabase. When students visit the Vercel cloud portal (`/selfieattend`), their requests are seamlessly dispatched to the active local server.
+5. **Background Process Watchdogs**: Actively monitors all subprocesses. If any worker experiences a transient crash or OS interruption, the watchdog automatically restarts it within seconds.
+6. **Graceful Cloud Fallback Restoration**: On shutdown (`Ctrl+C` or `Stop_Attendance.command`), the launcher cleanly restores the 24/7 Hugging Face Spaces cloud backend URL so that student services remain uninterrupted.
 
 ---
 
