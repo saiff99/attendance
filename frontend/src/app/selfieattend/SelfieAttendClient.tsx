@@ -43,6 +43,7 @@ export interface ActiveSession {
   is_expired?: boolean;
   window_duration_seconds?: number;
   checkin_token?: string | null;
+  geofence?: CampusGeofenceConfig | null;
 }
 
 export interface StudentProfile {
@@ -246,6 +247,9 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
 
   // Determine effective geofence from selected lecture session (if session carried GPS metadata) or global config
   const effectiveGeofence = useMemo<CampusGeofenceConfig>(() => {
+    if (selectedSession && selectedSession.geofence !== undefined && selectedSession.geofence !== null) {
+      return selectedSession.geofence;
+    }
     if (selectedSession?.instructor_name) {
       const decoded = decodeSessionMetadata(selectedSession.instructor_name);
       if (decoded.geofence) {

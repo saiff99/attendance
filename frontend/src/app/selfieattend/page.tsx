@@ -66,6 +66,7 @@ async function getInitialSessions(): Promise<ActiveSession[]> {
         start_time: s.start_time,
         end_time: s.end_time,
         instructor_name: s.instructor_name,
+        geofence: decodeSessionMetadata(s.instructor_name || '').geofence,
         target_academic_year: s.target_academic_year,
         created_at: s.created_at,
         attendance_count: 0,

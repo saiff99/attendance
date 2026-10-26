@@ -104,6 +104,7 @@ async function processAndFilterSessions(
       created_by: creator,
       creator_name: fullName,
       created_by_name: fullName,
+      geofence: dec.geofence || null,
     };
   });
 
@@ -130,6 +131,7 @@ async function processAndFilterSessions(
         return {
           ...s,
           checkin_token: (!s.is_expired && remSec > 0) ? generateCheckinToken(s.id, remSec) : null,
+          geofence: s.geofence || null,
         };
       });
   }
@@ -141,6 +143,7 @@ async function processAndFilterSessions(
       return {
         ...s,
         checkin_token: (!s.is_expired && remSec > 0) ? generateCheckinToken(s.id, remSec) : null,
+        geofence: s.geofence || null,
       };
     });
   }
@@ -160,6 +163,7 @@ async function processAndFilterSessions(
         instructor_name: dec.topic || s.class_name,
         created_by: undefined,
         attendance_count: undefined,
+        geofence: dec.geofence || null,
       };
     });
   }
@@ -175,6 +179,7 @@ async function processAndFilterSessions(
       creator_name: 'Faculty Member',
       created_by_name: 'Faculty Member',
       attendance_count: undefined, // Hidden from unauthenticated public scrapers
+      geofence: dec.geofence || null,
     };
   });
 }

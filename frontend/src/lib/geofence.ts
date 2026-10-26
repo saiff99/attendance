@@ -9,9 +9,9 @@ export interface CampusGeofenceConfig {
 // Default permanent classroom location for JIMSH (30m Single Room boundary)
 export const DEFAULT_GEOFENCE_CONFIG: CampusGeofenceConfig = {
   enabled: true,
-  latitude: 22.451550, // Classroom Center Latitude
-  longitude: 88.172366, // Classroom Center Longitude
-  radiusMeters: 30, // 30m default for Single Classroom / Lecture Hall boundary
+  latitude: 22.449852, // Classroom Center Latitude (Calibrated JIMSH Lecture Hall)
+  longitude: 88.170628, // Classroom Center Longitude (Calibrated JIMSH Lecture Hall)
+  radiusMeters: 45, // 45m comfortable lecture hall boundary (absorbs indoor GPS multipath jitter)
   campusName: "JIMSH Medical College Campus & Lecture Halls",
 };
 

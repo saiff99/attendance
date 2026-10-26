@@ -1017,9 +1017,32 @@ async def get_active_sessions(request: Request):
                 else None
             )
 
+            # Extract session-level geofence configuration if embedded in instructor_name
+            sess_instructor = s.get("instructor_name") or ""
+            sess_geofence = None
+            gps_match = re.search(r"\[GPS:([-\d.]+),([-\d.]+),(\d+),([01])(?:,([^\]]*))?\]", sess_instructor)
+            if gps_match:
+                try:
+                    sess_campus_name = "College Campus & Lecture Halls"
+                    if gps_match.group(5):
+                        try:
+                            sess_campus_name = urllib.parse.unquote(gps_match.group(5))
+                        except Exception:
+                            sess_campus_name = gps_match.group(5)
+                    sess_geofence = {
+                        "latitude": float(gps_match.group(1)),
+                        "longitude": float(gps_match.group(2)),
+                        "radiusMeters": float(gps_match.group(3)),
+                        "enabled": gps_match.group(4) == "1",
+                        "campusName": sess_campus_name,
+                    }
+                except Exception:
+                    sess_geofence = None
+
             enhanced_sessions.append({
                 **s,
                 "instructor_name": s.get("instructor_name") if is_internal_auth else clean_public_instructor_name(s.get("instructor_name")),
+                "geofence": sess_geofence,
                 "attendance_count": count,
                 "checkin_token": checkin_token,
                 "remaining_seconds": remaining_seconds,
