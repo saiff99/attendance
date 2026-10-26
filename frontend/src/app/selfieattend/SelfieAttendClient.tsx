@@ -1771,7 +1771,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                             </p>
                           </div>
                           <a
-                            href={`https://attendance-cd0ishn9x-jims-hospital.vercel.app/selfieattend?session_id=${selectedSession?.id || ""}`}
+                            href={`https://jimslogin.vercel.app/selfieattend?session_id=${selectedSession?.id || ""}`}
                             className="mt-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-all shadow-lg shadow-indigo-600/25 flex items-center gap-1.5 cursor-pointer"
                           >
                             <Camera className="w-4 h-4" />

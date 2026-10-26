@@ -5,7 +5,7 @@ export function getBackendUrl(): string {
       return "http://127.0.0.1:8000";
     }
   }
-  // When running in production (e.g. Vercel / newshuge.com), use same-origin relative proxy
+  // When running in production (e.g. Vercel: jimslogin.vercel.app), use same-origin relative proxy
   return "";
 }
 

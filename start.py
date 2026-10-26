@@ -784,7 +784,7 @@ def main():
         print(f"║  {CYAN}Engine Mode:{RESET}          {GREEN}Super Clean Core Attendance Engine{RESET}             ║")
     print(f"║  {CYAN}Watchdog Recovery:{RESET}    {GREEN}Active (Auto-restarts All Hub Services){RESET}   ║")
     print(f"║  {CYAN}Cloudflare Tunnel:{RESET}    {display_tunnel:<49} ║")
-    print(f"║  {CYAN}Vercel Live Portal:{RESET}   https://newshuge.com/selfieattend                ║")
+    print(f"║  {CYAN}Vercel Live Portal:{RESET}   https://jimslogin.vercel.app/selfieattend ║")
     print(f"║  {CYAN}Bandwidth Quota:{RESET}      {GREEN}UNLIMITED FOREVER (No Limits){RESET}                    ║")
     print(BOLD + GREEN + "╚" + "═"*68 + "╝" + RESET + "\n")
     print(f"{YELLOW}Press Ctrl+C anytime to stop all services.{RESET}\n")
