@@ -826,7 +826,7 @@ export default function LiveScan() {
                 </label>
                 <select
                   id="academic_year"
-                  className="w-full rounded-xl border border-gray-300 dark:border-slate-800 py-2.5 sm:py-3 px-3.5 sm:px-4 text-gray-900 dark:text-white bg-white dark:bg-slate-950/70 focus:outline-none focus:border-indigo-600 dark:focus:border-indigo-500 focus:ring-1 focus:ring-indigo-600 dark:focus:ring-indigo-500 transition-all text-xs sm:text-sm cursor-pointer shadow-sm"
+                  className="w-full rounded-xl border border-gray-300 dark:border-slate-800 py-2.5 sm:py-3 px-3.5 sm:px-4 text-gray-900 dark:text-white bg-white dark:bg-slate-950/70 focus:outline-none focus:border-indigo-600 dark:focus:border-indigo-500 focus:ring-1 focus:ring-indigo-600 dark:focus:ring-indigo-500 transition-all text-base sm:text-sm cursor-pointer shadow-sm"
                   value={setupData.academic_year}
                   onChange={e => handleCohortChange(e.target.value)}
                 >
@@ -842,7 +842,7 @@ export default function LiveScan() {
                 <select
                   id="sub_batch"
                   disabled={setupData.academic_year === "All"}
-                  className="w-full rounded-xl border border-gray-300 dark:border-slate-800 py-2.5 sm:py-3 px-3.5 sm:px-4 text-gray-900 dark:text-white bg-white dark:bg-slate-950/70 focus:outline-none focus:border-indigo-600 dark:focus:border-indigo-500 focus:ring-1 focus:ring-indigo-600 dark:focus:ring-indigo-500 transition-all text-xs sm:text-sm cursor-pointer shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full rounded-xl border border-gray-300 dark:border-slate-800 py-2.5 sm:py-3 px-3.5 sm:px-4 text-gray-900 dark:text-white bg-white dark:bg-slate-950/70 focus:outline-none focus:border-indigo-600 dark:focus:border-indigo-500 focus:ring-1 focus:ring-indigo-600 dark:focus:ring-indigo-500 transition-all text-base sm:text-sm cursor-pointer shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                   value={setupData.sub_batch}
                   onChange={e => setSetupData({ ...setupData, sub_batch: e.target.value })}
                 >
@@ -867,7 +867,7 @@ export default function LiveScan() {
               <select
                 id="subject"
                 required
-                className="w-full rounded-xl border border-gray-300 dark:border-slate-800 py-2.5 sm:py-3 px-3.5 sm:px-4 text-gray-900 dark:text-white bg-white dark:bg-slate-950/70 focus:outline-none focus:border-indigo-600 dark:focus:border-indigo-500 focus:ring-1 focus:ring-indigo-600 dark:focus:ring-indigo-500 transition-all text-xs sm:text-sm cursor-pointer shadow-sm"
+                className="w-full rounded-xl border border-gray-300 dark:border-slate-800 py-2.5 sm:py-3 px-3.5 sm:px-4 text-gray-900 dark:text-white bg-white dark:bg-slate-950/70 focus:outline-none focus:border-indigo-600 dark:focus:border-indigo-500 focus:ring-1 focus:ring-indigo-600 dark:focus:ring-indigo-500 transition-all text-base sm:text-sm cursor-pointer shadow-sm"
                 value={setupData.subject}
                 onChange={e => setSetupData({ ...setupData, subject: e.target.value })}
               >
@@ -889,7 +889,7 @@ export default function LiveScan() {
               <label htmlFor="hall" className="block text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-slate-400 mb-1.5">Lecture / Examination Hall</label>
               <select
                 id="hall"
-                className="w-full rounded-xl border border-gray-300 dark:border-slate-800 py-2.5 sm:py-3 px-3.5 sm:px-4 text-gray-900 dark:text-white bg-white dark:bg-slate-950/70 focus:outline-none focus:border-indigo-600 dark:focus:border-indigo-500 focus:ring-1 focus:ring-indigo-600 dark:focus:ring-indigo-500 transition-all text-xs sm:text-sm cursor-pointer shadow-sm"
+                className="w-full rounded-xl border border-gray-300 dark:border-slate-800 py-2.5 sm:py-3 px-3.5 sm:px-4 text-gray-900 dark:text-white bg-white dark:bg-slate-950/70 focus:outline-none focus:border-indigo-600 dark:focus:border-indigo-500 focus:ring-1 focus:ring-indigo-600 dark:focus:ring-indigo-500 transition-all text-base sm:text-sm cursor-pointer shadow-sm"
                 value={setupData.hall}
                 onChange={e => setSetupData({ ...setupData, hall: e.target.value })}
               >
@@ -909,7 +909,7 @@ export default function LiveScan() {
                     id="custom-hall"
                     required
                     type="text"
-                    className="w-full rounded-xl border border-indigo-300 dark:border-indigo-500/50 py-2 sm:py-2.5 px-3.5 text-gray-900 dark:text-white bg-white dark:bg-slate-950/90 placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-xs sm:text-sm shadow-inner"
+                    className="w-full rounded-xl border border-indigo-300 dark:border-indigo-500/50 py-2 sm:py-2.5 px-3.5 text-gray-900 dark:text-white bg-white dark:bg-slate-950/90 placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-base sm:text-sm shadow-inner"
                     value={customHallName}
                     onChange={e => setCustomHallName(e.target.value)}
                     placeholder="e.g. Anatomy Demo, Physiology Demo, Biochemistry Lab..."
@@ -925,7 +925,7 @@ export default function LiveScan() {
                 id="topic"
                 required
                 type="text"
-                className="w-full rounded-xl border border-gray-300 dark:border-slate-800 py-2.5 sm:py-3 px-3.5 sm:px-4 text-gray-900 dark:text-white bg-white dark:bg-slate-950/70 placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-indigo-600 dark:focus:border-indigo-500 focus:ring-1 focus:ring-indigo-600 dark:focus:ring-indigo-500 transition-all text-xs sm:text-sm shadow-sm"
+                className="w-full rounded-xl border border-gray-300 dark:border-slate-800 py-2.5 sm:py-3 px-3.5 sm:px-4 text-gray-900 dark:text-white bg-white dark:bg-slate-950/70 placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-indigo-600 dark:focus:border-indigo-500 focus:ring-1 focus:ring-indigo-600 dark:focus:ring-indigo-500 transition-all text-base sm:text-sm shadow-sm"
                 value={setupData.topic}
                 onChange={e => setSetupData({ ...setupData, topic: e.target.value })}
                 placeholder="e.g. Prof. Dr. A. K. Rahman - Cardiovascular Pathology"

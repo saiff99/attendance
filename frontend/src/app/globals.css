@@ -37,6 +37,15 @@ a {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* Prevent iOS Safari from automatically zooming into inputs, selects, and textareas on focus */
+@media screen and (max-width: 767px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
 /* Suppress browser focus outlines and selection boxes on Recharts charts */
 .recharts-responsive-container,
 .recharts-wrapper,
