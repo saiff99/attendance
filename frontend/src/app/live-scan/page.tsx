@@ -8,7 +8,7 @@ import {
   ArrowLeft, BookOpen, Users, MapPin, Video, Download,
   Grid, Maximize2, Minimize2, Eye, ShieldCheck, RefreshCw, X, Search,
   Clock, Sparkles, ChevronLeft as PrevIcon, ChevronRight as NextIcon,
-  QrCode, Copy, Check, ExternalLink, Smartphone, Navigation, MessageSquare,
+  QrCode, Copy, Check, ExternalLink, Smartphone, Navigation,
   UserCheck, UserX, RotateCcw, Radio, AlertCircle
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
