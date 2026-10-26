@@ -293,9 +293,9 @@ import math
 
 DEFAULT_GEOFENCE_CONFIG = {
     "enabled": True,  # Secure by default: always enabled
-    "latitude": 22.449852,
-    "longitude": 88.170628,
-    "radiusMeters": 45.0,
+    "latitude": 22.451550,
+    "longitude": 88.172366,
+    "radiusMeters": 30.0,
     "campusName": "JIMSH Medical College Campus & Lecture Halls",
 }
 
