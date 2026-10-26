@@ -11,7 +11,7 @@ import hashlib
 import logging
 import ipaddress
 from datetime import datetime, timezone
-import dateutil.parser
+import dateutil.parser  # type: ignore
 import numpy as np
 from PIL import Image, ImageOps
 from numpy.linalg import norm
