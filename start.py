@@ -154,13 +154,12 @@ def is_medattend_process(pid: int, cmd_override: str = None, cwd_override: str =
         if base_dir_clean in cmd_lower:
             return True
 
-        # Specific repository submodule markers (Include next-server, uvicorn, and repo binaries)
+        # Specific repository submodule markers (Never match generic "node", "python", or "next")
         specific_repo_markers = [
             os.path.join("backend", ".venv").lower(),
             "app.main:app",
             "main:app",
             os.path.join("frontend", ".next").lower(),
-            "next-server",
         ]
         if any(marker in cmd_lower for marker in specific_repo_markers):
             return True
