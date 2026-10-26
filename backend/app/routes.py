@@ -25,7 +25,6 @@ from app.config import (
     safe_db_execute,
     get_camera_urls,
     get_camera_details,
-    get_ptz_urls,
     is_cohort_matching,
     get_server_geofence_config,
     calculate_haversine_distance,
@@ -831,32 +830,6 @@ async def video_feed(session_id: str, request: Request, camera_index: int = 0, g
         media_type="multipart/x-mixed-replace; boundary=frame"
     )
 
-@router.get("/api/ptz-cameras")
-async def get_ptz_cameras():
-    urls = get_ptz_urls()
-    return {"count": len(urls)}
-
-@router.get("/api/ptz-video-feed/{session_id}")
-async def ptz_video_feed(session_id: str, request: Request, camera_index: int = 0, grid: int = 0):
-    """Streams the live PTZ video with bounding boxes."""
-    return StreamingResponse(
-        generate_video_feed(session_id, request=request, camera_index=camera_index, camera_type="ptz", is_grid=bool(grid)),
-        media_type="multipart/x-mixed-replace; boundary=frame"
-    )
-
-class PTZCommand(BaseModel):
-    direction: str
-
-from app.ptz import ptz_move
-
-@router.post("/api/ptz/move")
-async def ptz_control(cmd: PTZCommand):
-    """Controls the PTZ camera movement."""
-    success = ptz_move(cmd.direction)
-    if success:
-        return {"status": "success", "direction": cmd.direction}
-    else:
-        raise HTTPException(status_code=500, detail="Failed to execute PTZ command")
 
 
 # ==========================================
@@ -1625,53 +1598,4 @@ async def selfie_attendance(
             }
         raise HTTPException(status_code=500, detail="Failed to save attendance record.")
 
-
-# ==========================================
-# WhatsApp Multi-Device QR Bridge Notifications
-# ==========================================
-
-from app.whatsapp import (
-    get_whatsapp_status,
-    disconnect_whatsapp,
-    send_whatsapp_raw,
-    send_session_absentee_alerts,
-    get_whatsapp_job_status
-)
-
-class WhatsAppTestRequest(BaseModel):
-    phone: str
-    message: Optional[str] = None
-
-class WhatsAppAlertRequest(BaseModel):
-    session_id: str
-    async_mode: Optional[bool] = True
-
-@router.get("/api/whatsapp/status")
-async def api_whatsapp_status():
-    """Returns real-time WhatsApp Web connection status, active QR code, and linked phone number."""
-    return await asyncio.to_thread(get_whatsapp_status)
-
-@router.post("/api/whatsapp/disconnect")
-async def api_whatsapp_disconnect():
-    """Disconnects the active WhatsApp account and generates a fresh QR code."""
-    return await asyncio.to_thread(disconnect_whatsapp)
-
-@router.post("/api/whatsapp/test")
-async def api_whatsapp_test(req: WhatsAppTestRequest):
-    """Sends a test WhatsApp message from the connected account."""
-    msg = req.message or "🏫 *Jagannath Gupta Institute of Medical Sciences & Hospital*\nThis is a verified test message from your MedAttend Attendance Notification System."
-    return await asyncio.to_thread(send_whatsapp_raw, req.phone, msg)
-
-@router.post("/api/whatsapp/send-absent-alerts")
-async def api_whatsapp_send_absent_alerts(req: WhatsAppAlertRequest):
-    """
-    Step 8 — Non-Blocking WhatsApp Absentee Alert Dispatcher.
-    Dispatches WhatsApp absent notices asynchronously from the connected account with safe anti-spam throttling.
-    """
-    return await asyncio.to_thread(send_session_absentee_alerts, req.session_id, req.async_mode)
-
-@router.get("/api/whatsapp/job-status/{job_id}")
-async def api_whatsapp_job_status(job_id: str):
-    """Fetches real-time status and live counter of a background WhatsApp alert dispatch job."""
-    return await asyncio.to_thread(get_whatsapp_job_status, job_id)
 

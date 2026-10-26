@@ -18,13 +18,11 @@ import Webcam from "react-webcam";
 import { MjpegPlayer } from "@/components/MjpegPlayer";
 import { GeofenceModal } from "@/components/GeofenceModal";
 import { ClassroomGpsModal } from "@/components/ClassroomGpsModal";
-import { WhatsAppAlertModal } from "@/components/WhatsAppAlertModal";
 import { useAuth } from "@/lib/auth";
 import {
   CampusGeofenceConfig,
   DEFAULT_GEOFENCE_CONFIG,
   encodeSessionMetadata,
-  encodeSessionWhatsAppTag,
   decodeSessionMetadata,
   getLocalGeofence,
   saveLocalGeofence,
@@ -56,7 +54,6 @@ const DEFAULT_CAMERAS: CameraMeta[] = [
 
 export default function LiveScan() {
   const { user } = useAuth();
-  const canSendWhatsAppAlerts = user?.role === "Super Admin" || user?.role === "Admin";
   const [activeTab, setActiveTab] = useState<"grid" | "cctv" | "live" | "manual">("grid");
   const [isScanning, setIsScanning] = useState(false);
 
@@ -276,7 +273,6 @@ export default function LiveScan() {
     }
   }, [setupData.hall, customHallName, sessionGeofence]);
   const [copiedLink, setCopiedLink] = useState(false);
-  const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false);
 
   // Auto-Tour Camera Cycle State for Single Camera View
   const [isAutoTourActive, setIsAutoTourActive] = useState(false);
@@ -621,18 +617,7 @@ export default function LiveScan() {
       }
     }
 
-    if (activeSession && canSendWhatsAppAlerts) {
-      const wantAlerts = window.confirm(
-        "Attendance session completed!\n\nWould you like to open the WhatsApp Alert sender now to notify parents of absent students?"
-      );
-      if (wantAlerts) {
-        setIsWhatsAppModalOpen(true);
-      } else {
-        setActiveSession(null);
-      }
-    } else {
-      setActiveSession(null);
-    }
+    setActiveSession(null);
   };
 
   const handleProcessAttendance = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1145,15 +1130,6 @@ export default function LiveScan() {
               <RefreshCw className="w-3.5 h-3.5 mr-1 text-gray-400 dark:text-slate-400" /> Sync
             </button>
 
-            {canSendWhatsAppAlerts && (
-              <button
-                onClick={() => setIsWhatsAppModalOpen(true)}
-                className="inline-flex items-center px-3 sm:px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold text-white shadow-md shadow-emerald-600/20 transition-all cursor-pointer active:scale-95"
-                title="Send Absentee WhatsApp Alerts to Parents"
-              >
-                <MessageSquare className="w-3.5 h-3.5 mr-1" /> WhatsApp Alerts
-              </button>
-            )}
 
             <button
               onClick={exportToCSV}
@@ -1980,36 +1956,6 @@ export default function LiveScan() {
           </div>
         )}
 
-        {/* WhatsApp Absentee Alert Modal */}
-        {activeSession && (
-          <WhatsAppAlertModal
-            isOpen={isWhatsAppModalOpen}
-            onClose={() => {
-              setIsWhatsAppModalOpen(false);
-              if (typeof window !== "undefined" && !localStorage.getItem("medattend_active_session_id")) {
-                setActiveSession(null);
-              }
-            }}
-            sessionId={activeSession.id}
-            sessionName={activeSession.class_name}
-            topicName={decodeSessionMetadata(activeSession.instructor_name).topic}
-            initialAlertMeta={decodeSessionMetadata(activeSession.instructor_name).whatsappAlert}
-            onAlertSuccess={(meta) => {
-              // Update local session instructor_name with new WA tag
-              if (activeSession) {
-                const updatedInstructor = encodeSessionWhatsAppTag(
-                  activeSession.instructor_name,
-                  meta.sentCount,
-                  meta.sentAt
-                );
-                setActiveSession({
-                  ...activeSession,
-                  instructor_name: updatedInstructor,
-                });
-              }
-            }}
-          />
-        )}
 
         {/* GPS Geofence Modal */}
         <GeofenceModal

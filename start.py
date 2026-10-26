@@ -52,6 +52,7 @@ if not SUPABASE_URL:
     print(f"\033[91mPlease set your college's production SUPABASE_URL in backend/.env.\033[0m\n")
     sys.exit(1)
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_KEY")
+ENABLE_WHATSAPP = os.getenv("ENABLE_WHATSAPP", "0").strip().lower() in ("1", "true", "yes")
 
 GREEN = "\033[92m"
 BLUE = "\033[94m"
@@ -618,20 +619,21 @@ def watchdog_loop():
                 except Exception as fe_err:
                     print(f"{RED}❌ [WATCHDOG] Failed to recover frontend: {fe_err}{RESET}\n")
 
-            # --- 3. Monitor WhatsApp Bridge ---
-            with watchdog_lock:
-                wa_proc = managed_procs.get("whatsapp")
+            # --- 3. Monitor WhatsApp Bridge (Optional) ---
+            if ENABLE_WHATSAPP:
+                with watchdog_lock:
+                    wa_proc = managed_procs.get("whatsapp")
 
-            if wa_proc and wa_proc.poll() is not None:
-                now_str = time.strftime("%H:%M:%S")
-                print(f"\n{RED}⚠️  [WATCHDOG] WhatsApp Bridge process exited unexpectedly at {now_str}! Restarting on Port 5005...{RESET}")
-                try:
-                    new_wa = start_whatsapp_process()
-                    with watchdog_lock:
-                        managed_procs["whatsapp"] = new_wa
-                    print(f"{GREEN}✅ [WATCHDOG] WhatsApp Bridge recovered on Port 5005{RESET}\n")
-                except Exception as wa_err:
-                    print(f"{RED}❌ [WATCHDOG] Failed to recover WhatsApp Bridge: {wa_err}{RESET}\n")
+                if wa_proc and wa_proc.poll() is not None:
+                    now_str = time.strftime("%H:%M:%S")
+                    print(f"\n{RED}⚠️  [WATCHDOG] WhatsApp Bridge process exited unexpectedly at {now_str}! Restarting on Port 5005...{RESET}")
+                    try:
+                        new_wa = start_whatsapp_process()
+                        with watchdog_lock:
+                            managed_procs["whatsapp"] = new_wa
+                        print(f"{GREEN}✅ [WATCHDOG] WhatsApp Bridge recovered on Port 5005{RESET}\n")
+                    except Exception as wa_err:
+                        print(f"{RED}❌ [WATCHDOG] Failed to recover WhatsApp Bridge: {wa_err}{RESET}\n")
 
         except Exception:
             time.sleep(3.0)
@@ -648,7 +650,8 @@ def main():
     # 1. Clean previous lingering processes safely on target ports
     free_port_safely(3000)
     free_port_safely(8000)
-    free_port_safely(5005)
+    if ENABLE_WHATSAPP:
+        free_port_safely(5005)
     time.sleep(0.3)
 
     if not os.path.exists(VENV_UVICORN):
@@ -678,11 +681,14 @@ def main():
     else:
         print(f"  {YELLOW}! Backend is taking a bit longer to initialize models...{RESET}")
 
-    # 4. Start WhatsApp Multi-Device QR Bridge
-    print(f"{BLUE}[3/5]{RESET} Starting WhatsApp Multi-Device QR Bridge (Port 5005)...")
-    wa_proc = start_whatsapp_process()
-    with watchdog_lock:
-        managed_procs["whatsapp"] = wa_proc
+    # 4. Start WhatsApp Multi-Device QR Bridge (Optional)
+    if ENABLE_WHATSAPP:
+        print(f"{BLUE}[3/5]{RESET} Starting WhatsApp Multi-Device QR Bridge (Port 5005)...")
+        wa_proc = start_whatsapp_process()
+        with watchdog_lock:
+            managed_procs["whatsapp"] = wa_proc
+    else:
+        print(f"  {GREEN}✓{RESET} Core Mode: Running in Super-Clean Attendance Mode (WhatsApp Bridge Disabled)")
 
     # Start Unified System Watchdog Thread (Step 9 & 10)
     threading.Thread(target=watchdog_loop, daemon=True, name="SystemWatchdog").start()
@@ -740,7 +746,10 @@ def main():
     print(BOLD + GREEN + "╠" + "═"*68 + "╣" + RESET)
     print(f"║  {CYAN}Local Web Dashboard:{RESET}  http://localhost:3000 (Production)               ║")
     print(f"║  {CYAN}Local AI Backend:{RESET}     http://127.0.0.1:8000 (Production)               ║")
-    print(f"║  {CYAN}WhatsApp QR Bridge:{RESET}   http://127.0.0.1:5005 (Active)                   ║")
+    if ENABLE_WHATSAPP:
+        print(f"║  {CYAN}WhatsApp QR Bridge:{RESET}   http://127.0.0.1:5005 (Active)                   ║")
+    else:
+        print(f"║  {CYAN}Engine Mode:{RESET}          {GREEN}Super Clean Core Attendance Engine{RESET}             ║")
     print(f"║  {CYAN}Watchdog Recovery:{RESET}    {GREEN}Active (Auto-restarts All Hub Services){RESET}   ║")
     print(f"║  {CYAN}Cloudflare Tunnel:{RESET}    {display_tunnel:<49} ║")
     print(f"║  {CYAN}Vercel Live Portal:{RESET}   https://newshuge.com/selfieattend                ║")

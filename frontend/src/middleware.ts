@@ -77,8 +77,6 @@ export async function middleware(request: NextRequest) {
 
     // Block all administrative backend and hardware control APIs from Student invocation
     const adminRestrictedApis = [
-      '/api/ptz',
-      '/api/whatsapp',
       '/api/start-live-scan',
       '/api/process-attendance',
       '/api/users',
@@ -86,8 +84,6 @@ export async function middleware(request: NextRequest) {
       '/api/admin',
       '/api/audit-logs',
       '/api/cameras',
-      '/api/ptz-cameras',
-      '/api/ptz-video-feed',
       '/api/video-feed',
       '/api/enroll-face',
       '/api/enroll-face-burst',
