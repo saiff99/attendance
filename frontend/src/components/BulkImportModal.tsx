@@ -205,21 +205,18 @@ export function BulkImportModal({
         name: "MORSALIM MONDAL",
         year: selectedYear || "1st Year",
         group: "Group A",
-        phone: "+919876543210",
       },
       {
         roll: "26101",
         name: "SK SAIFUDDIN",
         year: selectedYear || "1st Year",
         group: "Group B",
-        phone: "+919876543211",
       },
       {
         roll: "26201",
         name: "RAHUL ROY",
         year: selectedYear || "1st Year",
         group: "Group C",
-        phone: "+919876543212",
       },
     ];
 
@@ -230,7 +227,6 @@ export function BulkImportModal({
       { header: "Full Name", key: "name", width: 25 },
       { header: "Academic Year", key: "year", width: 18 },
       { header: "Group", key: "group", width: 15 },
-      { header: "WhatsApp", key: "phone", width: 20 },
     ];
 
     sampleData.forEach((row) => worksheet.addRow(row));
