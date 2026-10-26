@@ -1179,7 +1179,7 @@ async def student_lookup(
                 "recorded_at": att_record.get("recorded_at", "Earlier Today")
             }
 
-        can_checkin = bool(not cohort_mismatch and not is_already_present and has_face)
+        can_checkin = not cohort_mismatch and not is_already_present and has_face
         roll_token = generate_checkin_token(clean_sess_id, remaining_validity, clean_roll)
 
         if not is_internal_auth:
