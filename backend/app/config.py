@@ -242,7 +242,7 @@ def is_cohort_matching(target_cohort: Optional[str], student_year: Optional[str]
     if not target_cohort:
         return True
     
-    t = str(target_cohort).strip()
+    t = target_cohort.strip()
     t_lower = t.lower()
     
     if (
@@ -256,7 +256,7 @@ def is_cohort_matching(target_cohort: Optional[str], student_year: Optional[str]
     if not student_year:
         return False
         
-    s = str(student_year).strip()
+    s = student_year.strip()
     s_lower = s.lower()
     
     def get_base_year(val: str) -> str:

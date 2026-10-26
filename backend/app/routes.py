@@ -33,6 +33,7 @@ from app.config import (
 from app.ai import app_fa, AI_ENABLED, calculate_confidence_score
 from app.antispoof import verify_face_liveness
 from app.stream import generate_video_feed
+import cv2  # type: ignore
 
 import uuid
 from app.rate_limiter import (
@@ -272,7 +273,7 @@ async def enroll_face(
     if consent_granted is not None:
         if isinstance(consent_granted, bool) and consent_granted is True:
             is_consented = True
-        elif str(consent_granted).strip().lower() in ("true", "1", "yes", "affirmative"):
+        elif consent_granted.strip().lower() in ("true", "1", "yes", "affirmative"):
             is_consented = True
 
     if not is_consented:
@@ -306,7 +307,7 @@ async def enroll_face(
         )
 
     def _extract_single_face():
-        import cv2
+        import cv2  # type: ignore
         image = Image.open(io.BytesIO(contents)).convert('RGB')
         image_np = np.array(image)
         image_bgr = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
@@ -411,7 +412,7 @@ async def enroll_face_burst(
     if consent_granted is not None:
         if isinstance(consent_granted, bool) and consent_granted is True:
             is_consented = True
-        elif str(consent_granted).strip().lower() in ("true", "1", "yes", "affirmative"):
+        elif consent_granted.strip().lower() in ("true", "1", "yes", "affirmative"):
             is_consented = True
 
     if not is_consented:
@@ -456,7 +457,7 @@ async def enroll_face_burst(
             file_contents.append(c)
 
     def _extract_burst_encodings():
-        import cv2
+        import cv2  # type: ignore
         encs = []
         for contents in file_contents:
             if not contents:
@@ -682,7 +683,7 @@ async def process_attendance(file: UploadFile = File(...), session_id: str = For
         )
 
     def _match_photo_faces():
-        import cv2
+        import cv2  # type: ignore
         image = Image.open(io.BytesIO(contents)).convert('RGB')
         image_np = np.array(image)
         image_bgr = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
@@ -856,11 +857,11 @@ def get_checkin_secret() -> str:
 
 def generate_checkin_token(session_id: str, valid_seconds: int = 300, student_roll: Optional[str] = None) -> str:
     try:
-        uuid.UUID(str(session_id).strip())
+        uuid.UUID(session_id.strip())
     except Exception:
         return ""
     expires_at = int(time.time()) + min(max(valid_seconds, 30), 330)
-    clean_roll = str(student_roll).strip().lower() if student_roll and str(student_roll).strip() else None
+    clean_roll = student_roll.strip().lower() if student_roll and student_roll.strip() else None
     if clean_roll:
         payload = f"{session_id}:{clean_roll}:{expires_at}"
     else:
@@ -882,14 +883,14 @@ def verify_checkin_token(
     if not token or not isinstance(token, str) or not token.strip():
         return False
     parts = token.strip().split(":")
-    clean_expected_roll = str(expected_student_roll).lower().strip() if expected_student_roll and str(expected_student_roll).strip() else ""
+    clean_expected_roll = expected_student_roll.lower().strip() if expected_student_roll and expected_student_roll.strip() else ""
 
     if clean_expected_roll:
         # Strict Roll-Bound Capability: 3-part classroom tokens are strictly rejected when student-specific capability is required
         if len(parts) != 4:
             return False
         sess_id, roll, expires_str, sig = parts
-        if sess_id.lower() != str(expected_session_id).lower().strip():
+        if sess_id.lower() != expected_session_id.lower().strip():
             return False
         if roll.lower() != clean_expected_roll:
             return False
@@ -898,12 +899,12 @@ def verify_checkin_token(
         # Session-Level Capability: permits 3-part classroom token or 4-part token
         if len(parts) == 3:
             sess_id, expires_str, sig = parts
-            if sess_id.lower() != str(expected_session_id).lower().strip():
+            if sess_id.lower() != expected_session_id.lower().strip():
                 return False
             payload = f"{sess_id}:{expires_str}"
         elif len(parts) == 4:
             sess_id, roll, expires_str, sig = parts
-            if sess_id.lower() != str(expected_session_id).lower().strip():
+            if sess_id.lower() != expected_session_id.lower().strip():
                 return False
             payload = f"{sess_id}:{roll}:{expires_str}"
         else:
@@ -1432,7 +1433,7 @@ async def selfie_attendance(
         )
 
     def _verify_selfie():
-        import cv2
+        import cv2  # type: ignore
         raw_img = Image.open(io.BytesIO(contents))
         image = ImageOps.exif_transpose(raw_img).convert('RGB')
         image_np = np.array(image)
