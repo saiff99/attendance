@@ -74,10 +74,22 @@ watchdog_lock = threading.Lock()
 
 
 def terminate_process(proc, name="process", timeout=2.0):
-    """Gracefully terminates a specific subprocess without broad killing."""
+    """Gracefully terminates a specific subprocess and its entire process group (avoiding orphaned child workers)."""
     if proc is None:
         return
     try:
+        # 1. Kill entire process group if available (kills npm + next-server + worker threads together)
+        if hasattr(os, "killpg") and hasattr(os, "getpgid"):
+            try:
+                pgid = os.getpgid(proc.pid)
+                os.killpg(pgid, signal.SIGTERM)
+                time.sleep(0.15)
+                if proc.poll() is None:
+                    os.killpg(pgid, signal.SIGKILL)
+            except Exception:
+                pass
+        
+        # 2. Fallback direct process termination
         if proc.poll() is None:
             proc.terminate()
             try:
@@ -142,12 +154,13 @@ def is_medattend_process(pid: int, cmd_override: str = None, cwd_override: str =
         if base_dir_clean in cmd_lower:
             return True
 
-        # Specific repository submodule markers (Never match generic "node", "python", or "next")
+        # Specific repository submodule markers (Include next-server, uvicorn, and repo binaries)
         specific_repo_markers = [
             os.path.join("backend", ".venv").lower(),
-            os.path.join("whatsapp-service", "server.js").lower(),
             "app.main:app",
+            "main:app",
             os.path.join("frontend", ".next").lower(),
+            "next-server",
         ]
         if any(marker in cmd_lower for marker in specific_repo_markers):
             return True
@@ -161,29 +174,30 @@ def is_medattend_process(pid: int, cmd_override: str = None, cwd_override: str =
         return False
 
 
-def free_port_safely(port: int):
-    """Safely frees a local port only if occupied by a dangling MedAttend process from previous run."""
+def free_port_safely(port: int, force: bool = False):
+    """
+    Safely frees a local port only if occupied by a dangling MedAttend process or zombie server.
+    Uses -nP and -sTCP:LISTEN to target strictly the LISTENING server daemon, avoiding client sockets.
+    """
     try:
-        # Strictly target LISTENING server sockets, ignoring client connections (browsers, curl, test runners)
-        cmd = f"lsof -tiTCP:{port} -sTCP:LISTEN"
+        cmd = f"lsof -nP -iTCP:{port} -sTCP:LISTEN -t"
         try:
             output = subprocess.check_output(cmd, shell=True, text=True, stderr=subprocess.DEVNULL).strip()
         except subprocess.CalledProcessError:
-            # Fallback if -sTCP:LISTEN flag is not available on older lsof
-            cmd = f"lsof -ti:{port}"
-            output = subprocess.check_output(cmd, shell=True, text=True, stderr=subprocess.DEVNULL).strip()
+            output = ""
 
         pids = output.split()
         for pid in pids:
             if pid and pid.isdigit():
                 pid_int = int(pid)
                 if pid_int != os.getpid():
-                    if is_medattend_process(pid_int):
+                    if force or is_medattend_process(pid_int):
                         try:
                             os.kill(pid_int, signal.SIGTERM)
-                            time.sleep(0.1)
+                            time.sleep(0.15)
                             if pid_int_running(pid_int):
                                 os.kill(pid_int, signal.SIGKILL)
+                            print(f"  {GREEN}✓ Cleaned dangling process on port {port} (PID {pid_int}){RESET}")
                         except Exception:
                             pass
                     else:
@@ -271,6 +285,15 @@ def enforce_single_launcher_instance(lock_file_path: str = None):
         pass
 
 
+def kill_orphaned_zombies():
+    """Scans and kills any orphaned next-server or uvicorn processes from this project."""
+    try:
+        subprocess.run(["pkill", "-9", "-f", "next-server"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(["pkill", "-9", "-f", "uvicorn.*main:app"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception:
+        pass
+
+
 def cleanup(signum=None, frame=None):
     """Clean exit handler for Ctrl+C and SIGTERM."""
     global watchdog_running, _launcher_lock_fd
@@ -280,6 +303,12 @@ def cleanup(signum=None, frame=None):
         for name, proc in managed_procs.items():
             if proc:
                 terminate_process(proc, name)
+
+    # Force free all server ports and eliminate any orphaned zombie workers
+    free_port_safely(3000, force=True)
+    free_port_safely(8000, force=True)
+    kill_orphaned_zombies()
+
     # Release launcher lock
     try:
         if _launcher_lock_fd:
@@ -440,7 +469,8 @@ def start_frontend_process():
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
-        bufsize=1
+        bufsize=1,
+        preexec_fn=os.setsid
     )
 
     def log_frontend_output(p):
@@ -469,7 +499,8 @@ def start_backend_process():
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
-        bufsize=1
+        bufsize=1,
+        preexec_fn=os.setsid
     )
     
     def log_backend_output(p):
@@ -701,7 +732,8 @@ def main():
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
-        bufsize=1
+        bufsize=1,
+        preexec_fn=os.setsid
     )
     with watchdog_lock:
         managed_procs["tunnel"] = cf_proc
