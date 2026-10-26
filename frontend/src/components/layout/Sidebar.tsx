@@ -42,7 +42,12 @@ export default function Sidebar() {
   const [hasActiveLiveSession, setHasActiveLiveSession] = useState(false);
   const [ongoingCount, setOngoingCount] = useState<number>(0);
   const { user, logout } = useAuth();
-  const { theme, setTheme } = useTheme();
+  const { theme, setTheme, resolvedTheme } = useTheme();
+  const currentTheme = resolvedTheme || theme;
+
+  const handleToggleTheme = () => {
+    setTheme(currentTheme === "dark" ? "light" : "dark");
+  };
   const isStudentPortal = pathname?.startsWith("/selfieattend") || pathname?.startsWith("/self-attendance") || pathname?.startsWith("/portal");
 
   useEffect(() => {
@@ -102,19 +107,29 @@ export default function Sidebar() {
               MedAttend
             </span>
           </div>
-          <div className="flex items-center gap-2">
-            {mounted && (
-              <button
-                onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-                className="p-2 rounded-xl text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 transition-all"
-                title="Toggle Theme"
-              >
-                {theme === "dark" ? <Sun className="h-5 w-5 text-amber-400" /> : <Moon className="h-5 w-5 text-indigo-600" />}
-              </button>
-            )}
+          <div className="flex items-center gap-1.5">
             <button
-              onClick={() => setIsOpen(!isOpen)}
-              className="p-2 -mr-2 rounded-xl text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 focus:outline-none transition-all"
+              type="button"
+              onClick={handleToggleTheme}
+              className="p-2 min-w-[42px] min-h-[42px] flex items-center justify-center rounded-xl text-gray-600 dark:text-gray-300 active:bg-gray-100 dark:active:bg-gray-800 active:scale-95 [@media(hover:hover)]:hover:bg-gray-100 dark:[@media(hover:hover)]:hover:bg-gray-800 transition-transform touch-manipulation cursor-pointer"
+              title="Toggle Theme"
+              aria-label="Toggle Theme"
+            >
+              {mounted && currentTheme === "dark" ? (
+                <Sun className="h-5 w-5 text-amber-400" />
+              ) : (
+                <Moon className="h-5 w-5 text-indigo-600" />
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsOpen((prev) => !prev);
+              }}
+              className="p-2 min-w-[42px] min-h-[42px] flex items-center justify-center rounded-xl text-gray-600 dark:text-gray-300 active:bg-gray-100 dark:active:bg-gray-800 active:scale-95 [@media(hover:hover)]:hover:bg-gray-100 dark:[@media(hover:hover)]:hover:bg-gray-800 focus:outline-none transition-transform touch-manipulation cursor-pointer"
+              aria-label="Open sidebar"
+              aria-expanded={isOpen}
             >
               <span className="sr-only">Open sidebar</span>
               <Menu className="h-6 w-6" aria-hidden="true" />
@@ -146,8 +161,10 @@ export default function Sidebar() {
           </span>
         </div>
         <button 
+          type="button"
           onClick={() => setIsOpen(false)}
-          className="lg:hidden -mr-2 p-2 rounded-lg text-gray-400 hover:text-gray-500 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+          className="lg:hidden p-2 min-w-[42px] min-h-[42px] flex items-center justify-center rounded-lg text-gray-400 active:bg-gray-100 dark:active:bg-gray-800 [@media(hover:hover)]:hover:bg-gray-100 dark:[@media(hover:hover)]:hover:bg-gray-800 transition-colors touch-manipulation cursor-pointer"
+          aria-label="Close sidebar"
         >
           <X className="h-6 w-6" />
         </button>
@@ -228,8 +245,8 @@ export default function Sidebar() {
               type="button"
               onClick={() => setTheme("light")}
               className={classNames(
-                "px-2.5 py-1 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer",
-                mounted && theme === "light"
+                "px-2.5 py-1 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer touch-manipulation",
+                mounted && currentTheme === "light"
                   ? "bg-white text-indigo-600 shadow-sm font-semibold ring-1 ring-black/5"
                   : "text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
               )}
@@ -242,8 +259,8 @@ export default function Sidebar() {
               type="button"
               onClick={() => setTheme("dark")}
               className={classNames(
-                "px-2.5 py-1 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer",
-                mounted && theme === "dark"
+                "px-2.5 py-1 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer touch-manipulation",
+                mounted && currentTheme === "dark"
                   ? "bg-gray-900 text-indigo-400 shadow-sm font-semibold ring-1 ring-white/10"
                   : "text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
               )}

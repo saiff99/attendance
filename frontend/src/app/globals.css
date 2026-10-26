@@ -29,6 +29,14 @@ body {
   font-family: var(--font-sans), sans-serif;
 }
 
+/* Ensure mobile touch buttons and links respond immediately without 300ms delay */
+button,
+[role="button"],
+a {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
 /* Suppress browser focus outlines and selection boxes on Recharts charts */
 .recharts-responsive-container,
 .recharts-wrapper,
