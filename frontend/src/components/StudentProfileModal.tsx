@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { X, Calendar as CalendarIcon, CheckCircle2, XCircle } from "lucide-react";
-import { getParentPhone, formatPhoneDisplay } from "@/lib/studentContact";
 
 interface StudentProfileModalProps {
   student: any;

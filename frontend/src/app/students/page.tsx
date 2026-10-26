@@ -8,7 +8,7 @@ import type { Student } from "@/types/database";
 import { StudentProfileModal } from "@/components/StudentProfileModal";
 import { FaceRegistrationModal } from "@/components/FaceRegistrationModal";
 import { BulkImportModal } from "@/components/BulkImportModal";
-import { getParentPhone, formatPhoneDisplay, encodeStudentEmail, cleanPhoneNumber } from "@/lib/studentContact";
+import { getParentPhone, encodeStudentEmail, cleanPhoneNumber } from "@/lib/studentContact";
 import { useAuth } from "@/lib/auth";
 
 // In-memory module cache for instant navigation between tabs without layout shift
@@ -734,7 +734,6 @@ export default function StudentDirectory() {
                     ) : (
                       filteredStudents.map((student, idx) => {
                         const isSelected = selectedIds.includes(student.id);
-                        const phone = getParentPhone(student);
                         return (
                           <tr
                             key={student.id}
