@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { X, MapPin, ShieldCheck, ShieldAlert, Navigation, Loader2, Check, RefreshCw } from "lucide-react";
+import { X, MapPin, ShieldCheck, ShieldAlert, Navigation, Loader2, Check, RefreshCw, RotateCcw } from "lucide-react";
 import { 
   CampusGeofenceConfig, 
   DEFAULT_GEOFENCE_CONFIG, 
@@ -199,18 +199,32 @@ export function GeofenceModal({ isOpen, onClose, initialConfig, onConfigSaved }:
               <label className="block font-semibold uppercase tracking-wider text-gray-600 dark:text-slate-400 text-[10px]">
                 Target Classroom / Campus GPS Coordinates
               </label>
-              <button
-                type="button"
-                onClick={handleCaptureCurrentLocation}
-                disabled={capturingGPS}
-                className="inline-flex items-center text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 disabled:opacity-50 transition-colors"
-              >
-                {capturingGPS ? (
-                  <><Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> Capturing GPS...</>
-                ) : (
-                  <><Navigation className="w-3.5 h-3.5 mr-1" /> Use Current Device GPS</>
+              <div className="flex items-center gap-2.5">
+                {(config.latitude !== DEFAULT_GEOFENCE_CONFIG.latitude || config.longitude !== DEFAULT_GEOFENCE_CONFIG.longitude) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setConfig({ ...DEFAULT_GEOFENCE_CONFIG, radiusMeters: config.radiusMeters });
+                      setGpsStatus("Reset to default JIMSH Classroom location");
+                    }}
+                    className="inline-flex items-center text-[11px] font-semibold text-amber-600 dark:text-amber-400 hover:underline transition-colors"
+                  >
+                    <RotateCcw className="w-3 h-3 mr-1" /> Reset Default
+                  </button>
                 )}
-              </button>
+                <button
+                  type="button"
+                  onClick={handleCaptureCurrentLocation}
+                  disabled={capturingGPS}
+                  className="inline-flex items-center text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 disabled:opacity-50 transition-colors"
+                >
+                  {capturingGPS ? (
+                    <><Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> Capturing GPS...</>
+                  ) : (
+                    <><Navigation className="w-3.5 h-3.5 mr-1" /> Use Current Device GPS</>
+                  )}
+                </button>
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3">

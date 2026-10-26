@@ -972,15 +972,33 @@ export default function LiveScan() {
 
               {sessionGeofence.enabled && (
                 <div className="flex items-center justify-between pt-1.5 border-t border-gray-200/60 dark:border-slate-800/80">
-                  <button
-                    type="button"
-                    onClick={handleStartClassroomGPSCalibration}
-                    disabled={capturingSessionGPS}
-                    className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 cursor-pointer"
-                  >
-                    {capturingSessionGPS ? <Loader2 className="w-3 h-3 animate-spin" /> : <Navigation className="w-3 h-3" />}
-                    <span>Set Classroom GPS to Current Location</span>
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleStartClassroomGPSCalibration}
+                      disabled={capturingSessionGPS}
+                      className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      {capturingSessionGPS ? <Loader2 className="w-3 h-3 animate-spin" /> : <Navigation className="w-3 h-3" />}
+                      <span>Set Classroom GPS to Current Location</span>
+                    </button>
+
+                    {(sessionGeofence.latitude !== DEFAULT_GEOFENCE_CONFIG.latitude || sessionGeofence.longitude !== DEFAULT_GEOFENCE_CONFIG.longitude) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const def = { ...DEFAULT_GEOFENCE_CONFIG };
+                          setSessionGeofence(def);
+                          saveLocalGeofence(def);
+                        }}
+                        className="text-[10px] text-amber-600 dark:text-amber-400 hover:underline flex items-center gap-0.5 cursor-pointer font-medium"
+                        title="Reset to JIMSH Classroom Default (22.451550, 88.172366)"
+                      >
+                        <RotateCcw className="w-2.5 h-2.5" />
+                        <span>Reset Default</span>
+                      </button>
+                    )}
+                  </div>
 
                   <button
                     type="button"
