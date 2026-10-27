@@ -198,6 +198,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
   const [isRecheckingGps, setIsRecheckingGps] = useState(false);
   const isVerifyingRef = useRef(false);
   const activeVerificationPromiseRef = useRef<Promise<boolean> | null>(null);
+  const prevGeofenceRef = useRef<string>("");
 
   const backendUrl = getBackendUrl();
 
@@ -260,8 +261,15 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
   }, [selectedSession, geofenceConfig]);
 
   // Verify User GPS Location against Geofence boundary using High-Precision Multi-Sample Calibrator
-  const verifyUserLocation = useCallback(async (forceFresh: boolean = false): Promise<boolean> => {
-    if (!effectiveGeofence.enabled) {
+  const verifyUserLocation = useCallback(async (
+    forceFresh: boolean = false,
+    overrideGeofence?: CampusGeofenceConfig | null
+  ): Promise<boolean> => {
+    const targetGeofence = (overrideGeofence !== undefined && overrideGeofence !== null)
+      ? overrideGeofence
+      : effectiveGeofence;
+
+    if (!targetGeofence.enabled) {
       setGeofenceStatus("allowed");
       setGeofenceErrorMessage(null);
       setGpsFixStatus("");
@@ -273,8 +281,8 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
       isVerifyingRef.current = false;
     }
 
-    // If verification is already actively in-flight, return the existing promise so caller seamlessly awaits it
-    if (activeVerificationPromiseRef.current) {
+    // If verification is already actively in-flight and no override was supplied, return existing promise
+    if (activeVerificationPromiseRef.current && !overrideGeofence) {
       return activeVerificationPromiseRef.current;
     }
 
@@ -301,12 +309,12 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
         const dist = calculateDistanceMeters(
           coords.latitude,
           coords.longitude,
-          effectiveGeofence.latitude,
-          effectiveGeofence.longitude
+          targetGeofence.latitude,
+          targetGeofence.longitude
         );
         setGeofenceDistance(dist);
 
-        if (dist <= effectiveGeofence.radiusMeters) {
+        if (dist <= targetGeofence.radiusMeters) {
           setGeofenceStatus("allowed");
           setGeofenceErrorMessage(null);
           setGpsFixStatus("");
@@ -314,7 +322,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
         } else {
           setGeofenceStatus("blocked");
           setGeofenceErrorMessage(
-            "Location Verification Failed: Physical presence inside the lecture hall is required to record attendance."
+            `Location Verification Failed: You are ${formatDistance(dist)} away from ${targetGeofence.campusName || "classroom"} (Max allowed: ${targetGeofence.radiusMeters}m).`
           );
           setGpsFixStatus("");
           return false;
@@ -338,16 +346,24 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
 
   // When selected session changes, reset or auto-allow if geofence is disabled for this session
   useEffect(() => {
+    const geoKey = `${effectiveGeofence.enabled}:${effectiveGeofence.latitude}:${effectiveGeofence.longitude}:${effectiveGeofence.radiusMeters}:${selectedSession?.id || ""}`;
+    if (prevGeofenceRef.current === geoKey) {
+      return;
+    }
+    prevGeofenceRef.current = geoKey;
+
     if (!effectiveGeofence.enabled) {
       setGeofenceStatus("allowed");
       setGeofenceErrorMessage(null);
     } else {
-      setGeofenceStatus("checking");
-      setGeofenceDistance(null);
-      setGeofenceErrorMessage(null);
-      verifyUserLocation();
+      if (!isRecheckingGps) {
+        setGeofenceStatus("checking");
+        setGeofenceDistance(null);
+        setGeofenceErrorMessage(null);
+        verifyUserLocation();
+      }
     }
-  }, [effectiveGeofence, verifyUserLocation]);
+  }, [effectiveGeofence, selectedSession?.id, isRecheckingGps, verifyUserLocation]);
 
   // Helper: calculate remaining seconds for any session (5-minute / 300s window)
   const getSessionRemainingSeconds = useCallback((sess: ActiveSession) => {
@@ -375,8 +391,8 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
 
   const isSelectedExpired = selectedSession !== null && selectedRemainingSec <= 0;
 
-  // Helper to process session list with active countdowns
-  const processSessionsList = useCallback((rawSessions: any[]) => {
+  // Helper to process session list with active countdowns and preserved geofence
+  const processSessionsList = useCallback((rawSessions: any[]): ActiveSession[] => {
     const nowUtc = Date.now();
     const activeList: ActiveSession[] = rawSessions.map((s: any) => {
       const timeStr = s.start_time || s.created_at;
@@ -388,6 +404,16 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
         remainingSeconds = Math.max(0, (s.window_duration_seconds || 300) - elapsedSec);
         isExpired = remainingSeconds <= 0;
       }
+
+      // Preserve or decode session-level geofence
+      let sessionGeofence = s.geofence || null;
+      if (!sessionGeofence && s.instructor_name) {
+        const decoded = decodeSessionMetadata(s.instructor_name);
+        if (decoded.geofence) {
+          sessionGeofence = decoded.geofence;
+        }
+      }
+
       return {
         id: s.id,
         class_name: s.class_name,
@@ -402,6 +428,8 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
         remaining_seconds: remainingSeconds,
         is_expired: isExpired,
         window_duration_seconds: s.window_duration_seconds || 300,
+        checkin_token: s.checkin_token || null,
+        geofence: sessionGeofence,
       };
     });
 
@@ -423,39 +451,52 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
         setStep("enter_roll");
       }
     }
+
+    return activeList;
   }, [initialSessionId]);
 
   // Fetch active sessions client-side
-  const fetchActiveSessions = useCallback(async (showFullLoader = false) => {
+  const fetchActiveSessions = useCallback(async (showFullLoader = false): Promise<ActiveSession[]> => {
     setIsRefreshing(true);
     if (showFullLoader || sessions.length === 0) {
       setLoadingSessions(true);
     }
     const startTime = Date.now();
+    let resultList: ActiveSession[] = [];
     try {
       // 1. Try Same-Origin Next.js API route first (runs with server-side service_role)
       try {
-        const localRes = await fetch("/api/active-sessions", {
+        const localRes = await fetch(`/api/active-sessions?_t=${Date.now()}`, {
           cache: "no-store",
-          headers: { "ngrok-skip-browser-warning": "69420" }
+          headers: { 
+            "ngrok-skip-browser-warning": "69420",
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache"
+          }
         });
         if (localRes.ok) {
           const data = await localRes.json();
           if (data.sessions && Array.isArray(data.sessions)) {
-            processSessionsList(data.sessions);
-            return;
+            resultList = processSessionsList(data.sessions);
+            return resultList;
           }
         }
       } catch (e) { }
 
       // 2. Fallback to backend API
-      const res = await fetch(`${backendUrl}/api/active-sessions`, {
-        headers: { "ngrok-skip-browser-warning": "69420" }
+      const res = await fetch(`${backendUrl}/api/active-sessions?_t=${Date.now()}`, {
+        cache: "no-store",
+        headers: { 
+          "ngrok-skip-browser-warning": "69420",
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          "Pragma": "no-cache"
+        }
       });
       if (res.ok) {
         const data = await res.json();
         const activeList = data.sessions || [];
-        processSessionsList(activeList);
+        resultList = processSessionsList(activeList);
+        return resultList;
       }
     } catch (err) {
       console.error("Failed to load active sessions:", err);
@@ -472,29 +513,75 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
         setLoadingSessions(false);
       }
     }
+    return resultList;
   }, [backendUrl, processSessionsList, sessions.length]);
 
-  // Dedicated instant-feedback GPS re-check handler with smooth spin animation
+  // Dedicated instant-feedback GPS re-check handler with on-demand cloud sync & smooth spin animation
   const handleRecheckGps = useCallback(async () => {
-    if (isRecheckingGps || geofenceStatus === "checking") return;
+    if (isRecheckingGps) return;
     setIsRecheckingGps(true);
     setGeofenceStatus("checking");
     setGeofenceErrorMessage(null);
-    setGpsFixStatus("Connecting to GPS satellites...");
+    setGpsFixStatus("Connecting to GPS satellites & syncing session...");
 
     try {
       // Guarantee at least 900ms of spinning animation so the user visibly perceives the active refresh
       const minAnimationWait = new Promise((resolve) => setTimeout(resolve, 900));
-      const sessionsPromise = fetchActiveSessions();
-      const locationPromise = verifyUserLocation(true);
 
-      await Promise.all([sessionsPromise, locationPromise, minAnimationWait]);
+      // 1. Fetch fresh active sessions and global geofence concurrently with cache-busting
+      const sessionsPromise = fetchActiveSessions();
+      const globalGeofencePromise = (async () => {
+        try {
+          const res = await fetch(`/api/geofence?_t=${Date.now()}`, {
+            cache: "no-store",
+            headers: { 
+              "Cache-Control": "no-cache, no-store, must-revalidate",
+              "Pragma": "no-cache"
+            }
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.config) {
+              setGeofenceConfig(data.config);
+              return data.config as CampusGeofenceConfig;
+            }
+          }
+        } catch { }
+        return null;
+      })();
+
+      const [freshSessions, freshGlobal] = await Promise.all([
+        sessionsPromise,
+        globalGeofencePromise
+      ]);
+
+      // 2. Identify the active session's freshly synced geofence
+      let targetGeofence: CampusGeofenceConfig | null = null;
+      if (selectedSession) {
+        const updated = freshSessions.find(s => s.id === selectedSession.id);
+        if (updated) {
+          setSelectedSession(updated);
+          targetGeofence = updated.geofence || (updated.instructor_name ? decodeSessionMetadata(updated.instructor_name).geofence : null);
+        }
+      }
+
+      if (!targetGeofence) {
+        targetGeofence = freshGlobal || geofenceConfig;
+      }
+
+      // Sync reference key so the useEffect doesn't trigger a redundant verification
+      const geoKey = `${targetGeofence.enabled}:${targetGeofence.latitude}:${targetGeofence.longitude}:${targetGeofence.radiusMeters}:${selectedSession?.id || ""}`;
+      prevGeofenceRef.current = geoKey;
+
+      // 3. Immediately verify user location against the fresh geofence coordinates
+      const locationPromise = verifyUserLocation(true, targetGeofence);
+      await Promise.all([locationPromise, minAnimationWait]);
     } catch (err: any) {
       console.error("GPS Re-check error:", err);
     } finally {
       setIsRecheckingGps(false);
     }
-  }, [fetchActiveSessions, verifyUserLocation, isRecheckingGps, geofenceStatus]);
+  }, [fetchActiveSessions, verifyUserLocation, isRecheckingGps, selectedSession, geofenceConfig]);
 
   const isGpsChecking = isRecheckingGps || geofenceStatus === "checking";
 
