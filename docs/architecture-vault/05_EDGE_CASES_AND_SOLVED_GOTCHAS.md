@@ -124,3 +124,32 @@ This document catalogs critical real-world edge cases, platform-specific quirks,
      ```
 - **Rule:** Never hardcode cookie `secure: process.env.NODE_ENV === 'production'` without evaluating genuine connection TLS state. This ensures zero friction during institutional on-premise Wi-Fi/LAN testing while preserving maximum cryptographic protection in cloud production.
 
+---
+
+### Gotcha 8: Insecure HTTP Origin `navigator.mediaDevices` Disablement & Live Scan Crash
+- **Symptom:** Accessing the application from a secondary device or desktop on the local LAN via private IP (e.g., `http://172.16.2.76:3000`) worked perfectly for login, Ongoing Sessions, Reports, and Academic Subjects. However, clicking the **"Live Scan"** menu immediately crashed with Next.js's dark error screen: `"This page couldn't load. Reload to try again, or go back."`
+- **Root Cause:**
+  1. Modern Web APIs restrict sensitive hardware capabilities (Webcams, Microphones, Screen Capture, WebRTC) exclusively to **Secure Contexts** (`window.isSecureContext === true`, i.e., `https://` or `localhost`).
+  2. When accessing over an unencrypted local IP (`http://172.16.2.76:3000`), modern browsers (Chromium, WebKit, Gecko) intentionally strip and leave `navigator.mediaDevices` as `undefined`.
+  3. `LiveScan` in `frontend/src/app/live-scan/page.tsx` previously ran `navigator.mediaDevices.enumerateDevices().then(handleDevices)` in an unguarded `useEffect` on mount.
+  4. Evaluating `navigator.mediaDevices.enumerateDevices()` threw an uncaught `TypeError: Cannot read properties of undefined (reading 'enumerateDevices')`, crashing React during initial lifecycle hydration.
+  5. Similarly, rendering `<Webcam>` from `react-webcam` without media devices triggered internal fallbacks to deprecated `MediaStreamTrack.getSources`, causing additional unhandled exceptions.
+- **Architectural Fix:**
+  1. **Safe MediaDevices Guard on Mount (`frontend/src/app/live-scan/page.tsx`):**
+     ```typescript
+     if (
+       typeof window !== "undefined" &&
+       typeof navigator !== "undefined" &&
+       navigator.mediaDevices &&
+       typeof navigator.mediaDevices.enumerateDevices === "function"
+     ) {
+       setHasMediaDevicesSupport(true);
+       navigator.mediaDevices.enumerateDevices().then(handleDevices).catch(console.warn);
+     } else {
+       setHasMediaDevicesSupport(false);
+     }
+     ```
+  2. **Non-Breaking Webcam Standby UI:** In the "Webcam" scan tab, if `!hasMediaDevicesSupport`, `<Webcam>` is replaced with an informative banner explaining that hardware webcams are blocked on unencrypted HTTP IP origins, directing users to use the **Multi-CCTV Grid** (RTSP/MJPEG over LAN) or open via `localhost` / HTTPS.
+  3. **Omni-Modal Invariant:** Extended identical defensive media guards to `FaceRegistrationModal.tsx` and `SelfieAttendClient.tsx` to prevent camera initialization crashes anywhere in the platform.
+- **Rule:** Never call `navigator.mediaDevices.*` or mount camera capture components without verifying `typeof navigator !== 'undefined' && Boolean(navigator.mediaDevices?.getUserMedia)`.
+

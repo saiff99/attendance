@@ -22,7 +22,7 @@ Whenever human engineers, system administrators, or AI pair-programmers interact
 | **[02. Architecture Decision Records (ADRs)](./02_ARCHITECTURE_DECISION_RECORDS.md)** | Formal documentation of *why* specific engines, protocols, and designs were chosen over alternatives. |
 | **[03. Hard Constraints & Security Rules](./03_HARD_CONSTRAINTS_AND_SECURITY_RULES.md)** | Non-negotiable architectural mandates (5-minute window, anti-spoofing thresholds, rate limits, RLS). |
 | **[04. API Contracts & Database Schemas](./04_API_CONTRACTS_AND_DATABASE_SCHEMAS.md)** | Detailed payload schemas, headers, status codes, PostgreSQL tables, metadata tags, and foreign keys. |
-| **[05. Edge Cases & Solved Gotchas](./05_EDGE_CASES_AND_SOLVED_GOTCHAS.md)** | Real-world institutional gotchas (Safari 16px zoom, RCC Faraday GPS attenuation, Re-check GPS sync, LAN IP cookie handling). |
+| **[05. Edge Cases & Solved Gotchas](./05_EDGE_CASES_AND_SOLVED_GOTCHAS.md)** | Real-world institutional gotchas (Safari 16px zoom, RCC Faraday GPS attenuation, Re-check GPS sync, LAN IP cookie handling, insecure mediaDevices guards). |
 
 ---
 
