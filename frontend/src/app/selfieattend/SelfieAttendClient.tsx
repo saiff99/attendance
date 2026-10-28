@@ -167,7 +167,14 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
   const facingMode = "user" as const;
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [submittingAttendance, setSubmittingAttendance] = useState(false);
-  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [cameraError, setCameraError] = useState<string | null>(() => {
+    if (typeof window !== "undefined" && typeof navigator !== "undefined") {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        return "Browser blocks hardware camera on insecure HTTP IP origins. Please open via the secure HTTPS portal.";
+      }
+    }
+    return null;
+  });
 
   // Active Liveness & Blink Detection States
   const [livenessPhase, setLivenessPhase] = useState<"positioning" | "ready" | "blinking" | "verified">("positioning");

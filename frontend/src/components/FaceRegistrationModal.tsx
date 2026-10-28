@@ -38,6 +38,7 @@ export function FaceRegistrationModal({ isOpen, onClose, studentId, studentName,
   const [errorMessage, setErrorMessage] = useState("");
   const [countdown, setCountdown] = useState<number | null>(null);
   const [consentConfirmed, setConsentConfirmed] = useState(false);
+  const [hasCameraSupport, setHasCameraSupport] = useState<boolean>(true);
   
   const webcamRef = useRef<Webcam>(null);
   const framesRef = useRef<string[]>([]);
@@ -52,6 +53,10 @@ export function FaceRegistrationModal({ isOpen, onClose, studentId, studentName,
       setCountdown(null);
       setConsentConfirmed(false);
       framesRef.current = [];
+      if (typeof window !== 'undefined' && typeof navigator !== 'undefined') {
+        const supported = !!(navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function');
+        setHasCameraSupport(supported);
+      }
     }
   }, [isOpen]);
 
@@ -298,6 +303,14 @@ export function FaceRegistrationModal({ isOpen, onClose, studentId, studentName,
                   <Loader2 className="w-12 h-12 animate-spin mb-2" />
                   <span className="text-sm font-medium animate-pulse">Analyzing...</span>
                 </div>
+              ) : !hasCameraSupport ? (
+                <div className="flex flex-col items-center justify-center p-4 text-center">
+                  <AlertCircle className="w-10 h-10 text-amber-400 mb-2" />
+                  <span className="text-xs font-semibold text-white">Camera Unavailable</span>
+                  <span className="text-[10px] text-slate-400 mt-1 max-w-[180px] leading-tight">
+                    Browsers block webcam on HTTP IP. Use localhost or HTTPS portal.
+                  </span>
+                </div>
               ) : (
                 <Webcam
                   audio={false}
@@ -305,6 +318,7 @@ export function FaceRegistrationModal({ isOpen, onClose, studentId, studentName,
                   screenshotFormat="image/jpeg"
                   screenshotQuality={0.85}
                   videoConstraints={{ facingMode: "user", width: { ideal: 640 }, height: { ideal: 640 } }}
+                  onUserMediaError={() => setHasCameraSupport(false)}
                   className="w-full h-full object-cover transform scale-x-[-1]" // Mirror effect
                 />
               )}

@@ -342,6 +342,7 @@ export default function LiveScan() {
   const webcamRef = useRef<Webcam>(null);
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string | undefined>(undefined);
+  const [hasMediaDevicesSupport, setHasMediaDevicesSupport] = useState<boolean>(true);
 
   const handleDevices = useCallback(
     (mediaDevices: MediaDeviceInfo[]) => {
@@ -351,7 +352,25 @@ export default function LiveScan() {
   );
 
   useEffect(() => {
-    navigator.mediaDevices.enumerateDevices().then(handleDevices);
+    // In insecure contexts (e.g. unencrypted HTTP over local LAN IP http://172.16.x.x:3000),
+    // modern browsers disable WebRTC & MediaDevices (navigator.mediaDevices is undefined).
+    // Guard strictly to prevent TypeError: Cannot read properties of undefined (reading 'enumerateDevices')
+    if (
+      typeof window !== "undefined" &&
+      typeof navigator !== "undefined" &&
+      navigator.mediaDevices &&
+      typeof navigator.mediaDevices.enumerateDevices === "function"
+    ) {
+      setHasMediaDevicesSupport(true);
+      navigator.mediaDevices
+        .enumerateDevices()
+        .then(handleDevices)
+        .catch((err) => {
+          console.warn("Could not enumerate media devices:", err);
+        });
+    } else {
+      setHasMediaDevicesSupport(false);
+    }
   }, [handleDevices]);
 
   // Session Duration Timer
@@ -1436,29 +1455,53 @@ export default function LiveScan() {
 
                   <div className="absolute inset-0 w-full h-full">
                     <div className="w-full h-full bg-black flex items-center justify-center relative overflow-hidden">
-                      <Webcam
-                        audio={false}
-                        ref={webcamRef}
-                        screenshotFormat="image/jpeg"
-                        videoConstraints={{ deviceId: selectedDeviceId }}
-                        className="w-full h-full object-cover"
-                      />
-
-                      {isScanning && (
-                        <div className="absolute inset-0 border-2 border-indigo-500/30 m-4 sm:m-8 rounded-lg pointer-events-none">
-                          <div className="absolute top-0 left-0 w-12 sm:w-16 h-12 sm:h-16 border-t-4 border-l-4 border-indigo-500 -mt-1 -ml-1" />
-                          <div className="absolute top-0 right-0 w-12 sm:w-16 h-12 sm:h-16 border-t-4 border-r-4 border-indigo-500 -mt-1 -mr-1" />
-                          <div className="absolute bottom-0 left-0 w-12 sm:w-16 h-12 sm:h-16 border-b-4 border-l-4 border-indigo-500 -mb-1 -ml-1" />
-                          <div className="absolute bottom-0 right-0 w-12 sm:w-16 h-12 sm:h-16 border-b-4 border-r-4 border-indigo-500 -mb-1 -mr-1" />
-                          <div className="absolute top-1/2 left-0 w-full h-0.5 bg-indigo-400/50 shadow-[0_0_8px_rgba(99,102,241,0.8)] animate-scan" />
+                      {!hasMediaDevicesSupport ? (
+                        <div className="p-6 text-center flex flex-col items-center justify-center gap-3 bg-slate-950 text-slate-200 z-10 w-full h-full">
+                          <AlertCircle className="w-10 h-10 sm:w-12 sm:h-12 text-amber-400" />
+                          <div className="max-w-md">
+                            <h4 className="text-sm sm:text-base font-bold text-white">Webcam Inactive (Insecure HTTP Origin)</h4>
+                            <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                              Modern browsers (Chrome, Edge, Safari) strictly block hardware camera access on unencrypted IP addresses (<code>{typeof window !== "undefined" ? window.location.host : "172.16.x.x"}</code>).
+                            </p>
+                          </div>
+                          <div className="p-3 bg-slate-900/80 border border-slate-800 rounded-xl text-left text-[11px] sm:text-xs text-slate-300 max-w-md space-y-1">
+                            <p className="font-semibold text-indigo-400">💡 Recommended Options:</p>
+                            <p>• Use the <strong>Multi-CCTV Grid</strong> or <strong>Single CCTV</strong> tabs (they stream via RTSP/MJPEG over LAN without needing a webcam).</p>
+                            <p>• To use this laptop&apos;s physical webcam, open MedAttend directly from the host machine via <code>http://localhost:3000</code>.</p>
+                            <p>• Or access via the secure <strong>HTTPS portal</strong>.</p>
+                          </div>
                         </div>
-                      )}
+                      ) : (
+                        <>
+                          <Webcam
+                            audio={false}
+                            ref={webcamRef}
+                            screenshotFormat="image/jpeg"
+                            videoConstraints={{ deviceId: selectedDeviceId }}
+                            onUserMediaError={(err) => {
+                              console.warn("Webcam error:", err);
+                              setHasMediaDevicesSupport(false);
+                            }}
+                            className="w-full h-full object-cover"
+                          />
 
-                      {!isScanning && (
-                        <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center backdrop-blur-sm transition-all">
-                          <Camera className="w-10 h-10 sm:w-14 sm:h-14 text-slate-500 mb-2 sm:mb-3" />
-                          <p className="text-slate-300 font-medium tracking-widest text-[11px] sm:text-xs">WEBCAM STANDBY</p>
-                        </div>
+                          {isScanning && (
+                            <div className="absolute inset-0 border-2 border-indigo-500/30 m-4 sm:m-8 rounded-lg pointer-events-none">
+                              <div className="absolute top-0 left-0 w-12 sm:w-16 h-12 sm:h-16 border-t-4 border-l-4 border-indigo-500 -mt-1 -ml-1" />
+                              <div className="absolute top-0 right-0 w-12 sm:w-16 h-12 sm:h-16 border-t-4 border-r-4 border-indigo-500 -mt-1 -mr-1" />
+                              <div className="absolute bottom-0 left-0 w-12 sm:w-16 h-12 sm:h-16 border-b-4 border-l-4 border-indigo-500 -mb-1 -ml-1" />
+                              <div className="absolute bottom-0 right-0 w-12 sm:w-16 h-12 sm:h-16 border-b-4 border-r-4 border-indigo-500 -mb-1 -mr-1" />
+                              <div className="absolute top-1/2 left-0 w-full h-0.5 bg-indigo-400/50 shadow-[0_0_8px_rgba(99,102,241,0.8)] animate-scan" />
+                            </div>
+                          )}
+
+                          {!isScanning && (
+                            <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center backdrop-blur-sm transition-all">
+                              <Camera className="w-10 h-10 sm:w-14 sm:h-14 text-slate-500 mb-2 sm:mb-3" />
+                              <p className="text-slate-300 font-medium tracking-widest text-[11px] sm:text-xs">WEBCAM STANDBY</p>
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
                   </div>
