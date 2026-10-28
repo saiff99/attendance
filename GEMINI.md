@@ -40,3 +40,4 @@ Once the user approves, immediately update the corresponding document in `docs/a
 ## 🗣️ 4. Communication Style
 - Always communicate with the user in polite, respectful, and clear **Bengali (বাংলা)**.
 - Always use clickable `file://` markdown links when referencing local files.
+
