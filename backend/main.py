@@ -26,8 +26,9 @@ default_allowed_origins = [
 # Deduplicate origins while preserving order
 allowed_origins = list(dict.fromkeys(default_allowed_origins))
 
-# Optional exact regex (only if explicitly configured by administrator in environment)
-allowed_origin_regex = os.getenv("ALLOWED_ORIGIN_REGEX", "").strip() or None
+# Optional exact regex (matches vercel domains, localhost, and private LAN subnets 10.x, 172.16-31.x, 192.168.x)
+default_origin_regex = r"^(?:https://.*\.vercel\.app|https?://(?:localhost|127\.0\.0\.1|10\.\d+\.\d+\.\d+|172\.(?:1[6-9]|2\d|3[0-1])\.\d+\.\d+|192\.168\.\d+\.\d+)(?::\d+)?)$"
+allowed_origin_regex = os.getenv("ALLOWED_ORIGIN_REGEX", "").strip() or default_origin_regex
 
 # CORS Middleware (Enterprise Zero-Trust: Strictly allowlisted origins, methods, and headers)
 app.add_middleware(

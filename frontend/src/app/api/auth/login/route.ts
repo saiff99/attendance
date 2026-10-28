@@ -285,12 +285,27 @@ export async function POST(request: Request) {
       user: authUser,
     });
 
+    // Determine whether the connection is genuinely HTTPS (Vercel production / SSL domain)
+    // Over local LAN IP addresses (e.g. http://172.16.2.76:3000), cookies with `secure: true`
+    // are rejected by modern browsers (Chrome/Edge/Safari/Firefox), causing redirect bounce.
+    const forwardedProto = request.headers.get('x-forwarded-proto');
+    let isHttps = false;
+    if (forwardedProto) {
+      isHttps = forwardedProto.includes('https');
+    } else {
+      try {
+        isHttps = new URL(request.url).protocol === 'https:';
+      } catch {
+        isHttps = false;
+      }
+    }
+
     // Set secure HttpOnly cookie (10 hours = 36000s)
     response.cookies.set({
       name: SESSION_COOKIE_NAME,
       value: token,
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: isHttps,
       sameSite: 'lax',
       path: '/',
       maxAge: 36000,
@@ -301,7 +316,7 @@ export async function POST(request: Request) {
       name: 'medattend_auth',
       value: 'true',
       httpOnly: false,
-      secure: process.env.NODE_ENV === 'production',
+      secure: isHttps,
       sameSite: 'lax',
       path: '/',
       maxAge: 36000,
