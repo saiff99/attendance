@@ -131,6 +131,18 @@ python3 test_attendance_flow.py
 
 ---
 
+## Context Architecture Vault Synchronization
+
+If your changes introduce or modify any of the following:
+- Database tables, migrations, foreign keys, or schema definitions (`04_API_CONTRACTS_AND_DATABASE_SCHEMAS.md`)
+- Core security rules, countdown windows, anti-spoofing criteria, or geofence thresholds (`03_HARD_CONSTRAINTS_AND_SECURITY_RULES.md`)
+- Architectural components, AI models, failover mechanics, or network ingress (`02_ARCHITECTURE_DECISION_RECORDS.md`)
+- Critical platform gotchas, hardware edge cases, or regression fixes (`05_EDGE_CASES_AND_SOLVED_GOTCHAS.md`)
+
+You **must** update the corresponding specification document in [`docs/architecture-vault/`](docs/architecture-vault/INDEX.md) as part of your change.
+
+---
+
 ## Submitting a Pull Request (PR)
 
 1. Push your branch to your GitHub fork:
