@@ -21,6 +21,7 @@ For specialized operational, administrative, and compliance instructions, please
 
 | Guide | Target Audience | Primary Focus |
 | :--- | :--- | :--- |
+| [**🏛️ Context Architecture Vault**](docs/architecture-vault/INDEX.md) | Software Engineers & AI Agents | Authoritative Single Source of Truth for system topology, ADRs, hard security constraints, database schemas, and solved edge cases. |
 | [**👨‍🏫 Faculty & User Guide**](docs/USER_GUIDE.md) | Professors, Lecturers & Teaching Staff | Conducting attendance sessions, live AI camera monitoring, GPS selfie instructions, and exporting Excel reports. |
 | [**🛠️ Admin & IT Setup Guide**](docs/ADMIN_SETUP_GUIDE.md) | System Admins & IT Engineers | 3-tier user governance, lockout guardrails, RTSP multi-camera setup, ONVIF PTZ controls, and curriculum configuration. |
 | [**🎓 Student Portal Guide**](docs/STUDENT_PORTAL_GUIDE.md) | Medical Students & Interns | Logging in with Roll No & PIN, mobile GPS selfie check-in, 7-day attendance logs, and NMC exam eligibility. |
