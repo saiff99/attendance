@@ -93,3 +93,34 @@ This document catalogs critical real-world edge cases, platform-specific quirks,
   - Route all application queries through the Supavisor / PgBouncer transactional connection pooler on port `6543`.
   - Enforced short statement timeouts (`statement_timeout = 8000ms`) and added client-side retry with exponential backoff on transient connection failures.
 
+---
+
+### Gotcha 7: Local LAN IP (HTTP) Cookie Rejection & Infinite Login Redirect Loop
+- **Symptom:** Accessing the application via local Wi-Fi or LAN IP address (e.g., `http://172.16.2.76:3000` or `http://192.168.1.50:3000`) allows viewing the login page, but submitting valid credentials leaves the button indefinitely stuck on `"Redirecting to Dashboard..."` or immediately bounces the user back to `/login?from=%2F`.
+- **Root Cause:**
+  1. RFC 6265bis specifications dictate that browsers treat `localhost` and `127.0.0.1` as "Potentially Trustworthy Origins", allowing `Secure` cookies over plain HTTP. However, private LAN IP addresses (`172.16.x.x`, `192.168.x.x`, `10.x.x.x`) are classified as untrusted plain HTTP (`⚠️ Not Secure`).
+  2. The Next.js login endpoint previously set `secure: process.env.NODE_ENV === 'production'`. In production builds (`npm run build && npm start`), this evaluated to `secure: true`.
+  3. Chromium, Safari, and Firefox strictly drop and reject any incoming `Set-Cookie` header carrying the `Secure` attribute over an insecure HTTP connection.
+  4. Although the API authenticated successfully (`200 OK`), the browser discarded `medattend_session`. When the client navigated to `/`, Next.js `middleware.ts` found no session cookie and redirected the user straight back to `/login`.
+- **Architectural Fix:**
+  1. **Dynamic Transport-Aware Cookie Security (`frontend/src/app/api/auth/login/route.ts`):** Dynamically evaluate the transport protocol using `x-forwarded-proto` and `new URL(request.url).protocol`. Only set `secure: true` when accessed via actual TLS/HTTPS (e.g., Vercel Edge, custom HTTPS domain, Cloudflare SSL). Over local unencrypted HTTP, set `secure: false`:
+     ```typescript
+     const forwardedProto = request.headers.get('x-forwarded-proto');
+     const isHttps = forwardedProto ? forwardedProto.includes('https') : new URL(request.url).protocol === 'https:';
+     
+     response.cookies.set({
+       name: SESSION_COOKIE_NAME,
+       value: token,
+       httpOnly: true,
+       secure: isHttps,
+       sameSite: 'lax',
+       path: '/',
+       maxAge: 36000,
+     });
+     ```
+  2. **CORS Regex Subnet Ingress (`backend/main.py` & `backend/app.py`):** Expanded `allowed_origin_regex` to permit local private LAN subnets (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`) on standard development ports:
+     ```python
+     default_origin_regex = r"^(?:https://.*\.vercel\.app|https?://(?:localhost|127\.0\.0\.1|10\.\d+\.\d+\.\d+|172\.(?:1[6-9]|2\d|3[0-1])\.\d+\.\d+|192\.168\.\d+\.\d+)(?::\d+)?)$"
+     ```
+- **Rule:** Never hardcode cookie `secure: process.env.NODE_ENV === 'production'` without evaluating genuine connection TLS state. This ensures zero friction during institutional on-premise Wi-Fi/LAN testing while preserving maximum cryptographic protection in cloud production.
+
