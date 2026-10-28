@@ -92,3 +92,4 @@ This document catalogs critical real-world edge cases, platform-specific quirks,
 - **Architectural Fix:**
   - Route all application queries through the Supavisor / PgBouncer transactional connection pooler on port `6543`.
   - Enforced short statement timeouts (`statement_timeout = 8000ms`) and added client-side retry with exponential backoff on transient connection failures.
+

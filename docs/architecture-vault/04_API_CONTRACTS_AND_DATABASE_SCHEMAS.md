@@ -167,3 +167,4 @@ Append-only immutable record of all administrative, biometric, and security acti
 - **Error Responses:**
   - `403 Forbidden`: Geofence boundary exceeded, window expired, face similarity `< 0.40`, or proxy device detected.
   - `422 Unprocessable`: No face detected or multiple faces in camera frame.
+

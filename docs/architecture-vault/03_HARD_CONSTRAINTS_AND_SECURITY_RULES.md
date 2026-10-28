@@ -73,3 +73,4 @@ The rules documented in this specification are **Hard Constraints**. Under no ci
 - **Implementation:**
   - Secrets are supplied exclusively via `.env` (backend) and `.env.local` (frontend).
   - Minimum secret length for `INTERNAL_API_KEY` and session secrets is 32 alphanumeric characters.
+

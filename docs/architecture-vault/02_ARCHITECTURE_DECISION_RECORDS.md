@@ -97,3 +97,4 @@
   - *Positive:* Impossible to accidentally orphan or delete attendance history through UI errors or automated scripts.
   - *Positive:* Re-enrolling a previously archived student safely restores the active profile (`is_active: true`) while preserving exact relational integrity with past attendance records.
   - *Negative:* Database administration requires deliberate archiving workflows instead of simple row deletion.
+

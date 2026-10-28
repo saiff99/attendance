@@ -165,3 +165,4 @@ sequenceDiagram
 | **Vector Dot-Product Similarity** | `< 1 ms` | `< 1 ms` | `< 5 ms` |
 | **Database Write & Audit Log** | `< 15 ms` | `< 25 ms` | `< 100 ms` |
 | **Total End-to-End Check-In** | **`~0.8 s – 1.2 s`** | **`~1.5 s – 2.2 s`** | **`< 3.0 s`** |
+
