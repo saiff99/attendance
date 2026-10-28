@@ -26,6 +26,7 @@ For specialized operational, administrative, and compliance instructions, please
 | [**🛠️ Admin & IT Setup Guide**](docs/ADMIN_SETUP_GUIDE.md) | System Admins & IT Engineers | 3-tier user governance, lockout guardrails, RTSP multi-camera setup, ONVIF PTZ controls, and curriculum configuration. |
 | [**🎓 Student Portal Guide**](docs/STUDENT_PORTAL_GUIDE.md) | Medical Students & Interns | Logging in with Roll No & PIN, mobile GPS selfie check-in, 7-day attendance logs, and NMC exam eligibility. |
 | [**🛡️ Security & Privacy Policy**](docs/SECURITY_AND_PRIVACY.md) | Deans, Legal Counsel & Compliance | India DPDP Act 2023 compliance, irreversible 512D ArcFace embeddings, zero raw photo storage, and audit logs. |
+| [**📜 Data Governance & Retention**](docs/DATA_GOVERNANCE_AND_RETENTION_POLICY.md) | Compliance Officers & DPOs | Institutional retention timelines, non-cascading deletion, and student data rights. |
 | [**🤝 Contributing Guidelines**](CONTRIBUTING.md) | Developers & Open-Source Contributors | Development environment setup, branch conventions, testing, and pull request workflow. |
 
 ---
@@ -623,7 +624,25 @@ attendance/
 │
 ├── database/
 │   ├── schema.sql                 # Complete PostgreSQL / Supabase Unified Production Schema
-│   └── migrations/                # Additive, Idempotent Database Migrations (01 to 12)
+│   └── migrations/                # Additive, Idempotent Database Migrations (01 to 19)
+│
+├── docs/                          # Comprehensive Documentation & Knowledge Vault
+│   ├── architecture-vault/        # Authoritative Architecture Vault (ADRs, Topology, Schemas, Constraints)
+│   │   ├── INDEX.md               # Master Registry & Vault Navigation
+│   │   ├── 01_SYSTEM_TOPOLOGY_AND_DATA_FLOW.md
+│   │   ├── 02_ARCHITECTURE_DECISION_RECORDS.md
+│   │   ├── 03_HARD_CONSTRAINTS_AND_SECURITY_RULES.md
+│   │   ├── 04_API_CONTRACTS_AND_DATABASE_SCHEMAS.md
+│   │   └── 05_EDGE_CASES_AND_SOLVED_GOTCHAS.md
+│   ├── ADMIN_SETUP_GUIDE.md       # IT & Administrator Setup Manual
+│   ├── USER_GUIDE.md              # Faculty & Classroom Operational Guide
+│   ├── STUDENT_PORTAL_GUIDE.md    # Medical Student Portal Manual
+│   ├── SECURITY_AND_PRIVACY.md    # Biometric Security & DPDP Act 2023 Compliance
+│   └── DATA_GOVERNANCE_AND_RETENTION_POLICY.md # Data Retention & Non-Cascading Deletion Policy
+│
+├── scripts/                       # Maintenance & Disaster Recovery Utilities
+│   ├── backup_db.py               # Point-in-time PostgreSQL Encrypted Backup
+│   └── restore_db.py              # Automated Integrity-Checked Database Restoration
 │
 ├── backend/                       # FastAPI AI Core & Stream Engine
 │   ├── Dockerfile                 # Container Definition for Hugging Face Spaces
