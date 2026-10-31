@@ -375,10 +375,11 @@ export default function StudentPortalPage() {
           <Link
             href="/selfieattend"
             className="flex items-center gap-1.5 py-1.5 px-2.5 sm:px-3 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-xs font-semibold transition-all shadow-sm group shrink-0"
+            title="Mark Attendance"
           >
             <Smartphone className="w-3.5 h-3.5 text-emerald-400 group-hover:scale-110 transition-transform shrink-0" />
-            <span className="hidden sm:inline">Selfie Attendance</span>
-            <span className="sm:hidden text-[11px]">Selfie</span>
+            <span className="hidden sm:inline">Attendance</span>
+            <span className="sm:hidden text-[11px]">Attend</span>
           </Link>
 
           <button
