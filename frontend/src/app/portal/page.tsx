@@ -7,7 +7,7 @@ import {
   GraduationCap, BookOpen, CheckCircle2, AlertTriangle, XCircle,
   Calendar, Clock, MapPin, Smartphone, Shield, LogOut, KeyRound,
   RefreshCw, ChevronRight, User, Sparkles, Check, ArrowUpRight, Camera, ShieldCheck,
-  Eye, EyeOff
+  Eye, EyeOff, Bell, WifiOff
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { FaceRegistrationModal } from "@/components/FaceRegistrationModal";
@@ -94,6 +94,50 @@ export default function StudentPortalPage() {
 
   // Face ID Biometric Registration modal state
   const [isFaceModalOpen, setIsFaceModalOpen] = useState(false);
+
+  // PWA Offline Status & Push Notification States
+  const [isOnline, setIsOnline] = useState<boolean>(true);
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | "unsupported">("default");
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setIsOnline(navigator.onLine);
+      const handleOnline = () => setIsOnline(true);
+      const handleOffline = () => setIsOnline(false);
+
+      window.addEventListener("online", handleOnline);
+      window.addEventListener("offline", handleOffline);
+
+      if ("Notification" in window) {
+        setNotificationPermission(Notification.permission);
+      } else {
+        setNotificationPermission("unsupported");
+      }
+
+      return () => {
+        window.removeEventListener("online", handleOnline);
+        window.removeEventListener("offline", handleOffline);
+      };
+    }
+  }, []);
+
+  const requestNotificationAccess = async () => {
+    if (typeof window === "undefined" || !("Notification" in window)) return;
+    try {
+      const perm = await Notification.requestPermission();
+      setNotificationPermission(perm);
+      if (perm === "granted" && "serviceWorker" in navigator) {
+        const reg = await navigator.serviceWorker.ready;
+        reg.showNotification("MedAttend AI", {
+          body: "Attendance alerts enabled! You will receive live check-in notifications.",
+          icon: "/icons/icon-192x192.png",
+          badge: "/icons/icon-192x192.png",
+        });
+      }
+    } catch (e) {
+      console.warn("Notification permission error:", e);
+    }
+  };
 
   const fetchPortalData = useCallback(async (rollQuery?: string, isSilent = false) => {
     // Only show full-screen loader on initial fetch when there is no data
@@ -374,7 +418,22 @@ export default function StudentPortalPage() {
         </div>
 
         {/* Student Quick Controls */}
-        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+        <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+          {notificationPermission !== "unsupported" && (
+            <button
+              onClick={requestNotificationAccess}
+              className={`flex items-center gap-1.5 py-1.5 px-2 sm:px-2.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer shrink-0 ${
+                notificationPermission === "granted"
+                  ? "bg-slate-800/80 hover:bg-slate-700 border-slate-700/60 text-emerald-400"
+                  : "bg-indigo-500/10 hover:bg-indigo-500/20 border-indigo-500/30 text-indigo-300"
+              }`}
+              title={notificationPermission === "granted" ? "Attendance Push Alerts Active" : "Enable Attendance Push Alerts"}
+            >
+              <Bell className="w-3.5 h-3.5 shrink-0" />
+              <span className="hidden md:inline">{notificationPermission === "granted" ? "Alerts On" : "Alerts"}</span>
+            </button>
+          )}
+
           <Link
             href="/selfieattend"
             className="flex items-center gap-1.5 py-1.5 px-2.5 sm:px-3 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-xs font-semibold transition-all shadow-sm group shrink-0"
@@ -404,6 +463,14 @@ export default function StudentPortalPage() {
           </button>
         </div>
       </header>
+
+      {/* PWA Offline Mode Notice */}
+      {!isOnline && (
+        <div className="bg-amber-500/15 border-b border-amber-500/30 px-3.5 py-2 text-center text-xs text-amber-300 font-medium flex items-center justify-center gap-2">
+          <WifiOff className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+          <span>Offline Mode: Campus cellular connection dropped. Student profile cached locally.</span>
+        </div>
+      )}
 
       {/* Admin Preview Mode Toolbar */}
       {isElevatedViewer && (

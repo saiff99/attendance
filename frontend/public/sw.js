@@ -1,5 +1,5 @@
-// MedAttend PWA Service Worker
-const CACHE_NAME = 'medattend-pwa-v2';
+// MedAttend PWA Service Worker v3 (Offline Caching + Push Notification Support)
+const CACHE_NAME = 'medattend-pwa-v3';
 const STATIC_ASSETS = [
   '/',
   '/portal',
@@ -61,7 +61,7 @@ self.addEventListener('fetch', (event) => {
         })
         .catch(() => {
           return caches.match(event.request).then((cached) => {
-            return cached || caches.match('/');
+            return cached || caches.match('/portal') || caches.match('/');
           });
         })
     );
@@ -80,6 +80,57 @@ self.addEventListener('fetch', (event) => {
       }).catch(() => null);
 
       return cachedResponse || fetchPromise;
+    })
+  );
+});
+
+// 4. Push Notification Event Handler
+self.addEventListener('push', (event) => {
+  let payload = {
+    title: 'MedAttend AI',
+    body: 'New lecture attendance session started in your hall.',
+    url: '/selfieattend'
+  };
+
+  if (event.data) {
+    try {
+      payload = Object.assign(payload, event.data.json());
+    } catch (e) {
+      payload.body = event.data.text() || payload.body;
+    }
+  }
+
+  const options = {
+    body: payload.body,
+    icon: '/icons/icon-192x192.png',
+    badge: '/icons/icon-192x192.png',
+    vibrate: [100, 50, 100],
+    data: {
+      url: payload.url || '/selfieattend',
+    },
+    actions: [
+      { action: 'attend', title: 'Open Check-in' }
+    ]
+  };
+
+  event.waitUntil(self.registration.showNotification(payload.title, options));
+});
+
+// 5. Notification Click Handler
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const targetUrl = event.notification.data?.url || '/selfieattend';
+
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+      for (const client of windowClients) {
+        if (client.url.includes(targetUrl) && 'focus' in client) {
+          return client.focus();
+        }
+      }
+      if (clients.openWindow) {
+        return clients.openWindow(targetUrl);
+      }
     })
   );
 });
