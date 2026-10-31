@@ -182,3 +182,4 @@ export async function optimizeClassroomPhoto(
     reader.readAsDataURL(file);
   });
 }
+
