@@ -26,7 +26,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // Login page layout: Full screen without sidebar
   if (isLoginPage) {
     return (
-      <main className="flex-1 min-h-screen flex flex-col w-full min-w-0 bg-[#070B12]">
+      <main className="flex-1 min-h-screen flex flex-col w-full min-w-0 bg-slate-50 dark:bg-[#070B12] text-slate-900 dark:text-slate-100 transition-colors duration-200">
         {children}
       </main>
     );
@@ -41,7 +41,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {!isStudentUser && isAuthenticated && <Sidebar />}
         <main className={`flex-1 min-h-screen flex flex-col w-full min-w-0 ${
           !isStudentUser && isAuthenticated ? "lg:pl-64" : "lg:pl-0"
-        } pt-0 bg-[#070B12]`}>
+        } pt-0 bg-slate-50 dark:bg-[#070B12] text-slate-900 dark:text-slate-100 transition-colors duration-200`}>
           {children}
         </main>
       </>
@@ -58,7 +58,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {isAuthenticated && !isStudentUser && <Sidebar />}
         <main className={`flex-1 min-h-screen flex flex-col w-full min-w-0 ${
           isAuthenticated && !isStudentUser ? "lg:pl-64" : "lg:pl-0"
-        } pt-0 bg-[#070B12]`}>
+        } pt-0 bg-slate-50 dark:bg-[#070B12] text-slate-900 dark:text-slate-100 transition-colors duration-200`}>
           {children}
         </main>
       </>
@@ -68,13 +68,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // Protected Admin Routes (/ , /live-scan, /students, /reports, /ongoing)
   if (isLoading) {
     return (
-      <div className="fixed inset-0 z-50 bg-[#070B12] flex flex-col items-center justify-center p-4 text-center select-none">
-        <div className="w-14 h-14 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 shadow-xl shadow-indigo-500/10 mb-4 animate-pulse">
+      <div className="fixed inset-0 z-50 bg-slate-50/90 dark:bg-[#070B12]/90 backdrop-blur-md flex flex-col items-center justify-center p-4 text-center select-none transition-colors duration-200">
+        <div className="w-14 h-14 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-500 dark:text-indigo-400 shadow-xl shadow-indigo-500/10 mb-4 animate-pulse">
           <Activity className="w-7 h-7" />
         </div>
-        <div className="flex items-center gap-2.5 text-indigo-400 mb-1.5">
+        <div className="flex items-center gap-2.5 text-indigo-600 dark:text-indigo-400 mb-1.5">
           <Loader2 className="w-5 h-5 animate-spin" />
-          <span className="text-sm font-semibold tracking-wide text-slate-200">Verifying Admin Session...</span>
+          <span className="text-sm font-semibold tracking-wide text-slate-800 dark:text-slate-200">Verifying Admin Session...</span>
         </div>
         <p className="text-xs text-slate-500">Connecting to MedAttend secure workspace</p>
       </div>
@@ -83,13 +83,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   if (!isAuthenticated) {
     return (
-      <div className="fixed inset-0 z-50 bg-[#070B12] flex flex-col items-center justify-center p-4 text-center select-none">
-        <div className="w-14 h-14 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 shadow-xl shadow-indigo-500/10 mb-4 animate-pulse">
+      <div className="fixed inset-0 z-50 bg-slate-50/90 dark:bg-[#070B12]/90 backdrop-blur-md flex flex-col items-center justify-center p-4 text-center select-none transition-colors duration-200">
+        <div className="w-14 h-14 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-500 dark:text-indigo-400 shadow-xl shadow-indigo-500/10 mb-4 animate-pulse">
           <Activity className="w-7 h-7" />
         </div>
-        <div className="flex items-center gap-2.5 text-indigo-400 mb-1.5">
+        <div className="flex items-center gap-2.5 text-indigo-600 dark:text-indigo-400 mb-1.5">
           <Loader2 className="w-5 h-5 animate-spin" />
-          <span className="text-sm font-semibold tracking-wide text-slate-200">Redirecting to Admin Login...</span>
+          <span className="text-sm font-semibold tracking-wide text-slate-800 dark:text-slate-200">Redirecting to Admin Login...</span>
         </div>
         <p className="text-xs text-slate-500">Please wait while authentication portal loads</p>
       </div>

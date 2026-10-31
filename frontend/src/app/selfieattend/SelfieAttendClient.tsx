@@ -1124,30 +1124,30 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
   };
 
   return (
-    <div className="min-h-screen bg-[#070B12] text-slate-100 flex flex-col items-center justify-start p-3 sm:p-6 select-none">
+    <div className="min-h-screen bg-slate-50 dark:bg-[#070B12] text-slate-900 dark:text-slate-100 flex flex-col items-center justify-start p-3 sm:p-6 select-none transition-colors duration-200">
       {/* Background Ambient Glow */}
       <div className="fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-lg h-64 bg-indigo-600/10 blur-[100px] rounded-full pointer-events-none" />
 
       {/* Header */}
-      <header className="w-full max-w-md flex items-center justify-between py-3 mb-3 border-b border-slate-800/80 shrink-0">
+      <header className="w-full max-w-md flex items-center justify-between py-3 mb-3 border-b border-slate-200 dark:border-slate-800/80 shrink-0">
         <div className="flex items-center gap-2.5">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center shadow-lg shadow-indigo-500/25">
             <GraduationCap className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h1 className="text-base font-bold text-white tracking-tight flex items-center gap-1.5">
-              MedAttend <span className="text-[10px] font-semibold uppercase bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-1.5 py-0.2 rounded">Selfie Portal</span>
+            <h1 className="text-base font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-1.5">
+              MedAttend <span className="text-[10px] font-semibold uppercase bg-indigo-500/15 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-300 border border-indigo-500/30 px-1.5 py-0.2 rounded">Selfie Portal</span>
             </h1>
-            <p className="text-[11px] text-slate-400">5-Min Live Face Verification</p>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">5-Min Live Face Verification</p>
           </div>
         </div>
 
         <Link
           href={isStaffUser ? "/" : "/portal"}
-          className="group inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-800/80 hover:bg-indigo-600/20 text-slate-300 hover:text-white text-xs font-semibold border border-slate-700/80 hover:border-indigo-500/40 transition-all duration-200 backdrop-blur-md shadow-sm hover:shadow-md hover:shadow-indigo-500/10 cursor-pointer active:scale-95"
+          className="group inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800/80 hover:bg-slate-200 dark:hover:bg-indigo-600/20 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white text-xs font-semibold border border-slate-200 dark:border-slate-700/80 hover:border-slate-300 dark:hover:border-indigo-500/40 transition-all duration-200 backdrop-blur-md shadow-sm hover:shadow-md cursor-pointer active:scale-95"
           title={isStaffUser ? "Return to Dashboard" : "Return to Student Portal"}
         >
-          <ArrowLeft className="w-3.5 h-3.5 text-indigo-400 group-hover:text-indigo-300 group-hover:-translate-x-0.5 transition-transform duration-200 shrink-0" />
+          <ArrowLeft className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 group-hover:text-indigo-700 dark:group-hover:text-indigo-300 group-hover:-translate-x-0.5 transition-transform duration-200 shrink-0" />
           <span className="tracking-tight">{isStaffUser ? "Back to Dashboard" : "Back to Portal"}</span>
         </Link>
       </header>
@@ -1160,37 +1160,37 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
         {/* ========================================================================= */}
         {step === "select_session" && (
           <div className="flex flex-col gap-3.5 animate-in fade-in slide-in-from-bottom-3 duration-200">
-            <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl">
+            <div className="bg-white dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 sm:p-5 shadow-lg dark:shadow-xl transition-colors">
               <div className="flex items-center justify-between mb-3">
                 <div>
-                  <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
-                    <BookOpen className="w-4 h-4 text-indigo-400" />
+                  <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <BookOpen className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
                     Select Your Live Class
                   </h2>
-                  <p className="text-xs text-slate-400 mt-0.5">
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                     Selfie check-in is valid for <strong>5 minutes</strong> from start time:
                   </p>
                 </div>
                 <button
                   onClick={() => fetchActiveSessions()}
                   disabled={isRefreshing || loadingSessions}
-                  className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all cursor-pointer disabled:opacity-60"
+                  className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-transparent transition-all cursor-pointer disabled:opacity-60"
                   title="Refresh Sessions"
                 >
-                  <RefreshCw className={`w-4 h-4 ${isRefreshing ? "animate-spin text-indigo-400" : ""}`} />
+                  <RefreshCw className={`w-4 h-4 ${isRefreshing ? "animate-spin text-indigo-500 dark:text-indigo-400" : ""}`} />
                 </button>
               </div>
 
               {loadingSessions ? (
-                <div className="py-12 flex flex-col items-center justify-center gap-3 text-slate-400">
+                <div className="py-12 flex flex-col items-center justify-center gap-3 text-slate-500 dark:text-slate-400">
                   <div className="w-8 h-8 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin" />
                   <span className="text-xs">Finding active lecture halls...</span>
                 </div>
               ) : sessions.length === 0 ? (
-                <div className="py-10 px-4 rounded-xl bg-slate-950/50 border border-slate-800/80 flex flex-col items-center text-center gap-3">
-                  <AlertCircle className="w-8 h-8 text-amber-400/80" />
+                <div className="py-10 px-4 rounded-xl bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800/80 flex flex-col items-center text-center gap-3">
+                  <AlertCircle className="w-8 h-8 text-amber-500 dark:text-amber-400/80" />
                   <div>
-                    <h3 className="text-sm font-semibold text-white">
+                    <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
                       {user?.role === "Faculty" ? "No Active Sessions" : "No Live Lectures Right Now"}
                     </h3>
                     <p className="text-xs text-slate-400 mt-1 max-w-xs">

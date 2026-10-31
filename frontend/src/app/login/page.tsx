@@ -5,9 +5,10 @@ import { useRouter } from "next/navigation";
 import {
   Activity, Lock, User, ShieldCheck,
   AlertCircle, Eye, EyeOff, Loader2, CheckCircle2,
-  GraduationCap, KeyRound
+  GraduationCap, KeyRound, Sun, Moon
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
+import { useTheme } from "next-themes";
 
 const LOGIN_MODE_STORAGE_KEY = "medattend_login_mode";
 
@@ -20,9 +21,16 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
 
+  const [mounted, setMounted] = useState(false);
+  const { theme, setTheme, resolvedTheme } = useTheme();
+
   const inputRef = useRef<HTMLInputElement>(null);
   const { login, logout, isAuthenticated, isLoading, user } = useAuth();
   const router = useRouter();
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Restore persisted login tab selection from URL parameter or localStorage
   useEffect(() => {
@@ -115,16 +123,33 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-[100dvh] bg-[#070B12] text-slate-100 flex flex-col items-center justify-center p-4 py-8 relative overflow-y-auto">
+    <div className="min-h-[100dvh] bg-slate-50 dark:bg-[#070B12] text-slate-900 dark:text-slate-100 flex flex-col items-center justify-center p-4 py-8 relative overflow-y-auto transition-colors duration-200">
+      {/* Floating Theme Switcher Button */}
+      <div className="absolute top-4 right-4 sm:top-6 sm:right-6 z-20">
+        <button
+          type="button"
+          onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
+          className="p-2.5 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/90 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 backdrop-blur-md shadow-sm dark:shadow-md transition-all cursor-pointer"
+          title={mounted && resolvedTheme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}
+          aria-label="Toggle theme"
+        >
+          {mounted && resolvedTheme === "dark" ? (
+            <Sun className="w-4 h-4 text-amber-400" />
+          ) : (
+            <Moon className="w-4 h-4 text-indigo-500" />
+          )}
+        </button>
+      </div>
+
       {/* Background Ambient Glow */}
-      <div className="fixed top-1/4 left-1/2 -translate-x-1/2 w-96 h-96 bg-indigo-600/15 blur-[120px] rounded-full pointer-events-none" />
+      <div className="fixed top-1/4 left-1/2 -translate-x-1/2 w-96 h-96 bg-indigo-600/10 dark:bg-indigo-600/15 blur-[120px] rounded-full pointer-events-none" />
       <div className="fixed bottom-10 right-10 w-72 h-72 bg-violet-600/10 blur-[100px] rounded-full pointer-events-none" />
 
       {/* Main Login Card */}
-      <div className="w-full max-w-md bg-slate-900/90 border border-slate-800/90 rounded-3xl p-6 sm:p-8 shadow-2xl backdrop-blur-xl relative z-10 transition-all duration-300 ease-out overflow-hidden">
+      <div className="w-full max-w-md bg-white dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800/90 rounded-3xl p-6 sm:p-8 shadow-xl dark:shadow-2xl backdrop-blur-xl relative z-10 transition-all duration-300 ease-out overflow-hidden">
         {/* Animated Top Progress Line during loading */}
         {loading && (
-          <div className="absolute top-0 left-0 right-0 h-1 bg-slate-800 overflow-hidden">
+          <div className="absolute top-0 left-0 right-0 h-1 bg-slate-200 dark:bg-slate-800 overflow-hidden">
             <div className="h-full bg-gradient-to-r from-indigo-500 via-violet-400 to-emerald-400 animate-pulse w-full" />
           </div>
         )}
@@ -134,17 +159,17 @@ export default function LoginPage() {
           <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center text-white mb-3 shadow-xl shadow-indigo-600/30 transition-transform duration-300 hover:scale-105">
             {loginMode === "student" ? <GraduationCap className="w-7 h-7" /> : <Activity className="w-7 h-7" />}
           </div>
-          <h1 className="text-2xl font-black text-white tracking-tight flex items-center gap-2">
+          <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
             MedAttend{" "}
             <span className={`text-xs uppercase font-bold px-2 py-0.5 rounded-full border ${
               loginMode === "student"
-                ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
-                : "bg-indigo-500/20 text-indigo-300 border border-indigo-500/30"
+                ? "bg-emerald-500/15 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 border-emerald-500/30"
+                : "bg-indigo-500/15 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-300 border-indigo-500/30"
             }`}>
               {loginMode === "student" ? "Student" : "Staff / Admin"}
             </span>
           </h1>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
             {loginMode === "student"
               ? "Access Your Medical Curriculum & Attendance Portal"
               : "Faculty & Administrator Control Hub"}
@@ -152,7 +177,7 @@ export default function LoginPage() {
         </div>
 
         {/* Tab Switcher: Admin / Faculty vs Student Portal */}
-        <div className="relative grid grid-cols-2 p-1 bg-slate-950/80 border border-slate-800 rounded-2xl mb-5 select-none">
+        <div className="relative grid grid-cols-2 p-1 bg-slate-100 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800 rounded-2xl mb-5 select-none">
           {/* Animated Sliding Pill Indicator */}
           <div
             className={`absolute top-1 bottom-1 left-1 w-[calc(50%-4px)] rounded-xl bg-indigo-600 shadow-md shadow-indigo-600/30 transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] pointer-events-none ${
@@ -166,7 +191,7 @@ export default function LoginPage() {
             className={`relative z-10 py-2.5 px-3 rounded-xl text-xs font-bold transition-colors duration-200 flex items-center justify-center gap-1.5 cursor-pointer ${
               loginMode === "admin"
                 ? "text-white"
-                : "text-slate-400 hover:text-white"
+                : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
             }`}
           >
             <ShieldCheck className={`w-3.5 h-3.5 transition-transform duration-200 ${loginMode === "admin" ? "scale-105" : ""}`} />
@@ -179,7 +204,7 @@ export default function LoginPage() {
             className={`relative z-10 py-2.5 px-3 rounded-xl text-xs font-bold transition-colors duration-200 flex items-center justify-center gap-1.5 cursor-pointer ${
               loginMode === "student"
                 ? "text-white"
-                : "text-slate-400 hover:text-white"
+                : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
             }`}
           >
             <GraduationCap className={`w-3.5 h-3.5 transition-transform duration-200 ${loginMode === "student" ? "scale-105" : ""}`} />
@@ -190,19 +215,19 @@ export default function LoginPage() {
         {/* Login Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
           {error && (
-            <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs flex items-center gap-2 transition-all animate-in fade-in duration-200">
-              <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+            <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-300 text-xs flex items-center gap-2 transition-all animate-in fade-in duration-200">
+              <AlertCircle className="w-4 h-4 shrink-0 text-rose-500 dark:text-rose-400" />
               <span>{error}</span>
             </div>
           )}
 
           {/* User ID / Student Roll Field */}
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1.5">
               {loginMode === "student" ? "Student Roll Number" : "Username"}
             </label>
             <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
+              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400 dark:text-slate-500">
                 {loginMode === "student" ? <GraduationCap className="w-4 h-4" /> : <User className="w-4 h-4" />}
               </div>
               <input
@@ -218,7 +243,7 @@ export default function LoginPage() {
                   setError(null);
                 }}
                 placeholder={loginMode === "student" ? "e.g. 25003" : "e.g. admin or faculty"}
-                className="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-950/80 border border-slate-800 text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-base sm:text-sm font-medium transition-all duration-200 disabled:opacity-60"
+                className="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-950 text-base sm:text-sm font-medium transition-all duration-200 disabled:opacity-60"
               />
             </div>
           </div>
@@ -226,12 +251,12 @@ export default function LoginPage() {
           {/* Password / 6-Digit PIN Field */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400">
+              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">
                 {loginMode === "student" ? "6-Digit Security PIN" : "Password"}
               </label>
             </div>
             <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
+              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400 dark:text-slate-500">
                 {loginMode === "student" ? <KeyRound className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
               </div>
               <input
@@ -248,19 +273,19 @@ export default function LoginPage() {
                   setError(null);
                 }}
                 placeholder={loginMode === "student" ? "Enter 6-digit PIN" : "Enter password"}
-                className="w-full pl-10 pr-10 py-3 rounded-xl bg-slate-950/80 border border-slate-800 text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-base sm:text-sm font-medium transition-all duration-200 disabled:opacity-60"
+                className="w-full pl-10 pr-10 py-3 rounded-xl bg-slate-50 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-950 text-base sm:text-sm font-medium transition-all duration-200 disabled:opacity-60"
               />
               <button
                 type="button"
                 disabled={loading}
                 onClick={() => setShowPassword((prev) => !prev)}
-                className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-500 hover:text-slate-300 transition-colors cursor-pointer disabled:opacity-40"
+                className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-700 dark:text-slate-500 dark:hover:text-slate-300 transition-colors cursor-pointer disabled:opacity-40"
               >
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
             {loginMode === "student" && (
-              <p className="text-[11px] text-slate-500 mt-1.5">
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1.5">
                 Enter your registered 6-digit Security PIN.
               </p>
             )}
