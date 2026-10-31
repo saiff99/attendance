@@ -353,20 +353,23 @@ export default function StudentPortalPage() {
   return (
     <div className="min-h-screen bg-[#070B12] text-slate-100 pb-16 selection:bg-indigo-500 selection:text-white">
       {/* Top Header Navbar */}
-      <header className="sticky top-0 z-30 bg-slate-950/80 backdrop-blur-xl border-b border-slate-800/80 px-3.5 sm:px-8 py-3 sm:py-3.5 flex items-center justify-between gap-2.5 sm:gap-4">
+      <header className="sticky top-0 z-30 bg-slate-950/80 backdrop-blur-xl border-b border-slate-800/80 px-3.5 sm:px-8 py-2.5 sm:py-3.5 flex items-center justify-between gap-2 sm:gap-4">
         <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
           <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center text-white shadow-md shadow-indigo-600/30 shrink-0">
             <GraduationCap className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-1.5 sm:gap-2">
-              <span className="text-sm font-black text-white tracking-tight shrink-0">MedAttend</span>
-              <span className="inline-flex flex-col sm:flex-row items-center justify-center text-center text-[9px] sm:text-[10px] font-bold uppercase tracking-wider px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 leading-tight shrink-0">
-                <span>Student</span>
-                <span className="sm:ml-1">Portal</span>
+              <span className="text-sm sm:text-base font-black text-white tracking-tight shrink-0">MedAttend</span>
+              <span className="hidden sm:inline-flex items-center text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 leading-tight shrink-0">
+                Student Portal
               </span>
             </div>
-            <p className="text-[11px] text-slate-400 hidden sm:block">Academic Attendance &amp; Curriculum Performance</p>
+            {/* Mobile Subtitle: Stacked directly underneath MedAttend (Zero horizontal collision) */}
+            <p className="text-[10px] font-semibold text-indigo-400 tracking-wide uppercase sm:hidden leading-none mt-0.5">
+              Student Portal
+            </p>
+            <p className="text-[11px] text-slate-400 hidden sm:block mt-0.5">Academic Attendance &amp; Curriculum Performance</p>
           </div>
         </div>
 
