@@ -1131,57 +1131,57 @@ export default function LiveScan() {
         </div>
 
         {/* Main Dashboard Layout (Zero Horizontal Scroll) */}
-        <div className="flex-1 flex flex-col lg:flex-row gap-3 sm:gap-4 min-h-0 w-full">
+        <div className="flex-1 flex flex-col lg:flex-row gap-3 sm:gap-4 min-h-0 w-full min-w-0 max-w-full">
 
           {/* Left Column: Visualizer & Camera Matrix */}
-          <div className="flex-1 flex flex-col bg-white dark:bg-slate-900/80 backdrop-blur-xl rounded-2xl shadow-sm dark:shadow-xl border border-gray-200 dark:border-slate-800/90 overflow-hidden min-w-0 transition-colors duration-300">
+          <div className="flex-1 flex flex-col bg-white dark:bg-slate-900/80 backdrop-blur-xl rounded-2xl shadow-sm dark:shadow-xl border border-gray-200 dark:border-slate-800/90 overflow-hidden min-w-0 max-w-full w-full transition-colors duration-300">
 
             {/* Segmented Mode Selector (Touch-Scrollable on Mobile) */}
-            <div className="p-1.5 sm:p-2 border-b border-gray-200 dark:border-slate-800/80 bg-gray-50 dark:bg-slate-950/40 flex items-center gap-1.5 overflow-x-auto no-scrollbar scroll-smooth">
+            <div className="p-1 sm:p-2 border-b border-gray-200 dark:border-slate-800/80 bg-gray-50 dark:bg-slate-950/40 flex items-center gap-1 sm:gap-1.5 overflow-x-auto no-scrollbar scroll-smooth w-full min-w-0">
               <button
                 onClick={() => setActiveTab("grid")}
-                className={`flex-1 min-w-[85px] sm:min-w-[100px] py-2 px-2.5 sm:px-3 text-xs font-semibold rounded-xl flex items-center justify-center whitespace-nowrap transition-all ${activeTab === "grid"
+                className={`flex-1 min-w-[72px] sm:min-w-[95px] py-1.5 sm:py-2 px-1.5 sm:px-3 text-[11px] sm:text-xs font-semibold rounded-xl flex items-center justify-center whitespace-nowrap transition-all ${activeTab === "grid"
                     ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
                     : "text-gray-600 hover:text-gray-900 hover:bg-gray-200/70 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800/60"
                   }`}
               >
-                <Grid className="w-3.5 h-3.5 mr-1.5" />
-                Multi Cam
+                <Grid className="w-3.5 h-3.5 mr-1 shrink-0" />
+                <span>Multi<span className="hidden sm:inline"> Cam</span></span>
               </button>
               <button
                 onClick={() => setActiveTab("cctv")}
-                className={`flex-1 min-w-[75px] sm:min-w-[90px] py-2 px-2.5 sm:px-3 text-xs font-semibold rounded-xl flex items-center justify-center whitespace-nowrap transition-all ${activeTab === "cctv"
+                className={`flex-1 min-w-[62px] sm:min-w-[85px] py-1.5 sm:py-2 px-1.5 sm:px-3 text-[11px] sm:text-xs font-semibold rounded-xl flex items-center justify-center whitespace-nowrap transition-all ${activeTab === "cctv"
                     ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
                     : "text-gray-600 hover:text-gray-900 hover:bg-gray-200/70 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800/60"
                   }`}
               >
-                <Video className="w-3.5 h-3.5 mr-1.5" />
-                Single
+                <Video className="w-3.5 h-3.5 mr-1 shrink-0" />
+                <span>Single</span>
               </button>
               <button
                 onClick={() => setActiveTab("photo")}
-                className={`flex-1 min-w-[85px] sm:min-w-[95px] py-2 px-2.5 sm:px-3 text-xs font-semibold rounded-xl flex items-center justify-center whitespace-nowrap transition-all ${activeTab === "photo"
+                className={`flex-1 min-w-[80px] sm:min-w-[95px] py-1.5 sm:py-2 px-1.5 sm:px-3 text-[11px] sm:text-xs font-semibold rounded-xl flex items-center justify-center whitespace-nowrap transition-all ${activeTab === "photo"
                     ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
                     : "text-gray-600 hover:text-gray-900 hover:bg-gray-200/70 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800/60"
                   }`}
               >
-                <Camera className="w-3.5 h-3.5 mr-1.5" />
-                Take Photo
+                <Camera className="w-3.5 h-3.5 mr-1 shrink-0" />
+                <span>Take Photo</span>
               </button>
               <button
                 onClick={() => setActiveTab("manual")}
-                className={`flex-1 min-w-[80px] sm:min-w-[90px] py-2 px-2.5 sm:px-3 text-xs font-semibold rounded-xl flex items-center justify-center whitespace-nowrap transition-all ${activeTab === "manual"
+                className={`flex-1 min-w-[72px] sm:min-w-[95px] py-1.5 sm:py-2 px-1.5 sm:px-3 text-[11px] sm:text-xs font-semibold rounded-xl flex items-center justify-center whitespace-nowrap transition-all ${activeTab === "manual"
                     ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
                     : "text-gray-600 hover:text-gray-900 hover:bg-gray-200/70 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800/60"
                   }`}
               >
-                <Upload className="w-3.5 h-3.5 mr-1.5" />
-                Upload Photo
+                <Upload className="w-3.5 h-3.5 mr-1 shrink-0" />
+                <span>Upload<span className="hidden sm:inline"> Photo</span></span>
               </button>
             </div>
 
             {/* Video Viewport Area */}
-            <div className="flex-1 p-2.5 sm:p-4 flex flex-col min-h-0 overflow-y-auto">
+            <div className="flex-1 p-2 sm:p-3.5 md:p-4 flex flex-col min-h-0 min-w-0 max-w-full w-full overflow-y-auto box-border">
               {activeTab === "grid" ? (
                 /* 6-CAMERA SPLIT SCREEN MATRIX */
                 <div className="flex-1 flex flex-col gap-3 sm:gap-4">
@@ -1280,7 +1280,7 @@ export default function LiveScan() {
                 </div>
               ) : activeTab === "cctv" ? (
                 /* SINGLE CAMERA VIEW WITH AUTO-TOUR */
-                <div className="flex-1 flex flex-col items-center justify-center bg-slate-950 rounded-2xl relative overflow-hidden group aspect-video min-h-[240px] sm:min-h-[360px] lg:min-h-[440px] border border-slate-800">
+                <div className="w-full max-w-full min-w-0 flex-1 flex flex-col items-center justify-center bg-slate-950 rounded-2xl relative overflow-hidden group aspect-video min-h-[220px] sm:min-h-[360px] lg:min-h-[440px] border border-slate-800">
                   {/* Top Control Bar: Camera Dropdown + Quick Prev/Next + Auto-Tour Control */}
                   <div className="absolute top-3 left-3 sm:top-4 sm:left-4 z-20 flex flex-wrap items-center gap-1.5 sm:gap-2">
                     {/* Camera Selector Dropdown */}
@@ -1386,16 +1386,16 @@ export default function LiveScan() {
                 </div>
               ) : activeTab === "photo" ? (
                 /* TAKE PHOTO VIEWPORT */
-                <div className="flex-1 flex flex-col items-center justify-center bg-gradient-to-b from-slate-900/90 via-slate-950 to-slate-950 rounded-2xl relative overflow-hidden group aspect-video min-h-[260px] sm:min-h-[360px] lg:min-h-[440px] border border-slate-800 p-6 sm:p-8">
+                <div className="w-full max-w-full min-w-0 flex-1 flex flex-col items-center justify-center bg-gradient-to-b from-slate-900/90 via-slate-950 to-slate-950 rounded-2xl relative overflow-hidden group min-h-[260px] sm:min-h-[340px] lg:min-h-[420px] border border-slate-800 p-3.5 sm:p-6 lg:p-8 box-border">
                   {/* Ambient Glows */}
                   <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
                   <div className="absolute bottom-10 right-10 w-48 h-48 bg-teal-500/10 rounded-full blur-3xl pointer-events-none" />
 
                   {isProcessing ? (
-                    <div className="flex flex-col items-center justify-center text-center z-10 max-w-sm">
+                    <div className="flex flex-col items-center justify-center text-center z-10 max-w-sm px-2 box-border">
                       <div className="relative mb-4">
-                        <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-indigo-500/20 border border-indigo-500/40 text-indigo-400 flex items-center justify-center shadow-xl shadow-indigo-500/20">
-                          <Loader2 className="w-8 h-8 sm:w-10 sm:h-10 animate-spin" />
+                        <div className="w-14 h-14 sm:w-20 sm:h-20 rounded-2xl bg-indigo-500/20 border border-indigo-500/40 text-indigo-400 flex items-center justify-center shadow-xl shadow-indigo-500/20">
+                          <Loader2 className="w-7 h-7 sm:w-10 sm:h-10 animate-spin" />
                         </div>
                         <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-emerald-500 border-2 border-slate-900 flex items-center justify-center text-white">
                           <Sparkles className="w-3.5 h-3.5 animate-pulse" />
@@ -1407,31 +1407,31 @@ export default function LiveScan() {
                       </p>
                     </div>
                   ) : (
-                    <div className="flex flex-col items-center justify-center text-center z-10 max-w-md w-full">
-                      <div className="relative mb-3.5 group-hover:scale-105 transition-transform duration-300">
-                        <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-3xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-teal-400 text-white flex items-center justify-center shadow-2xl shadow-indigo-500/30">
-                          <Camera className="w-8 h-8 sm:w-10 sm:h-10" />
+                    <div className="flex flex-col items-center justify-center text-center z-10 max-w-md w-full min-w-0 px-1 box-border">
+                      <div className="relative mb-3 group-hover:scale-105 transition-transform duration-300">
+                        <div className="w-14 h-14 sm:w-20 sm:h-20 rounded-3xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-teal-400 text-white flex items-center justify-center shadow-2xl shadow-indigo-500/30">
+                          <Camera className="w-7 h-7 sm:w-10 sm:h-10" />
                         </div>
-                        <div className="absolute -bottom-1 -right-1 px-2 py-0.5 rounded-full bg-emerald-500 text-white text-[9px] font-bold shadow-md uppercase tracking-wider">
+                        <div className="absolute -bottom-1 -right-1 px-1.5 sm:px-2 py-0.5 rounded-full bg-emerald-500 text-white text-[9px] font-bold shadow-md uppercase tracking-wider">
                           HD AI
                         </div>
                       </div>
 
-                      <h3 className="text-base sm:text-xl font-bold text-white mb-1">
+                      <h3 className="text-base sm:text-xl font-bold text-white mb-1 px-1">
                         Take Classroom Group Photo
                       </h3>
-                      <p className="text-xs sm:text-sm text-slate-300 mb-3.5 max-w-sm leading-relaxed">
+                      <p className="text-xs sm:text-sm text-slate-300 mb-3 max-w-sm leading-relaxed px-1">
                         Line up students without mobile devices and snap their photo. AI will recognize everyone in the frame at once.
                       </p>
 
-                      <div className="flex flex-wrap items-center justify-center gap-1.5 sm:gap-2 mb-5">
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 text-[10px] sm:text-[11px] font-medium">
+                      <div className="flex flex-wrap items-center justify-center gap-1.5 sm:gap-2 mb-4 sm:mb-5 max-w-full">
+                        <span className="inline-flex items-center gap-1 px-2 sm:px-2.5 py-0.5 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 text-[10px] sm:text-[11px] font-medium shrink-0">
                           <Sparkles className="w-3 h-3 text-indigo-400" /> Smart Compression
                         </span>
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-[10px] sm:text-[11px] font-medium">
+                        <span className="inline-flex items-center gap-1 px-2 sm:px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-[10px] sm:text-[11px] font-medium shrink-0">
                           <Users className="w-3 h-3 text-emerald-400" /> Multi-Face Detection
                         </span>
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-slate-800/80 border border-slate-700 text-slate-300 text-[10px] sm:text-[11px] font-medium">
+                        <span className="inline-flex items-center gap-1 px-2 sm:px-2.5 py-0.5 rounded-full bg-slate-800/80 border border-slate-700 text-slate-300 text-[10px] sm:text-[11px] font-medium shrink-0">
                           <ShieldCheck className="w-3 h-3 text-teal-400" /> 512D ArcFace
                         </span>
                       </div>
@@ -1440,14 +1440,14 @@ export default function LiveScan() {
                         type="button"
                         disabled={!activeSession || isProcessing}
                         onClick={() => cameraInputRef.current?.click()}
-                        className="w-full sm:w-auto px-6 sm:px-8 py-3 rounded-2xl bg-gradient-to-r from-indigo-600 via-indigo-500 to-teal-500 hover:from-indigo-500 hover:to-teal-400 text-white font-bold text-xs sm:text-sm shadow-xl shadow-indigo-600/30 hover:shadow-indigo-600/50 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transform active:scale-98"
+                        className="w-full sm:w-auto px-5 sm:px-8 py-2.5 sm:py-3 rounded-2xl bg-gradient-to-r from-indigo-600 via-indigo-500 to-teal-500 hover:from-indigo-500 hover:to-teal-400 text-white font-bold text-xs sm:text-sm shadow-xl shadow-indigo-600/30 hover:shadow-indigo-600/50 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transform active:scale-98"
                       >
                         <Camera className="w-4 h-4 sm:w-5 sm:h-5" />
                         Open Camera &amp; Take Photo
                       </button>
 
                       {!activeSession && (
-                        <p className="text-[11px] text-amber-400 mt-2 font-medium">
+                        <p className="text-[11px] text-amber-400 mt-2 font-medium px-1">
                           Please start a lecture session first before taking attendance photo.
                         </p>
                       )}
@@ -1458,21 +1458,21 @@ export default function LiveScan() {
                 /* PHOTO UPLOAD */
                 <div
                   onClick={() => !isProcessing && fileInputRef.current?.click()}
-                  className={`flex-1 flex flex-col items-center justify-center border-2 border-dashed border-slate-800 rounded-2xl bg-slate-950/60 hover:bg-slate-950 hover:border-indigo-500/50 transition-all aspect-video min-h-[240px] sm:min-h-[360px] lg:min-h-[440px] p-4 ${!isProcessing ? 'cursor-pointer' : 'opacity-70 cursor-not-allowed'}`}
+                  className={`w-full max-w-full min-w-0 flex-1 flex flex-col items-center justify-center border-2 border-dashed border-slate-800 rounded-2xl bg-slate-950/60 hover:bg-slate-950 hover:border-indigo-500/50 transition-all min-h-[220px] sm:min-h-[340px] lg:min-h-[420px] p-3.5 sm:p-6 box-border text-center ${!isProcessing ? 'cursor-pointer' : 'opacity-70 cursor-not-allowed'}`}
                 >
                   {isProcessing ? (
-                    <Loader2 className="w-10 h-10 sm:w-12 sm:h-12 text-indigo-400 mb-3 animate-spin" />
+                    <Loader2 className="w-8 h-8 sm:w-12 sm:h-12 text-indigo-400 mb-3 animate-spin" />
                   ) : (
-                    <Upload className="w-10 h-10 sm:w-12 sm:h-12 text-slate-600 mb-3" />
+                    <Upload className="w-8 h-8 sm:w-12 sm:h-12 text-slate-600 mb-3" />
                   )}
-                  <p className="text-slate-300 font-medium text-xs sm:text-sm text-center">{isProcessing ? processingStatusText : "Click or drag classroom photo to upload"}</p>
-                  <p className="text-slate-500 text-[10px] sm:text-xs mt-1 text-center">Supports JPG, PNG (Auto-compressed client-side for smooth processing)</p>
+                  <p className="text-slate-300 font-medium text-xs sm:text-sm text-center px-2">{isProcessing ? processingStatusText : "Click or drag classroom photo to upload"}</p>
+                  <p className="text-slate-500 text-[10px] sm:text-xs mt-1 text-center px-2">Supports JPG, PNG (Auto-compressed client-side for smooth processing)</p>
                 </div>
               )}
 
               {/* Action Bar */}
-              <div className="mt-2.5 sm:mt-3 pt-2 sm:pt-2.5 border-t border-slate-800/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-                <div className="text-[10px] sm:text-[11px] text-slate-400 flex items-center gap-1.5 sm:gap-2">
+              <div className="w-full max-w-full min-w-0 mt-2.5 sm:mt-3 pt-2 sm:pt-2.5 border-t border-slate-800/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 box-border">
+                <div className="w-full sm:w-auto text-[10px] sm:text-[11px] text-slate-400 flex items-center gap-1.5 sm:gap-2 min-w-0">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
                   <span className="truncate">AI Engine: InsightFace 512D ArcFace Active</span>
                 </div>
@@ -1481,7 +1481,7 @@ export default function LiveScan() {
                   <button
                     disabled={isProcessing || !activeSession}
                     onClick={() => cameraInputRef.current?.click()}
-                    className="w-full sm:w-auto flex items-center justify-center px-4 py-1.5 rounded-xl font-semibold text-xs text-white bg-indigo-600 hover:bg-indigo-500 shadow-md transition-all disabled:opacity-50 cursor-pointer"
+                    className="w-full sm:w-auto flex items-center justify-center px-4 py-2 sm:py-1.5 rounded-xl font-semibold text-xs text-white bg-indigo-600 hover:bg-indigo-500 shadow-md transition-all disabled:opacity-50 cursor-pointer"
                   >
                     {isProcessing ? (
                       <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Processing...</>
@@ -1493,7 +1493,7 @@ export default function LiveScan() {
                   <button
                     disabled={isProcessing || !activeSession}
                     onClick={() => fileInputRef.current?.click()}
-                    className="w-full sm:w-auto flex items-center justify-center px-4 py-1.5 rounded-xl font-semibold text-xs text-white bg-indigo-600 hover:bg-indigo-500 shadow-md transition-all disabled:opacity-50 cursor-pointer"
+                    className="w-full sm:w-auto flex items-center justify-center px-4 py-2 sm:py-1.5 rounded-xl font-semibold text-xs text-white bg-indigo-600 hover:bg-indigo-500 shadow-md transition-all disabled:opacity-50 cursor-pointer"
                   >
                     {isProcessing ? (
                       <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Scanning...</>
