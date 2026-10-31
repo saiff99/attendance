@@ -114,3 +114,18 @@
   - *Positive:* Enables instant multi-student batch attendance: teachers snap a single photo of standing students and mark all present simultaneously in ~1.5 seconds.
   - *Negative:* Highly blurred or out-of-focus group photos may require retaking via the built-in "Take Another Photo" modal action.
 
+---
+
+### ADR-010: Automated Database Migration Runner & Audit Ledger
+- **Context:** With over 19 distinct PostgreSQL migration scripts managing zero-trust RLS policies, DPDP Act 2023 biometric consent, and forensic immutability triggers, manual SQL execution in web dashboards (e.g., Supabase SQL Editor) introduces severe human error risks, out-of-order execution, and deployment bottlenecks across developer workstations and CI/CD pipelines.
+- **Decision:**
+  1. Author a dedicated dual-runtime CLI migration runner ([scripts/migrate.mjs](file:///Users/saif/Desktop/Attendance/Attendance-app/scripts/migrate.mjs) for Node.js/Next.js and [scripts/migrate.py](file:///Users/saif/Desktop/Attendance/Attendance-app/scripts/migrate.py) for Python/FastAPI) and a 1-click macOS launcher ([Migrate_Database.command](file:///Users/saif/Desktop/Attendance/Attendance-app/Migrate_Database.command)).
+  2. Implement an authoritative database ledger table (`public._migrations`) tracking version numbers, migration names, SHA-256 content checksums, and execution latencies.
+  3. Support non-destructive dry-run syntax verification, static quote/parenthesis checking, idempotent bundle compilation ([database/combined_migrations_bundle.sql](file:///Users/saif/Desktop/Attendance/Attendance-app/database/combined_migrations_bundle.sql)), and transactional rollback on failures.
+- **Consequences:**
+  - *Positive:* Eliminates manual multi-file copy-pasting; enables 1-click schema synchronization (`npm run db:migrate`).
+  - *Positive:* SHA-256 checksum tracking guarantees immutability and alerts developers if past migration scripts are retroactively altered.
+  - *Positive:* Works seamlessly in both live PostgreSQL network connections and zero-network offline sandbox environments via `--bundle` and `--dry-run`.
+  - *Negative:* Developers must adhere to the strict `NN_descriptive_name.sql` numbering standard for all future schema changes.
+
+

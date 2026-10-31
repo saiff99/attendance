@@ -81,6 +81,26 @@ Append-only immutable record of all administrative, biometric, and security acti
 
 ---
 
+### 1.5. Table: `_migrations` (Authoritative Migration Ledger & Schema History)
+Tracks all executed schema migrations, SHA-256 integrity checksums, and execution latency.
+
+| Column Name | Data Type | Constraints | Description |
+| :--- | :--- | :--- | :--- |
+| `id` | `SERIAL` | `PRIMARY KEY` | Auto-incrementing internal migration counter |
+| `version` | `INTEGER` | `NOT NULL, UNIQUE` | Sequential migration number (e.g., `1`, `2`, ..., `19`) |
+| `name` | `VARCHAR(255)` | `NOT NULL, UNIQUE` | Filename sans extension (e.g., `19_backfill_and_align_archive_flags`) |
+| `checksum` | `VARCHAR(64)` | `NOT NULL` | Normalized SHA-256 hash of migration SQL content |
+| `applied_at` | `TIMESTAMPTZ` | `NOT NULL, DEFAULT NOW()` | Exact timestamp when migration was committed |
+| `execution_time_ms` | `INTEGER` | `NOT NULL, DEFAULT 0` | Execution latency in milliseconds |
+
+#### 🛠️ Automated Migration CLI Utilities
+- **Node.js Runner:** [scripts/migrate.mjs](file:///Users/saif/Desktop/Attendance/Attendance-app/scripts/migrate.mjs) (Callable via `npm run db:status`, `npm run db:migrate`, `npm run db:dry-run`, `npm run db:bundle`).
+- **Python Runner:** [scripts/migrate.py](file:///Users/saif/Desktop/Attendance/Attendance-app/scripts/migrate.py) (Callable via `python3 scripts/migrate.py --status|--apply|--dry-run|--bundle|--create`).
+- **1-Click macOS Launcher:** [Migrate_Database.command](file:///Users/saif/Desktop/Attendance/Attendance-app/Migrate_Database.command) (Interactive terminal runner for developers/administrators).
+- **Consolidated SQL Bundle:** [database/combined_migrations_bundle.sql](file:///Users/saif/Desktop/Attendance/Attendance-app/database/combined_migrations_bundle.sql) (1-click copy-paste execution bundle for Supabase SQL Editor).
+
+---
+
 ## 2. API Contract Specifications
 
 ### 2.1. `GET /api/active-sessions`
