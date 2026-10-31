@@ -10,7 +10,11 @@
     "lint": "eslint",
     "test": "node scripts/test-offline.mjs",
     "test:offline": "node scripts/test-offline.mjs",
-    "test:security": "node scripts/test-auth-security.mjs"
+    "test:security": "node scripts/test-auth-security.mjs",
+    "db:status": "node ../scripts/migrate.mjs --status",
+    "db:migrate": "node ../scripts/migrate.mjs --apply",
+    "db:dry-run": "node ../scripts/migrate.mjs --dry-run",
+    "db:bundle": "node ../scripts/migrate.mjs --bundle"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.105.3",
@@ -32,10 +36,12 @@
     "@tailwindcss/postcss": "^4",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20",
+    "@types/pg": "^8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
+    "pg": "^8.23.1",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
