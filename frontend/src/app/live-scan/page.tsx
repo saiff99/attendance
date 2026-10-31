@@ -14,7 +14,7 @@ import {
 import { QRCodeSVG } from "qrcode.react";
 // Live Scan Faculty Portal
 import { getBackendUrl, getVideoBackendUrl } from "@/lib/api";
-import Webcam from "react-webcam";
+import { optimizeClassroomPhoto } from "@/lib/imageOptimizer";
 import { MjpegPlayer } from "@/components/MjpegPlayer";
 import { GeofenceModal } from "@/components/GeofenceModal";
 import { ClassroomGpsModal } from "@/components/ClassroomGpsModal";
@@ -54,8 +54,7 @@ const DEFAULT_CAMERAS: CameraMeta[] = [
 
 export default function LiveScan() {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<"grid" | "cctv" | "live" | "manual">("grid");
-  const [isScanning, setIsScanning] = useState(false);
+  const [activeTab, setActiveTab] = useState<"grid" | "cctv" | "photo" | "manual">("grid");
 
   // Attendance & Manual Override State
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -67,6 +66,7 @@ export default function LiveScan() {
   const [undoingLogId, setUndoingLogId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
+  const [processingStatusText, setProcessingStatusText] = useState("Analyzing image...");
   const [uploadResultModal, setUploadResultModal] = useState<{
     isOpen: boolean;
     count: number;
@@ -76,6 +76,7 @@ export default function LiveScan() {
   } | null>(null);
   const [sessionTime, setSessionTime] = useState("00:00:00");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   // Session State
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -338,41 +339,6 @@ export default function LiveScan() {
   };
 
 
-  // Webcam State
-  const webcamRef = useRef<Webcam>(null);
-  const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
-  const [selectedDeviceId, setSelectedDeviceId] = useState<string | undefined>(undefined);
-  const [hasMediaDevicesSupport, setHasMediaDevicesSupport] = useState<boolean>(true);
-
-  const handleDevices = useCallback(
-    (mediaDevices: MediaDeviceInfo[]) => {
-      setDevices(mediaDevices.filter(({ kind }) => kind === "videoinput"));
-    },
-    [setDevices]
-  );
-
-  useEffect(() => {
-    // In insecure contexts (e.g. unencrypted HTTP over local LAN IP http://172.16.x.x:3000),
-    // modern browsers disable WebRTC & MediaDevices (navigator.mediaDevices is undefined).
-    // Guard strictly to prevent TypeError: Cannot read properties of undefined (reading 'enumerateDevices')
-    if (
-      typeof window !== "undefined" &&
-      typeof navigator !== "undefined" &&
-      navigator.mediaDevices &&
-      typeof navigator.mediaDevices.enumerateDevices === "function"
-    ) {
-      setHasMediaDevicesSupport(true);
-      navigator.mediaDevices
-        .enumerateDevices()
-        .then(handleDevices)
-        .catch((err) => {
-          console.warn("Could not enumerate media devices:", err);
-        });
-    } else {
-      setHasMediaDevicesSupport(false);
-    }
-  }, [handleDevices]);
-
   // Session Duration Timer
   useEffect(() => {
     if (!activeSession) return;
@@ -386,17 +352,6 @@ export default function LiveScan() {
     }, 1000);
     return () => clearInterval(timer);
   }, [activeSession]);
-
-  // Automated scanning effect (for live camera only)
-  useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (isScanning && activeTab === "live" && activeSession) {
-      interval = setInterval(() => {
-        captureAndProcess();
-      }, 5000);
-    }
-    return () => clearInterval(interval);
-  }, [isScanning, activeTab, activeSession]);
 
   // Log polling for CCTV / Grid mode
   useEffect(() => {
@@ -467,41 +422,6 @@ export default function LiveScan() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-  };
-
-  const captureAndProcess = async () => {
-    if (!webcamRef.current || !activeSession) return;
-
-    const imageSrc = webcamRef.current.getScreenshot();
-    if (!imageSrc) return;
-
-    try {
-      const res = await fetch(imageSrc);
-      const blob = await res.blob();
-      const file = new File([blob], "capture.jpg", { type: "image/jpeg" });
-
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('session_id', activeSession.id);
-
-      const backendUrl = getBackendUrl();
-      const response = await fetch(`${backendUrl}/api/process-attendance`, {
-        method: 'POST',
-        headers: {
-          'ngrok-skip-browser-warning': '69420'
-        },
-        body: formData,
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        if (result.recognized && result.recognized.length > 0) {
-          await fetchLogs();
-        }
-      }
-    } catch (err) {
-      console.error("Failed background scan process", err);
-    }
   };
 
   const fetchEnrolledStudents = useCallback(async () => {
@@ -640,13 +560,27 @@ export default function LiveScan() {
   };
 
   const handleProcessAttendance = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !activeSession) return;
+    const rawFile = e.target.files?.[0];
+    if (!rawFile || !activeSession) return;
 
     setIsProcessing(true);
+    setProcessingStatusText("Optimizing high-resolution photo...");
     try {
+      // 1. Client-side Smart Canvas Downscale & Compression
+      // Scales 12MP/48MP raw photos down to ~2560px & ~500-800KB without quality loss
+      const { file: optimizedFile, originalSize, compressedSize, width, height, wasCompressed } =
+        await optimizeClassroomPhoto(rawFile, 2560, 0.88);
+
+      if (wasCompressed) {
+        console.log(
+          `[Smart Photo Optimizer] Downscaled ${(originalSize / (1024 * 1024)).toFixed(1)}MB -> ${(compressedSize / 1024).toFixed(0)}KB (${width}x${height})`
+        );
+      }
+
+      setProcessingStatusText("Scanning faces with InsightFace AI...");
+
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append('file', optimizedFile);
       formData.append('session_id', activeSession.id);
 
       const backendUrl = getBackendUrl();
@@ -683,7 +617,18 @@ export default function LiveScan() {
       });
     } finally {
       setIsProcessing(false);
+      setProcessingStatusText("Analyzing image...");
       if (fileInputRef.current) fileInputRef.current.value = "";
+      if (cameraInputRef.current) cameraInputRef.current.value = "";
+    }
+  };
+
+  const handleTriggerPhotoAction = () => {
+    setUploadResultModal(null);
+    if (activeTab === "photo") {
+      cameraInputRef.current?.click();
+    } else {
+      fileInputRef.current?.click();
     }
   };
 
@@ -1082,6 +1027,14 @@ export default function LiveScan() {
           ref={fileInputRef}
           onChange={handleProcessAttendance}
         />
+        <input
+          type="file"
+          accept="image/*"
+          capture="environment"
+          className="hidden"
+          ref={cameraInputRef}
+          onChange={handleProcessAttendance}
+        />
 
         {/* Top Header Command Bar */}
         <div className="mb-3 sm:mb-4 bg-white dark:bg-slate-900/80 backdrop-blur-xl border border-gray-200 dark:border-slate-800/90 rounded-2xl p-3 sm:p-4 shadow-sm dark:shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-3 transition-colors duration-300">
@@ -1206,24 +1159,24 @@ export default function LiveScan() {
                 Single
               </button>
               <button
-                onClick={() => setActiveTab("live")}
-                className={`flex-1 min-w-[80px] sm:min-w-[90px] py-2 px-2.5 sm:px-3 text-xs font-semibold rounded-xl flex items-center justify-center whitespace-nowrap transition-all ${activeTab === "live"
+                onClick={() => setActiveTab("photo")}
+                className={`flex-1 min-w-[85px] sm:min-w-[95px] py-2 px-2.5 sm:px-3 text-xs font-semibold rounded-xl flex items-center justify-center whitespace-nowrap transition-all ${activeTab === "photo"
                     ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
                     : "text-gray-600 hover:text-gray-900 hover:bg-gray-200/70 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800/60"
                   }`}
               >
                 <Camera className="w-3.5 h-3.5 mr-1.5" />
-                Webcam
+                Take Photo
               </button>
               <button
                 onClick={() => setActiveTab("manual")}
-                className={`flex-1 min-w-[75px] sm:min-w-[85px] py-2 px-2.5 sm:px-3 text-xs font-semibold rounded-xl flex items-center justify-center whitespace-nowrap transition-all ${activeTab === "manual"
+                className={`flex-1 min-w-[80px] sm:min-w-[90px] py-2 px-2.5 sm:px-3 text-xs font-semibold rounded-xl flex items-center justify-center whitespace-nowrap transition-all ${activeTab === "manual"
                     ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
                     : "text-gray-600 hover:text-gray-900 hover:bg-gray-200/70 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800/60"
                   }`}
               >
                 <Upload className="w-3.5 h-3.5 mr-1.5" />
-                Upload
+                Upload Photo
               </button>
             </div>
 
@@ -1431,80 +1384,75 @@ export default function LiveScan() {
                     </div>
                   </div>
                 </div>
-              ) : activeTab === "live" ? (
-                /* WEBCAM SCAN VIEW */
-                <div className="flex-1 flex flex-col items-center justify-center bg-slate-950 rounded-2xl relative overflow-hidden group aspect-video min-h-[240px] sm:min-h-[360px] lg:min-h-[440px] border border-slate-800">
-                  {devices.length > 0 && (
-                    <div className="absolute top-3 left-3 sm:top-4 sm:left-4 z-20 bg-slate-900/90 backdrop-blur-md rounded-xl shadow-xl border border-slate-700/70 text-xs flex items-center pr-2">
-                      <div className="pl-2.5 sm:pl-3 py-1.5 sm:py-2 border-r border-slate-700/70">
-                        <Video className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-400" />
-                      </div>
-                      <select
-                        className="py-1.5 sm:py-2 pl-2 pr-5 sm:pr-6 border-0 bg-transparent text-white font-medium focus:ring-0 cursor-pointer outline-none w-full max-w-[160px] sm:max-w-[200px] text-xs sm:text-sm truncate"
-                        value={selectedDeviceId}
-                        onChange={(e) => setSelectedDeviceId(e.target.value)}
-                      >
-                        {devices.map((device, key) => (
-                          <option key={device.deviceId} value={device.deviceId} className="bg-slate-900 text-white">
-                            {device.label || `Camera ${key + 1}`}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
+              ) : activeTab === "photo" ? (
+                /* TAKE PHOTO VIEWPORT */
+                <div className="flex-1 flex flex-col items-center justify-center bg-gradient-to-b from-slate-900/90 via-slate-950 to-slate-950 rounded-2xl relative overflow-hidden group aspect-video min-h-[260px] sm:min-h-[360px] lg:min-h-[440px] border border-slate-800 p-6 sm:p-8">
+                  {/* Ambient Glows */}
+                  <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+                  <div className="absolute bottom-10 right-10 w-48 h-48 bg-teal-500/10 rounded-full blur-3xl pointer-events-none" />
 
-                  <div className="absolute inset-0 w-full h-full">
-                    <div className="w-full h-full bg-black flex items-center justify-center relative overflow-hidden">
-                      {!hasMediaDevicesSupport ? (
-                        <div className="p-6 text-center flex flex-col items-center justify-center gap-3 bg-slate-950 text-slate-200 z-10 w-full h-full">
-                          <AlertCircle className="w-10 h-10 sm:w-12 sm:h-12 text-amber-400" />
-                          <div className="max-w-md">
-                            <h4 className="text-sm sm:text-base font-bold text-white">Webcam Inactive (Insecure HTTP Origin)</h4>
-                            <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                              Modern browsers (Chrome, Edge, Safari) strictly block hardware camera access on unencrypted IP addresses (<code>{typeof window !== "undefined" ? window.location.host : "172.16.x.x"}</code>).
-                            </p>
-                          </div>
-                          <div className="p-3 bg-slate-900/80 border border-slate-800 rounded-xl text-left text-[11px] sm:text-xs text-slate-300 max-w-md space-y-1">
-                            <p className="font-semibold text-indigo-400">💡 Recommended Options:</p>
-                            <p>• Use the <strong>Multi-CCTV Grid</strong> or <strong>Single CCTV</strong> tabs (they stream via RTSP/MJPEG over LAN without needing a webcam).</p>
-                            <p>• To use this laptop&apos;s physical webcam, open MedAttend directly from the host machine via <code>http://localhost:3000</code>.</p>
-                            <p>• Or access via the secure <strong>HTTPS portal</strong>.</p>
-                          </div>
+                  {isProcessing ? (
+                    <div className="flex flex-col items-center justify-center text-center z-10 max-w-sm">
+                      <div className="relative mb-4">
+                        <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-indigo-500/20 border border-indigo-500/40 text-indigo-400 flex items-center justify-center shadow-xl shadow-indigo-500/20">
+                          <Loader2 className="w-8 h-8 sm:w-10 sm:h-10 animate-spin" />
                         </div>
-                      ) : (
-                        <>
-                          <Webcam
-                            audio={false}
-                            ref={webcamRef}
-                            screenshotFormat="image/jpeg"
-                            videoConstraints={{ deviceId: selectedDeviceId }}
-                            onUserMediaError={(err) => {
-                              console.warn("Webcam error:", err);
-                              setHasMediaDevicesSupport(false);
-                            }}
-                            className="w-full h-full object-cover"
-                          />
+                        <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-emerald-500 border-2 border-slate-900 flex items-center justify-center text-white">
+                          <Sparkles className="w-3.5 h-3.5 animate-pulse" />
+                        </div>
+                      </div>
+                      <h4 className="text-sm sm:text-base font-bold text-white mb-1">{processingStatusText}</h4>
+                      <p className="text-xs text-slate-400 leading-relaxed">
+                        Detecting all student faces &amp; matching against cohort roster...
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center text-center z-10 max-w-md w-full">
+                      <div className="relative mb-3.5 group-hover:scale-105 transition-transform duration-300">
+                        <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-3xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-teal-400 text-white flex items-center justify-center shadow-2xl shadow-indigo-500/30">
+                          <Camera className="w-8 h-8 sm:w-10 sm:h-10" />
+                        </div>
+                        <div className="absolute -bottom-1 -right-1 px-2 py-0.5 rounded-full bg-emerald-500 text-white text-[9px] font-bold shadow-md uppercase tracking-wider">
+                          HD AI
+                        </div>
+                      </div>
 
-                          {isScanning && (
-                            <div className="absolute inset-0 border-2 border-indigo-500/30 m-4 sm:m-8 rounded-lg pointer-events-none">
-                              <div className="absolute top-0 left-0 w-12 sm:w-16 h-12 sm:h-16 border-t-4 border-l-4 border-indigo-500 -mt-1 -ml-1" />
-                              <div className="absolute top-0 right-0 w-12 sm:w-16 h-12 sm:h-16 border-t-4 border-r-4 border-indigo-500 -mt-1 -mr-1" />
-                              <div className="absolute bottom-0 left-0 w-12 sm:w-16 h-12 sm:h-16 border-b-4 border-l-4 border-indigo-500 -mb-1 -ml-1" />
-                              <div className="absolute bottom-0 right-0 w-12 sm:w-16 h-12 sm:h-16 border-b-4 border-r-4 border-indigo-500 -mb-1 -mr-1" />
-                              <div className="absolute top-1/2 left-0 w-full h-0.5 bg-indigo-400/50 shadow-[0_0_8px_rgba(99,102,241,0.8)] animate-scan" />
-                            </div>
-                          )}
+                      <h3 className="text-base sm:text-xl font-bold text-white mb-1">
+                        Take Classroom Group Photo
+                      </h3>
+                      <p className="text-xs sm:text-sm text-slate-300 mb-3.5 max-w-sm leading-relaxed">
+                        Line up students without mobile devices and snap their photo. AI will recognize everyone in the frame at once.
+                      </p>
 
-                          {!isScanning && (
-                            <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center backdrop-blur-sm transition-all">
-                              <Camera className="w-10 h-10 sm:w-14 sm:h-14 text-slate-500 mb-2 sm:mb-3" />
-                              <p className="text-slate-300 font-medium tracking-widest text-[11px] sm:text-xs">WEBCAM STANDBY</p>
-                            </div>
-                          )}
-                        </>
+                      <div className="flex flex-wrap items-center justify-center gap-1.5 sm:gap-2 mb-5">
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 text-[10px] sm:text-[11px] font-medium">
+                          <Sparkles className="w-3 h-3 text-indigo-400" /> Smart Compression
+                        </span>
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-[10px] sm:text-[11px] font-medium">
+                          <Users className="w-3 h-3 text-emerald-400" /> Multi-Face Detection
+                        </span>
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-slate-800/80 border border-slate-700 text-slate-300 text-[10px] sm:text-[11px] font-medium">
+                          <ShieldCheck className="w-3 h-3 text-teal-400" /> 512D ArcFace
+                        </span>
+                      </div>
+
+                      <button
+                        type="button"
+                        disabled={!activeSession || isProcessing}
+                        onClick={() => cameraInputRef.current?.click()}
+                        className="w-full sm:w-auto px-6 sm:px-8 py-3 rounded-2xl bg-gradient-to-r from-indigo-600 via-indigo-500 to-teal-500 hover:from-indigo-500 hover:to-teal-400 text-white font-bold text-xs sm:text-sm shadow-xl shadow-indigo-600/30 hover:shadow-indigo-600/50 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transform active:scale-98"
+                      >
+                        <Camera className="w-4 h-4 sm:w-5 sm:h-5" />
+                        Open Camera &amp; Take Photo
+                      </button>
+
+                      {!activeSession && (
+                        <p className="text-[11px] text-amber-400 mt-2 font-medium">
+                          Please start a lecture session first before taking attendance photo.
+                        </p>
                       )}
                     </div>
-                  </div>
+                  )}
                 </div>
               ) : (
                 /* PHOTO UPLOAD */
@@ -1517,8 +1465,8 @@ export default function LiveScan() {
                   ) : (
                     <Upload className="w-10 h-10 sm:w-12 sm:h-12 text-slate-600 mb-3" />
                   )}
-                  <p className="text-slate-300 font-medium text-xs sm:text-sm text-center">{isProcessing ? "Processing AI Recognition..." : "Click or drag classroom photo to upload"}</p>
-                  <p className="text-slate-500 text-[10px] sm:text-xs mt-1 text-center">Supports JPG, PNG (High Resolution Classroom Wide Shots)</p>
+                  <p className="text-slate-300 font-medium text-xs sm:text-sm text-center">{isProcessing ? processingStatusText : "Click or drag classroom photo to upload"}</p>
+                  <p className="text-slate-500 text-[10px] sm:text-xs mt-1 text-center">Supports JPG, PNG (Auto-compressed client-side for smooth processing)</p>
                 </div>
               )}
 
@@ -1529,23 +1477,23 @@ export default function LiveScan() {
                   <span className="truncate">AI Engine: InsightFace 512D ArcFace Active</span>
                 </div>
 
-                {activeTab === "live" ? (
+                {activeTab === "photo" ? (
                   <button
-                    onClick={() => setIsScanning(!isScanning)}
-                    className={`w-full sm:w-auto flex items-center justify-center px-4 py-1.5 rounded-xl font-semibold text-xs text-white shadow-md transition-all ${isScanning ? "bg-red-600 hover:bg-red-500" : "bg-indigo-600 hover:bg-indigo-500"
-                      }`}
+                    disabled={isProcessing || !activeSession}
+                    onClick={() => cameraInputRef.current?.click()}
+                    className="w-full sm:w-auto flex items-center justify-center px-4 py-1.5 rounded-xl font-semibold text-xs text-white bg-indigo-600 hover:bg-indigo-500 shadow-md transition-all disabled:opacity-50 cursor-pointer"
                   >
-                    {isScanning ? (
-                      <><StopCircle className="w-3.5 h-3.5 mr-1.5" /> Stop Scan</>
+                    {isProcessing ? (
+                      <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Processing...</>
                     ) : (
-                      <><PlayCircle className="w-3.5 h-3.5 mr-1.5" /> Start Scan</>
+                      <><Camera className="w-3.5 h-3.5 mr-1.5" /> Take Photo</>
                     )}
                   </button>
                 ) : activeTab === "manual" ? (
                   <button
-                    disabled={isProcessing}
+                    disabled={isProcessing || !activeSession}
                     onClick={() => fileInputRef.current?.click()}
-                    className="w-full sm:w-auto flex items-center justify-center px-4 py-1.5 rounded-xl font-semibold text-xs text-white bg-indigo-600 hover:bg-indigo-500 shadow-md transition-all disabled:opacity-50"
+                    className="w-full sm:w-auto flex items-center justify-center px-4 py-1.5 rounded-xl font-semibold text-xs text-white bg-indigo-600 hover:bg-indigo-500 shadow-md transition-all disabled:opacity-50 cursor-pointer"
                   >
                     {isProcessing ? (
                       <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Scanning...</>
@@ -2070,13 +2018,11 @@ export default function LiveScan() {
                   </p>
                   <div className="flex gap-2.5 w-full">
                     <button
-                      onClick={() => {
-                        setUploadResultModal(null);
-                        fileInputRef.current?.click();
-                      }}
+                      onClick={handleTriggerPhotoAction}
                       className="flex-1 py-2.5 px-4 rounded-xl font-semibold text-xs text-white bg-indigo-600 hover:bg-indigo-500 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md"
                     >
-                      <Upload className="w-4 h-4" /> Try Another Photo
+                      {activeTab === "photo" ? <Camera className="w-4 h-4" /> : <Upload className="w-4 h-4" />}
+                      {activeTab === "photo" ? "Take Another Photo" : "Try Another Photo"}
                     </button>
                     <button
                       onClick={() => setUploadResultModal(null)}
@@ -2141,14 +2087,12 @@ export default function LiveScan() {
 
                   <div className="flex gap-2.5 w-full">
                     <button
-                      onClick={() => {
-                        setUploadResultModal(null);
-                        fileInputRef.current?.click();
-                      }}
+                      onClick={handleTriggerPhotoAction}
                       className="py-2.5 px-3.5 rounded-xl font-semibold text-xs text-gray-700 dark:text-slate-300 bg-gray-100 hover:bg-gray-200 dark:bg-slate-800 dark:hover:bg-slate-700 transition-all flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
-                      title="Upload another classroom photo"
+                      title={activeTab === "photo" ? "Take another group photo" : "Upload another classroom photo"}
                     >
-                      <Upload className="w-3.5 h-3.5" /> Upload More
+                      {activeTab === "photo" ? <Camera className="w-3.5 h-3.5" /> : <Upload className="w-3.5 h-3.5" />}
+                      {activeTab === "photo" ? "Snap More" : "Upload More"}
                     </button>
                     <button
                       onClick={() => setUploadResultModal(null)}
@@ -2170,13 +2114,11 @@ export default function LiveScan() {
                   </p>
                   <div className="flex gap-2.5 w-full">
                     <button
-                      onClick={() => {
-                        setUploadResultModal(null);
-                        fileInputRef.current?.click();
-                      }}
+                      onClick={handleTriggerPhotoAction}
                       className="flex-1 py-2.5 px-4 rounded-xl font-bold text-xs text-white bg-indigo-600 hover:bg-indigo-500 transition-all shadow-md cursor-pointer flex items-center justify-center gap-1.5"
                     >
-                      <Upload className="w-4 h-4" /> Try Clearer Photo
+                      {activeTab === "photo" ? <Camera className="w-4 h-4" /> : <Upload className="w-4 h-4" />}
+                      {activeTab === "photo" ? "Retake Photo" : "Try Clearer Photo"}
                     </button>
                     <button
                       onClick={() => setUploadResultModal(null)}
