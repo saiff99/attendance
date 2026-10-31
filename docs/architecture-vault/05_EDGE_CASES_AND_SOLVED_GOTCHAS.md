@@ -153,3 +153,21 @@ This document catalogs critical real-world edge cases, platform-specific quirks,
   3. **Omni-Modal Invariant:** Extended identical defensive media guards to `FaceRegistrationModal.tsx` and `SelfieAttendClient.tsx` to prevent camera initialization crashes anywhere in the platform.
 - **Rule:** Never call `navigator.mediaDevices.*` or mount camera capture components without verifying `typeof navigator !== 'undefined' && Boolean(navigator.mediaDevices?.getUserMedia)`.
 
+---
+
+### Gotcha 9: `aspect-video` Flex Container Expansion & Horizontal Clipping on Mobile
+- **Symptom:** On mobile viewports (e.g., iPhone 12/13/14/15/16 at 375px–390px width), the **"Take Classroom Group Photo"** card and adjacent **"Upload Photo"** card overflowed horizontally outside the screen boundaries. Text lines (`"photo. AI will recognize..."`), pill badges (`512D ArcFace`), and the right rounded borders were chopped off, breaking layout symmetry.
+- **Root Cause:**
+  1. The container element had CSS class `aspect-video` (`aspect-ratio: 16 / 9;`).
+  2. The interactive card content (camera icon, header, subtitle, 3 pill badges, and CTA button) required ~320px–360px vertical height when stacked on narrow mobile screens.
+  3. Because `aspect-ratio: 16 / 9` was set without an explicit `max-width: 100%` / dynamic height override, browser CSS layout calculated the intrinsic width from the height: `width = 340px * (16 / 9) ≈ 604px`!
+  4. Inside an `overflow-hidden` or flex parent, this forced the container to blow out to ~600px wide, cutting off the right ~200px on 390px mobile screens.
+- **Architectural Fix:**
+  1. **Strict Separation of Video Feeds vs UI Action Cards (`frontend/src/app/live-scan/page.tsx`):** `aspect-video` is reserved strictly for genuine streaming video players (CCTV MJPEG/WebRTC streams). Interactive cards with variable text, badges, and buttons must NEVER use `aspect-video`.
+  2. **Responsive Dynamic Height & Bounded Width:**
+     ```tsx
+     <div className="w-full max-w-full min-w-0 flex-1 flex flex-col items-center justify-center bg-gradient-to-b from-slate-900/90 via-slate-950 to-slate-950 rounded-2xl relative overflow-hidden group min-h-[260px] sm:min-h-[340px] lg:min-h-[420px] border border-slate-800 p-3.5 sm:p-6 lg:p-8 box-border">
+     ```
+  3. **Pill Flex Wrapping & Compact Mobile Padding:** Applied `shrink-0` on badges with responsive padding (`p-3.5 sm:p-6`) and shortened segmented mode tab labels on mobile (`Multi` instead of `Multi Cam`, `Upload` instead of `Upload Photo`) to prevent tab-bar blowout.
+- **Rule:** Never apply `aspect-video` or fixed aspect ratios to flex containers containing stacked text, badges, or buttons. Always enforce `w-full max-w-full min-w-0 box-border` with content-adaptive heights (`min-h-[...]`).
+
