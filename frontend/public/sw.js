@@ -1,9 +1,11 @@
-// MedAttend PWA Service Worker v3 (Offline Caching + Push Notification Support)
-const CACHE_NAME = 'medattend-pwa-v3';
+// MedAttend PWA Service Worker v4 (Offline Fallback + Background Sync + Push)
+const CACHE_NAME = 'medattend-pwa-v4';
 const STATIC_ASSETS = [
   '/',
+  '/login',
   '/portal',
   '/selfieattend',
+  '/offline.html',
   '/manifest.json',
   '/icons/icon-192x192.png',
   '/icons/icon-512x512.png',
@@ -12,7 +14,13 @@ const STATIC_ASSETS = [
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
+    caches.open(CACHE_NAME).then(async (cache) => {
+      // Prioritize caching offline.html first so fallback is 100% guaranteed
+      try {
+        await cache.add('/offline.html');
+      } catch (err) {
+        console.warn('PWA: Failed to cache /offline.html during install:', err);
+      }
       return cache.addAll(STATIC_ASSETS).catch((err) => {
         console.warn('PWA: Failed to cache some static assets during install:', err);
       });
@@ -48,7 +56,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 2. Navigation Requests (HTML pages): Network-First with Cache Fallback
+  // 2. Navigation Requests (HTML pages): Network-First with Offline Fallback Page
   if (event.request.mode === 'navigate') {
     event.respondWith(
       fetch(event.request)
@@ -61,7 +69,12 @@ self.addEventListener('fetch', (event) => {
         })
         .catch(() => {
           return caches.match(event.request).then((cached) => {
-            return cached || caches.match('/portal') || caches.match('/');
+            return (
+              cached ||
+              caches.match('/offline.html') ||
+              caches.match('/portal') ||
+              caches.match('/')
+            );
           });
         })
     );

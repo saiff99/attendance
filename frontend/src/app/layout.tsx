@@ -129,6 +129,19 @@ export default function RootLayout({
             `,
           }}
         />
+        {/* Instant PWA Service Worker Registration: Pre-caches offline fallback on first load */}
+        <script
+          id="medattend-sw-register"
+          dangerouslySetInnerHTML={{
+            __html: `
+if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+  window.addEventListener('load', function() {
+    navigator.serviceWorker.register('/sw.js').catch(function() {});
+  });
+}
+            `,
+          }}
+        />
       </head>
       <body suppressHydrationWarning className="min-h-screen bg-[#070B12] dark:bg-[#070B12] text-slate-100 transition-colors duration-200 antialiased">
         <AuthProvider>
