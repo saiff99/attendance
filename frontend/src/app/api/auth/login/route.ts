@@ -38,6 +38,7 @@ export async function POST(request: Request) {
         {
           success: false,
           error: lockMsg,
+          retryAfter: slot.remainingSeconds,
         },
         {
           status: 429,

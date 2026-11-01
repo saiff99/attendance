@@ -17,7 +17,7 @@ interface AuthContextType {
   user: AuthUser | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (username: string, pass: string, mode?: "admin" | "student") => Promise<{ success: boolean; error?: string; user?: AuthUser }>;
+  login: (username: string, pass: string, mode?: "admin" | "student") => Promise<{ success: boolean; error?: string; user?: AuthUser; retryAfter?: number }>;
   logout: () => Promise<void>;
   refreshSession: () => Promise<void>;
 }
@@ -71,7 +71,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     usernameInput: string,
     passwordInput: string,
     mode?: "admin" | "student"
-  ): Promise<{ success: boolean; error?: string; user?: AuthUser }> => {
+  ): Promise<{ success: boolean; error?: string; user?: AuthUser; retryAfter?: number }> => {
     const cleanUser = usernameInput.trim().toLowerCase();
     const cleanPass = passwordInput.trim();
 
@@ -92,9 +92,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const data = await res.json();
 
       if (!res.ok || !data.success) {
+        let retryAfter: number | undefined = undefined;
+        if (typeof data.retryAfter === "number") {
+          retryAfter = data.retryAfter;
+        } else {
+          const headerRetry = res.headers.get("Retry-After");
+          if (headerRetry) {
+            const parsed = parseInt(headerRetry, 10);
+            if (!isNaN(parsed) && parsed > 0) retryAfter = parsed;
+          }
+        }
+        if (!retryAfter && typeof data.error === "string") {
+          const match = data.error.match(/(\d+)\s*s/);
+          if (match) retryAfter = parseInt(match[1], 10);
+        }
+
         return {
           success: false,
           error: data.error || "Invalid username or password. Please check your credentials.",
+          retryAfter,
         };
       }
 

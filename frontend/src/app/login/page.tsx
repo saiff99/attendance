@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   Activity, Lock, User, ShieldCheck,
   AlertCircle, Eye, EyeOff, Loader2, CheckCircle2,
-  GraduationCap, KeyRound, Sun, Moon
+  GraduationCap, KeyRound, Sun, Moon, Clock
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { useTheme } from "next-themes";
@@ -20,6 +20,8 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [lockoutSeconds, setLockoutSeconds] = useState<number | null>(null);
+  const [lockoutExpiredNotice, setLockoutExpiredNotice] = useState<boolean>(false);
 
   const [mounted, setMounted] = useState(false);
   const { theme, setTheme, resolvedTheme } = useTheme();
@@ -76,8 +78,29 @@ export default function LoginPage() {
     }
   }, [loginMode]);
 
+  // Interactive countdown ticker for 429 rate limit cooldown
+  useEffect(() => {
+    if (lockoutSeconds === null || lockoutSeconds <= 0) return;
+
+    const timer = setInterval(() => {
+      setLockoutSeconds((prev) => {
+        if (prev === null || prev <= 1) {
+          clearInterval(timer);
+          setError(null);
+          setLockoutExpiredNotice(true);
+          return null;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [lockoutSeconds]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (lockoutSeconds !== null && lockoutSeconds > 0) return;
+
     if (!username.trim() || !password.trim()) {
       setError(
         loginMode === "student"
@@ -89,6 +112,7 @@ export default function LoginPage() {
 
     setLoading(true);
     setError(null);
+    setLockoutExpiredNotice(false);
 
     // Micro-delay for smooth perceptible feedback
     await new Promise((r) => setTimeout(r, 200));
@@ -96,6 +120,9 @@ export default function LoginPage() {
     const res = await login(username, password, loginMode);
 
     if (res.success) {
+      setLockoutSeconds(null);
+      setLockoutExpiredNotice(false);
+
       // Role safeguard: ensure authenticated user role matches current loginMode
       if (loginMode === "admin" && res.user?.role === "Student") {
         await logout();
@@ -118,6 +145,10 @@ export default function LoginPage() {
       router.replace(destination);
     } else {
       setLoading(false);
+      if (res.retryAfter && res.retryAfter > 0) {
+        setLockoutSeconds(res.retryAfter);
+        setLockoutExpiredNotice(false);
+      }
       setError(res.error || "Authentication failed. Please check your credentials.");
     }
   };
@@ -214,12 +245,34 @@ export default function LoginPage() {
 
         {/* Login Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
-          {error && (
+          {/* Rate Limit Lockout Interactive Countdown Banner */}
+          {lockoutSeconds !== null && lockoutSeconds > 0 ? (
+            <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-200 text-xs flex items-start gap-2.5 transition-all shadow-sm animate-in fade-in duration-200">
+              <Clock className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5 animate-spin" style={{ animationDuration: "4s" }} />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-bold text-amber-900 dark:text-amber-100">Security Cooldown Active</span>
+                  <span className="font-mono text-xs px-2 py-0.5 rounded-lg bg-amber-500/20 text-amber-900 dark:text-amber-100 font-bold tracking-tight">
+                    {lockoutSeconds}s
+                  </span>
+                </div>
+                <p className="mt-1 text-amber-700/90 dark:text-amber-300/90 leading-relaxed">
+                  Too many failed attempts. Login is temporarily locked to prevent unauthorized access. Cooldown expires in{" "}
+                  <strong className="font-semibold text-amber-900 dark:text-amber-100">{lockoutSeconds} second{lockoutSeconds !== 1 ? "s" : ""}</strong>.
+                </p>
+              </div>
+            </div>
+          ) : lockoutExpiredNotice ? (
+            <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-emerald-700 dark:text-emerald-300 text-xs flex items-center gap-2 transition-all animate-in fade-in duration-200">
+              <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-500 dark:text-emerald-400" />
+              <span>Security cooldown expired. You may now attempt to sign in again.</span>
+            </div>
+          ) : error ? (
             <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-300 text-xs flex items-center gap-2 transition-all animate-in fade-in duration-200">
               <AlertCircle className="w-4 h-4 shrink-0 text-rose-500 dark:text-rose-400" />
               <span>{error}</span>
             </div>
-          )}
+          ) : null}
 
           {/* User ID / Student Roll Field */}
           <div>
@@ -236,11 +289,12 @@ export default function LoginPage() {
                 inputMode={loginMode === "student" ? "numeric" : undefined}
                 pattern={loginMode === "student" ? "[0-9]*" : undefined}
                 required
-                disabled={loading}
+                disabled={loading || (lockoutSeconds !== null && lockoutSeconds > 0)}
                 value={username}
                 onChange={(e) => {
                   setUsername(e.target.value);
-                  setError(null);
+                  if (!lockoutSeconds) setError(null);
+                  setLockoutExpiredNotice(false);
                 }}
                 placeholder={loginMode === "student" ? "e.g. 25003" : "e.g. admin or faculty"}
                 className="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-950 text-base sm:text-sm font-medium transition-all duration-200 disabled:opacity-60"
@@ -266,18 +320,19 @@ export default function LoginPage() {
                 maxLength={loginMode === "student" ? 6 : undefined}
                 autoComplete={loginMode === "student" ? "one-time-code" : "current-password"}
                 required
-                disabled={loading}
+                disabled={loading || (lockoutSeconds !== null && lockoutSeconds > 0)}
                 value={password}
                 onChange={(e) => {
                   setPassword(e.target.value);
-                  setError(null);
+                  if (!lockoutSeconds) setError(null);
+                  setLockoutExpiredNotice(false);
                 }}
                 placeholder={loginMode === "student" ? "Enter 6-digit PIN" : "Enter password"}
                 className="w-full pl-10 pr-10 py-3 rounded-xl bg-slate-50 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-950 text-base sm:text-sm font-medium transition-all duration-200 disabled:opacity-60"
               />
               <button
                 type="button"
-                disabled={loading}
+                disabled={loading || (lockoutSeconds !== null && lockoutSeconds > 0)}
                 onClick={() => setShowPassword((prev) => !prev)}
                 className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-700 dark:text-slate-500 dark:hover:text-slate-300 transition-colors cursor-pointer disabled:opacity-40"
               >
@@ -295,16 +350,23 @@ export default function LoginPage() {
           <div className="pt-2">
             <button
               type="submit"
-              disabled={loading}
-              className={`w-full py-3.5 rounded-xl font-bold text-sm transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98] ${
-                isSuccess
-                  ? "bg-emerald-600 text-white shadow-emerald-600/30"
+              disabled={loading || (lockoutSeconds !== null && lockoutSeconds > 0)}
+              className={`w-full py-3.5 rounded-xl font-bold text-sm transition-all shadow-lg flex items-center justify-center gap-2 ${
+                lockoutSeconds !== null && lockoutSeconds > 0
+                  ? "bg-amber-100 dark:bg-amber-950/50 border border-amber-300/60 dark:border-amber-700/50 text-amber-800 dark:text-amber-200 shadow-none cursor-not-allowed"
+                  : isSuccess
+                  ? "bg-emerald-600 text-white shadow-emerald-600/30 cursor-pointer"
                   : loading
-                  ? "bg-indigo-600/90 text-white shadow-indigo-600/30 animate-pulse"
-                  : "bg-gradient-to-r from-indigo-600 via-indigo-500 to-violet-600 hover:from-indigo-500 hover:via-indigo-400 hover:to-violet-500 text-white shadow-indigo-600/30"
+                  ? "bg-indigo-600/90 text-white shadow-indigo-600/30 animate-pulse cursor-wait"
+                  : "bg-gradient-to-r from-indigo-600 via-indigo-500 to-violet-600 hover:from-indigo-500 hover:via-indigo-400 hover:to-violet-500 text-white shadow-indigo-600/30 cursor-pointer active:scale-[0.98]"
               }`}
             >
-              {isSuccess ? (
+              {lockoutSeconds !== null && lockoutSeconds > 0 ? (
+                <>
+                  <Lock className="w-4 h-4 text-amber-600 dark:text-amber-400 animate-pulse" />
+                  <span>Locked ({lockoutSeconds}s remaining)</span>
+                </>
+              ) : isSuccess ? (
                 <>
                   <CheckCircle2 className="w-4 h-4 text-emerald-200 animate-bounce" />
                   <span>
