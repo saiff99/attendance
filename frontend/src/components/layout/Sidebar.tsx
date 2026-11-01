@@ -50,6 +50,11 @@ export default function Sidebar() {
   };
   const isStudentPortal = pathname?.startsWith("/selfieattend") || pathname?.startsWith("/self-attendance") || pathname?.startsWith("/portal");
 
+  // Guarantee sidebar is cleanly closed on every page/route change
+  useEffect(() => {
+    setIsOpen(false);
+  }, [pathname]);
+
   useEffect(() => {
     setMounted(true);
     const checkActive = async () => {
@@ -100,18 +105,18 @@ export default function Sidebar() {
     <>
       {/* Mobile & Tablet Top Header: Hidden on student portal routes (/selfieattend) */}
       {!isStudentPortal && (
-        <div className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-white/95 dark:bg-gray-900/95 backdrop-blur-md border-b border-gray-200 dark:border-gray-800 flex items-center justify-between px-4 sm:px-6 z-40 shadow-sm transition-colors duration-300">
+        <div className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-white/95 dark:bg-gray-900/95 backdrop-blur-md border-b border-gray-200 dark:border-gray-800 flex items-center justify-between px-4 sm:px-6 z-45 shadow-sm transition-colors duration-300 select-none">
           <div className="flex items-center">
             <Activity className="h-7 w-7 text-indigo-600 dark:text-indigo-400 mr-2.5" />
             <span className="text-xl font-bold tracking-tight text-gray-900 dark:text-white">
               MedAttend
             </span>
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 sm:gap-2">
             <button
               type="button"
               onClick={handleToggleTheme}
-              className="p-2 min-w-[42px] min-h-[42px] flex items-center justify-center rounded-xl text-gray-600 dark:text-gray-300 active:bg-gray-100 dark:active:bg-gray-800 active:scale-95 [@media(hover:hover)]:hover:bg-gray-100 dark:[@media(hover:hover)]:hover:bg-gray-800 transition-transform touch-manipulation cursor-pointer"
+              className="p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl text-gray-600 dark:text-gray-300 active:bg-gray-100 dark:active:bg-gray-800 [@media(hover:hover)]:hover:bg-gray-100 dark:[@media(hover:hover)]:hover:bg-gray-800 transition-colors touch-manipulation cursor-pointer select-none"
               title="Toggle Theme"
               aria-label="Toggle Theme"
             >
@@ -123,15 +128,12 @@ export default function Sidebar() {
             </button>
             <button
               type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setIsOpen((prev) => !prev);
-              }}
-              className="p-2 min-w-[42px] min-h-[42px] flex items-center justify-center rounded-xl text-gray-600 dark:text-gray-300 active:bg-gray-100 dark:active:bg-gray-800 active:scale-95 [@media(hover:hover)]:hover:bg-gray-100 dark:[@media(hover:hover)]:hover:bg-gray-800 focus:outline-none transition-transform touch-manipulation cursor-pointer"
-              aria-label="Open sidebar"
+              onClick={() => setIsOpen((prev) => !prev)}
+              className="p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl text-gray-600 dark:text-gray-300 active:bg-gray-100 dark:active:bg-gray-800 [@media(hover:hover)]:hover:bg-gray-100 dark:[@media(hover:hover)]:hover:bg-gray-800 focus:outline-none transition-colors touch-manipulation cursor-pointer select-none"
+              aria-label="Toggle sidebar"
               aria-expanded={isOpen}
             >
-              <span className="sr-only">Open sidebar</span>
+              <span className="sr-only">Toggle sidebar</span>
               <Menu className="h-6 w-6" aria-hidden="true" />
             </button>
           </div>
@@ -163,7 +165,7 @@ export default function Sidebar() {
         <button 
           type="button"
           onClick={() => setIsOpen(false)}
-          className="lg:hidden p-2 min-w-[42px] min-h-[42px] flex items-center justify-center rounded-lg text-gray-400 active:bg-gray-100 dark:active:bg-gray-800 [@media(hover:hover)]:hover:bg-gray-100 dark:[@media(hover:hover)]:hover:bg-gray-800 transition-colors touch-manipulation cursor-pointer"
+          className="lg:hidden p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl text-gray-400 active:bg-gray-100 dark:active:bg-gray-800 [@media(hover:hover)]:hover:bg-gray-100 dark:[@media(hover:hover)]:hover:bg-gray-800 transition-colors touch-manipulation cursor-pointer select-none"
           aria-label="Close sidebar"
         >
           <X className="h-6 w-6" />
