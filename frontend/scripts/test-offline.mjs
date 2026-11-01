@@ -943,6 +943,59 @@ console.log('\n--- 16. Inactive / Archived Student Protection Across All Pathway
   );
 }
 
+// --- 17. NMC 75% Attendance Predictive & Recovery Math Invariants ---
+console.log('\n--- 17. NMC 75% Attendance Predictive & Recovery Math Invariants ---');
+{
+  function calculateNmcTargets(present, total) {
+    const currentPct = total > 0 ? Math.round((present / total) * 1000) / 10 : 100;
+    const neededFor75 = currentPct < 75 ? Math.max(0, Math.ceil(3 * total - 4 * present)) : 0;
+    const safeBunkBuffer = currentPct >= 75 ? Math.max(0, Math.floor((4 * present - 3 * total) / 3)) : 0;
+    return { currentPct, neededFor75, safeBunkBuffer };
+  }
+
+  function simulateAttendance(present, total, simUpcoming, simAttended) {
+    const simTotal = total + simUpcoming;
+    const simPresent = present + simAttended;
+    const simPct = simTotal > 0 ? Math.round((simPresent / simTotal) * 1000) / 10 : 0;
+    return { simTotal, simPresent, simPct, isEligible: simPct >= 75 };
+  }
+
+  // 1. Shortage target math (60% attendance)
+  const res60 = calculateNmcTargets(12, 20);
+  assert(res60.neededFor75 === 12, 'Shortage (12/20 = 60%) requires exactly 12 consecutive classes');
+  assert((12 + res60.neededFor75) / (20 + res60.neededFor75) >= 0.75, 'Attending needed classes achieves >= 75%');
+
+  // 2. Shortage target math (70% attendance)
+  const res70 = calculateNmcTargets(7, 10);
+  assert(res70.neededFor75 === 2, 'Shortage (7/10 = 70%) requires exactly 2 consecutive classes');
+  assert((7 + res70.neededFor75) / (10 + res70.neededFor75) === 0.75, 'Attending 2 classes reaches exactly 75%');
+
+  // 3. Safe bunk buffer math (90% attendance)
+  const res90 = calculateNmcTargets(18, 20);
+  assert(res90.safeBunkBuffer === 4, 'Safe zone (18/20 = 90%) allows exactly 4 safe absences');
+  assert(18 / (20 + res90.safeBunkBuffer) >= 0.75, 'Missing 4 classes retains >= 75% attendance');
+  assert(18 / (20 + res90.safeBunkBuffer + 1) < 0.75, 'Missing 5 classes drops below 75%');
+
+  // 4. Exact 75% threshold
+  const res75 = calculateNmcTargets(15, 20);
+  assert(res75.safeBunkBuffer === 0, 'Exact 75% attendance (15/20) has 0 classes safe margin');
+
+  // 5. Zero classes edge case
+  const resZero = calculateNmcTargets(0, 0);
+  assert(resZero.neededFor75 === 0 && resZero.safeBunkBuffer === 0, 'Zero classes delivered handles cleanly without NaN');
+
+  // 6. Simulation projection
+  const sim = simulateAttendance(12, 20, 10, 9);
+  assert(sim.simPresent === 21 && sim.simTotal === 30 && sim.simPct === 70, 'Simulator accurately computes projected ratio (21/30 = 70%)');
+  assert(!sim.isEligible, '70% projected status flags ineligible');
+
+  const simSuccess = simulateAttendance(12, 20, 10, 10);
+  assert(simSuccess.simPct === 73.3 && !simSuccess.isEligible, '22/30 = 73.3% correctly evaluated');
+
+  const simEligible = simulateAttendance(12, 20, 15, 15);
+  assert(simEligible.simPct === 77.1 && simEligible.isEligible, '27/35 = 77.1% correctly evaluates exam eligible');
+}
+
 // Summary
 console.log('\n' + '=' .repeat(65));
 console.log(`📊 Offline Unit Test Summary: ${passed} Passed, ${failed} Failed`);
