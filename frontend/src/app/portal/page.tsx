@@ -6,7 +6,7 @@ import Link from "next/link";
 import {
   GraduationCap, BookOpen, CheckCircle2, AlertTriangle, XCircle,
   Calendar, Clock, MapPin, Smartphone, Shield, LogOut, KeyRound,
-  RefreshCw, ChevronRight, User, Sparkles, Check, ArrowUpRight, Camera, ShieldCheck,
+  RefreshCw, ChevronRight, ChevronDown, User, Sparkles, Check, ArrowUpRight, Camera, ShieldCheck,
   Eye, EyeOff, Bell, WifiOff
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
@@ -94,6 +94,33 @@ export default function StudentPortalPage() {
 
   // Face ID Biometric Registration modal state
   const [isFaceModalOpen, setIsFaceModalOpen] = useState(false);
+
+  // User Profile Dropdown Menu State
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const profileMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close profile dropdown on outside click or Escape key
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) {
+        setIsProfileMenuOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsProfileMenuOpen(false);
+      }
+    };
+
+    if (isProfileMenuOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+      document.addEventListener("keydown", handleKeyDown);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isProfileMenuOpen]);
 
   // PWA Offline Status & Push Notification States
   const [isOnline, setIsOnline] = useState<boolean>(true);
@@ -418,22 +445,7 @@ export default function StudentPortalPage() {
         </div>
 
         {/* Student Quick Controls */}
-        <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
-          {notificationPermission !== "unsupported" && (
-            <button
-              onClick={requestNotificationAccess}
-              className={`flex items-center gap-1.5 py-1.5 px-2 sm:px-2.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer shrink-0 ${
-                notificationPermission === "granted"
-                  ? "bg-slate-800/80 hover:bg-slate-700 border-slate-700/60 text-emerald-400"
-                  : "bg-indigo-500/10 hover:bg-indigo-500/20 border-indigo-500/30 text-indigo-300"
-              }`}
-              title={notificationPermission === "granted" ? "Attendance Push Alerts Active" : "Enable Attendance Push Alerts"}
-            >
-              <Bell className="w-3.5 h-3.5 shrink-0" />
-              <span className="hidden md:inline">{notificationPermission === "granted" ? "Alerts On" : "Alerts"}</span>
-            </button>
-          )}
-
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           <Link
             href="/selfieattend"
             className="flex items-center gap-1.5 py-1.5 px-2.5 sm:px-3 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-xs font-semibold transition-all shadow-sm group shrink-0"
@@ -444,23 +456,127 @@ export default function StudentPortalPage() {
             <span className="sm:hidden text-[11px]">Attend</span>
           </Link>
 
-          <button
-            onClick={() => setIsPinModalOpen(true)}
-            className="flex items-center gap-1.5 py-1.5 px-2.5 sm:px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold transition-all cursor-pointer shrink-0"
-            title="Update Security PIN"
-          >
-            <KeyRound className="w-3.5 h-3.5 text-indigo-400" />
-            <span className="hidden sm:inline">Security PIN</span>
-          </button>
+          {/* Account Profile Dropdown Menu */}
+          <div className="relative" ref={profileMenuRef}>
+            <button
+              type="button"
+              onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
+              className={`flex items-center gap-1.5 py-1.5 px-2 sm:px-2.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer shrink-0 ${
+                isProfileMenuOpen
+                  ? "bg-slate-800 border-indigo-500/50 text-white shadow-md shadow-indigo-500/10"
+                  : "bg-slate-800/80 hover:bg-slate-800 border-slate-700/80 text-slate-300 hover:text-white"
+              }`}
+              title="Account Menu"
+              aria-label="Account Menu"
+              aria-expanded={isProfileMenuOpen}
+            >
+              <div className="w-5 h-5 rounded-lg bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center text-white text-[10px] font-bold shrink-0">
+                {student.fullName ? student.fullName.charAt(0).toUpperCase() : <User className="w-3 h-3" />}
+              </div>
+              <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${isProfileMenuOpen ? "rotate-180 text-indigo-400" : ""}`} />
+            </button>
 
-          <button
-            onClick={() => logout()}
-            className="flex items-center gap-1.5 py-1.5 px-2.5 sm:px-3 rounded-xl bg-slate-800/80 hover:bg-rose-500/20 hover:text-rose-300 text-slate-400 text-xs font-semibold transition-all cursor-pointer shrink-0"
-            title="Sign Out"
-          >
-            <LogOut className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Sign Out</span>
-          </button>
+            {/* Profile Dropdown Menu */}
+            {isProfileMenuOpen && (
+              <div className="absolute right-0 mt-2 w-60 sm:w-64 rounded-2xl bg-slate-900 border border-slate-800 shadow-2xl backdrop-blur-xl py-1.5 z-50 animate-in fade-in zoom-in-95 duration-150">
+                {/* User Identity Header */}
+                <div className="px-3.5 py-2.5 border-b border-slate-800/80">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-indigo-500 via-violet-600 to-indigo-700 p-0.5 shadow-md shrink-0">
+                      <div className="w-full h-full rounded-[10px] bg-slate-950 flex items-center justify-center text-indigo-300 font-bold text-xs">
+                        {student.fullName ? student.fullName.charAt(0).toUpperCase() : <User className="w-4 h-4" />}
+                      </div>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-bold text-white truncate">
+                        {student.fullName}
+                      </p>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <span className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                          Roll: {student.studentRoll}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Menu Options */}
+                <div className="p-1.5 space-y-0.5">
+                  {/* Change PIN Button */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsProfileMenuOpen(false);
+                      setIsPinModalOpen(true);
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-800/80 transition-colors text-left cursor-pointer"
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-indigo-500/10 text-indigo-400 flex items-center justify-center shrink-0">
+                      <KeyRound className="w-3.5 h-3.5" />
+                    </div>
+                    <div className="flex-1">
+                      <span className="block font-semibold">Change Security PIN</span>
+                      <span className="block text-[10px] text-slate-400">Update your 6-digit access PIN</span>
+                    </div>
+                  </button>
+
+                  {/* Attendance Push Alerts Button */}
+                  {notificationPermission !== "unsupported" && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        requestNotificationAccess();
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-800/80 transition-colors text-left cursor-pointer"
+                    >
+                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
+                        notificationPermission === "granted"
+                          ? "bg-emerald-500/10 text-emerald-400"
+                          : "bg-amber-500/10 text-amber-400"
+                      }`}>
+                        <Bell className="w-3.5 h-3.5" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between">
+                          <span className="block font-semibold">Push Alerts</span>
+                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
+                            notificationPermission === "granted"
+                              ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                              : "bg-slate-800 text-slate-400 border border-slate-700"
+                          }`}>
+                            {notificationPermission === "granted" ? "Active" : "Enable"}
+                          </span>
+                        </div>
+                        <span className="block text-[10px] text-slate-400">
+                          {notificationPermission === "granted" ? "Live check-in alerts on" : "Click to allow class alerts"}
+                        </span>
+                      </div>
+                    </button>
+                  )}
+                </div>
+
+                {/* Divider */}
+                <div className="border-t border-slate-800 my-1" />
+
+                {/* Sign Out Option */}
+                <div className="p-1.5 pt-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsProfileMenuOpen(false);
+                      logout();
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 transition-colors text-left cursor-pointer"
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-rose-500/10 text-rose-400 flex items-center justify-center shrink-0">
+                      <LogOut className="w-3.5 h-3.5" />
+                    </div>
+                    <span>Sign Out</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
