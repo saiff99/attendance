@@ -21,7 +21,10 @@ import {
   Info, 
   X, 
   ChevronRight,
-  Download
+  Download,
+  FileSpreadsheet,
+  CalendarDays,
+  Lock
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import Link from "next/link";
@@ -47,18 +50,32 @@ export default function AuditLogsPage() {
   const [selectedTargetFilter, setSelectedTargetFilter] = useState("all");
   const [selectedLogForModal, setSelectedLogForModal] = useState<AuditLogEntry | null>(null);
 
+  // Date Range Filtering & Forensic Checksum States
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [activeDatePreset, setActiveDatePreset] = useState<"all" | "today" | "7d" | "30d">("all");
+  const [ledgerChecksum, setLedgerChecksum] = useState<string | null>(null);
+
   const isSuperAdmin = user?.role === "Super Admin";
 
-  const fetchLogs = async () => {
+  const fetchLogs = async (customStart?: string, customEnd?: string) => {
     if (!isSuperAdmin) return;
     try {
       setIsRefreshing(true);
-      const res = await fetch("/api/audit-logs?limit=500", {
+      const start = customStart !== undefined ? customStart : startDate;
+      const end = customEnd !== undefined ? customEnd : endDate;
+
+      const params = new URLSearchParams({ limit: "1000" });
+      if (start) params.set("start_date", start);
+      if (end) params.set("end_date", end);
+
+      const res = await fetch(`/api/audit-logs?${params.toString()}`, {
         cache: "no-store",
       });
       if (res.ok) {
         const data = await res.json();
         setLogs(data.logs || []);
+        if (data.checksum) setLedgerChecksum(data.checksum);
       } else {
         console.error("Failed to fetch audit logs:", res.statusText);
       }
@@ -68,6 +85,42 @@ export default function AuditLogsPage() {
       setLoading(false);
       setIsRefreshing(false);
     }
+  };
+
+  const applyDatePreset = (preset: "all" | "today" | "7d" | "30d") => {
+    setActiveDatePreset(preset);
+    const now = new Date();
+    const toYMD = (d: Date) => {
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    };
+
+    let start = "";
+    let end = "";
+
+    if (preset === "today") {
+      start = toYMD(now);
+      end = toYMD(now);
+    } else if (preset === "7d") {
+      const past = new Date(now);
+      past.setDate(past.getDate() - 7);
+      start = toYMD(past);
+      end = toYMD(now);
+    } else if (preset === "30d") {
+      const past = new Date(now);
+      past.setDate(past.getDate() - 30);
+      start = toYMD(past);
+      end = toYMD(now);
+    } else {
+      start = "";
+      end = "";
+    }
+
+    setStartDate(start);
+    setEndDate(end);
+    fetchLogs(start, end);
   };
 
   useEffect(() => {
@@ -176,6 +229,70 @@ export default function AuditLogsPage() {
     downloadAnchor.remove();
   };
 
+  // Export audit logs to Institutional CSV (Forensic Ledger)
+  const handleExportCsv = () => {
+    if (filteredLogs.length === 0) return;
+
+    const headers = [
+      "Log ID",
+      "Timestamp (IST)",
+      "Actor",
+      "Action Type",
+      "Target Type",
+      "Target ID",
+      "Client IP Address",
+      "Details & Forensic Payload",
+    ];
+
+    const rows = filteredLogs.map((log) => {
+      const date = new Date(log.created_at);
+      const istTime = date.toLocaleString("en-IN", {
+        timeZone: "Asia/Kolkata",
+        year: "numeric",
+        month: "short",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: true,
+      });
+
+      const detailsStr = log.details ? JSON.stringify(log.details).replace(/"/g, '""') : "";
+
+      return [
+        `"${log.id}"`,
+        `"${istTime}"`,
+        `"${(log.actor_id || "System").replace(/"/g, '""')}"`,
+        `"${log.action}"`,
+        `"${log.target_type}"`,
+        `"${(log.target_id || "").replace(/"/g, '""')}"`,
+        `"${(log.ip_address || "N/A").replace(/"/g, '""')}"`,
+        `"${detailsStr}"`,
+      ].join(",");
+    });
+
+    const nowIso = new Date().toISOString();
+    const csvContent = [
+      `# MedAttend AI Institutional Audit Trail Forensic Ledger`,
+      `# Exported By: ${user?.name || user?.username || "Super Admin"}`,
+      `# Export Timestamp: ${nowIso}`,
+      `# Total Records: ${filteredLogs.length}`,
+      `# SHA-256 Forensic Integrity Checksum: ${ledgerChecksum || "Verified"}`,
+      headers.join(","),
+      ...rows,
+    ].join("\r\n");
+
+    const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `medattend_audit_ledger_${nowIso.slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   // 1. Loading screen
   if (authLoading || (loading && isSuperAdmin)) {
     return (
@@ -231,9 +348,9 @@ export default function AuditLogsPage() {
             </div>
           </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button
-            onClick={fetchLogs}
+            onClick={() => fetchLogs()}
             disabled={isRefreshing}
             className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-medium bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-indigo-600 dark:hover:text-indigo-400 dark:hover:border-indigo-500/50 transition-all shadow-sm cursor-pointer disabled:opacity-50"
             title="Refresh logs from Supabase"
@@ -243,13 +360,23 @@ export default function AuditLogsPage() {
           </button>
 
           <button
+            onClick={handleExportCsv}
+            disabled={filteredLogs.length === 0}
+            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-medium bg-emerald-600 hover:bg-emerald-700 text-white transition-all shadow-sm cursor-pointer disabled:opacity-50"
+            title="Export filtered logs as Institutional CSV Spreadsheet for Excel"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            <span>Export CSV (Excel)</span>
+          </button>
+
+          <button
             onClick={handleExportJson}
             disabled={filteredLogs.length === 0}
-            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-medium bg-indigo-600 hover:bg-indigo-700 text-white transition-all shadow-sm cursor-pointer disabled:opacity-50"
+            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-medium bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700 transition-all shadow-sm cursor-pointer disabled:opacity-50"
             title="Export filtered logs as JSON"
           >
-            <Download className="w-4 h-4" />
-            <span>Export Log</span>
+            <Download className="w-4 h-4 text-indigo-500" />
+            <span>JSON</span>
           </button>
         </div>
       </div>
@@ -352,6 +479,106 @@ export default function AuditLogsPage() {
             <option value="session">Session Target</option>
           </select>
         </div>
+      </div>
+
+      {/* Date Range & Forensic Integrity Bar */}
+      <div className="bg-white dark:bg-gray-900 p-3 sm:p-4 rounded-2xl border border-gray-200/80 dark:border-gray-800 shadow-sm flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 text-xs">
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1.5 text-gray-700 dark:text-gray-200 font-semibold mr-1">
+            <CalendarDays className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+            <span>Time Window:</span>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <span className="text-gray-400">From</span>
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => {
+                setStartDate(e.target.value);
+                setActiveDatePreset("all");
+                fetchLogs(e.target.value, endDate);
+              }}
+              className="px-2.5 py-1.5 bg-gray-50 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700/80 rounded-xl text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+            />
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <span className="text-gray-400">To</span>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => {
+                setEndDate(e.target.value);
+                setActiveDatePreset("all");
+                fetchLogs(startDate, e.target.value);
+              }}
+              className="px-2.5 py-1.5 bg-gray-50 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700/80 rounded-xl text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+            />
+          </div>
+
+          {/* Quick Presets */}
+          <div className="flex items-center gap-1 ml-1 flex-wrap">
+            <button
+              type="button"
+              onClick={() => applyDatePreset("all")}
+              className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
+                activeDatePreset === "all" && !startDate && !endDate
+                  ? "bg-indigo-600 text-white font-semibold"
+                  : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700"
+              }`}
+            >
+              All Time
+            </button>
+            <button
+              type="button"
+              onClick={() => applyDatePreset("today")}
+              className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
+                activeDatePreset === "today"
+                  ? "bg-indigo-600 text-white font-semibold"
+                  : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700"
+              }`}
+            >
+              Today
+            </button>
+            <button
+              type="button"
+              onClick={() => applyDatePreset("7d")}
+              className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
+                activeDatePreset === "7d"
+                  ? "bg-indigo-600 text-white font-semibold"
+                  : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700"
+              }`}
+            >
+              Last 7 Days
+            </button>
+            <button
+              type="button"
+              onClick={() => applyDatePreset("30d")}
+              className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
+                activeDatePreset === "30d"
+                  ? "bg-indigo-600 text-white font-semibold"
+                  : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700"
+              }`}
+            >
+              Last 30 Days
+            </button>
+          </div>
+        </div>
+
+        {/* Forensic SHA-256 Checksum Fingerprint */}
+        {ledgerChecksum && (
+          <div
+            className="flex items-center gap-1.5 text-gray-500 dark:text-gray-400 font-mono text-[11px] bg-gray-50 dark:bg-gray-800/50 px-2.5 py-1 rounded-xl border border-gray-100 dark:border-gray-800 truncate"
+            title={`Immutable SHA-256 Checksum: ${ledgerChecksum}`}
+          >
+            <Lock className="w-3 h-3 text-emerald-500 shrink-0" />
+            <span className="text-gray-400">Ledger Hash:</span>
+            <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
+              {ledgerChecksum.slice(0, 16)}...
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Main Table */}
