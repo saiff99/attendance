@@ -7,7 +7,6 @@ import { verifySessionToken, SESSION_COOKIE_NAME } from './lib/serverAuth';
 // Note: /api/active-sessions provides sanitized public metadata and issues signed check-in tokens
 const PUBLIC_PATHS = [
   '/login',
-  '/offline.html',
   '/self-attendance',
   '/selfieattend',
   '/manifest.json',
@@ -22,7 +21,7 @@ const PUBLIC_PATHS = [
 ];
 
 // Strict static asset file extension regex (prevents path bypass like /api/video-feed/a.b)
-const STATIC_ASSET_REGEX = /\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|json|webmanifest|woff|woff2|ttf|eot|html)$/i;
+const STATIC_ASSET_REGEX = /\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|json|webmanifest|woff|woff2|ttf|eot)$/i;
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;

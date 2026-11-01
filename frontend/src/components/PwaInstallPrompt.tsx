@@ -12,19 +12,7 @@ export function PwaInstallPrompt() {
   const [isDismissed, setIsDismissed] = useState<boolean>(false);
 
   useEffect(() => {
-    // 1. Unconditionally Register Service Worker for ALL users (Standalone PWA & Browser)
-    if ("serviceWorker" in navigator && process.env.NODE_ENV !== "development") {
-      navigator.serviceWorker
-        .register("/sw.js")
-        .then((reg) => {
-          console.log("PWA Service Worker registered successfully:", reg.scope);
-        })
-        .catch((err) => {
-          console.warn("PWA Service Worker registration failed:", err);
-        });
-    }
-
-    // 2. Check if running in standalone mode (already installed as PWA)
+    // 1. Check if running in standalone mode (already installed as PWA)
     const isStandaloneMode =
       window.matchMedia("(display-mode: standalone)").matches ||
       (window.navigator as any).standalone === true ||
@@ -40,6 +28,18 @@ export function PwaInstallPrompt() {
     if (dismissedTime && Date.now() - parseInt(dismissedTime, 10) < 2 * 24 * 60 * 60 * 1000) {
       setIsDismissed(true);
       return;
+    }
+
+    // 2. Register Service Worker
+    if ("serviceWorker" in navigator && process.env.NODE_ENV !== "development") {
+      navigator.serviceWorker
+        .register("/sw.js")
+        .then((reg) => {
+          console.log("PWA Service Worker registered successfully:", reg.scope);
+        })
+        .catch((err) => {
+          console.warn("PWA Service Worker registration failed:", err);
+        });
     }
 
     // 3. Detect iOS and Mobile vs Desktop device
