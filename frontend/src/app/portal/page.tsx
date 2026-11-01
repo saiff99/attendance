@@ -7,10 +7,9 @@ import {
   GraduationCap, BookOpen, CheckCircle2, AlertTriangle, XCircle,
   Calendar, Clock, MapPin, Smartphone, Shield, LogOut, KeyRound,
   RefreshCw, ChevronRight, User, Sparkles, Check, ArrowUpRight, Camera, ShieldCheck,
-  Eye, EyeOff, Bell, WifiOff, Sun, Moon
+  Eye, EyeOff, Bell, WifiOff
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
-import { useTheme } from "next-themes";
 import { FaceRegistrationModal } from "@/components/FaceRegistrationModal";
 
 interface SubjectRow {
@@ -100,12 +99,7 @@ export default function StudentPortalPage() {
   const [isOnline, setIsOnline] = useState<boolean>(true);
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | "unsupported">("default");
 
-  // Color Theme State
-  const [mounted, setMounted] = useState(false);
-  const { theme, setTheme, resolvedTheme } = useTheme();
-
   useEffect(() => {
-    setMounted(true);
     if (typeof window !== "undefined") {
       setIsOnline(navigator.onLine);
       const handleOnline = () => setIsOnline(true);
@@ -302,15 +296,15 @@ export default function StudentPortalPage() {
 
   if (loading && !data) {
     return (
-      <div className="min-h-screen bg-slate-50 dark:bg-[#060911] text-slate-800 dark:text-slate-100 flex flex-col items-center justify-between p-6 sm:p-10 relative overflow-hidden select-none transition-colors duration-200">
+      <div className="min-h-screen bg-[#060911] text-slate-100 flex flex-col items-center justify-between p-6 sm:p-10 relative overflow-hidden select-none">
         {/* Ambient Glowing Atmospheric Aura */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[340px] sm:w-[480px] h-[340px] sm:h-[480px] bg-gradient-to-tr from-indigo-500/15 dark:from-indigo-600/20 via-violet-500/10 dark:via-violet-600/15 to-teal-500/10 rounded-full blur-[110px] pointer-events-none" />
-        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-48 h-48 bg-indigo-500/10 dark:bg-indigo-500/15 rounded-full blur-[70px] pointer-events-none" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[340px] sm:w-[480px] h-[340px] sm:h-[480px] bg-gradient-to-tr from-indigo-600/20 via-violet-600/15 to-teal-500/10 rounded-full blur-[110px] pointer-events-none" />
+        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-48 h-48 bg-indigo-500/15 rounded-full blur-[70px] pointer-events-none" />
 
         {/* Top Live Sync Pill */}
         <div className="w-full flex justify-end relative z-10">
-          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/80 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 text-[10px] font-mono uppercase tracking-wider text-slate-600 dark:text-slate-400 backdrop-blur-md shadow-sm">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400 animate-ping" />
+          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900/60 border border-slate-800 text-[10px] font-mono uppercase tracking-wider text-slate-400 backdrop-blur-md">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
             <span>Live Sync</span>
           </div>
         </div>
@@ -320,41 +314,41 @@ export default function StudentPortalPage() {
           {/* Layered Glassmorphic Shield Emblem with Pulse Aura */}
           <div className="relative mb-6">
             <div className="absolute -inset-3 rounded-3xl bg-gradient-to-r from-indigo-500/25 via-violet-500/20 to-teal-500/25 blur-xl animate-pulse" />
-            <div className="relative w-20 h-20 rounded-2xl bg-gradient-to-b from-slate-100 via-slate-200 to-slate-300 dark:from-slate-800 dark:via-slate-900 dark:to-slate-950 p-0.5 shadow-xl dark:shadow-2xl border border-slate-200 dark:border-slate-700/60 flex items-center justify-center">
-              <div className="w-full h-full rounded-[14px] bg-white dark:bg-gradient-to-br dark:from-indigo-600/20 dark:via-slate-950 dark:to-slate-950 flex items-center justify-center shadow-inner relative overflow-hidden">
-                <GraduationCap className="w-10 h-10 text-indigo-600 dark:text-indigo-400 drop-shadow-[0_2px_12px_rgba(99,102,241,0.5)]" />
-                <div className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-emerald-500 dark:bg-emerald-400 border-2 border-white dark:border-[#060911] shadow-[0_0_8px_#10b981]" />
+            <div className="relative w-20 h-20 rounded-2xl bg-gradient-to-b from-slate-800 via-slate-900 to-slate-950 p-0.5 shadow-2xl border border-slate-700/60 flex items-center justify-center">
+              <div className="w-full h-full rounded-[14px] bg-gradient-to-br from-indigo-600/20 via-slate-950 to-slate-950 flex items-center justify-center shadow-inner relative overflow-hidden">
+                <GraduationCap className="w-10 h-10 text-indigo-400 drop-shadow-[0_2px_12px_rgba(99,102,241,0.5)]" />
+                <div className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-emerald-400 border-2 border-[#060911] shadow-[0_0_8px_#10b981]" />
               </div>
             </div>
           </div>
 
           {/* Typography & Institutional Badging */}
-          <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight flex items-center justify-center gap-2">
+          <h1 className="text-2xl font-black text-white tracking-tight flex items-center justify-center gap-2">
             MedAttend
-            <span className="text-[11px] font-bold font-mono px-2 py-0.5 rounded-lg bg-indigo-500/15 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-300 border border-indigo-500/30">
+            <span className="text-[11px] font-bold font-mono px-2 py-0.5 rounded-lg bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
               AI
             </span>
           </h1>
-          <p className="text-[11px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 mt-1">
+          <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400 mt-1">
             Medical Student Portal
           </p>
 
           {/* Sleek Indeterminate Shimmer Progress Bar */}
           <div className="mt-7 w-full max-w-[240px] flex flex-col items-center gap-3">
-            <div className="w-full h-1.5 bg-slate-200 dark:bg-slate-900 rounded-full overflow-hidden relative border border-slate-300/80 dark:border-slate-800 shadow-inner">
+            <div className="w-full h-1.5 bg-slate-900 rounded-full overflow-hidden relative border border-slate-800 shadow-inner">
               <div className="absolute inset-y-0 w-28 bg-gradient-to-r from-transparent via-indigo-500 to-teal-300 rounded-full animate-shimmer-slide" />
             </div>
 
-            <div className="flex items-center gap-2 text-xs text-indigo-600 dark:text-indigo-300/90 font-medium">
-              <RefreshCw className="w-3.5 h-3.5 animate-spin text-indigo-500 dark:text-indigo-400" />
+            <div className="flex items-center gap-2 text-xs text-indigo-300/90 font-medium">
+              <RefreshCw className="w-3.5 h-3.5 animate-spin text-indigo-400" />
               <span>Synchronizing Academic Records...</span>
             </div>
           </div>
         </div>
 
         {/* Bottom Trust Badge */}
-        <div className="relative z-10 flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/80 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800/80 backdrop-blur-md text-[11px] text-slate-600 dark:text-slate-400 font-medium shadow-sm">
-          <ShieldCheck className="w-3.5 h-3.5 text-emerald-500 dark:text-emerald-400" />
+        <div className="relative z-10 flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-900/60 border border-slate-800/80 backdrop-blur-md text-[11px] text-slate-400 font-medium shadow-sm">
+          <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
           <span>NMC Verified • End-to-End Encrypted</span>
         </div>
       </div>
@@ -363,31 +357,31 @@ export default function StudentPortalPage() {
 
   if (error || !data) {
     return (
-      <div className="min-h-screen bg-slate-50 dark:bg-[#070B12] text-slate-900 dark:text-slate-100 flex flex-col items-center justify-center p-4 transition-colors duration-200">
-        <div className="max-w-md w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 text-center shadow-xl dark:shadow-2xl">
-          <div className="w-12 h-12 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-500 dark:text-rose-400 flex items-center justify-center mx-auto mb-4">
+      <div className="min-h-screen bg-[#070B12] text-slate-100 flex flex-col items-center justify-center p-4">
+        <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-6 text-center shadow-2xl">
+          <div className="w-12 h-12 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-400 flex items-center justify-center mx-auto mb-4">
             <XCircle className="w-6 h-6" />
           </div>
-          <h2 className="text-lg font-bold text-slate-900 dark:text-white mb-2">Portal Access Error</h2>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mb-6">{error || "Unable to retrieve student records."}</p>
+          <h2 className="text-lg font-bold text-white mb-2">Portal Access Error</h2>
+          <p className="text-xs text-slate-400 mb-6">{error || "Unable to retrieve student records."}</p>
           <div className="flex flex-col sm:flex-row items-center gap-2.5">
             <button
               onClick={() => fetchPortalData(selectedRoll)}
-              className="w-full sm:flex-1 py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition-all cursor-pointer shadow-md shadow-indigo-600/20"
+              className="w-full sm:flex-1 py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition-all cursor-pointer"
             >
               Retry
             </button>
             {user?.role !== "Student" && (
               <Link
                 href="/"
-                className="w-full sm:flex-1 py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold transition-all text-center border border-slate-200 dark:border-transparent"
+                className="w-full sm:flex-1 py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-all text-center"
               >
                 Dashboard
               </Link>
             )}
             <button
               onClick={() => logout()}
-              className="w-full sm:flex-1 py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold transition-all cursor-pointer border border-slate-200 dark:border-transparent"
+              className="w-full sm:flex-1 py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-all cursor-pointer"
             >
               Sign Out
             </button>
@@ -401,52 +395,37 @@ export default function StudentPortalPage() {
   const isElevatedViewer = data.viewerRole === "Super Admin" || data.viewerRole === "Faculty" || user?.role === "Super Admin" || user?.role === "Faculty";
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#070B12] text-slate-900 dark:text-slate-100 pb-16 transition-colors duration-200 selection:bg-indigo-500 selection:text-white">
+    <div className="min-h-screen bg-[#070B12] text-slate-100 pb-16 selection:bg-indigo-500 selection:text-white">
       {/* Top Header Navbar */}
-      <header className="sticky top-0 z-30 bg-white/80 dark:bg-slate-950/80 backdrop-blur-xl border-b border-slate-200/80 dark:border-slate-800/80 px-3.5 sm:px-8 py-2.5 sm:py-3.5 flex items-center justify-between gap-2 sm:gap-4 transition-colors">
+      <header className="sticky top-0 z-30 bg-slate-950/80 backdrop-blur-xl border-b border-slate-800/80 px-3.5 sm:px-8 py-2.5 sm:py-3.5 flex items-center justify-between gap-2 sm:gap-4">
         <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
           <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center text-white shadow-md shadow-indigo-600/30 shrink-0">
             <GraduationCap className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-1.5 sm:gap-2">
-              <span className="text-sm sm:text-base font-black text-slate-900 dark:text-white tracking-tight shrink-0">MedAttend</span>
-              <span className="hidden sm:inline-flex items-center text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-indigo-500/15 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-300 border border-indigo-500/30 leading-tight shrink-0">
+              <span className="text-sm sm:text-base font-black text-white tracking-tight shrink-0">MedAttend</span>
+              <span className="hidden sm:inline-flex items-center text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 leading-tight shrink-0">
                 Student Portal
               </span>
             </div>
             {/* Mobile Subtitle: Stacked directly underneath MedAttend (Zero horizontal collision) */}
-            <p className="text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 tracking-wide uppercase sm:hidden leading-none mt-0.5">
+            <p className="text-[10px] font-semibold text-indigo-400 tracking-wide uppercase sm:hidden leading-none mt-0.5">
               Student Portal
             </p>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 hidden sm:block mt-0.5">Academic Attendance &amp; Curriculum Performance</p>
+            <p className="text-[11px] text-slate-400 hidden sm:block mt-0.5">Academic Attendance &amp; Curriculum Performance</p>
           </div>
         </div>
 
         {/* Student Quick Controls */}
-        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-          {/* Quick Theme Toggle Button */}
-          <button
-            type="button"
-            onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
-            className="flex items-center justify-center p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800/80 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all cursor-pointer shrink-0 border border-slate-200/90 dark:border-slate-700/60 shadow-sm"
-            title={mounted && resolvedTheme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}
-            aria-label="Toggle color theme"
-          >
-            {mounted && resolvedTheme === "dark" ? (
-              <Sun className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-            ) : (
-              <Moon className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
-            )}
-          </button>
-
+        <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
           {notificationPermission !== "unsupported" && (
             <button
               onClick={requestNotificationAccess}
               className={`flex items-center gap-1.5 py-1.5 px-2 sm:px-2.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer shrink-0 ${
                 notificationPermission === "granted"
-                  ? "bg-emerald-50 dark:bg-slate-800/80 hover:bg-emerald-100 dark:hover:bg-slate-700 border-emerald-200 dark:border-slate-700/60 text-emerald-600 dark:text-emerald-400"
-                  : "bg-indigo-50 dark:bg-indigo-500/10 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 border-indigo-200 dark:border-indigo-500/30 text-indigo-600 dark:text-indigo-300"
+                  ? "bg-slate-800/80 hover:bg-slate-700 border-slate-700/60 text-emerald-400"
+                  : "bg-indigo-500/10 hover:bg-indigo-500/20 border-indigo-500/30 text-indigo-300"
               }`}
               title={notificationPermission === "granted" ? "Attendance Push Alerts Active" : "Enable Attendance Push Alerts"}
             >
@@ -457,26 +436,26 @@ export default function StudentPortalPage() {
 
           <Link
             href="/selfieattend"
-            className="flex items-center gap-1.5 py-1.5 px-2.5 sm:px-3 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 border border-emerald-200 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-300 text-xs font-semibold transition-all shadow-sm group shrink-0"
+            className="flex items-center gap-1.5 py-1.5 px-2.5 sm:px-3 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-xs font-semibold transition-all shadow-sm group shrink-0"
             title="Mark Attendance"
           >
-            <Smartphone className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 group-hover:scale-110 transition-transform shrink-0" />
+            <Smartphone className="w-3.5 h-3.5 text-emerald-400 group-hover:scale-110 transition-transform shrink-0" />
             <span className="hidden sm:inline">Attendance</span>
             <span className="sm:hidden text-[11px]">Attend</span>
           </Link>
 
           <button
             onClick={() => setIsPinModalOpen(true)}
-            className="flex items-center gap-1.5 py-1.5 px-2.5 sm:px-3 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white border border-slate-200/80 dark:border-transparent text-xs font-semibold transition-all cursor-pointer shrink-0"
+            className="flex items-center gap-1.5 py-1.5 px-2.5 sm:px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold transition-all cursor-pointer shrink-0"
             title="Update Security PIN"
           >
-            <KeyRound className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+            <KeyRound className="w-3.5 h-3.5 text-indigo-400" />
             <span className="hidden sm:inline">Security PIN</span>
           </button>
 
           <button
             onClick={() => logout()}
-            className="flex items-center gap-1.5 py-1.5 px-2.5 sm:px-3 rounded-xl bg-slate-100 dark:bg-slate-800/80 hover:bg-rose-50 dark:hover:bg-rose-500/20 text-slate-600 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-300 border border-slate-200/80 dark:border-transparent text-xs font-semibold transition-all cursor-pointer shrink-0"
+            className="flex items-center gap-1.5 py-1.5 px-2.5 sm:px-3 rounded-xl bg-slate-800/80 hover:bg-rose-500/20 hover:text-rose-300 text-slate-400 text-xs font-semibold transition-all cursor-pointer shrink-0"
             title="Sign Out"
           >
             <LogOut className="w-3.5 h-3.5" />
@@ -594,37 +573,37 @@ export default function StudentPortalPage() {
         )}
 
         {/* Student Identity Hero Card */}
-        <div className="bg-white dark:bg-gradient-to-br dark:from-slate-900/90 dark:via-slate-900/80 dark:to-slate-950 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-5 sm:p-7 shadow-lg dark:shadow-2xl relative overflow-hidden backdrop-blur-xl transition-colors">
+        <div className="bg-gradient-to-br from-slate-900/90 via-slate-900/80 to-slate-950 border border-slate-800 rounded-3xl p-5 sm:p-7 shadow-2xl relative overflow-hidden backdrop-blur-xl">
           <div className="absolute top-0 right-0 w-80 h-80 bg-indigo-500/10 blur-[100px] rounded-full pointer-events-none" />
 
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10">
             {/* Left: Avatar & Metadata */}
             <div className="flex items-center gap-4 sm:gap-5">
               <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-tr from-indigo-500 via-violet-600 to-indigo-700 p-0.5 shadow-xl shadow-indigo-600/20 flex-shrink-0">
-                <div className="w-full h-full rounded-[14px] bg-slate-100 dark:bg-slate-950 flex items-center justify-center text-indigo-600 dark:text-indigo-300 font-bold text-2xl">
+                <div className="w-full h-full rounded-[14px] bg-slate-950 flex items-center justify-center text-indigo-300 font-bold text-2xl">
                   {student.fullName ? student.fullName.charAt(0).toUpperCase() : <User className="w-8 h-8" />}
                 </div>
               </div>
 
               <div>
                 <div className="flex flex-wrap items-center gap-2 mb-1">
-                  <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">{student.fullName}</h1>
-                  <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-lg bg-indigo-500/15 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-300 border border-indigo-500/30">
+                  <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">{student.fullName}</h1>
+                  <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-lg bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
                     Roll: {student.studentRoll}
                   </span>
                 </div>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  <span className="text-slate-700 dark:text-slate-300 font-semibold">{student.academicYear} MBBS</span>
+                <p className="text-xs text-slate-400">
+                  <span className="text-slate-300 font-semibold">{student.academicYear} MBBS</span>
                 </p>
                 <div className="flex items-center gap-2 mt-2">
                   {student.hasFaceEnrolled ? (
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shadow-sm">
-                      <Check className="w-3.5 h-3.5 text-emerald-500 dark:text-emerald-400" />
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-sm">
+                      <Check className="w-3.5 h-3.5 text-emerald-400" />
                       Biometrics Registered
                     </span>
                   ) : (
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 shadow-sm">
-                      <AlertTriangle className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400" />
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20 shadow-sm">
+                      <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
                       Biometrics Pending
                     </span>
                   )}
@@ -633,29 +612,29 @@ export default function StudentPortalPage() {
             </div>
 
             {/* Right: Exam Eligibility Badge */}
-            <div className="flex flex-col items-center justify-center text-center bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800/80 rounded-2xl p-4 sm:p-5 transition-colors">
-              <span className="text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold mb-1.5 text-center">
+            <div className="flex flex-col items-center justify-center text-center bg-slate-950/60 border border-slate-800/80 rounded-2xl p-4 sm:p-5">
+              <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold mb-1.5 text-center">
                 NMC University Eligibility
               </span>
               <div className="flex items-center justify-center">
                 {summary.status === "Eligible" ? (
-                  <span className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-500/15 dark:bg-emerald-500/20 border border-emerald-500/30 dark:border-emerald-500/40 text-emerald-700 dark:text-emerald-300 font-bold text-sm shadow-inner text-center">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  <span className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-bold text-sm shadow-inner text-center">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
                     <span>Eligible for Exams</span>
                   </span>
                 ) : summary.status === "Borderline" ? (
-                  <span className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-amber-500/15 dark:bg-amber-500/20 border border-amber-500/30 dark:border-amber-500/40 text-amber-700 dark:text-amber-300 font-bold text-sm shadow-inner text-center">
-                    <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                  <span className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-300 font-bold text-sm shadow-inner text-center">
+                    <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
                     <span>Borderline (Requires Caution)</span>
                   </span>
                 ) : (
-                  <span className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-rose-500/15 dark:bg-rose-500/20 border border-rose-500/30 dark:border-rose-500/40 text-rose-700 dark:text-rose-300 font-bold text-sm shadow-inner text-center">
-                    <XCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
+                  <span className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-rose-500/20 border border-rose-500/40 text-rose-300 font-bold text-sm shadow-inner text-center">
+                    <XCircle className="w-4 h-4 text-rose-400 shrink-0" />
                     <span>Attendance Shortage (&lt;75%)</span>
                   </span>
                 )}
               </div>
-              <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1.5 text-center">
+              <p className="text-[10px] text-slate-500 mt-1.5 text-center">
                 Minimum 75% required across all departments
               </p>
             </div>
@@ -665,24 +644,24 @@ export default function StudentPortalPage() {
         {/* 4 Metric KPI Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
           {/* Card 1: Overall Percentage */}
-          <div className="bg-white dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 sm:p-5 shadow-sm dark:shadow-xl relative overflow-hidden transition-colors">
+          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl relative overflow-hidden">
             <div className="flex items-center justify-between gap-1.5 mb-2">
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Overall Rate</span>
+              <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Overall Rate</span>
               <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap shrink-0 ${
                 summary.percentage >= 75
-                  ? "bg-emerald-500/15 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30"
+                  ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
                   : summary.percentage >= 65
-                  ? "bg-amber-500/15 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30"
-                  : "bg-rose-500/15 dark:bg-rose-500/20 text-rose-700 dark:text-rose-300 border border-rose-500/30"
+                  ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                  : "bg-rose-500/20 text-rose-300 border border-rose-500/30"
               }`}>
                 {summary.status === "At Risk" ? "Risk" : summary.status}
               </span>
             </div>
-            <div className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">
+            <div className="text-2xl sm:text-3xl font-black text-white tracking-tight">
               {summary.percentage}%
             </div>
             {/* Progress Bar */}
-            <div className="mt-3 w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
+            <div className="mt-3 w-full bg-slate-800 h-2 rounded-full overflow-hidden">
               <div
                 className={`h-full rounded-full transition-all duration-500 ${
                   summary.percentage >= 75
@@ -697,53 +676,53 @@ export default function StudentPortalPage() {
           </div>
 
           {/* Card 2: Total Classes */}
-          <div className="bg-white dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 sm:p-5 shadow-sm dark:shadow-xl transition-colors">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 block mb-2">Total Classes</span>
-            <div className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">{summary.totalClasses}</div>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-2">Delivered to your cohort</p>
+          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl">
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 block mb-2">Total Classes</span>
+            <div className="text-2xl sm:text-3xl font-black text-white tracking-tight">{summary.totalClasses}</div>
+            <p className="text-[11px] text-slate-500 mt-2">Delivered to your cohort</p>
           </div>
 
           {/* Card 3: Classes Attended */}
-          <div className="bg-white dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 sm:p-5 shadow-sm dark:shadow-xl transition-colors">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 block mb-2">Attended</span>
-            <div className="text-2xl sm:text-3xl font-black text-emerald-600 dark:text-emerald-400 tracking-tight">{summary.present}</div>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-2">Marked present via AI &amp; Selfie</p>
+          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl">
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 block mb-2">Attended</span>
+            <div className="text-2xl sm:text-3xl font-black text-emerald-400 tracking-tight">{summary.present}</div>
+            <p className="text-[11px] text-slate-500 mt-2">Marked present via AI &amp; Selfie</p>
           </div>
 
           {/* Card 4: Classes Absent */}
-          <div className="bg-white dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 sm:p-5 shadow-sm dark:shadow-xl transition-colors">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 block mb-2">Absent</span>
-            <div className="text-2xl sm:text-3xl font-black text-rose-600 dark:text-rose-400 tracking-tight">{summary.absent}</div>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-2">Classes not attended</p>
+          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl">
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 block mb-2">Absent</span>
+            <div className="text-2xl sm:text-3xl font-black text-rose-400 tracking-tight">{summary.absent}</div>
+            <p className="text-[11px] text-slate-500 mt-2">Classes not attended</p>
           </div>
         </div>
 
         {/* ========================================================================= */}
         {/* Core Feature: Subject-wise Attendance Breakdown Table                     */}
         {/* ========================================================================= */}
-        <section className="bg-white dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-3 sm:p-7 shadow-lg dark:shadow-2xl relative overflow-hidden backdrop-blur-xl transition-colors">
+        <section className="bg-slate-900/90 border border-slate-800 rounded-3xl p-3 sm:p-7 shadow-2xl relative overflow-hidden backdrop-blur-xl">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 sm:mb-5">
             <div>
               <div className="flex items-center gap-2">
-                <BookOpen className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-                <h2 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white tracking-tight">Subject-wise Attendance Breakdown</h2>
+                <BookOpen className="w-5 h-5 text-indigo-400" />
+                <h2 className="text-lg sm:text-xl font-bold text-white tracking-tight">Subject-wise Attendance Breakdown</h2>
               </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              <p className="text-xs text-slate-400 mt-0.5">
                 Detailed subject-by-subject percentage calculation for {student.academicYear} curriculum.
               </p>
             </div>
             <button
               onClick={() => fetchPortalData(selectedRoll)}
               disabled={loading}
-              className="self-start sm:self-auto flex items-center gap-1.5 py-1.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-transparent text-xs font-semibold transition-all cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
+              className="self-start sm:self-auto flex items-center gap-1.5 py-1.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-all cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
             >
-              <RefreshCw className={`w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 ${loading ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 text-indigo-400 ${loading ? 'animate-spin' : ''}`} />
               <span>Refresh</span>
             </button>
           </div>
 
           {/* The Table Matching User's Screenshot Specification */}
-          <div className="rounded-2xl border border-slate-200 dark:border-slate-800/90 bg-slate-50/50 dark:bg-slate-950/60 shadow-inner overflow-hidden">
+          <div className="rounded-2xl border border-slate-800/90 bg-slate-950/60 shadow-inner overflow-hidden">
             <table className="w-full table-fixed text-left border-collapse text-xs sm:text-sm">
               <colgroup>
                 <col className="w-[30%] sm:w-[28%]" />
@@ -754,7 +733,7 @@ export default function StudentPortalPage() {
                 <col className="w-[18%] sm:w-[16%]" />
               </colgroup>
               <thead>
-                <tr className="border-b border-slate-200 dark:border-slate-800/80 bg-slate-100/90 dark:bg-slate-900/80 text-slate-600 dark:text-slate-400 text-[10px] sm:text-[11px] font-bold uppercase tracking-wider">
+                <tr className="border-b border-slate-800/80 bg-slate-900/80 text-slate-400 text-[10px] sm:text-[11px] font-bold uppercase tracking-wider">
                   <th className="py-2.5 sm:py-3 px-1.5 sm:px-4">Subject</th>
                   <th className="py-2.5 sm:py-3 px-0.5 sm:px-2 text-center">
                     <span className="sm:inline hidden">Total</span><span className="sm:hidden">Tot</span>
@@ -769,37 +748,37 @@ export default function StudentPortalPage() {
                   <th className="py-2.5 sm:py-3 px-0.5 sm:px-2 text-center">Status</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-200/80 dark:divide-slate-800/60">
+              <tbody className="divide-y divide-slate-800/60">
                 {subjects.map((sub, idx) => (
                   <tr
                     key={sub.code || sub.subject || idx}
-                    className="hover:bg-slate-100/60 dark:hover:bg-slate-900/50 transition-colors"
+                    className="hover:bg-slate-900/50 transition-colors"
                   >
                     {/* Subject Name - Clean, without subtitles */}
                     <td className="py-2 sm:py-3.5 px-1.5 sm:px-4">
-                      <div className="font-bold text-slate-900 dark:text-white text-[11px] sm:text-sm leading-tight break-words">
+                      <div className="font-bold text-white text-[11px] sm:text-sm leading-tight break-words">
                         {sub.subject}
                       </div>
                     </td>
 
                     {/* Total Classes */}
-                    <td className="py-2 sm:py-3.5 px-0.5 sm:px-2 text-center font-bold text-slate-700 dark:text-slate-300 text-[11px] sm:text-sm">
+                    <td className="py-2 sm:py-3.5 px-0.5 sm:px-2 text-center font-bold text-slate-300 text-[11px] sm:text-sm">
                       {sub.totalClasses}
                     </td>
 
                     {/* Attended / Present */}
-                    <td className="py-2 sm:py-3.5 px-0.5 sm:px-2 text-center font-bold text-emerald-600 dark:text-emerald-400 text-[11px] sm:text-sm">
+                    <td className="py-2 sm:py-3.5 px-0.5 sm:px-2 text-center font-bold text-emerald-400 text-[11px] sm:text-sm">
                       {sub.present}
                     </td>
 
                     {/* Absent */}
-                    <td className="py-2 sm:py-3.5 px-0.5 sm:px-2 text-center font-bold text-rose-600 dark:text-rose-400 text-[11px] sm:text-sm">
+                    <td className="py-2 sm:py-3.5 px-0.5 sm:px-2 text-center font-bold text-rose-400 text-[11px] sm:text-sm">
                       {sub.absent}
                     </td>
 
                     {/* Attendance Percentage */}
                     <td className="py-2 sm:py-3.5 px-0.5 sm:px-2 text-center">
-                      <span className="font-black text-slate-900 dark:text-white text-[11px] sm:text-sm whitespace-nowrap">
+                      <span className="font-black text-white text-[11px] sm:text-sm whitespace-nowrap">
                         {sub.percentage}%
                       </span>
                     </td>
@@ -807,18 +786,18 @@ export default function StudentPortalPage() {
                     {/* Status Badge */}
                     <td className="py-2 sm:py-3.5 px-0.5 sm:px-2 text-center">
                       {sub.status === "Good" ? (
-                        <span className="inline-flex items-center justify-center gap-1 px-1.5 sm:px-2.5 py-0.5 rounded-full text-[9px] sm:text-xs font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 whitespace-nowrap">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400 animate-pulse shrink-0" />
+                        <span className="inline-flex items-center justify-center gap-1 px-1.5 sm:px-2.5 py-0.5 rounded-full text-[9px] sm:text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 whitespace-nowrap">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
                           <span>Good</span>
                         </span>
                       ) : sub.status === "Borderline" ? (
-                        <span className="inline-flex items-center justify-center gap-1 px-1.5 sm:px-2.5 py-0.5 rounded-full text-[9px] sm:text-xs font-bold bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20 whitespace-nowrap">
-                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 dark:bg-amber-400 shrink-0" />
+                        <span className="inline-flex items-center justify-center gap-1 px-1.5 sm:px-2.5 py-0.5 rounded-full text-[9px] sm:text-xs font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 whitespace-nowrap">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
                           <span>Border</span>
                         </span>
                       ) : (
-                        <span className="inline-flex items-center justify-center gap-1 px-1.5 sm:px-2.5 py-0.5 rounded-full text-[9px] sm:text-xs font-bold bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-500/20 whitespace-nowrap">
-                          <span className="w-1.5 h-1.5 rounded-full bg-rose-500 dark:bg-rose-400 shrink-0" />
+                        <span className="inline-flex items-center justify-center gap-1 px-1.5 sm:px-2.5 py-0.5 rounded-full text-[9px] sm:text-xs font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20 whitespace-nowrap">
+                          <span className="w-1.5 h-1.5 rounded-full bg-rose-400 shrink-0" />
                           <span>Low</span>
                         </span>
                       )}
@@ -827,31 +806,31 @@ export default function StudentPortalPage() {
                 ))}
 
                 {/* Overall Summary Footer Row */}
-                <tr className="bg-slate-100/90 dark:bg-slate-900/90 font-black border-t-2 border-indigo-500/40 text-xs sm:text-sm">
-                  <td className="py-2.5 sm:py-4 px-1.5 sm:px-4 text-slate-900 dark:text-white">
+                <tr className="bg-slate-900/90 font-black border-t-2 border-indigo-500/40 text-xs sm:text-sm">
+                  <td className="py-2.5 sm:py-4 px-1.5 sm:px-4 text-white">
                     <div className="flex items-center gap-1 sm:gap-2">
-                      <Sparkles className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                      <Sparkles className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
                       <span className="font-black text-[11px] sm:text-sm leading-tight whitespace-nowrap">
                         <span className="sm:inline hidden">Overall </span>Total
                       </span>
                     </div>
                   </td>
-                  <td className="py-2.5 sm:py-4 px-0.5 sm:px-2 text-center text-slate-900 dark:text-white text-[11px] sm:text-sm font-bold">{summary.totalClasses}</td>
-                  <td className="py-2.5 sm:py-4 px-0.5 sm:px-2 text-center text-emerald-600 dark:text-emerald-400 text-[11px] sm:text-sm font-bold">{summary.present}</td>
-                  <td className="py-2.5 sm:py-4 px-0.5 sm:px-2 text-center text-rose-600 dark:text-rose-400 text-[11px] sm:text-sm font-bold">{summary.absent}</td>
-                  <td className="py-2.5 sm:py-4 px-0.5 sm:px-2 text-center text-indigo-600 dark:text-indigo-300 font-extrabold text-[11px] sm:text-base whitespace-nowrap">
+                  <td className="py-2.5 sm:py-4 px-0.5 sm:px-2 text-center text-white text-[11px] sm:text-sm font-bold">{summary.totalClasses}</td>
+                  <td className="py-2.5 sm:py-4 px-0.5 sm:px-2 text-center text-emerald-400 text-[11px] sm:text-sm font-bold">{summary.present}</td>
+                  <td className="py-2.5 sm:py-4 px-0.5 sm:px-2 text-center text-rose-400 text-[11px] sm:text-sm font-bold">{summary.absent}</td>
+                  <td className="py-2.5 sm:py-4 px-0.5 sm:px-2 text-center text-indigo-300 font-extrabold text-[11px] sm:text-base whitespace-nowrap">
                     {summary.percentage}%
                   </td>
                   <td className="py-2.5 sm:py-4 px-0.5 sm:px-2 text-center">
                     <span className={`inline-flex items-center justify-center gap-1 px-1.5 sm:px-2.5 py-0.5 rounded-full text-[9px] sm:text-xs font-black whitespace-nowrap ${
                       summary.status === "Eligible"
-                        ? "bg-emerald-500/15 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 dark:border-emerald-500/40"
+                        ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
                         : summary.status === "Borderline"
-                        ? "bg-amber-500/15 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30 dark:border-amber-500/40"
-                        : "bg-rose-500/15 dark:bg-rose-500/20 text-rose-700 dark:text-rose-300 border border-rose-500/30 dark:border-rose-500/40"
+                        ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                        : "bg-rose-500/20 text-rose-300 border border-rose-500/40"
                     }`}>
                       <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                        summary.status === "Eligible" ? "bg-emerald-500 dark:bg-emerald-400" : summary.status === "Borderline" ? "bg-amber-500 dark:bg-amber-400" : "bg-rose-500 dark:bg-rose-400"
+                        summary.status === "Eligible" ? "bg-emerald-400" : summary.status === "Borderline" ? "bg-amber-400" : "bg-rose-400"
                       }`} />
                       <span>{summary.status === "Eligible" ? "Eligible" : summary.status === "Borderline" ? "Border" : "Low"}</span>
                     </span>
@@ -863,60 +842,60 @@ export default function StudentPortalPage() {
         </section>
 
         {/* Recent Session Attendance Timeline */}
-        <section className="bg-white dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-5 sm:p-7 shadow-lg dark:shadow-2xl relative overflow-hidden backdrop-blur-xl transition-colors">
+        <section className="bg-slate-900/90 border border-slate-800 rounded-3xl p-5 sm:p-7 shadow-2xl relative overflow-hidden backdrop-blur-xl">
           <div className="flex items-center justify-between gap-3 mb-5">
             <div>
               <div className="flex items-center gap-2">
-                <Calendar className="w-5 h-5 text-indigo-600 dark:text-indigo-400 shrink-0" />
-                <h2 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white tracking-tight">Recent Class Attendance Log</h2>
+                <Calendar className="w-5 h-5 text-indigo-400 shrink-0" />
+                <h2 className="text-lg sm:text-xl font-bold text-white tracking-tight">Recent Class Attendance Log</h2>
               </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Verification logs from Live Scan AI &amp; GPS Selfie portal (Past 7 days).</p>
+              <p className="text-xs text-slate-400 mt-1">Verification logs from Live Scan AI &amp; GPS Selfie portal (Past 7 days).</p>
             </div>
             <button
               onClick={() => fetchPortalData(selectedRoll || undefined)}
               disabled={loading}
-              className="shrink-0 flex items-center gap-1.5 py-1.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-transparent text-xs font-semibold transition-all cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
+              className="shrink-0 flex items-center gap-1.5 py-1.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-all cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
               title="Refresh Logs"
             >
-              <RefreshCw className={`w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 ${loading ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 text-indigo-400 ${loading ? 'animate-spin' : ''}`} />
               <span>Refresh</span>
             </button>
           </div>
 
           {last7DaysSessions.length === 0 ? (
-            <div className="text-center py-10 bg-slate-50 dark:bg-slate-950/40 rounded-2xl border border-slate-200 dark:border-slate-800/60">
-              <p className="text-xs text-slate-500 dark:text-slate-400">No session attendance recorded in the last 7 days.</p>
+            <div className="text-center py-10 bg-slate-950/40 rounded-2xl border border-slate-800/60">
+              <p className="text-xs text-slate-500">No session attendance recorded in the last 7 days.</p>
             </div>
           ) : (
             <div className="space-y-2.5">
               {last7DaysSessions.map((session, i) => (
                 <div
                   key={session.sessionId || i}
-                  className="p-3.5 rounded-2xl bg-slate-50/80 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800/80 hover:border-slate-300 dark:hover:border-slate-700/80 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                  className="p-3.5 rounded-2xl bg-slate-950/60 border border-slate-800/80 hover:border-slate-700/80 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3"
                 >
                   <div className="flex items-center gap-3">
                     <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs ${
                       session.status === "Present"
-                        ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
-                        : "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20"
+                        ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                        : "bg-rose-500/10 text-rose-400 border border-rose-500/20"
                     }`}>
                       {session.status === "Present" ? <CheckCircle2 className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
                     </div>
 
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="font-bold text-slate-900 dark:text-white text-xs sm:text-sm">{session.subject}</span>
-                        <span className="text-[10px] text-slate-500 dark:text-slate-400">• {session.venue}</span>
+                        <span className="font-bold text-white text-xs sm:text-sm">{session.subject}</span>
+                        <span className="text-[10px] text-slate-500">• {session.venue}</span>
                       </div>
-                      <div className="flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                      <div className="flex items-center gap-2 text-[11px] text-slate-400 mt-0.5">
                         <span className="flex items-center gap-1">
-                          <Calendar className="w-3 h-3 text-slate-400 dark:text-slate-500" /> {session.date}
+                          <Calendar className="w-3 h-3 text-slate-500" /> {session.date}
                         </span>
                         {session.startTime && (
                           <>
                             <span>•</span>
                             <span className="flex items-center gap-1">
-                              <Clock className="w-3 h-3 text-slate-400 dark:text-slate-500" /> {formatSessionTime(session.startTime)}
+                              <Clock className="w-3 h-3 text-slate-500" /> {formatSessionTime(session.startTime)}
                             </span>
                           </>
                         )}
@@ -924,14 +903,14 @@ export default function StudentPortalPage() {
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between sm:justify-end gap-3 self-end sm:self-center w-full sm:w-auto pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-200/80 dark:border-slate-800/60">
-                    <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
-                      Mode: <span className="text-slate-800 dark:text-slate-200 font-semibold">{session.captureMode}</span>
+                  <div className="flex items-center justify-between sm:justify-end gap-3 self-end sm:self-center w-full sm:w-auto pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-800/60">
+                    <span className="text-[11px] font-medium text-slate-400">
+                      Mode: <span className="text-slate-200">{session.captureMode}</span>
                     </span>
                     <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
                       session.status === "Present"
-                        ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
-                        : "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20"
+                        ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                        : "bg-rose-500/10 text-rose-400 border border-rose-500/20"
                     }`}>
                       {session.status}
                     </span>
@@ -945,23 +924,23 @@ export default function StudentPortalPage() {
 
       {/* Security 6-Digit PIN Modal */}
       {isPinModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-sm w-full shadow-2xl relative animate-in fade-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-sm w-full shadow-2xl relative animate-in fade-in zoom-in-95 duration-200">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+              <div className="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center">
                 <KeyRound className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-white">Update 6-Digit PIN</h3>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400">Used for quick student portal login</p>
+                <h3 className="text-base font-bold text-white">Update 6-Digit PIN</h3>
+                <p className="text-[11px] text-slate-400">Used for quick student portal login</p>
               </div>
             </div>
 
             {pinMessage && (
               <div className={`p-3 rounded-xl mb-4 text-xs font-semibold ${
                 pinMessage.type === "success"
-                  ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-300"
-                  : "bg-rose-500/10 border border-rose-500/20 text-rose-700 dark:text-rose-300"
+                  ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-300"
+                  : "bg-rose-500/10 border border-rose-500/20 text-rose-300"
               }`}>
                 {pinMessage.text}
               </div>
@@ -969,7 +948,7 @@ export default function StudentPortalPage() {
 
             <form onSubmit={handleUpdatePin} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                <label className="block text-xs font-semibold text-slate-400 mb-1">
                   Current 6-Digit PIN
                 </label>
                 <div className="relative flex items-center">
@@ -982,28 +961,28 @@ export default function StudentPortalPage() {
                     value={oldPin}
                     onChange={(e) => setOldPin(e.target.value.replace(/\D/g, ""))}
                     placeholder="••••••"
-                    className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white font-mono text-center text-lg tracking-widest focus:outline-none focus:border-indigo-500 transition-colors"
+                    className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white font-mono text-center text-lg tracking-widest focus:outline-none focus:border-indigo-500 transition-colors"
                   />
                   <button
                     type="button"
                     onClick={() => setShowOldPin(!showOldPin)}
-                    className="absolute right-3 p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/80 transition-colors cursor-pointer"
+                    className="absolute right-3 p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/80 transition-colors cursor-pointer"
                     title={showOldPin ? "Hide PIN" : "Show PIN"}
                     tabIndex={-1}
                   >
-                    {showOldPin ? <EyeOff className="w-4 h-4 text-indigo-500 dark:text-indigo-400" /> : <Eye className="w-4 h-4" />}
+                    {showOldPin ? <EyeOff className="w-4 h-4 text-indigo-400" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
-                <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">Enter your current PIN or temporary activation PIN.</p>
+                <p className="text-[10px] text-slate-500 mt-1">Enter your current PIN or temporary activation PIN.</p>
               </div>
 
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400">New 6-Digit PIN</label>
+                  <label className="block text-xs font-semibold text-slate-400">New 6-Digit PIN</label>
                   <button
                     type="button"
                     onClick={generateRandomPin}
-                    className="text-[11px] text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 dark:hover:text-indigo-300 font-semibold cursor-pointer"
+                    className="text-[11px] text-indigo-400 hover:text-indigo-300 font-semibold cursor-pointer"
                   >
                     🎲 Random PIN
                   </button>
@@ -1018,22 +997,22 @@ export default function StudentPortalPage() {
                     value={newPin}
                     onChange={(e) => setNewPin(e.target.value.replace(/\D/g, ""))}
                     placeholder="••••••"
-                    className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white font-mono text-center text-lg tracking-widest focus:outline-none focus:border-indigo-500 transition-colors"
+                    className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white font-mono text-center text-lg tracking-widest focus:outline-none focus:border-indigo-500 transition-colors"
                   />
                   <button
                     type="button"
                     onClick={() => setShowNewPin(!showNewPin)}
-                    className="absolute right-3 p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/80 transition-colors cursor-pointer"
+                    className="absolute right-3 p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/80 transition-colors cursor-pointer"
                     title={showNewPin ? "Hide PIN" : "Show PIN"}
                     tabIndex={-1}
                   >
-                    {showNewPin ? <EyeOff className="w-4 h-4 text-indigo-500 dark:text-indigo-400" /> : <Eye className="w-4 h-4" />}
+                    {showNewPin ? <EyeOff className="w-4 h-4 text-indigo-400" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                <label className="block text-xs font-semibold text-slate-400 mb-1">
                   Confirm New PIN
                 </label>
                 <div className="relative flex items-center">
@@ -1046,16 +1025,16 @@ export default function StudentPortalPage() {
                     value={confirmPin}
                     onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, ""))}
                     placeholder="••••••"
-                    className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white font-mono text-center text-lg tracking-widest focus:outline-none focus:border-indigo-500 transition-colors"
+                    className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white font-mono text-center text-lg tracking-widest focus:outline-none focus:border-indigo-500 transition-colors"
                   />
                   <button
                     type="button"
                     onClick={() => setShowConfirmPin(!showConfirmPin)}
-                    className="absolute right-3 p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/80 transition-colors cursor-pointer"
+                    className="absolute right-3 p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/80 transition-colors cursor-pointer"
                     title={showConfirmPin ? "Hide PIN" : "Show PIN"}
                     tabIndex={-1}
                   >
-                    {showConfirmPin ? <EyeOff className="w-4 h-4 text-indigo-500 dark:text-indigo-400" /> : <Eye className="w-4 h-4" />}
+                    {showConfirmPin ? <EyeOff className="w-4 h-4 text-indigo-400" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
               </div>
@@ -1073,7 +1052,7 @@ export default function StudentPortalPage() {
                     setShowConfirmPin(false);
                     setPinMessage(null);
                   }}
-                  className="flex-1 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold cursor-pointer transition-all border border-slate-200 dark:border-transparent"
+                  className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold cursor-pointer transition-all"
                 >
                   Cancel
                 </button>

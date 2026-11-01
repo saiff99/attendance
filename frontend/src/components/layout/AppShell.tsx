@@ -41,7 +41,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {!isStudentUser && isAuthenticated && <Sidebar />}
         <main className={`flex-1 min-h-screen flex flex-col w-full min-w-0 ${
           !isStudentUser && isAuthenticated ? "lg:pl-64" : "lg:pl-0"
-        } pt-0 bg-slate-50 dark:bg-[#070B12] text-slate-900 dark:text-slate-100 transition-colors duration-200`}>
+        } pt-0 bg-[#070B12]`}>
           {children}
         </main>
       </>
