@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -50,10 +50,35 @@ export default function Sidebar() {
   };
   const isStudentPortal = pathname?.startsWith("/selfieattend") || pathname?.startsWith("/self-attendance") || pathname?.startsWith("/portal");
 
-  // Guarantee sidebar is cleanly closed on every page/route change
+  // Guarantee sidebar is cleanly closed on genuine route changes (skips initial mount)
+  const initialPathRef = useRef(pathname);
   useEffect(() => {
-    setIsOpen(false);
+    if (initialPathRef.current !== pathname) {
+      initialPathRef.current = pathname;
+      setIsOpen(false);
+      if (typeof window !== "undefined" && (window as any).__toggleMedAttendSidebar) {
+        (window as any).__toggleMedAttendSidebar(false);
+      }
+    }
   }, [pathname]);
+
+  // Synchronize React state with native pre-hydration sidebar triggers
+  useEffect(() => {
+    const sb = document.getElementById("medattend-sidebar");
+    if (sb && sb.classList.contains("translate-x-0")) {
+      setIsOpen(true);
+    }
+
+    const handleSync = (e: any) => {
+      if (typeof e.detail?.open === "boolean") {
+        setIsOpen(e.detail.open);
+      }
+    };
+    window.addEventListener("medattend-sidebar-sync", handleSync);
+    return () => {
+      window.removeEventListener("medattend-sidebar-sync", handleSync);
+    };
+  }, []);
 
   useEffect(() => {
     setMounted(true);
@@ -127,8 +152,15 @@ export default function Sidebar() {
               )}
             </button>
             <button
+              id="mobile-sidebar-toggle"
               type="button"
-              onClick={() => setIsOpen((prev) => !prev)}
+              onClick={() => {
+                if (typeof window !== "undefined" && (window as any).__toggleMedAttendSidebar) {
+                  (window as any).__toggleMedAttendSidebar();
+                } else {
+                  setIsOpen((prev) => !prev);
+                }
+              }}
               className="p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl text-gray-600 dark:text-gray-300 active:bg-gray-100 dark:active:bg-gray-800 [@media(hover:hover)]:hover:bg-gray-100 dark:[@media(hover:hover)]:hover:bg-gray-800 focus:outline-none transition-colors touch-manipulation cursor-pointer select-none"
               aria-label="Toggle sidebar"
               aria-expanded={isOpen}
@@ -141,33 +173,53 @@ export default function Sidebar() {
       )}
 
       {/* Mobile & Tablet Backdrop Overlay */}
-      {!isStudentPortal && isOpen && (
+      {!isStudentPortal && (
         <div 
-          className="lg:hidden fixed inset-0 bg-black/60 z-40 transition-opacity backdrop-blur-sm"
-          onClick={() => setIsOpen(false)}
+          id="medattend-sidebar-backdrop"
+          className={classNames(
+            "lg:hidden fixed inset-0 bg-black/60 z-40 transition-opacity backdrop-blur-sm",
+            isOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none hidden"
+          )}
+          onClick={() => {
+            if (typeof window !== "undefined" && (window as any).__toggleMedAttendSidebar) {
+              (window as any).__toggleMedAttendSidebar(false);
+            } else {
+              setIsOpen(false);
+            }
+          }}
           aria-hidden="true"
         />
       )}
 
       {/* Sidebar (Desktop: Always visible. Mobile: Hidden on student portal, slides in via isOpen on admin pages) */}
-      <div className={classNames(
-        "h-full w-64 sm:w-72 lg:w-64 flex-col bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 shadow-xl lg:shadow-sm fixed inset-y-0 left-0 z-50 transition-transform duration-300 ease-in-out",
-        isStudentPortal ? "hidden lg:flex" : "flex",
-        isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
-      )}>
-      <div className="flex h-16 shrink-0 items-center justify-between px-6 border-b border-gray-100 dark:border-gray-800">
-        <div className="flex items-center">
-          <Activity className="h-8 w-8 text-indigo-600 dark:text-indigo-400 mr-2" />
-          <span className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">
-            MedAttend
-          </span>
-        </div>
-        <button 
-          type="button"
-          onClick={() => setIsOpen(false)}
-          className="lg:hidden p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl text-gray-400 active:bg-gray-100 dark:active:bg-gray-800 [@media(hover:hover)]:hover:bg-gray-100 dark:[@media(hover:hover)]:hover:bg-gray-800 transition-colors touch-manipulation cursor-pointer select-none"
-          aria-label="Close sidebar"
-        >
+      <div 
+        id="medattend-sidebar"
+        className={classNames(
+          "h-full w-64 sm:w-72 lg:w-64 flex-col bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 shadow-xl lg:shadow-sm fixed inset-y-0 left-0 z-50 transition-transform duration-300 ease-in-out",
+          isStudentPortal ? "hidden lg:flex" : "flex",
+          isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+        )}
+      >
+        <div className="flex h-16 shrink-0 items-center justify-between px-6 border-b border-gray-100 dark:border-gray-800">
+          <div className="flex items-center">
+            <Activity className="h-8 w-8 text-indigo-600 dark:text-indigo-400 mr-2" />
+            <span className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">
+              MedAttend
+            </span>
+          </div>
+          <button 
+            id="mobile-sidebar-close"
+            type="button"
+            onClick={() => {
+              if (typeof window !== "undefined" && (window as any).__toggleMedAttendSidebar) {
+                (window as any).__toggleMedAttendSidebar(false);
+              } else {
+                setIsOpen(false);
+              }
+            }}
+            className="lg:hidden p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl text-gray-400 active:bg-gray-100 dark:active:bg-gray-800 [@media(hover:hover)]:hover:bg-gray-100 dark:[@media(hover:hover)]:hover:bg-gray-800 transition-colors touch-manipulation cursor-pointer select-none"
+            aria-label="Close sidebar"
+          >
           <X className="h-6 w-6" />
         </button>
       </div>
@@ -213,6 +265,9 @@ export default function Sidebar() {
                 onClick={() => {
                   if (typeof window !== "undefined") {
                     window.dispatchEvent(new CustomEvent("medattend-navigate"));
+                    if ((window as any).__toggleMedAttendSidebar) {
+                      (window as any).__toggleMedAttendSidebar(false);
+                    }
                   }
                   setIsOpen(false);
                 }}

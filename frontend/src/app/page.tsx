@@ -1,11 +1,23 @@
 import { cookies } from "next/headers";
+import nextDynamic from "next/dynamic";
 import { Users, UserCheck, CalendarCheck, Activity, CalendarDays, TrendingUp } from "lucide-react";
 import { supabaseServer } from "@/lib/supabaseServer";
-import { AttendanceChart } from "@/components/AttendanceChart";
 import { getStartOfTodayISO } from "@/lib/dateUtils";
 import { verifySessionToken, SESSION_COOKIE_NAME } from "@/lib/serverAuth";
 import { RecentClassSessionsTable } from "@/components/RecentClassSessionsTable";
 import { decodeSessionMetadata } from "@/lib/geofence";
+
+const AttendanceChart = nextDynamic(
+  () => import("@/components/AttendanceChart").then((mod) => mod.AttendanceChart),
+  {
+    loading: () => (
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8 animate-pulse">
+        <div className="lg:col-span-2 h-72 bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800" />
+        <div className="h-72 bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800" />
+      </div>
+    ),
+  }
+);
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
