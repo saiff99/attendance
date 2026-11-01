@@ -188,3 +188,52 @@ Tracks all executed schema migrations, SHA-256 integrity checksums, and executio
   - `403 Forbidden`: Geofence boundary exceeded, window expired, face similarity `< 0.40`, or proxy device detected.
   - `422 Unprocessable`: No face detected or multiple faces in camera frame.
 
+---
+
+### 2.4. `GET /api/audit-logs` (Forensic Security Ledger & Tamper-Evident Verification)
+- **Caller:** Super Admin Audit Portal (`/audit-logs`) & Institutional Compliance Exporters.
+- **Access Control:** Restricted strictly to authenticated `Super Admin` role via `verifySessionToken()`.
+- **Query Parameters:**
+  - `start_date` *(optional)*: Filter events created on or after date/timestamp (`YYYY-MM-DD` or ISO string).
+  - `end_date` *(optional)*: Filter events created on or before date/timestamp (`YYYY-MM-DD` or ISO string).
+  - `action` *(optional)*: Filter by event action type (e.g., `START_SESSION`, `SELFIE_ATTENDANCE_SUCCESS`, `BULK_STUDENT_IMPORT`).
+  - `target_type` *(optional)*: Filter by target resource entity (`session`, `student`, `attendance`, `system`).
+  - `limit` *(optional, default: `500`, max: `2000`)*: Maximum records retrieved per query.
+- **Forensic Checksum Calculation:**
+  - Computes a deterministic SHA-256 cryptographic digest across the JSON serialized log array using Node.js standard `crypto`:
+    ```ts
+    const checksum = crypto.createHash("sha256").update(JSON.stringify(logs)).digest("hex");
+    ```
+  - Enables instant cryptographic verification of ledger integrity against offline archives and regulatory audits.
+- **Export Standards:**
+  - Institutional CSV export embeds Excel UTF-8 Byte Order Mark (`\uFEFF`) preventing script/character corruption in spreadsheet tools.
+  - Header metadata section embeds generation timestamp, exporting administrator identity, query window, and live SHA-256 ledger fingerprint.
+- **Response Payload (`200 OK`):**
+```json
+{
+  "success": true,
+  "logs": [
+    {
+      "id": "c1f7a4e9-1234-5678-90ab-cdef12345678",
+      "actor_id": "dr_sharma",
+      "action": "START_SESSION",
+      "target_type": "session",
+      "target_id": "e4b6c31a-9f5e-4c7b-b841-8e8f8d9b1234",
+      "details": {
+        "ip": "203.0.113.195",
+        "class_name": "Gross Anatomy - Lecture 4",
+        "academic_year": "1st Year"
+      },
+      "created_at": "2026-10-28T10:00:00.000Z"
+    }
+  ],
+  "count": 1,
+  "checksum": "a8f5b2c4d9e1f0a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6"
+}
+```
+- **Error Responses:**
+  - `401 Unauthorized`: Session token missing or invalid.
+  - `403 Forbidden`: Authenticated user does not possess `Super Admin` privileges.
+  - `500 Internal Server Error`: Database query failure.
+
+
