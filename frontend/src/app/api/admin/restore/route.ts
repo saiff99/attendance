@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { supabaseServer } from '@/lib/supabaseServer';
 import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/serverAuth';
 import { logAuditEvent } from '@/lib/auditLog';
+import { decryptBackupPayload } from '@/lib/googleDriveBackup';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300; // 5 minutes for full disaster recovery restoration
@@ -59,14 +60,32 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!payload || typeof payload !== 'object' || !payload.data) {
+    let data = payload.data;
+    const checksum = payload.checksum;
+
+    // Support encrypted backup containers (e.g. from Google Drive or encrypted export)
+    if (payload.encrypted && payload.ciphertext) {
+      const secretKey =
+        payload.passphrase ||
+        process.env.BACKUP_ENCRYPTION_KEY?.trim() ||
+        process.env.JWT_SECRET?.trim() ||
+        'MedAttend-Default-Secret-Key-2026';
+      try {
+        data = decryptBackupPayload(payload, secretKey);
+      } catch (err: any) {
+        return NextResponse.json(
+          { error: 'Failed to decrypt backup: Invalid encryption key or corrupted payload.' },
+          { status: 400 }
+        );
+      }
+    }
+
+    if (!data || typeof data !== 'object') {
       return NextResponse.json(
         { error: 'Malformed backup file: Missing "data" container.' },
         { status: 400 }
       );
     }
-
-    const { data, checksum } = payload;
     const { students = [], sessions = [], attendance = [], subjects = [], settings = [] } = data;
 
     // Optional Checksum Validation

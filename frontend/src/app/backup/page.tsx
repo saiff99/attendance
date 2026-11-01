@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import {
   Database, Download, Upload, HardDrive, FileJson, CheckCircle2,
   AlertTriangle, RefreshCw, Loader2, ShieldAlert, GraduationCap,
-  BookOpen, Building2
+  BookOpen, Building2, Cloud, ShieldCheck, Lock, ExternalLink,
+  Folder, KeyRound
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 
@@ -22,6 +23,20 @@ export default function DatabaseBackupPage() {
   const [backupDownloadSuccess, setBackupDownloadSuccess] = useState<string | null>(null);
   const [backupDownloadError, setBackupDownloadError] = useState<string | null>(null);
 
+  // Google Drive Cloud Backup State
+  const [gdriveConfig, setGdriveConfig] = useState<{
+    isConfigured: boolean;
+    clientEmail?: string | null;
+    folderId?: string | null;
+    missingKeys?: string[];
+    hasEncryptionKey?: boolean;
+  } | null>(null);
+  const [gdriveRecentFiles, setGdriveRecentFiles] = useState<any[]>([]);
+  const [isGdriveLoading, setIsGdriveLoading] = useState(false);
+  const [isGdriveSyncing, setIsGdriveSyncing] = useState(false);
+  const [gdriveSyncSuccess, setGdriveSyncSuccess] = useState<string | null>(null);
+  const [gdriveSyncError, setGdriveSyncError] = useState<string | null>(null);
+
   // Restore State
   const [selectedBackupFile, setSelectedBackupFile] = useState<File | null>(null);
   const [backupPreview, setBackupPreview] = useState<{
@@ -29,6 +44,7 @@ export default function DatabaseBackupPage() {
     record_counts?: { students: number; sessions: number; attendance: number; subjects: number };
     checksum?: string;
     payloadData?: any;
+    isEncrypted?: boolean;
   } | null>(null);
   const [restoreError, setRestoreError] = useState<string | null>(null);
   const [isRestoring, setIsRestoring] = useState(false);
@@ -63,11 +79,53 @@ export default function DatabaseBackupPage() {
     }
   };
 
+  const fetchGdriveStatus = async () => {
+    setIsGdriveLoading(true);
+    try {
+      const res = await fetch("/api/admin/backup/google-drive");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          setGdriveConfig(data.config);
+          setGdriveRecentFiles(data.recentFiles || []);
+        }
+      }
+    } catch (err) {
+      console.warn("Failed to check Google Drive status:", err);
+    } finally {
+      setIsGdriveLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (currentUser?.role === "Super Admin") {
       fetchDbStats();
+      fetchGdriveStatus();
     }
   }, [currentUser?.role]);
+
+  const handleSyncToGoogleDrive = async () => {
+    setIsGdriveSyncing(true);
+    setGdriveSyncError(null);
+    setGdriveSyncSuccess(null);
+    try {
+      const res = await fetch("/api/admin/backup/google-drive", {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Failed to backup to Google Drive");
+      }
+      setGdriveSyncSuccess(
+        `Successfully uploaded encrypted backup "${data.file?.name}" (${((data.file?.sizeBytes || 0) / 1024).toFixed(1)} KB) to College Google Drive!`
+      );
+      fetchGdriveStatus();
+    } catch (err: any) {
+      setGdriveSyncError(err.message || "Failed to sync to Google Drive");
+    } finally {
+      setIsGdriveSyncing(false);
+    }
+  };
 
   const handleDownloadBackup = async () => {
     setIsDownloadingBackup(true);
@@ -116,21 +174,22 @@ export default function DatabaseBackupPage() {
     reader.onload = (event) => {
       try {
         const parsed = JSON.parse(event.target?.result as string);
-        if (!parsed || !parsed.data) {
-          setRestoreError("Invalid backup format: missing 'data' container.");
+        if (!parsed || (!parsed.data && !parsed.ciphertext)) {
+          setRestoreError("Invalid backup format: missing 'data' or 'ciphertext' container.");
           setBackupPreview(null);
           return;
         }
         setBackupPreview({
           exported_at: parsed.exported_at,
           record_counts: parsed.record_counts || {
-            students: parsed.data.students?.length || 0,
-            sessions: parsed.data.sessions?.length || 0,
-            attendance: parsed.data.attendance?.length || 0,
-            subjects: parsed.data.subjects?.length || 0,
+            students: parsed.data?.students?.length || 0,
+            sessions: parsed.data?.sessions?.length || 0,
+            attendance: parsed.data?.attendance?.length || 0,
+            subjects: parsed.data?.subjects?.length || 0,
           },
           checksum: parsed.checksum,
           payloadData: parsed,
+          isEncrypted: Boolean(parsed.encrypted),
         });
       } catch {
         setRestoreError("Failed to parse JSON file. Ensure the file is not corrupted.");
@@ -429,6 +488,176 @@ export default function DatabaseBackupPage() {
               )}
             </button>
           </div>
+        </div>
+
+        {/* CARD 3: AUTOMATED GOOGLE DRIVE CLOUD BACKUP (ZERO-DEPENDENCY REST) */}
+        <div className="p-6 rounded-2xl bg-white dark:bg-gray-900 border border-gray-200/80 dark:border-gray-800 shadow-sm transition-colors duration-300">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 pb-4 border-b border-gray-100 dark:border-gray-800">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400">
+                <Cloud className="w-6 h-6" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-base font-bold text-gray-900 dark:text-white">
+                    College Google Drive Automated Backup
+                  </h3>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300">
+                    Lightweight REST (0 KB)
+                  </span>
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Nightly military-grade encrypted snapshots pushed directly to the college's Google Drive
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={fetchGdriveStatus}
+                disabled={isGdriveLoading}
+                className="p-2 rounded-xl text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                title="Refresh Google Drive Status"
+              >
+                <RefreshCw className={`w-4 h-4 ${isGdriveLoading ? "animate-spin" : ""}`} />
+              </button>
+              {gdriveConfig?.isConfigured && (
+                <button
+                  type="button"
+                  onClick={handleSyncToGoogleDrive}
+                  disabled={isGdriveSyncing}
+                  className="py-2 px-3.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs flex items-center gap-2 shadow-sm shadow-blue-600/20 transition-all disabled:opacity-50"
+                >
+                  {isGdriveSyncing ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Uploading to Drive...
+                    </>
+                  ) : (
+                    <>
+                      <Cloud className="w-3.5 h-3.5" /> Sync to Drive Now
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
+          </div>
+
+          {gdriveSyncSuccess && (
+            <div className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-800 dark:text-emerald-300 flex items-center justify-between mb-4 animate-fadeIn">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>{gdriveSyncSuccess}</span>
+              </div>
+              <button onClick={() => setGdriveSyncSuccess(null)} className="text-emerald-600 hover:text-emerald-800">✕</button>
+            </div>
+          )}
+
+          {gdriveSyncError && (
+            <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-xs text-rose-800 dark:text-rose-300 flex items-center justify-between mb-4 animate-fadeIn">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>{gdriveSyncError}</span>
+              </div>
+              <button onClick={() => setGdriveSyncError(null)} className="text-rose-600 hover:text-rose-800">✕</button>
+            </div>
+          )}
+
+          {gdriveConfig?.isConfigured ? (
+            <div className="space-y-4">
+              {/* Active Configuration Badges */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                <div className="p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700/60">
+                  <div className="text-[11px] text-gray-500 dark:text-gray-400 mb-0.5 flex items-center gap-1.5">
+                    <Folder className="w-3.5 h-3.5 text-blue-500" /> Target Drive Folder
+                  </div>
+                  <div className="font-semibold text-gray-800 dark:text-gray-200 truncate" title={gdriveConfig.folderId || ""}>
+                    {gdriveConfig.folderId || "Configured"}
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700/60">
+                  <div className="text-[11px] text-gray-500 dark:text-gray-400 mb-0.5 flex items-center gap-1.5">
+                    <Lock className="w-3.5 h-3.5 text-emerald-500" /> Encryption Standard
+                  </div>
+                  <div className="font-semibold text-emerald-600 dark:text-emerald-400">
+                    AES-256-GCM Military Grade
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700/60">
+                  <div className="text-[11px] text-gray-500 dark:text-gray-400 mb-0.5 flex items-center gap-1.5">
+                    <ShieldCheck className="w-3.5 h-3.5 text-indigo-500" /> Retention Policy
+                  </div>
+                  <div className="font-semibold text-gray-800 dark:text-gray-200">
+                    Auto-prunes after 30 days
+                  </div>
+                </div>
+              </div>
+
+              {/* Recent Files Table */}
+              {gdriveRecentFiles.length > 0 && (
+                <div className="pt-2">
+                  <h4 className="text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">
+                    Recent Snapshots in Google Drive Folder ({gdriveRecentFiles.length}):
+                  </h4>
+                  <div className="overflow-x-auto rounded-xl border border-gray-100 dark:border-gray-800">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-800">
+                        <tr>
+                          <th className="py-2.5 px-3">File Name</th>
+                          <th className="py-2.5 px-3">Snapshot Date</th>
+                          <th className="py-2.5 px-3">Size</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 dark:divide-gray-800 text-gray-700 dark:text-gray-300">
+                        {gdriveRecentFiles.map((f: any) => (
+                          <tr key={f.id} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/40">
+                            <td className="py-2.5 px-3 font-mono font-medium text-blue-600 dark:text-blue-400 truncate max-w-[240px]">
+                              {f.name}
+                            </td>
+                            <td className="py-2.5 px-3">
+                              {f.createdTime ? new Date(f.createdTime).toLocaleString() : "Unknown"}
+                            </td>
+                            <td className="py-2.5 px-3">
+                              {f.size ? `${(parseInt(f.size, 10) / 1024).toFixed(1)} KB` : "—"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="p-4 rounded-xl bg-gray-50/70 dark:bg-gray-800/40 border border-gray-200 dark:border-gray-700/60 text-xs space-y-3">
+              <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400 font-semibold">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span>College Google Drive Setup Required</span>
+              </div>
+              <p className="text-gray-600 dark:text-gray-300 leading-relaxed">
+                To enable automatic nightly encrypted backups to the college's Google Drive with zero external packages, configure the following environment variables in your server <code className="px-1 py-0.5 rounded bg-gray-200 dark:bg-gray-700">.env</code> file:
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 font-mono text-[11px]">
+                <div className="p-2 rounded-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800">
+                  <span className="text-gray-400">1.</span> GOOGLE_SERVICE_ACCOUNT_EMAIL
+                </div>
+                <div className="p-2 rounded-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800">
+                  <span className="text-gray-400">2.</span> GOOGLE_PRIVATE_KEY
+                </div>
+                <div className="p-2 rounded-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800">
+                  <span className="text-gray-400">3.</span> GOOGLE_DRIVE_FOLDER_ID
+                </div>
+                <div className="p-2 rounded-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800">
+                  <span className="text-gray-400">4.</span> BACKUP_ENCRYPTION_KEY
+                </div>
+              </div>
+              <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                💡 <b>How it works:</b> Create a folder in Google Drive, create a Google Service Account in Google Cloud Console, and share the folder with the service account email as <b>Editor</b>.
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Modal: Database Disaster Recovery Restore Confirmation */}

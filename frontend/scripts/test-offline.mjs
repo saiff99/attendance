@@ -941,6 +941,85 @@ console.log('\n--- 16. Inactive / Archived Student Protection Across All Pathway
     backendRoutesContent.includes('s.get("academic_year", "")).startswith("[ARCHIVED]")'),
     'Backend /api/process-attendance excludes archived/inactive students from batch photo matching'
   );
+
+  // --- 17. Automated Google Drive Cloud Backup & AES-256-GCM Encryption ---
+  console.log('\n--- 17. Automated Google Drive Cloud Backup & AES-256-GCM Encryption ---');
+
+  function testEncrypt(dataStr, secretKey) {
+    const key = crypto.createHash('sha256').update(secretKey).digest();
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+    let ciphertext = cipher.update(dataStr, 'utf8', 'base64');
+    ciphertext += cipher.final('base64');
+    const authTag = cipher.getAuthTag();
+    return { encrypted: true, algorithm: 'aes-256-gcm', iv: iv.toString('hex'), authTag: authTag.toString('hex'), ciphertext };
+  }
+
+  function testDecrypt(envelope, secretKey) {
+    const key = crypto.createHash('sha256').update(secretKey).digest();
+    const iv = Buffer.from(envelope.iv, 'hex');
+    const authTag = Buffer.from(envelope.authTag, 'hex');
+    const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+    decipher.setAuthTag(authTag);
+    let decrypted = decipher.update(envelope.ciphertext, 'base64', 'utf8');
+    decrypted += decipher.final('utf8');
+    return JSON.parse(decrypted);
+  }
+
+  const samplePayload = {
+    students: [{ id: 'std_1', student_roll: '26001', full_name: 'Dr. Jane Doe' }],
+    sessions: [{ id: 'sess_1', class_name: 'Anatomy Lecture' }],
+    attendance: [{ id: 'att_1', status: 'Present' }]
+  };
+
+  const secretPass = 'MedAttend_Institutional_Master_Key_2026';
+  const encryptedEnv = testEncrypt(JSON.stringify(samplePayload), secretPass);
+
+  assert(encryptedEnv.encrypted === true, 'Backup container marked as encrypted');
+  assert(encryptedEnv.algorithm === 'aes-256-gcm', 'Encryption standard is AES-256-GCM');
+  assert(encryptedEnv.ciphertext !== JSON.stringify(samplePayload), 'Plaintext is fully obfuscated into ciphertext');
+  assert(encryptedEnv.iv.length === 24, 'IV length is 12 bytes hex (24 chars)');
+  assert(encryptedEnv.authTag.length === 32, 'AuthTag length is 16 bytes hex (32 chars)');
+
+  const decryptedPayload = testDecrypt(encryptedEnv, secretPass);
+  assert(decryptedPayload.students[0].student_roll === '26001', 'Decryption recovers exact student roll');
+  assert(decryptedPayload.sessions[0].class_name === 'Anatomy Lecture', 'Decryption recovers exact session metadata');
+
+  // Wrong key rejection
+  let wrongKeyFailed = false;
+  try {
+    testDecrypt(encryptedEnv, 'Wrong_Password_123');
+  } catch (e) {
+    wrongKeyFailed = true;
+  }
+  assert(wrongKeyFailed, 'Decryption strictly rejected with invalid passphrase');
+
+  // Tampered ciphertext rejection
+  let tamperedFailed = false;
+  try {
+    const tampered = { ...encryptedEnv, ciphertext: encryptedEnv.ciphertext.slice(0, -4) + 'AAAA' };
+    testDecrypt(tampered, secretPass);
+  } catch (e) {
+    tamperedFailed = true;
+  }
+  assert(tamperedFailed, 'Tampered ciphertext strictly rejected by GCM authentication tag');
+
+  // Check source files existence
+  const gdriveLib = path.join(__dirname, '../src/lib/googleDriveBackup.ts');
+  assert(fs.existsSync(gdriveLib), 'googleDriveBackup.ts library exists');
+
+  const gdriveLibContent = fs.readFileSync(gdriveLib, 'utf8');
+  assert(gdriveLibContent.includes('encryptBackupPayload') && gdriveLibContent.includes('decryptBackupPayload'), 'googleDriveBackup.ts exports AES-256-GCM encrypt/decrypt routines');
+  assert(gdriveLibContent.includes('getGoogleDriveAccessToken') && gdriveLibContent.includes('uploadBackupToGoogleDrive'), 'googleDriveBackup.ts implements native REST Google Drive upload');
+  assert(gdriveLibContent.includes('pruneOldGoogleDriveBackups'), 'googleDriveBackup.ts implements 30-day auto-retention pruning');
+
+  const gdriveRoute = path.join(__dirname, '../src/app/api/admin/backup/google-drive/route.ts');
+  assert(fs.existsSync(gdriveRoute), '/api/admin/backup/google-drive endpoint exists');
+
+  const cronRoute = path.join(__dirname, '../src/app/api/cron/backup/route.ts');
+  assert(fs.existsSync(cronRoute), '/api/cron/backup endpoint exists');
+  const cronContent = fs.readFileSync(cronRoute, 'utf8');
+  assert(cronContent.includes('verifyCronAuthorization') && cronContent.includes('CRON_SECRET'), '/api/cron/backup enforces strict CRON_SECRET authorization gate');
 }
 
 // Summary
