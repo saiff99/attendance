@@ -171,3 +171,27 @@ This document catalogs critical real-world edge cases, platform-specific quirks,
   3. **Pill Flex Wrapping & Compact Mobile Padding:** Applied `shrink-0` on badges with responsive padding (`p-3.5 sm:p-6`) and shortened segmented mode tab labels on mobile (`Multi` instead of `Multi Cam`, `Upload` instead of `Upload Photo`) to prevent tab-bar blowout.
 - **Rule:** Never apply `aspect-video` or fixed aspect ratios to flex containers containing stacked text, badges, or buttons. Always enforce `w-full max-w-full min-w-0 box-border` with content-adaptive heights (`min-h-[...]`).
 
+---
+
+### Gotcha 10: iOS PWA Cold-Start Pre-Hydration Touch Dead-Zone & CSS Scale Tap Drop
+- **Symptom:**
+  1. On mobile devices (specifically iPhones running the installed PWA in standalone WebKit mode), tapping the 3-line hamburger menu icon immediately upon opening the app produced no activity—the slide-in sidebar menu did not open. However, if the user waited ~8–10 seconds after opening without touching anything, tapping the hamburger icon opened the sidebar instantly on the very first touch.
+  2. Previously, tapping the hamburger icon also required a double-tap because the button's bounding box shrank during touch due to `active:scale-95`, causing iOS Safari to cancel the gesture.
+- **Root Cause:**
+  1. **The Uncanny Valley of SSR (Pre-Hydration Gap):** In an offline-first PWA, the service worker and WebKit render the cached HTML structure in ~100ms. The UI appears fully interactive, but the underlying JavaScript bundle (which included heavy SVG visualization libraries like `recharts` ~350KB) took 5–8 seconds to download, parse, and execute on mobile hardware. Before React 19 finished hydrating the page, the `<button>` had no native `onclick` or synthetic event listener attached, silently discarding any early tap.
+  2. **Mount-Time Route Reset Interference:** In Next.js client layout components, an unguarded `useEffect(() => setIsOpen(false), [pathname])` fired on initial mount, forcibly resetting any early-toggled `isOpen` state back to `false`.
+  3. **WebKit CSS Scale Touch Cancellation:** An `active:scale-95` transform shrank the button bounding box mid-gesture (`touchstart` to `touchend`), causing iOS WebKit to cancel the synthesized `click` event.
+- **Architectural Fix:**
+  1. **Instant Pre-Hydration Native DOM Bridge (`frontend/src/app/layout.tsx`):**
+     Added an ultra-lightweight inline `<script id="medattend-mobile-sidebar-init">` in `<head>` that executes synchronously before any JS chunk is loaded. It attaches an early event listener to `document` to intercept `#mobile-sidebar-toggle`, directly toggling Tailwind classes (`translate-x-0` vs `-translate-x-full`) on `#medattend-sidebar` and displaying `#medattend-sidebar-backdrop` with 0ms latency.
+  2. **Bi-Directional React Hydration Synchronization (`frontend/src/components/layout/Sidebar.tsx`):**
+     When React hydrates, `Sidebar` checks the DOM classes to inherit any pre-hydration toggle state, and listens to custom `medattend-sidebar-sync` events to keep `isOpen` in lockstep without double-toggling or visual flicker.
+  3. **Bundle Splitting & Lazy Loading (`frontend/src/app/page.tsx`):**
+     Converted `AttendanceChart` to use `nextDynamic` (`next/dynamic`) with a sleek animated skeleton fallback, stripping ~350KB of Recharts code from the critical initial chunk.
+  4. **Initial Mount Guard on Route Changes:**
+     Implemented `initialPathRef = useRef(pathname)` so route changes close the drawer only when `initialPathRef.current !== pathname`, avoiding initial mount overrides.
+  5. **Scale Elimination & Apple HIG 44px Touch Standards:**
+     Replaced `active:scale-95` with instant `transition-colors`, enforcing `min-w-[44px] min-h-[44px]` touch targets with `touch-manipulation cursor-pointer select-none`.
+- **Rule:** Never rely solely on React synthetic event listeners for critical mobile navigation elements (such as hamburger toggles) on PWA cold start. Always provide an inline native DOM bridge and decouple heavy third-party libraries from the critical initial bundle.
+
+
