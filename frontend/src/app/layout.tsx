@@ -53,7 +53,7 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${inter.variable} ${playfair.variable} min-h-screen bg-gray-50 dark:bg-gray-950 antialiased`}
+      className={`dark ${inter.variable} ${playfair.variable} min-h-screen bg-[#070B12] dark:bg-[#070B12] antialiased`}
     >
       <head>
         <link rel="manifest" href="/manifest.json" />
@@ -64,12 +64,12 @@ export default function RootLayout({
         <meta name="x5-orientation" content="portrait" />
         <meta name="orientation" content="portrait" />
       </head>
-      <body suppressHydrationWarning className="min-h-screen bg-gray-50 dark:bg-gray-950 transition-colors duration-300 antialiased">
+      <body suppressHydrationWarning className="min-h-screen bg-[#070B12] dark:bg-[#070B12] text-slate-100 transition-colors duration-200 antialiased">
         <AuthProvider>
           <ThemeProvider
             attribute="class"
-            defaultTheme="system"
-            enableSystem
+            defaultTheme="dark"
+            enableSystem={false}
             disableTransitionOnChange
           >
             <AppShell>{children}</AppShell>
