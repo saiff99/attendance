@@ -94,3 +94,14 @@ The rules documented in this specification are **Hard Constraints**. Under no ci
   - `POST /api/students/[id]/reset-pin`: Restricted strictly to `Super Admin` and `Admin`.
 - **Violation Guard:** Never grant `Faculty` role mutation or deletion capabilities on student records. Hiding UI elements is insufficient; least-privilege must be strictly enforced at the API route layer.
 
+### Rule 11: Student PIN Change Sliding-Window Rate Limiting & Account Isolation
+- **Constraint:** Repeated attempts to update student security access PINs via `POST /api/student/change-pin` must enforce strict atomic sliding-window rate limiting of maximum **5 attempts per 60 seconds** (`HTTP 429`).
+- **Implementation:**
+  - Tracked under atomic PostgreSQL RPC key `rl_pin_change:{studentIdentifier}` via `atomic_check_rate_limit` (with degraded in-memory fail-closed fallback).
+  - Rate check is executed *before* performing computationally expensive `bcrypt.compare` operations to prevent computational Denial-of-Service (Bcrypt CPU exhaustion).
+  - Exceeding 5 attempts within 60s returns `HTTP 429 Too Many Requests` with a dynamic `Retry-After: {remainingSeconds}` header and logs a `PIN_CHANGE_RATE_LIMITED` audit event in `audit_logs`.
+  - Rate limiting key is strictly bound to the authenticated student identifier (`studentId` / `studentRoll`), ensuring complete account isolation—preventing campus Wi-Fi NAT collisions where innocent students sharing a public IP could otherwise be throttled.
+  - Upon successful PIN verification and update, the rate limit key is immediately purged via `resetPinChangeRateLimit`.
+- **Violation Guard:** Never remove rate limiting from credential/PIN modification endpoints or depend solely on frontend UI button disables.
+
+
