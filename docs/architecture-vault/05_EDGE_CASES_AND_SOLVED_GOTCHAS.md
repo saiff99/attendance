@@ -215,4 +215,28 @@ This document catalogs critical real-world edge cases, platform-specific quirks,
      - The dedicated warning banner below renders the detailed, platform-specific operating system steps without UI duplication.
 - **Rule:** Never hardcode operating-system-specific paths or instructions (macOS, iOS, Android, Windows) in client-facing error strings. Always route through a platform detection helper to provide accurate, device-appropriate recovery instructions.
 
+---
+
+### Gotcha 12: Frozen 3-Attempt Face Verification Failure Warning & 60s Live Ticker Lock
+- **Symptom:**
+  When a student failed facial verification 3 consecutive times in `/selfieattend`, the application displayed a sticky, static warning card:
+  `"Cooldown active: 3 failed face attempts recorded for Roll '26001' on this device. Please wait 97s."`
+  The countdown number remained permanently frozen at `97s` without decrementing. Simultaneously, the `"Try Selfie Again"` button below remained clickable, allowing students to repeatedly trigger immediate 429 errors while trapped in the lockout.
+- **Root Cause:**
+  1. **Static Error Payload Assignment:** The API error handler in `SelfieAttendClient.tsx` stored `data.detail` directly into `resultData.message` as a static string. React had no interval timer or reactive state to decrement the remaining seconds dynamically.
+  2. **Uncapped Server Lockout Window:** `backend/app/rate_limiter.py` previously locked students out for 120 seconds (`now_ts + 120.0`). In high-pressure classroom environments with 5-minute total attendance windows, a 2-minute lockout was excessively punitive.
+  3. **Proxy Header Stripping:** The Next.js API route (`frontend/src/app/api/selfie-attendance/route.ts`) returned `NextResponse.json(data, { status: res.status })` without forwarding the upstream `Retry-After` header sent by the FastAPI backend.
+  4. **Unconditional Retry Button:** The `"Try Selfie Again"` button was rendered without any state disabling or lockout condition, leaving students unaware of when it was safe to retry.
+- **Architectural Fix:**
+  1. **60-Second Maximum Lockout Ceiling (`backend/app/rate_limiter.py`):** Reduced failure cooldown duration from 120s to strictly 60s (`now_ts + 60.0`) and capped remaining seconds calculation with `min(60, max(1, math.ceil(locked_until - now_ts)))`.
+  2. **API Proxy Header Preservation (`frontend/src/app/api/selfie-attendance/route.ts`):** Forwarded `Retry-After` upstream response header to the client.
+  3. **Client-Side Live Countdown State & 1-Second Interval Ticker (`SelfieAttendClient.tsx`):**
+     - Added `cooldownSeconds` reactive state initialized by extracting `Retry-After` header or regex matching `wait (\d+)s` (strictly clamped at `Math.min(60, waitSec)`).
+     - Running a 1000ms `setInterval` effect to decrement `cooldownSeconds` by 1 second down to 0.
+     - Dynamically substituted subtitle message `Please wait \d+s` with the live countdown value.
+     - Added an interactive amber glowing status badge: `⏳ Cooldown Active: Please wait {cooldownSeconds}s before retrying`.
+     - Disabled the `"Try Selfie Again"` button while `cooldownSeconds > 0` with explicit label: `Please wait {cooldownSeconds}s to retry`.
+     - Automatically transitioned to an emerald green alert (`✅ Cooldown expired! You may now take a selfie again.`) and unlocked the button instantly at `0s` without requiring page reload.
+- **Rule:** Never display static countdown warnings to end-users without an active reactive ticker. All rate-limit lockout intervals must be strictly bounded (capped at 60s max) and synchronize live client decrementing with backend header contracts.
+
 

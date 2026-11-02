@@ -74,3 +74,11 @@ The rules documented in this specification are **Hard Constraints**. Under no ci
   - Secrets are supplied exclusively via `.env` (backend) and `.env.local` (frontend).
   - Minimum secret length for `INTERNAL_API_KEY` and session secrets is 32 alphanumeric characters.
 
+### Rule 9: 3-Attempt Face Verification Failure Lockout Ceiling (60s Max)
+- **Constraint:** Repeated face recognition mismatches on a single device for a specific student roll within an active session trigger an automatic rate-limit lockout capped strictly at **60 seconds** (`HTTP 429`).
+- **Implementation:**
+  - Tracked under Redis/Postgres atomic key `rl_fail:{session_id}:{clean_roll}:{client_ip}`.
+  - On 3 consecutive failures, `locked_until = now_ts + 60.0`.
+  - Any subsequent attempts during the active lockout throw `HTTP 429: Cooldown active: 3 failed face attempts recorded... Please wait {wait_seconds}s.` with `Retry-After: {wait_seconds}` header, where `wait_seconds = min(60, max(1, math.ceil(locked_until - now_ts)))`.
+  - Client (`SelfieAttendClient.tsx`) initiates a 1-second live countdown ticker decrementing `cooldownSeconds` to 0, visually disables the retry button, and automatically unlocks upon expiry without page refresh.
+

@@ -187,6 +187,7 @@ Tracks all executed schema migrations, SHA-256 integrity checksums, and executio
 - **Error Responses:**
   - `403 Forbidden`: Geofence boundary exceeded, window expired, face similarity `< 0.40`, or proxy device detected.
   - `422 Unprocessable`: No face detected or multiple faces in camera frame.
+  - `429 Too Many Requests`: 3 consecutive failed face attempts on this device triggers temporary cooldown (`Retry-After: {wait_seconds}` capped at 60s max).
 
 ---
 
