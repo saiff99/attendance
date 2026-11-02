@@ -194,4 +194,25 @@ This document catalogs critical real-world edge cases, platform-specific quirks,
      Replaced `active:scale-95` with instant `transition-colors`, enforcing `min-w-[44px] min-h-[44px]` touch targets with `touch-manipulation cursor-pointer select-none`.
 - **Rule:** Never rely solely on React synthetic event listeners for critical mobile navigation elements (such as hamburger toggles) on PWA cold start. Always provide an inline native DOM bridge and decouple heavy third-party libraries from the critical initial bundle.
 
+---
+
+### Gotcha 11: Static Hardcoded macOS Location Permission Strings on Mobile & Cross-Platform GPS Fix
+- **Symptom:** On Android devices and iPhones running the PWA, when location permissions were blocked or GPS was unavailable, the attendance portal displayed confusing, irrelevant guidance:
+  `"Location permission was denied. Please allow location access in your browser settings and macOS System Settings > Privacy & Security > Location Services."`
+  Additionally, consecutive redundant error boxes displayed this identical multi-line string on top of each other.
+- **Root Cause:**
+  1. During early desktop development on macOS, `frontend/src/lib/geofence.ts` hardcoded macOS-specific error strings directly into the `PERMISSION_DENIED` and `POSITION_UNAVAILABLE` error branches without user-agent or platform detection.
+  2. In `SelfieAttendClient.tsx`, both the inline geofence status card and the outer permission warning banner rendered `geofenceErrorMessage` simultaneously, causing duplicate identical multi-line warning cards on mobile viewports.
+- **Architectural Fix:**
+  1. **Dynamic Platform-Aware Geolocation Formatter (`frontend/src/lib/geofence.ts`):**
+     Implemented `getGeolocationErrorMessage(err)` which inspects `navigator.userAgent` to deliver exact, actionable OS-specific navigation:
+     - **Android:** Directs students to `"browser or Android App Settings (Settings > Apps > Chrome/MedAttend > Permissions > Location)"`.
+     - **iOS:** Directs students to `"iOS Settings > Safari (or MedAttend) > Location"`.
+     - **Windows:** Directs users to `"Windows Settings > Privacy & Security > Location"`.
+     - **macOS:** Retained exclusively for macOS environments.
+  2. **Card Redundancy & Visual Hierarchy Decoupling (`SelfieAttendClient.tsx`):**
+     - The inline GPS status card provides a concise, single-line alert (`⚠️ Location permission was denied. Please allow location access below and tap "Re-check GPS"`).
+     - The dedicated warning banner below renders the detailed, platform-specific operating system steps without UI duplication.
+- **Rule:** Never hardcode operating-system-specific paths or instructions (macOS, iOS, Android, Windows) in client-facing error strings. Always route through a platform detection helper to provide accurate, device-appropriate recovery instructions.
+
 
