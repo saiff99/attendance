@@ -5,10 +5,9 @@ import { useRouter } from "next/navigation";
 import {
   Activity, Lock, User, ShieldCheck,
   AlertCircle, Eye, EyeOff, Loader2, CheckCircle2,
-  GraduationCap, KeyRound, Sun, Moon, Clock
+  GraduationCap, KeyRound, Clock
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
-import { useTheme } from "next-themes";
 
 const LOGIN_MODE_STORAGE_KEY = "medattend_login_mode";
 
@@ -23,16 +22,9 @@ export default function LoginPage() {
   const [lockoutSeconds, setLockoutSeconds] = useState<number | null>(null);
   const [lockoutExpiredNotice, setLockoutExpiredNotice] = useState<boolean>(false);
 
-  const [mounted, setMounted] = useState(false);
-  const { theme, setTheme, resolvedTheme } = useTheme();
-
   const inputRef = useRef<HTMLInputElement>(null);
   const { login, logout, isAuthenticated, isLoading, user } = useAuth();
   const router = useRouter();
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   // Restore persisted login tab selection from URL parameter or localStorage
   useEffect(() => {
@@ -154,24 +146,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-[100dvh] bg-slate-50 dark:bg-[#070B12] text-slate-900 dark:text-slate-100 flex flex-col items-center justify-center p-4 py-8 relative overflow-y-auto transition-colors duration-200">
-      {/* Floating Theme Switcher Button */}
-      <div className="absolute top-4 right-4 sm:top-6 sm:right-6 z-20">
-        <button
-          type="button"
-          onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
-          className="p-2.5 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/90 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 backdrop-blur-md shadow-sm dark:shadow-md transition-all cursor-pointer"
-          title={mounted && resolvedTheme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}
-          aria-label="Toggle theme"
-        >
-          {mounted && resolvedTheme === "dark" ? (
-            <Sun className="w-4 h-4 text-amber-400" />
-          ) : (
-            <Moon className="w-4 h-4 text-indigo-500" />
-          )}
-        </button>
-      </div>
-
+    <div className="min-h-[100dvh] bg-[#070B12] text-slate-100 flex flex-col items-center justify-center p-4 py-8 relative overflow-y-auto">
       {/* Background Ambient Glow */}
       <div className="fixed top-1/4 left-1/2 -translate-x-1/2 w-96 h-96 bg-indigo-600/10 dark:bg-indigo-600/15 blur-[120px] rounded-full pointer-events-none" />
       <div className="fixed bottom-10 right-10 w-72 h-72 bg-violet-600/10 blur-[100px] rounded-full pointer-events-none" />

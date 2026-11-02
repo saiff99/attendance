@@ -5,12 +5,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, ScanLine, Radio, Users, FileBarChart, Activity,
-  Menu, X, Smartphone, LogOut, Sun, Moon, ShieldCheck, UserCog,
+  Menu, X, Smartphone, LogOut, ShieldCheck, UserCog,
   GraduationCap, BookOpen, Database
 } from "lucide-react";
 import { SystemHealth } from "@/components/SystemHealth";
 import { useAuth } from "@/lib/auth";
-import { useTheme } from "next-themes";
 import { decodeSessionMetadata } from "@/lib/geofence";
 
 const navigation = [
@@ -42,12 +41,6 @@ export default function Sidebar() {
   const [hasActiveLiveSession, setHasActiveLiveSession] = useState(false);
   const [ongoingCount, setOngoingCount] = useState<number>(0);
   const { user, logout } = useAuth();
-  const { theme, setTheme, resolvedTheme } = useTheme();
-  const currentTheme = resolvedTheme || theme;
-
-  const handleToggleTheme = () => {
-    setTheme(currentTheme === "dark" ? "light" : "dark");
-  };
   const isStudentPortal = pathname?.startsWith("/selfieattend") || pathname?.startsWith("/self-attendance") || pathname?.startsWith("/portal");
 
   // Guarantee sidebar is cleanly closed on genuine route changes (skips initial mount)
@@ -138,19 +131,6 @@ export default function Sidebar() {
             </span>
           </div>
           <div className="flex items-center gap-1.5 sm:gap-2">
-            <button
-              type="button"
-              onClick={handleToggleTheme}
-              className="p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl text-gray-600 dark:text-gray-300 active:bg-gray-100 dark:active:bg-gray-800 [@media(hover:hover)]:hover:bg-gray-100 dark:[@media(hover:hover)]:hover:bg-gray-800 transition-colors touch-manipulation cursor-pointer select-none"
-              title="Toggle Theme"
-              aria-label="Toggle Theme"
-            >
-              {mounted && currentTheme === "dark" ? (
-                <Sun className="h-5 w-5 text-amber-400" />
-              ) : (
-                <Moon className="h-5 w-5 text-indigo-600" />
-              )}
-            </button>
             <button
               id="mobile-sidebar-toggle"
               type="button"
@@ -294,41 +274,6 @@ export default function Sidebar() {
         </nav>
       </div>
       <div className="flex flex-col shrink-0 border-t border-gray-200 dark:border-gray-800 p-4 gap-3">
-        {/* Theme Toggle Pill */}
-        <div className="flex items-center justify-between bg-gray-100/80 dark:bg-gray-800/80 p-1 rounded-xl border border-gray-200 dark:border-gray-700/60">
-          <span className="text-xs font-semibold text-gray-600 dark:text-gray-300 pl-2">Theme</span>
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              onClick={() => setTheme("light")}
-              className={classNames(
-                "px-2.5 py-1 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer touch-manipulation",
-                mounted && currentTheme === "light"
-                  ? "bg-white text-indigo-600 shadow-sm font-semibold ring-1 ring-black/5"
-                  : "text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
-              )}
-              title="Light Mode"
-            >
-              <Sun className="w-3.5 h-3.5 text-amber-500" />
-              <span>Light</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setTheme("dark")}
-              className={classNames(
-                "px-2.5 py-1 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer touch-manipulation",
-                mounted && currentTheme === "dark"
-                  ? "bg-gray-900 text-indigo-400 shadow-sm font-semibold ring-1 ring-white/10"
-                  : "text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
-              )}
-              title="Dark Mode"
-            >
-              <Moon className="w-3.5 h-3.5 text-indigo-400" />
-              <span>Dark</span>
-            </button>
-          </div>
-        </div>
-
         <SystemHealth />
 
         <div className="flex items-center justify-between pt-1">

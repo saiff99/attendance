@@ -1124,30 +1124,30 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#070B12] text-slate-900 dark:text-slate-100 flex flex-col items-center justify-start p-3 sm:p-6 select-none transition-colors duration-200">
+    <div className="min-h-screen bg-[#070B12] text-slate-100 flex flex-col items-center justify-start p-3 sm:p-6 select-none">
       {/* Background Ambient Glow */}
       <div className="fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-lg h-64 bg-indigo-600/10 blur-[100px] rounded-full pointer-events-none" />
 
       {/* Header */}
-      <header className="w-full max-w-md flex items-center justify-between py-3 mb-3 border-b border-slate-200 dark:border-slate-800/80 shrink-0">
+      <header className="w-full max-w-md flex items-center justify-between py-3 mb-3 border-b border-slate-800/80 shrink-0">
         <div className="flex items-center gap-2.5">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center shadow-lg shadow-indigo-500/25">
             <GraduationCap className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h1 className="text-base font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-1.5">
-              MedAttend <span className="text-[10px] font-semibold uppercase bg-indigo-500/15 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-300 border border-indigo-500/30 px-1.5 py-0.2 rounded">Selfie Portal</span>
+            <h1 className="text-base font-bold text-white tracking-tight flex items-center gap-1.5">
+              MedAttend <span className="text-[10px] font-semibold uppercase bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-1.5 py-0.2 rounded">Selfie Portal</span>
             </h1>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400">5-Min Live Face Verification</p>
+            <p className="text-[11px] text-slate-400">5-Min Live Face Verification</p>
           </div>
         </div>
 
         <Link
           href={isStaffUser ? "/" : "/portal"}
-          className="group inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800/80 hover:bg-slate-200 dark:hover:bg-indigo-600/20 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white text-xs font-semibold border border-slate-200 dark:border-slate-700/80 hover:border-slate-300 dark:hover:border-indigo-500/40 transition-all duration-200 backdrop-blur-md shadow-sm hover:shadow-md cursor-pointer active:scale-95"
+          className="group inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-800/80 hover:bg-indigo-600/20 text-slate-300 hover:text-white text-xs font-semibold border border-slate-700/80 hover:border-indigo-500/40 transition-all duration-200 backdrop-blur-md shadow-sm hover:shadow-md cursor-pointer active:scale-95"
           title={isStaffUser ? "Return to Dashboard" : "Return to Student Portal"}
         >
-          <ArrowLeft className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 group-hover:text-indigo-700 dark:group-hover:text-indigo-300 group-hover:-translate-x-0.5 transition-transform duration-200 shrink-0" />
+          <ArrowLeft className="w-3.5 h-3.5 text-indigo-400 group-hover:text-indigo-300 group-hover:-translate-x-0.5 transition-transform duration-200 shrink-0" />
           <span className="tracking-tight">{isStaffUser ? "Back to Dashboard" : "Back to Portal"}</span>
         </Link>
       </header>
