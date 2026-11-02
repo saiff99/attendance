@@ -979,6 +979,47 @@ console.log('\n--- 16. Inactive / Archived Student Protection Across All Pathway
   );
 }
 
+// --- 17. Student Registry Role-Based Access Control (RBAC Least-Privilege) ---
+console.log('\n--- 17. Student Registry RBAC Invariants (Least Privilege) ---');
+{
+  const bulkRoutePath = path.resolve(__dirname, '../src/app/api/students/bulk/route.ts');
+  const bulkContent = fs.readFileSync(bulkRoutePath, 'utf8');
+  assert(
+    bulkContent.includes("session.role !== 'Super Admin' && session.role !== 'Admin'") &&
+    !bulkContent.includes("session.role !== 'Faculty'"),
+    'students/bulk/route.ts strictly restricts bulk operations to Super Admin and Admin (Faculty forbidden)'
+  );
+
+  const studentIdRoutePath = path.resolve(__dirname, '../src/app/api/students/[id]/route.ts');
+  const studentIdContent = fs.readFileSync(studentIdRoutePath, 'utf8');
+  assert(
+    studentIdContent.includes("Administrator privileges required to delete or archive students") &&
+    studentIdContent.includes("Administrator privileges required to edit student profiles"),
+    'students/[id]/route.ts strictly restricts student deletion and update to Super Admin and Admin'
+  );
+
+  const studentRoutePath = path.resolve(__dirname, '../src/app/api/students/route.ts');
+  const studentContent = fs.readFileSync(studentRoutePath, 'utf8');
+  assert(
+    studentContent.includes("Administrator privileges required to register students"),
+    'students/route.ts strictly restricts student creation to Super Admin and Admin'
+  );
+
+  const revokeBioPath = path.resolve(__dirname, '../src/app/api/students/[id]/revoke-biometrics/route.ts');
+  const revokeBioContent = fs.readFileSync(revokeBioPath, 'utf8');
+  assert(
+    revokeBioContent.includes("Administrator privileges required to revoke student biometrics"),
+    'students/[id]/revoke-biometrics strictly restricts biometric purging to Admins'
+  );
+
+  const resetPinPath = path.resolve(__dirname, '../src/app/api/students/[id]/reset-pin/route.ts');
+  const resetPinContent = fs.readFileSync(resetPinPath, 'utf8');
+  assert(
+    resetPinContent.includes("Administrator privileges required to reset student PIN"),
+    'students/[id]/reset-pin strictly restricts student PIN reset to Admins'
+  );
+}
+
 // Summary
 console.log('\n' + '=' .repeat(65));
 console.log(`📊 Offline Unit Test Summary: ${passed} Passed, ${failed} Failed`);

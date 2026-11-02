@@ -82,9 +82,9 @@ export async function POST(request: NextRequest) {
     }
 
     const session = await verifySessionToken(sessionCookie);
-    if (!session || (session.role !== 'Super Admin' && session.role !== 'Admin' && session.role !== 'Faculty')) {
+    if (!session || (session.role !== 'Super Admin' && session.role !== 'Admin')) {
       return NextResponse.json(
-        { success: false, error: 'Forbidden. Authorized access required.' },
+        { success: false, error: 'Forbidden. Administrator privileges required to register students.' },
         { status: 403 }
       );
     }

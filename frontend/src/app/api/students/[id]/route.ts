@@ -75,9 +75,9 @@ export async function PUT(
     }
 
     const session = await verifySessionToken(sessionCookie);
-    if (!session || (session.role !== 'Super Admin' && session.role !== 'Admin' && session.role !== 'Faculty')) {
+    if (!session || (session.role !== 'Super Admin' && session.role !== 'Admin')) {
       return NextResponse.json(
-        { success: false, error: 'Forbidden. Authorized access required.' },
+        { success: false, error: 'Forbidden. Administrator privileges required to edit student profiles.' },
         { status: 403 }
       );
     }
@@ -203,9 +203,9 @@ export async function DELETE(
     }
 
     const session = await verifySessionToken(sessionCookie);
-    if (!session || (session.role !== 'Super Admin' && session.role !== 'Admin' && session.role !== 'Faculty')) {
+    if (!session || (session.role !== 'Super Admin' && session.role !== 'Admin')) {
       return NextResponse.json(
-        { success: false, error: 'Forbidden. Authorized access required.' },
+        { success: false, error: 'Forbidden. Administrator privileges required to delete or archive students.' },
         { status: 403 }
       );
     }
