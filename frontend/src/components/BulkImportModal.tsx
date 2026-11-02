@@ -39,6 +39,7 @@ export function BulkImportModal({
   const [importProgress, setImportProgress] = useState(0);
   const [importStatus, setImportStatus] = useState<"idle" | "success" | "error">("idle");
   const [statusMessage, setStatusMessage] = useState("");
+  const [filterStatus, setFilterStatus] = useState<"all" | "invalid">("all");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen) return null;
@@ -46,6 +47,7 @@ export function BulkImportModal({
   const resetState = () => {
     setFile(null);
     setParsedData([]);
+    setFilterStatus("all");
     setIsProcessingFile(false);
     setIsImporting(false);
     setImportProgress(0);
@@ -292,6 +294,9 @@ export function BulkImportModal({
 
   const validCount = parsedData.filter(p => p.valid).length;
   const invalidCount = parsedData.length - validCount;
+  const displayedRows = filterStatus === "invalid"
+    ? parsedData.filter((p) => !p.valid)
+    : parsedData;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
@@ -397,21 +402,36 @@ export function BulkImportModal({
               </div>
 
               {/* Status & Stats */}
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-gray-600 dark:text-gray-300 font-medium">
-                  Ready to import: <span className="text-emerald-600 dark:text-emerald-400 font-bold">{validCount} valid</span>
+              <div className="flex items-center justify-between text-xs flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-600 dark:text-gray-300 font-medium">
+                    Ready to import: <span className="text-emerald-600 dark:text-emerald-400 font-bold">{validCount} valid</span>
+                  </span>
                   {invalidCount > 0 && (
-                    <span className="text-amber-600 dark:text-amber-400 ml-2">({invalidCount} invalid/skipped)</span>
+                    <button
+                      type="button"
+                      onClick={() => setFilterStatus((prev) => (prev === "all" ? "invalid" : "all"))}
+                      className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-colors cursor-pointer ${
+                        filterStatus === "invalid"
+                          ? "bg-amber-600 text-white"
+                          : "bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-900/60"
+                      }`}
+                    >
+                      {filterStatus === "invalid" ? "Show All Rows" : `Show ${invalidCount} Invalid`}
+                    </button>
                   )}
+                </div>
+                <span className="text-gray-500 dark:text-gray-400 text-[11px] font-medium">
+                  Showing all {displayedRows.length} records (scroll to review)
                 </span>
-                <span className="text-gray-400 text-[11px]">Previewing top records</span>
               </div>
 
               {/* Preview Table */}
-              <div className="border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden max-h-52 overflow-y-auto">
+              <div className="border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden max-h-64 sm:max-h-72 overflow-y-auto">
                 <table className="w-full text-left text-xs divide-y divide-gray-200 dark:divide-gray-800">
-                  <thead className="bg-gray-50 dark:bg-gray-800/60 sticky top-0 font-semibold text-gray-700 dark:text-gray-300">
+                  <thead className="bg-slate-100 dark:bg-slate-800 sticky top-0 z-10 font-semibold text-slate-700 dark:text-slate-200 border-b border-slate-200 dark:border-slate-700 shadow-sm">
                     <tr>
+                      <th className="py-2.5 px-2.5 text-center text-gray-400 dark:text-gray-400 w-10">#</th>
                       <th className="py-2.5 px-3">Roll Number</th>
                       <th className="py-2.5 px-3">Full Name</th>
                       <th className="py-2.5 px-3">Year</th>
@@ -419,30 +439,36 @@ export function BulkImportModal({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-gray-800/50 bg-white dark:bg-gray-900">
-                    {parsedData.slice(0, 50).map((row, i) => (
-                      <tr key={i} className="hover:bg-gray-50 dark:hover:bg-gray-800/30">
-                        <td className="py-2 px-3 font-mono font-medium text-gray-900 dark:text-gray-100">
-                          {row.student_roll || <span className="text-red-500 italic">Empty</span>}
-                        </td>
-                        <td className="py-2 px-3 text-gray-800 dark:text-gray-200">
-                          {row.full_name || <span className="text-red-500 italic">Empty</span>}
-                        </td>
-                        <td className="py-2 px-3 text-gray-500 dark:text-gray-400">
-                          {row.academic_year}
-                        </td>
-                        <td className="py-2 px-3 text-right">
-                          {row.valid ? (
-                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400">
-                              Valid
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-50 text-red-700 dark:bg-red-950/50 dark:text-red-400">
-                              {row.error}
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
+                    {displayedRows.map((row, i) => {
+                      const originalIndex = parsedData.indexOf(row) + 1;
+                      return (
+                        <tr key={i} className="hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors">
+                          <td className="py-2 px-2.5 text-center text-[11px] font-mono text-gray-400 dark:text-gray-500 select-none">
+                            {originalIndex}
+                          </td>
+                          <td className="py-2 px-3 font-mono font-medium text-gray-900 dark:text-gray-100">
+                            {row.student_roll || <span className="text-red-500 italic">Empty</span>}
+                          </td>
+                          <td className="py-2 px-3 text-gray-800 dark:text-gray-200">
+                            {row.full_name || <span className="text-red-500 italic">Empty</span>}
+                          </td>
+                          <td className="py-2 px-3 text-gray-500 dark:text-gray-400">
+                            {row.academic_year}
+                          </td>
+                          <td className="py-2 px-3 text-right">
+                            {row.valid ? (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400">
+                                Valid
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-50 text-red-700 dark:bg-red-950/50 dark:text-red-400">
+                                {row.error}
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
