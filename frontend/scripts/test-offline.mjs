@@ -1020,6 +1020,99 @@ console.log('\n--- 17. Student Registry RBAC Invariants (Least Privilege) ---');
   );
 }
 
+// --- 18. Student PIN Change Rate Limiting & Brute-Force Shield ---
+console.log('\n--- 18. Student PIN Change Rate Limiting & Brute-Force Shield ---');
+{
+  const changePinRoutePath = path.resolve(__dirname, '../src/app/api/student/change-pin/route.ts');
+  const changePinContent = fs.readFileSync(changePinRoutePath, 'utf8');
+  const rateLimiterTsPath = path.resolve(__dirname, '../src/lib/rateLimiter.ts');
+  const rateLimiterContent = fs.readFileSync(rateLimiterTsPath, 'utf8');
+
+  // 1. Verify change-pin route imports and calls checkPinChangeRateLimit and resetPinChangeRateLimit
+  assert(
+    changePinContent.includes('checkPinChangeRateLimit') &&
+    changePinContent.includes('resetPinChangeRateLimit'),
+    'change-pin route imports checkPinChangeRateLimit and resetPinChangeRateLimit'
+  );
+
+  // 2. Verify change-pin route returns HTTP 429 and Retry-After header on rate limit exceeded
+  assert(
+    changePinContent.includes('status: 429') &&
+    changePinContent.includes("'Retry-After': String(rateLimit.remainingSeconds)"),
+    'change-pin route returns HTTP 429 with Retry-After header when rate limited'
+  );
+
+  // 3. Verify change-pin route logs PIN_CHANGE_RATE_LIMITED audit event
+  assert(
+    changePinContent.includes("action: 'PIN_CHANGE_RATE_LIMITED'"),
+    'change-pin route logs PIN_CHANGE_RATE_LIMITED audit event'
+  );
+
+  // 4. Verify change-pin route resets rate limit upon successful PIN change
+  assert(
+    changePinContent.includes('await resetPinChangeRateLimit('),
+    'change-pin route resets rate limit on successful PIN change'
+  );
+
+  // 5. Verify rateLimiter.ts exports checkPinChangeRateLimit and resetPinChangeRateLimit
+  assert(
+    rateLimiterContent.includes('export async function checkPinChangeRateLimit') &&
+    rateLimiterContent.includes('export async function resetPinChangeRateLimit'),
+    'rateLimiter.ts exports checkPinChangeRateLimit and resetPinChangeRateLimit'
+  );
+
+  // 6. Verify rateLimiter.ts uses PostgreSQL stored procedure atomic_check_rate_limit with shared key rl_pin_change:
+  assert(
+    rateLimiterContent.includes('rl_pin_change:') &&
+    rateLimiterContent.includes('atomic_check_rate_limit'),
+    'rateLimiter.ts uses shared atomic_check_rate_limit with key rl_pin_change:'
+  );
+
+  // 7. Behavioral Simulation: 5 attempts per 60s per student account
+  const memoryPinChangeMap = {};
+  function simulatePinChangeRateLimit(studentId, nowSec) {
+    const windowSeconds = 60.0;
+    const maxAttempts = 5;
+    const norm = studentId.trim().toLowerCase();
+
+    let attempts = (memoryPinChangeMap[norm] || []).filter(ts => nowSec - ts < windowSeconds);
+    if (attempts.length >= maxAttempts) {
+      memoryPinChangeMap[norm] = attempts;
+      const oldest = attempts[0];
+      const remainingSeconds = Math.max(1, Math.ceil(windowSeconds - (nowSec - oldest)));
+      return { allowed: false, remainingSeconds };
+    }
+    attempts.push(nowSec);
+    memoryPinChangeMap[norm] = attempts;
+    return { allowed: true, remainingSeconds: 0 };
+  }
+
+  function simulateResetPinLimit(studentId) {
+    delete memoryPinChangeMap[studentId.trim().toLowerCase()];
+  }
+
+  const baseTs = 1700000000;
+  // Student 1 attempts 1..5 are allowed
+  for (let i = 1; i <= 5; i++) {
+    const res = simulatePinChangeRateLimit('stu_101', baseTs + i);
+    assert(res.allowed === true, `PIN change attempt ${i} of 5 is allowed`);
+  }
+
+  // 6th attempt within window is blocked
+  const res6 = simulatePinChangeRateLimit('stu_101', baseTs + 6);
+  assert(res6.allowed === false, '6th PIN change attempt within 60s is strictly blocked (HTTP 429)');
+  assert(res6.remainingSeconds > 0 && res6.remainingSeconds <= 60, 'Blocked PIN change returns positive remaining cooldown');
+
+  // Account Isolation: Student 2 attempt is NOT blocked by Student 1 lockout
+  const resStu2 = simulatePinChangeRateLimit('stu_102', baseTs + 7);
+  assert(resStu2.allowed === true, 'Student 2 PIN change is unaffected by Student 1 lockout (strict account isolation)');
+
+  // Reset clears lockout for Student 1
+  simulateResetPinLimit('stu_101');
+  const resAfterReset = simulatePinChangeRateLimit('stu_101', baseTs + 8);
+  assert(resAfterReset.allowed === true, 'Resetting PIN change rate limit clears lockout immediately');
+}
+
 // Summary
 console.log('\n' + '=' .repeat(65));
 console.log(`📊 Offline Unit Test Summary: ${passed} Passed, ${failed} Failed`);

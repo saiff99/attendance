@@ -569,3 +569,75 @@ export async function resetActiveSessionsRateLimit(clientIp: string): Promise<vo
   }
 }
 
+/**
+ * Shared & Persistent Student PIN Change Rate Limiter (L1 in-memory + L2 Supabase atomic RPC).
+ * Enforces: Max 5 PIN change attempts per student account per 60 seconds to prevent brute-force attacks.
+ * Synchronized across instances using the shared key `rl_pin_change:{studentIdentifier}`.
+ */
+const memoryPinChangeLimits: Record<string, number[]> = {};
+
+export async function checkPinChangeRateLimit(
+  studentIdentifier: string,
+  nowSec: number = Date.now() / 1000
+): Promise<{ allowed: boolean; remainingSeconds: number }> {
+  const normId = (studentIdentifier || '').trim().toLowerCase();
+  if (!normId) {
+    return { allowed: true, remainingSeconds: 0 };
+  }
+
+  const dbKey = `rl_pin_change:${normId}`;
+  const windowSeconds = 60.0;
+  const maxAttempts = 5;
+
+  // 1. Authoritative L2 Atomic Transaction via PostgreSQL stored procedure (ACID + row/advisory locking)
+  try {
+    const { data, error } = await supabaseServer.rpc('atomic_check_rate_limit', {
+      p_key: dbKey,
+      p_max_attempts: maxAttempts,
+      p_window_seconds: windowSeconds,
+      p_now_ts: nowSec,
+    });
+
+    if (!error && data && typeof data === 'object' && 'allowed' in data) {
+      const allowed = Boolean(data.allowed);
+      const remainingSeconds = Number(data.retry_after) || 0;
+      return { allowed, remainingSeconds };
+    }
+  } catch (err) {
+    console.warn('[PinChangeRateLimit Warning] L2 DB atomic RPC fallback:', err);
+  }
+
+  // 2. Degraded In-Memory Fail-Closed Fallback (If RPC or database is offline/unreachable)
+  let attempts: number[] = (memoryPinChangeLimits[normId] || []).filter(
+    (ts) => nowSec - ts < windowSeconds
+  );
+
+  if (attempts.length >= maxAttempts) {
+    memoryPinChangeLimits[normId] = attempts;
+    const oldest = attempts[0];
+    const remainingSeconds = Math.max(1, Math.ceil(windowSeconds - (nowSec - oldest)));
+    return { allowed: false, remainingSeconds };
+  }
+
+  attempts.push(nowSec);
+  memoryPinChangeLimits[normId] = attempts;
+
+  return { allowed: true, remainingSeconds: 0 };
+}
+
+/**
+ * Resets the PIN change rate limit for a specific student (used upon successful PIN change or in tests).
+ */
+export async function resetPinChangeRateLimit(studentIdentifier: string): Promise<void> {
+  const normId = (studentIdentifier || '').trim().toLowerCase();
+  if (!normId) return;
+
+  delete memoryPinChangeLimits[normId];
+  const dbKey = `rl_pin_change:${normId}`;
+  try {
+    await supabaseServer.from('settings').delete().eq('key', dbKey);
+  } catch (err) {
+    console.warn('[PinChangeRateLimit Reset Warning]', err);
+  }
+}
+

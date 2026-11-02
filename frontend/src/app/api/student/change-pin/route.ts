@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/serverAuth';
 import { supabaseServer } from '@/lib/supabaseServer';
 import { logAuditEvent } from '@/lib/auditLog';
+import { checkPinChangeRateLimit, resetPinChangeRateLimit } from '@/lib/rateLimiter';
 
 export const dynamic = 'force-dynamic';
 
@@ -45,7 +46,39 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 3. Lookup student record
+    // 3. Persistent Rate Limiting Guard: Max 5 attempts per 60s per student
+    const studentIdentifier = session.studentId || session.studentRoll || session.username;
+    const rateLimit = await checkPinChangeRateLimit(studentIdentifier);
+    if (!rateLimit.allowed) {
+      logAuditEvent({
+        action: 'PIN_CHANGE_RATE_LIMITED',
+        targetType: 'student',
+        targetId: session.studentId || 'unknown',
+        actorId: session.studentRoll || session.username,
+        request,
+        details: {
+          student_roll: session.studentRoll,
+          reason: 'Exceeded maximum PIN change attempts (5 per 60s)',
+          retry_after: rateLimit.remainingSeconds,
+        },
+      });
+
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Too many PIN change attempts. Please wait ${rateLimit.remainingSeconds} seconds before trying again.`,
+          retryAfter: rateLimit.remainingSeconds,
+        },
+        {
+          status: 429,
+          headers: {
+            'Retry-After': String(rateLimit.remainingSeconds),
+          },
+        }
+      );
+    }
+
+    // 4. Lookup student record
     const studentQuery = session.studentId
       ? supabaseServer.from('students').select('*').eq('id', session.studentId).maybeSingle()
       : supabaseServer.from('students').select('*').ilike('student_roll', session.studentRoll || '').maybeSingle();
@@ -55,7 +88,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Student record not found.' }, { status: 404 });
     }
 
-    // 4. Strict Zero-Trust validation of old PIN against salted bcrypt hash ($2b$10$...)
+    // 5. Strict Zero-Trust validation of old PIN against salted bcrypt hash ($2b$10$...)
     let isOldMatch = false;
     if (student.portal_password_hash && student.portal_password_hash.startsWith('$2')) {
       isOldMatch = await bcrypt.compare(oldPin, student.portal_password_hash);
@@ -76,10 +109,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Current PIN is incorrect.' }, { status: 401 });
     }
 
-    // 5. Hash the new PIN with salted bcrypt (10 rounds)
+    // 6. Hash the new PIN with salted bcrypt (10 rounds)
     const passwordHash = await bcrypt.hash(newPin, 10);
 
-    // 6. Update student record: save new hash and clear temporary tags
+    // 7. Update student record: save new hash and clear temporary tags
     const { error: updateErr } = await supabaseServer
       .from('students')
       .update({
@@ -92,7 +125,13 @@ export async function POST(request: NextRequest) {
       throw updateErr;
     }
 
-    // 7. Audit Logging
+    // 8. Reset rate limit on successful PIN update
+    await resetPinChangeRateLimit(studentIdentifier);
+    if (student.id && student.id !== studentIdentifier) {
+      await resetPinChangeRateLimit(student.id);
+    }
+
+    // 9. Audit Logging
     logAuditEvent({
       action: 'STUDENT_CHANGED_PIN',
       targetType: 'student',
