@@ -1129,26 +1129,31 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
       <div className="fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-lg h-64 bg-indigo-600/10 blur-[100px] rounded-full pointer-events-none" />
 
       {/* Header */}
-      <header className="w-full max-w-md flex items-center justify-between py-3 mb-3 border-b border-slate-800/80 shrink-0">
-        <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center shadow-lg shadow-indigo-500/25">
-            <GraduationCap className="w-5 h-5 text-white" />
+      <header className="w-full max-w-md flex items-center justify-between py-2.5 sm:py-3 mb-3 border-b border-slate-800/80 shrink-0 gap-2">
+        <div className="flex items-center gap-2 sm:gap-2.5 min-w-0 flex-1">
+          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center shadow-lg shadow-indigo-500/25 shrink-0">
+            <GraduationCap className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
           </div>
-          <div>
-            <h1 className="text-base font-bold text-white tracking-tight flex items-center gap-1.5">
-              MedAttend <span className="text-[10px] font-semibold uppercase bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-1.5 py-0.2 rounded">Selfie Portal</span>
-            </h1>
-            <p className="text-[11px] text-slate-400">5-Min Live Face Verification</p>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5 flex-nowrap">
+              <h1 className="text-sm sm:text-base font-bold text-white tracking-tight shrink-0">
+                MedAttend
+              </h1>
+              <span className="text-[9px] sm:text-[10px] font-semibold uppercase bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-1.5 py-0.5 rounded shrink-0">
+                Selfie
+              </span>
+            </div>
+            <p className="text-[10px] sm:text-[11px] text-slate-400 truncate">5-Min Live Face Verification</p>
           </div>
         </div>
 
         <Link
           href={isStaffUser ? "/" : "/portal"}
-          className="group inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-800/80 hover:bg-indigo-600/20 text-slate-300 hover:text-white text-xs font-semibold border border-slate-700/80 hover:border-indigo-500/40 transition-all duration-200 backdrop-blur-md shadow-sm hover:shadow-md cursor-pointer active:scale-95"
+          className="group inline-flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-full bg-slate-800/80 hover:bg-indigo-600/20 text-slate-300 hover:text-white text-xs font-semibold border border-slate-700/80 hover:border-indigo-500/40 transition-all duration-200 backdrop-blur-md shadow-sm hover:shadow-md cursor-pointer active:scale-95 shrink-0"
           title={isStaffUser ? "Return to Dashboard" : "Return to Student Portal"}
         >
           <ArrowLeft className="w-3.5 h-3.5 text-indigo-400 group-hover:text-indigo-300 group-hover:-translate-x-0.5 transition-transform duration-200 shrink-0" />
-          <span className="tracking-tight">{isStaffUser ? "Back to Dashboard" : "Back to Portal"}</span>
+          <span className="tracking-tight">{isStaffUser ? "Dashboard" : "Portal"}</span>
         </Link>
       </header>
 
