@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { Search, UserPlus, FileDown, MoreHorizontal, X, UploadCloud, Loader2, Edit2, Trash2, Folder, ArrowLeft, Users, FileSpreadsheet, ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle, Lock, KeyRound, CheckCircle2, UserX } from "lucide-react";
+import { Search, UserPlus, FileDown, MoreHorizontal, X, UploadCloud, Loader2, Edit2, Trash2, Folder, ArrowLeft, Users, FileSpreadsheet, ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle, AlertCircle, Lock, KeyRound, CheckCircle2, UserX } from "lucide-react";
 // Student Directory
 import type { Student } from "@/types/database";
 import { StudentProfileModal } from "@/components/StudentProfileModal";
@@ -86,6 +86,21 @@ export default function StudentDirectory() {
   // Multi-select / Bulk Delete State
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+
+  // Custom Centered Modal for Single & Bulk Deletions
+  const [deleteModalState, setDeleteModalState] = useState<{
+    isOpen: boolean;
+    type: "single" | "bulk";
+    studentId?: string;
+    studentName?: string;
+    studentRoll?: string;
+    count?: number;
+    error?: string | null;
+  }>({
+    isOpen: false,
+    type: "bulk",
+  });
+  const [isDeleting, setIsDeleting] = useState<boolean>(false);
 
   // Profile Modal State
   const [selectedProfileStudent, setSelectedProfileStudent] = useState<Student | null>(null);
@@ -219,23 +234,25 @@ export default function StudentDirectory() {
     }
   };
 
-  const handleDelete = async (id: string) => {
+  const promptDeleteSingle = (student: Student) => {
     if (!isSuperAdmin) {
       alert("Access Denied: Only Super Admin can delete student records.");
       return;
     }
-    if (!window.confirm("Are you sure you want to delete this student? This will also remove their attendance records.")) return;
+    setDeleteModalState({
+      isOpen: true,
+      type: "single",
+      studentId: student.id,
+      studentName: student.full_name,
+      studentRoll: student.student_roll,
+      error: null,
+    });
+  };
 
-    try {
-      const res = await fetch(`/api/students/${id}`, { method: 'DELETE' });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to delete student.');
-
-      setSelectedIds(prev => prev.filter(item => item !== id));
-      fetchStudents();
-    } catch (error: any) {
-      console.error('Error deleting student:', error);
-      alert(error.message || 'Failed to delete student.');
+  const handleDelete = (id: string) => {
+    const target = students.find((s) => s.id === id);
+    if (target) {
+      promptDeleteSingle(target);
     }
   };
 
@@ -291,32 +308,59 @@ export default function StudentDirectory() {
     }
   };
 
-  const handleBulkDelete = async () => {
+  const promptBulkDelete = () => {
     if (!isSuperAdmin) {
       alert("Access Denied: Only Super Admin can delete student records.");
       return;
     }
     if (selectedIds.length === 0) return;
-    const count = selectedIds.length;
-    const confirmMsg = `Are you sure you want to delete ${count} selected student${count > 1 ? 's' : ''}? This will permanently remove their face biometrics and attendance records.`;
-    if (!window.confirm(confirmMsg)) return;
+    setDeleteModalState({
+      isOpen: true,
+      type: "bulk",
+      count: selectedIds.length,
+      error: null,
+    });
+  };
 
-    setIsBulkDeleting(true);
+  const handleBulkDelete = promptBulkDelete;
+
+  const executeDeleteConfirm = async () => {
+    if (!isSuperAdmin) return;
+    setIsDeleting(true);
+    setDeleteModalState((prev) => ({ ...prev, error: null }));
+
     try {
-      const res = await fetch('/api/students/bulk', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'delete', ids: selectedIds }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to delete selected students.');
+      if (deleteModalState.type === "bulk") {
+        setIsBulkDeleting(true);
+        const res = await fetch('/api/students/bulk', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'delete', ids: selectedIds }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to delete selected students.');
 
-      setSelectedIds([]);
-      await fetchStudents();
+        setSelectedIds([]);
+        setDeleteModalState({ isOpen: false, type: "bulk" });
+        await fetchStudents();
+      } else if (deleteModalState.type === "single" && deleteModalState.studentId) {
+        const id = deleteModalState.studentId;
+        const res = await fetch(`/api/students/${id}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to delete student.');
+
+        setSelectedIds(prev => prev.filter(item => item !== id));
+        setDeleteModalState({ isOpen: false, type: "single" });
+        await fetchStudents();
+      }
     } catch (error: any) {
-      console.error('Error during bulk deletion:', error);
-      alert(error.message || 'Failed to delete selected students. Check console for details.');
+      console.error('Error during deletion:', error);
+      setDeleteModalState((prev) => ({
+        ...prev,
+        error: error.message || 'Failed to delete. Please try again.',
+      }));
     } finally {
+      setIsDeleting(false);
       setIsBulkDeleting(false);
     }
   };
@@ -879,7 +923,7 @@ export default function StudentDirectory() {
                                         {isSuperAdmin && (
                                           <button
                                             onClick={() => {
-                                              handleDelete(student.id);
+                                              promptDeleteSingle(student);
                                               setOpenDropdownId(null);
                                             }}
                                             className="text-red-600 dark:text-red-400 w-full text-left px-3.5 py-2 text-xs sm:text-sm hover:bg-red-50 dark:hover:bg-red-900/30 flex items-center transition-colors font-medium cursor-pointer"
@@ -1349,6 +1393,121 @@ export default function StudentDirectory() {
                   </div>
                 </>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Custom Centered Student & Bulk Delete Confirmation Modal */}
+        {deleteModalState.isOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
+            <div className="relative w-full max-w-md rounded-3xl bg-slate-900 border border-slate-800 p-6 sm:p-7 shadow-2xl shadow-rose-950/20 text-left">
+              {/* Close Button */}
+              <button
+                type="button"
+                disabled={isDeleting || isBulkDeleting}
+                onClick={() => setDeleteModalState((prev) => ({ ...prev, isOpen: false }))}
+                className="absolute top-5 right-5 text-slate-400 hover:text-white transition-colors p-1.5 rounded-xl hover:bg-slate-800 cursor-pointer disabled:opacity-40"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              <div className="flex items-center gap-3.5 mb-5">
+                <div className="w-12 h-12 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-500 flex items-center justify-center shadow-lg shadow-rose-500/10 shrink-0">
+                  <Trash2 className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-white tracking-tight">
+                    {deleteModalState.type === "bulk"
+                      ? `Delete ${deleteModalState.count} Students`
+                      : "Delete Student Record"}
+                  </h3>
+                  <p className="text-xs text-rose-400 font-semibold">Irreversible Deletion Warning</p>
+                </div>
+              </div>
+
+              {deleteModalState.error && (
+                <div className="p-3.5 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-300 flex items-start gap-2.5 mb-4 text-xs animate-in zoom-in-95">
+                  <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                  <span>{deleteModalState.error}</span>
+                </div>
+              )}
+
+              {/* Target Details Box */}
+              <div className="bg-slate-950/70 border border-slate-800 rounded-2xl p-4 mb-4">
+                {deleteModalState.type === "bulk" ? (
+                  <>
+                    <div className="flex items-center justify-between text-xs mb-2">
+                      <span className="text-slate-400">Selected Count</span>
+                      <span className="font-mono font-bold text-rose-400 px-2 py-0.5 rounded-md bg-rose-500/10 border border-rose-500/20">
+                        {deleteModalState.count} Students
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-slate-400">Data Impact</span>
+                      <span className="font-semibold text-slate-300 text-[11px]">Profiles, Face Biometrics & Attendance</span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-between text-xs mb-2">
+                      <span className="text-slate-400">Student Name</span>
+                      <span className="font-bold text-white text-sm">{deleteModalState.studentName}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-slate-400">Roll Number</span>
+                      <span className="font-mono font-bold text-rose-400 px-2 py-0.5 rounded-md bg-rose-500/10 border border-rose-500/20">
+                        {deleteModalState.studentRoll}
+                      </span>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <p className="text-xs text-slate-300 leading-relaxed mb-6">
+                {deleteModalState.type === "bulk" ? (
+                  <>
+                    Are you sure you want to permanently delete these <strong className="text-white font-bold">{deleteModalState.count}</strong> selected students? This will permanently purge their biometric face templates and historical attendance records.
+                  </>
+                ) : (
+                  <>
+                    Are you sure you want to delete this student? This action cannot be undone and will permanently remove their face biometrics and attendance history.
+                  </>
+                )}
+              </p>
+
+              {/* Action Buttons */}
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  disabled={isDeleting}
+                  onClick={() => setDeleteModalState((prev) => ({ ...prev, isOpen: false }))}
+                  className="flex-1 py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition-all cursor-pointer disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={isDeleting}
+                  onClick={executeDeleteConfirm}
+                  className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-500 hover:to-rose-600 active:scale-[0.98] text-white text-xs font-black shadow-lg shadow-rose-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  {isDeleting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin text-white" />
+                      <span>Deleting...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-4 h-4" />
+                      <span>
+                        {deleteModalState.type === "bulk"
+                          ? `Delete ${deleteModalState.count} Students`
+                          : "Delete Student"}
+                      </span>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         )}
