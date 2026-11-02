@@ -492,17 +492,18 @@ export default function StudentPortalPage() {
             {/* Profile Dropdown Menu with Smooth Spring Transitions */}
             {shouldRenderProfileMenu && (
               <div
-                className={`absolute right-0 mt-2 w-64 sm:w-72 rounded-2xl bg-slate-900/95 border border-slate-700/70 shadow-2xl shadow-black/80 backdrop-blur-2xl py-1.5 z-50 ring-1 ring-white/10 overflow-hidden ${
+                style={{ backgroundColor: "#0c1220" }}
+                className={`absolute right-0 mt-2 w-64 sm:w-72 rounded-2xl border border-slate-700/80 shadow-2xl shadow-black py-1.5 z-50 ring-1 ring-white/10 overflow-hidden ${
                   isProfileMenuOpen
                     ? "animate-profile-menu-enter pointer-events-auto"
                     : "animate-profile-menu-exit pointer-events-none"
                 }`}
               >
                 {/* User Identity Header */}
-                <div className="px-4 py-3 border-b border-slate-800/90 bg-gradient-to-b from-indigo-500/[0.07] to-transparent">
+                <div className="px-4 py-3 border-b border-slate-800 bg-[#101827]">
                   <div className="flex items-center gap-3">
                     <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-500 via-purple-500 to-indigo-600 p-[1.5px] shadow-lg shadow-indigo-500/20 shrink-0">
-                      <div className="w-full h-full rounded-[10px] bg-slate-950 flex items-center justify-center text-indigo-300 font-bold text-xs">
+                      <div className="w-full h-full rounded-[10px] bg-[#0c1220] flex items-center justify-center text-indigo-300 font-bold text-xs">
                         {student.fullName ? student.fullName.charAt(0).toUpperCase() : <User className="w-4 h-4" />}
                       </div>
                     </div>
@@ -511,7 +512,7 @@ export default function StudentPortalPage() {
                         {student.fullName}
                       </p>
                       <div className="flex items-center gap-1.5 mt-1">
-                        <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-md bg-indigo-500/15 text-indigo-300 border border-indigo-500/25">
+                        <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-md bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
                           Roll: {student.studentRoll}
                         </span>
                       </div>
@@ -520,7 +521,7 @@ export default function StudentPortalPage() {
                 </div>
 
                 {/* Menu Options */}
-                <div className="p-1.5 space-y-1">
+                <div className="p-1.5 space-y-1 bg-[#0c1220]">
                   {/* Change PIN Button */}
                   <button
                     type="button"
@@ -528,7 +529,7 @@ export default function StudentPortalPage() {
                       setIsProfileMenuOpen(false);
                       setIsPinModalOpen(true);
                     }}
-                    className="group w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-800/80 active:scale-[0.98] transition-all duration-150 text-left cursor-pointer"
+                    className="group w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-800 active:scale-[0.98] transition-all duration-150 text-left cursor-pointer"
                   >
                     <div className="w-7 h-7 rounded-lg bg-indigo-500/10 text-indigo-400 flex items-center justify-center shrink-0 group-hover:scale-105 group-hover:bg-indigo-500/20 transition-all duration-150">
                       <KeyRound className="w-3.5 h-3.5" />
@@ -546,12 +547,12 @@ export default function StudentPortalPage() {
                       onClick={() => {
                         requestNotificationAccess();
                       }}
-                      className="group w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-800/80 active:scale-[0.98] transition-all duration-150 text-left cursor-pointer"
+                      className="group w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-800 active:scale-[0.98] transition-all duration-150 text-left cursor-pointer"
                     >
                       <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 group-hover:scale-105 transition-all duration-150 ${
                         notificationPermission === "granted"
-                          ? "bg-emerald-500/10 text-emerald-400 group-hover:bg-emerald-500/20"
-                          : "bg-amber-500/10 text-amber-400 group-hover:bg-amber-500/20"
+                          ? "bg-emerald-500/15 text-emerald-400 group-hover:bg-emerald-500/25"
+                          : "bg-amber-500/15 text-amber-400 group-hover:bg-amber-500/25"
                       }`}>
                         <Bell className="w-3.5 h-3.5" />
                       </div>
@@ -575,10 +576,10 @@ export default function StudentPortalPage() {
                 </div>
 
                 {/* Divider */}
-                <div className="border-t border-slate-800/90 my-1 mx-2" />
+                <div className="border-t border-slate-800 my-1 mx-2" />
 
                 {/* Sign Out Option */}
-                <div className="p-1.5 pt-0.5">
+                <div className="p-1.5 pt-0.5 bg-[#0c1220]">
                   <button
                     type="button"
                     onClick={() => {
