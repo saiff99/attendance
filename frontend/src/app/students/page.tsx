@@ -249,12 +249,6 @@ export default function StudentDirectory() {
     });
   };
 
-  const handleDelete = (id: string) => {
-    const target = students.find((s) => s.id === id);
-    if (target) {
-      promptDeleteSingle(target);
-    }
-  };
 
   const confirmResetPin = async () => {
     if (!resetPinTarget) return;
