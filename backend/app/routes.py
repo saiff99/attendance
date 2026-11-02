@@ -639,11 +639,19 @@ async def revoke_biometrics(student_id: str, request: Request):
 
 
 @router.post("/api/process-attendance")
-async def process_attendance(file: UploadFile = File(...), session_id: str = Form(...)):
+async def process_attendance(request: Request, file: UploadFile = File(...), session_id: str = Form(...)):
     """
     Receives an image (e.g., a classroom photo), detects all faces, matches them against
     enrolled students, and logs attendance.
+    Strictly protected: Requires valid internal API key or authorized faculty/admin proxy.
     """
+    from app.security import is_authorized_request
+    if not is_authorized_request(request):
+        raise HTTPException(
+            status_code=403,
+            detail="Forbidden: Protected management endpoint. Valid X-Internal-API-Key or authorized proxy required."
+        )
+
     contents = await safe_read_image_file(file, MAX_CLASSROOM_IMAGE_SIZE)
     
     if not session_id:
@@ -703,15 +711,9 @@ async def process_attendance(file: UploadFile = File(...), session_id: str = For
             for student in enrolled_students:
                 known_encoding = np.array(student['face_encoding'])
                 
-                # Auto-update: If the DB has old 128D data, replace it with the newly detected 512D face!
+                # Enforce vector dimension alignment (reject legacy/mismatched dimensions without overwriting authoritative templates)
                 if known_encoding.shape != unknown_encoding.shape:
-                    if len(unknown_encoding) == 512:
-                        print(f"Auto-upgrading face data for {student['full_name']}...")
-                        supabase.table("students").update({"face_encoding": unknown_encoding.tolist()}).eq("id", student['id']).execute()
-                        known_encoding = unknown_encoding # Match instantly
-                        student['face_encoding'] = unknown_encoding.tolist()
-                    else:
-                        continue
+                    continue
                     
                 sim = np.dot(known_encoding, unknown_encoding) / (norm(known_encoding) * norm(unknown_encoding))
                 

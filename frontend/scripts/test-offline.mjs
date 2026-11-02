@@ -1113,6 +1113,58 @@ console.log('\n--- 18. Student PIN Change Rate Limiting & Brute-Force Shield ---
   assert(resAfterReset.allowed === true, 'Resetting PIN change rate limit clears lockout immediately');
 }
 
+// --- 19. Classroom Photo Attendance Authorization & Biometric Preservation ---
+console.log('\n--- 19. Classroom Photo Attendance Authorization & Biometric Preservation ---');
+{
+  const processRoutePath = path.resolve(__dirname, '../src/app/api/process-attendance/route.ts');
+  const processContent = fs.readFileSync(processRoutePath, 'utf8');
+  const liveScanPath = path.resolve(__dirname, '../src/app/live-scan/page.tsx');
+  const liveScanContent = fs.readFileSync(liveScanPath, 'utf8');
+  const backendRoutesPath = path.resolve(__dirname, '../../backend/app/routes.py');
+  const backendRoutesContent = fs.readFileSync(backendRoutesPath, 'utf8');
+
+  // 1. Verify process-attendance route enforces session verification
+  assert(
+    processContent.includes('verifySessionToken(sessionCookie)') &&
+    processContent.includes('Unauthorized: Authentication session required.'),
+    'process-attendance route strictly enforces session authentication (rejects unauthenticated)'
+  );
+
+  // 2. Verify process-attendance route enforces RBAC (Super Admin, Admin, Faculty only; Student forbidden)
+  assert(
+    processContent.includes("session.role !== 'Super Admin' && session.role !== 'Admin' && session.role !== 'Faculty'") &&
+    processContent.includes('UNAUTHORIZED_CLASSROOM_ATTENDANCE_ATTEMPT'),
+    'process-attendance route restricts invocation to Super Admin, Admin, and Faculty (Student forbidden)'
+  );
+
+  // 3. Verify process-attendance route logs audit events
+  assert(
+    processContent.includes('CLASSROOM_PHOTO_ATTENDANCE_PROCESSED'),
+    'process-attendance route logs CLASSROOM_PHOTO_ATTENDANCE_PROCESSED audit event upon success'
+  );
+
+  // 4. Verify live-scan/page.tsx calls authenticated Next.js proxy instead of raw backendUrl
+  assert(
+    liveScanContent.includes("fetch('/api/process-attendance'") &&
+    !liveScanContent.includes("fetch(`${backendUrl}/api/process-attendance"),
+    'live-scan/page.tsx calls authenticated Next.js proxy /api/process-attendance instead of raw backendUrl'
+  );
+
+  // 5. Verify backend route enforces is_authorized_request
+  assert(
+    backendRoutesContent.includes('is_authorized_request(request)') &&
+    backendRoutesContent.includes('Protected management endpoint. Valid X-Internal-API-Key or authorized proxy required.'),
+    'backend /api/process-attendance verifies is_authorized_request'
+  );
+
+  // 6. Verify backend eradicated silent biometric template overwriting during classroom scan
+  assert(
+    !backendRoutesContent.includes('Auto-upgrading face data for') &&
+    !backendRoutesContent.includes('supabase.table("students").update({"face_encoding": unknown_encoding.tolist()})'),
+    'backend eradicated silent biometric overwriting during classroom photo processing (ADR-001 integrity)'
+  );
+}
+
 // Summary
 console.log('\n' + '=' .repeat(65));
 console.log(`📊 Offline Unit Test Summary: ${passed} Passed, ${failed} Failed`);

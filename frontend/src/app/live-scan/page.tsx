@@ -583,18 +583,14 @@ export default function LiveScan() {
       formData.append('file', optimizedFile);
       formData.append('session_id', activeSession.id);
 
-      const backendUrl = getBackendUrl();
-      const response = await fetch(`${backendUrl}/api/process-attendance`, {
+      const response = await fetch('/api/process-attendance', {
         method: 'POST',
-        headers: {
-          'ngrok-skip-browser-warning': '69420'
-        },
         body: formData,
       });
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.detail || 'Failed to process attendance');
+        throw new Error(errorData.detail || errorData.error || 'Failed to process attendance');
       }
 
       const result = await response.json();
