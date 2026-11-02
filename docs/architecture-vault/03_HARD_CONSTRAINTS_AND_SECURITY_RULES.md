@@ -104,4 +104,14 @@ The rules documented in this specification are **Hard Constraints**. Under no ci
   - Upon successful PIN verification and update, the rate limit key is immediately purged via `resetPinChangeRateLimit`.
 - **Violation Guard:** Never remove rate limiting from credential/PIN modification endpoints or depend solely on frontend UI button disables.
 
+### Rule 12: Classroom Photo Attendance Session Authentication & Biometric Preservation
+- **Constraint:** Triggering classroom-wide facial attendance processing via `POST /api/process-attendance` requires mandatory user session authentication, role-based authorization (`Super Admin`, `Admin`, or `Faculty`), and strictly forbids unverified mutation or overwriting of authoritative student facial templates.
+- **Implementation:**
+  - **Session & RBAC Guard:** Next.js route `/api/process-attendance` strictly verifies `SESSION_COOKIE_NAME` via `verifySessionToken`. Students and unauthenticated callers are rejected immediately with `HTTP 401 Unauthorized` or `HTTP 403 Forbidden` (`UNAUTHORIZED_CLASSROOM_ATTENDANCE_ATTEMPT`).
+  - **Internal Proxying:** Frontend clients (`live-scan/page.tsx`) must invoke the authenticated Next.js `/api/process-attendance` proxy rather than directly dispatching requests to raw external `backendUrl` endpoints. The Next.js proxy forwards requests with verified `X-Internal-API-Key` headers.
+  - **Backend Perimeter Defense:** FastAPI `APISecurityMiddleware` and `process_attendance` route verify `is_authorized_request(request)`, rejecting raw external internet calls lacking internal credentials.
+  - **Biometric Template Immutability:** During batch classroom attendance recognition, facial embeddings extracted from low-resolution or angled classroom snapshots must **NEVER** overwrite or mutate the authoritative 512D ArcFace unit vector stored in `students.face_encoding`. Template enrollment is permitted strictly via explicit DPDP Act 2023 compliant enrollment pathways (`/api/enroll-face` and `/api/enroll-face-burst`).
+- **Violation Guard:** Never expose `/api/process-attendance` without session token verification and never re-introduce automated face encoding overwriting during attendance scans.
+
+
 
