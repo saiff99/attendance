@@ -1123,6 +1123,43 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
     fetchActiveSessions();
   };
 
+  // Visual Stepper Progress state calculation
+  const currentStepNumber = useMemo(() => {
+    switch (step) {
+      case "select_session":
+        return 1;
+      case "enter_roll":
+        return 2;
+      case "capture_selfie":
+        return 3;
+      case "result":
+        return resultData?.success ? 4 : 3;
+      default:
+        return 1;
+    }
+  }, [step, resultData?.success]);
+
+  const handleStepClick = (targetStep: number) => {
+    if (step === "result" || submittingAttendance) return;
+    if (targetStep === 1 && currentStepNumber > 1) {
+      if (step === "capture_selfie") {
+        stopCameraStream();
+        setCapturedImage(null);
+      }
+      hasAutoSelectedRef.current = true;
+      if (typeof window !== "undefined" && window.location.search) {
+        window.history.replaceState({}, '', window.location.pathname);
+      }
+      setSelectedSession(null);
+      setStudent(null);
+      setStep("select_session");
+    } else if (targetStep === 2 && currentStepNumber > 2) {
+      stopCameraStream();
+      setCapturedImage(null);
+      setStep("enter_roll");
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-[#070B12] text-slate-900 dark:text-slate-100 flex flex-col items-center justify-start p-3 sm:p-6 select-none transition-colors duration-200">
       {/* Background Ambient Glow */}
@@ -1151,6 +1188,165 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
           <span className="tracking-tight">{isStaffUser ? "Back to Dashboard" : "Back to Portal"}</span>
         </Link>
       </header>
+
+      {/* 3-Step Visual Progress Stepper */}
+      <div className="w-full max-w-md mb-3 px-0.5 select-none animate-in fade-in duration-200">
+        <div className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border border-slate-200/80 dark:border-slate-800/80 rounded-2xl p-2.5 sm:p-3 shadow-sm transition-colors">
+          <div className="flex items-center justify-between gap-1 sm:gap-2">
+
+            {/* Step 1: Class Selection */}
+            <div
+              onClick={() => handleStepClick(1)}
+              className={`flex-1 flex items-center gap-1.5 sm:gap-2 rounded-xl p-1 transition-all ${
+                currentStepNumber > 1 && step !== "result"
+                  ? "cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/60 active:scale-95"
+                  : ""
+              }`}
+              title={currentStepNumber > 1 && step !== "result" ? "Click to change class" : undefined}
+            >
+              <div
+                className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center shrink-0 transition-all duration-300 ${
+                  currentStepNumber > 1
+                    ? "bg-emerald-500 text-white shadow-sm shadow-emerald-500/30"
+                    : currentStepNumber === 1
+                    ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30 ring-2 ring-indigo-500/20"
+                    : "bg-slate-100 dark:bg-slate-800 text-slate-400"
+                }`}
+              >
+                {currentStepNumber > 1 ? (
+                  <Check className="w-4 h-4 stroke-[2.5]" />
+                ) : (
+                  <BookOpen className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                )}
+              </div>
+              <div className="min-w-0">
+                <span
+                  className={`block text-[10px] font-bold uppercase tracking-wider transition-colors ${
+                    currentStepNumber === 1
+                      ? "text-indigo-600 dark:text-indigo-400"
+                      : currentStepNumber > 1
+                      ? "text-emerald-600 dark:text-emerald-400"
+                      : "text-slate-400"
+                  }`}
+                >
+                  Step 1
+                </span>
+                <span
+                  className={`block text-xs font-semibold truncate transition-colors ${
+                    currentStepNumber >= 1 ? "text-slate-900 dark:text-white" : "text-slate-400"
+                  }`}
+                >
+                  <span className="sm:hidden">Class</span>
+                  <span className="hidden sm:inline">Select Class</span>
+                </span>
+              </div>
+            </div>
+
+            {/* Connecting Track 1 */}
+            <div
+              className={`w-3.5 sm:w-8 h-0.5 rounded-full shrink-0 transition-colors duration-300 ${
+                currentStepNumber > 1 ? "bg-emerald-500" : "bg-slate-200 dark:bg-slate-800"
+              }`}
+            />
+
+            {/* Step 2: Roll Number Verification */}
+            <div
+              onClick={() => handleStepClick(2)}
+              className={`flex-1 flex items-center gap-1.5 sm:gap-2 justify-center rounded-xl p-1 transition-all ${
+                currentStepNumber > 2 && step !== "result"
+                  ? "cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/60 active:scale-95"
+                  : ""
+              }`}
+              title={currentStepNumber > 2 && step !== "result" ? "Click to review roll profile" : undefined}
+            >
+              <div
+                className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center shrink-0 transition-all duration-300 ${
+                  currentStepNumber > 2
+                    ? "bg-emerald-500 text-white shadow-sm shadow-emerald-500/30"
+                    : currentStepNumber === 2
+                    ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30 ring-2 ring-indigo-500/20"
+                    : "bg-slate-100 dark:bg-slate-800 text-slate-400"
+                }`}
+              >
+                {currentStepNumber > 2 ? (
+                  <Check className="w-4 h-4 stroke-[2.5]" />
+                ) : (
+                  <UserCheck className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                )}
+              </div>
+              <div className="min-w-0">
+                <span
+                  className={`block text-[10px] font-bold uppercase tracking-wider transition-colors ${
+                    currentStepNumber === 2
+                      ? "text-indigo-600 dark:text-indigo-400"
+                      : currentStepNumber > 2
+                      ? "text-emerald-600 dark:text-emerald-400"
+                      : "text-slate-400"
+                  }`}
+                >
+                  Step 2
+                </span>
+                <span
+                  className={`block text-xs font-semibold truncate transition-colors ${
+                    currentStepNumber >= 2 ? "text-slate-900 dark:text-white" : "text-slate-400"
+                  }`}
+                >
+                  <span className="sm:hidden">Roll No</span>
+                  <span className="hidden sm:inline">Verify Roll</span>
+                </span>
+              </div>
+            </div>
+
+            {/* Connecting Track 2 */}
+            <div
+              className={`w-3.5 sm:w-8 h-0.5 rounded-full shrink-0 transition-colors duration-300 ${
+                currentStepNumber > 2 ? "bg-emerald-500" : "bg-slate-200 dark:bg-slate-800"
+              }`}
+            />
+
+            {/* Step 3: Biometric Face Verification */}
+            <div className="flex-1 flex items-center gap-1.5 sm:gap-2 justify-end rounded-xl p-1">
+              <div
+                className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center shrink-0 transition-all duration-300 ${
+                  currentStepNumber > 3
+                    ? "bg-emerald-500 text-white shadow-sm shadow-emerald-500/30"
+                    : currentStepNumber === 3
+                    ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30 ring-2 ring-indigo-500/20"
+                    : "bg-slate-100 dark:bg-slate-800 text-slate-400"
+                }`}
+              >
+                {currentStepNumber > 3 ? (
+                  <Check className="w-4 h-4 stroke-[2.5]" />
+                ) : (
+                  <Camera className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                )}
+              </div>
+              <div className="min-w-0">
+                <span
+                  className={`block text-[10px] font-bold uppercase tracking-wider transition-colors ${
+                    currentStepNumber === 3
+                      ? "text-indigo-600 dark:text-indigo-400"
+                      : currentStepNumber > 3
+                      ? "text-emerald-600 dark:text-emerald-400"
+                      : "text-slate-400"
+                  }`}
+                >
+                  Step 3
+                </span>
+                <span
+                  className={`block text-xs font-semibold truncate transition-colors ${
+                    currentStepNumber >= 3 ? "text-slate-900 dark:text-white" : "text-slate-400"
+                  }`}
+                >
+                  <span className="sm:hidden">Selfie</span>
+                  <span className="hidden sm:inline">Face Scan</span>
+                </span>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
 
       {/* Main Container */}
       <main className="w-full max-w-md flex-1 flex flex-col justify-start">
