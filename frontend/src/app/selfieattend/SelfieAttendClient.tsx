@@ -1696,7 +1696,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                             </div>
                           ) : geofenceStatus === "permission_error" ? (
                             <p className="text-[11px] text-amber-200 leading-relaxed">
-                              ⚠️ {geofenceErrorMessage || "Please allow location access in your mobile browser settings to verify you are in the lecture hall."}
+                              ⚠️ Location permission was denied. Please allow location access below and tap &ldquo;Re-check GPS&rdquo;.
                             </p>
                           ) : (
                             <p className="text-[11px] text-slate-400">

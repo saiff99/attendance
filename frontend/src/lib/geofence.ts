@@ -60,6 +60,52 @@ export interface GPSReading {
 }
 
 /**
+ * Generates an operating-system-aware human-readable geolocation error message.
+ */
+export function getGeolocationErrorMessage(err: { code?: number }): string {
+  const isBrowser = typeof navigator !== "undefined";
+  const ua = isBrowser ? (navigator.userAgent || "").toLowerCase() : "";
+  const isAndroid = /android/.test(ua);
+  const isIOS = /iphone|ipad|ipod/.test(ua);
+  const isMac = /macintosh|mac os x/.test(ua);
+  const isWindows = /windows/.test(ua);
+
+  const code = err?.code;
+
+  if (code === 1 /* PERMISSION_DENIED */) {
+    if (isAndroid) {
+      return "Location permission was denied. Please allow location access in your browser or Android App Settings (Settings > Apps > Chrome/MedAttend > Permissions > Location).";
+    }
+    if (isIOS) {
+      return "Location permission was denied. Please allow location access in iOS Settings > Safari (or MedAttend) > Location.";
+    }
+    if (isMac) {
+      return "Location permission was denied. Please allow location access in your browser settings and macOS System Settings > Privacy & Security > Location Services.";
+    }
+    if (isWindows) {
+      return "Location permission was denied. Please allow location access in your browser and Windows Settings > Privacy & Security > Location.";
+    }
+    return "Location permission was denied. Please allow location access in your browser and device location settings.";
+  }
+
+  if (code === 2 /* POSITION_UNAVAILABLE */) {
+    if (isAndroid || isIOS) {
+      return "Location information is unavailable. Please ensure GPS / Location is turned ON in your device quick settings.";
+    }
+    if (isMac) {
+      return "Location information is unavailable. On Mac: Please ensure Wi-Fi is ON and location is allowed in macOS System Settings > Privacy & Security > Location Services.";
+    }
+    return "Location information is unavailable. Please ensure GPS / Location is turned ON on your device.";
+  }
+
+  if (code === 3 /* TIMEOUT */) {
+    return "Location request timed out. Please check your GPS or internet connection and tap Re-check GPS.";
+  }
+
+  return "Could not access location. Please check your device location settings.";
+}
+
+/**
  * High-Precision Multi-Sample GPS Calibrator.
  * Samples continuous GPS updates using watchPosition over a short calibration window (1.5-3s)
  * and returns the highest precision reading with the lowest accuracy error margin.
@@ -98,19 +144,7 @@ export function getCalibratedHighPrecisionGPS(
         (err) => {
           if (completed) return;
           completed = true;
-          let msg = "Could not access location.";
-          switch (err.code) {
-            case err.PERMISSION_DENIED:
-              msg = "Location permission was denied. Please allow location access in your browser settings and macOS System Settings > Privacy & Security > Location Services.";
-              break;
-            case err.POSITION_UNAVAILABLE:
-              msg = "Location information is unavailable. On Mac: Please ensure Wi-Fi is ON and Chrome is allowed in System Settings > Privacy & Security > Location Services.";
-              break;
-            case err.TIMEOUT:
-              msg = "Location request timed out. Please check your connection and try again.";
-              break;
-          }
-          reject(new Error(msg));
+          reject(new Error(getGeolocationErrorMessage(err)));
         },
         {
           enableHighAccuracy: false,
@@ -222,19 +256,7 @@ export function getUserCoordinates(
             });
           },
           (err) => {
-            let msg = "Could not access location.";
-            switch (err.code) {
-              case err.PERMISSION_DENIED:
-                msg = "Location permission was denied. Please allow location access in your browser settings and macOS System Settings > Privacy & Security > Location Services.";
-                break;
-              case err.POSITION_UNAVAILABLE:
-                msg = "Location information is unavailable. On Mac: Please ensure Wi-Fi is ON and Chrome is allowed in System Settings > Privacy & Security > Location Services.";
-                break;
-              case err.TIMEOUT:
-                msg = "Location request timed out. Please try again.";
-                break;
-            }
-            reject(new Error(msg));
+            reject(new Error(getGeolocationErrorMessage(err)));
           },
           {
             enableHighAccuracy: false,
