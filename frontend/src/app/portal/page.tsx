@@ -97,7 +97,20 @@ export default function StudentPortalPage() {
 
   // User Profile Dropdown Menu State
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const [shouldRenderProfileMenu, setShouldRenderProfileMenu] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement>(null);
+
+  // Sync mounting and unmounting for smooth spring exit transition
+  useEffect(() => {
+    if (isProfileMenuOpen) {
+      setShouldRenderProfileMenu(true);
+    } else if (shouldRenderProfileMenu) {
+      const timer = setTimeout(() => {
+        setShouldRenderProfileMenu(false);
+      }, 160);
+      return () => clearTimeout(timer);
+    }
+  }, [isProfileMenuOpen, shouldRenderProfileMenu]);
 
   // Close profile dropdown on outside click or Escape key
   useEffect(() => {
@@ -461,38 +474,44 @@ export default function StudentPortalPage() {
             <button
               type="button"
               onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
-              className={`flex items-center gap-1.5 py-1.5 px-2 sm:px-2.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer shrink-0 ${
+              className={`flex items-center gap-1.5 py-1.5 px-2 sm:px-2.5 rounded-xl border text-xs font-semibold transition-all duration-200 cursor-pointer shrink-0 select-none ${
                 isProfileMenuOpen
-                  ? "bg-slate-800 border-indigo-500/50 text-white shadow-md shadow-indigo-500/10"
-                  : "bg-slate-800/80 hover:bg-slate-800 border-slate-700/80 text-slate-300 hover:text-white"
+                  ? "bg-slate-800 border-indigo-500/50 text-white shadow-md shadow-indigo-500/15 ring-2 ring-indigo-500/20"
+                  : "bg-slate-800/80 hover:bg-slate-800 border-slate-700/80 text-slate-300 hover:text-white active:scale-95"
               }`}
               title="Account Menu"
               aria-label="Account Menu"
               aria-expanded={isProfileMenuOpen}
             >
-              <div className="w-5 h-5 rounded-lg bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center text-white text-[10px] font-bold shrink-0">
+              <div className="w-5 h-5 rounded-lg bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center text-white text-[10px] font-bold shrink-0 shadow-sm shadow-indigo-500/30">
                 {student.fullName ? student.fullName.charAt(0).toUpperCase() : <User className="w-3 h-3" />}
               </div>
-              <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${isProfileMenuOpen ? "rotate-180 text-indigo-400" : ""}`} />
+              <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-250 ease-out ${isProfileMenuOpen ? "rotate-180 text-indigo-400" : "text-slate-400"}`} />
             </button>
 
-            {/* Profile Dropdown Menu */}
-            {isProfileMenuOpen && (
-              <div className="absolute right-0 mt-2 w-60 sm:w-64 rounded-2xl bg-slate-900 border border-slate-800 shadow-2xl backdrop-blur-xl py-1.5 z-50 animate-in fade-in zoom-in-95 duration-150">
+            {/* Profile Dropdown Menu with Smooth Spring Transitions */}
+            {shouldRenderProfileMenu && (
+              <div
+                className={`absolute right-0 mt-2 w-64 sm:w-72 rounded-2xl bg-slate-900/95 border border-slate-700/70 shadow-2xl shadow-black/80 backdrop-blur-2xl py-1.5 z-50 ring-1 ring-white/10 overflow-hidden ${
+                  isProfileMenuOpen
+                    ? "animate-profile-menu-enter pointer-events-auto"
+                    : "animate-profile-menu-exit pointer-events-none"
+                }`}
+              >
                 {/* User Identity Header */}
-                <div className="px-3.5 py-2.5 border-b border-slate-800/80">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-indigo-500 via-violet-600 to-indigo-700 p-0.5 shadow-md shrink-0">
+                <div className="px-4 py-3 border-b border-slate-800/90 bg-gradient-to-b from-indigo-500/[0.07] to-transparent">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-500 via-purple-500 to-indigo-600 p-[1.5px] shadow-lg shadow-indigo-500/20 shrink-0">
                       <div className="w-full h-full rounded-[10px] bg-slate-950 flex items-center justify-center text-indigo-300 font-bold text-xs">
                         {student.fullName ? student.fullName.charAt(0).toUpperCase() : <User className="w-4 h-4" />}
                       </div>
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-xs font-bold text-white truncate">
+                      <p className="text-xs font-bold text-white truncate tracking-wide">
                         {student.fullName}
                       </p>
-                      <div className="flex items-center gap-1.5 mt-0.5">
-                        <span className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-md bg-indigo-500/15 text-indigo-300 border border-indigo-500/25">
                           Roll: {student.studentRoll}
                         </span>
                       </div>
@@ -501,7 +520,7 @@ export default function StudentPortalPage() {
                 </div>
 
                 {/* Menu Options */}
-                <div className="p-1.5 space-y-0.5">
+                <div className="p-1.5 space-y-1">
                   {/* Change PIN Button */}
                   <button
                     type="button"
@@ -509,9 +528,9 @@ export default function StudentPortalPage() {
                       setIsProfileMenuOpen(false);
                       setIsPinModalOpen(true);
                     }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-800/80 transition-colors text-left cursor-pointer"
+                    className="group w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-800/80 active:scale-[0.98] transition-all duration-150 text-left cursor-pointer"
                   >
-                    <div className="w-7 h-7 rounded-lg bg-indigo-500/10 text-indigo-400 flex items-center justify-center shrink-0">
+                    <div className="w-7 h-7 rounded-lg bg-indigo-500/10 text-indigo-400 flex items-center justify-center shrink-0 group-hover:scale-105 group-hover:bg-indigo-500/20 transition-all duration-150">
                       <KeyRound className="w-3.5 h-3.5" />
                     </div>
                     <div className="flex-1">
@@ -527,12 +546,12 @@ export default function StudentPortalPage() {
                       onClick={() => {
                         requestNotificationAccess();
                       }}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-800/80 transition-colors text-left cursor-pointer"
+                      className="group w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-800/80 active:scale-[0.98] transition-all duration-150 text-left cursor-pointer"
                     >
-                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
+                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 group-hover:scale-105 transition-all duration-150 ${
                         notificationPermission === "granted"
-                          ? "bg-emerald-500/10 text-emerald-400"
-                          : "bg-amber-500/10 text-amber-400"
+                          ? "bg-emerald-500/10 text-emerald-400 group-hover:bg-emerald-500/20"
+                          : "bg-amber-500/10 text-amber-400 group-hover:bg-amber-500/20"
                       }`}>
                         <Bell className="w-3.5 h-3.5" />
                       </div>
@@ -556,19 +575,19 @@ export default function StudentPortalPage() {
                 </div>
 
                 {/* Divider */}
-                <div className="border-t border-slate-800 my-1" />
+                <div className="border-t border-slate-800/90 my-1 mx-2" />
 
                 {/* Sign Out Option */}
-                <div className="p-1.5 pt-0">
+                <div className="p-1.5 pt-0.5">
                   <button
                     type="button"
                     onClick={() => {
                       setIsProfileMenuOpen(false);
                       logout();
                     }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 transition-colors text-left cursor-pointer"
+                    className="group w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold text-rose-400 hover:text-rose-300 hover:bg-rose-500/15 active:scale-[0.98] transition-all duration-150 text-left cursor-pointer"
                   >
-                    <div className="w-7 h-7 rounded-lg bg-rose-500/10 text-rose-400 flex items-center justify-center shrink-0">
+                    <div className="w-7 h-7 rounded-lg bg-rose-500/10 text-rose-400 flex items-center justify-center shrink-0 group-hover:scale-105 group-hover:bg-rose-500/20 transition-all duration-150">
                       <LogOut className="w-3.5 h-3.5" />
                     </div>
                     <span>Sign Out</span>
