@@ -188,10 +188,10 @@ export default function OngoingSessionsPage() {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 sm:mb-8 pb-5 border-b border-gray-200 dark:border-slate-800">
           <div>
             <div className="flex items-center gap-2.5 mb-1.5">
-              <div className="w-10 h-10 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-600 dark:text-rose-400 shadow-sm">
+              <div className="w-10 h-10 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-600 dark:text-rose-400 shadow-sm shrink-0">
                 <Radio className="w-5 h-5 animate-pulse" />
               </div>
-              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-gray-900 dark:text-white flex items-center gap-2.5">
+              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-gray-900 dark:text-white flex flex-wrap items-center gap-2 sm:gap-2.5">
                 <span>Ongoing Sessions</span>
                 {sessions.length > 0 && (
                   <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-500 text-white animate-pulse shadow-sm shadow-rose-500/40">

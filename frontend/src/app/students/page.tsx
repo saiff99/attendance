@@ -943,7 +943,7 @@ export default function StudentDirectory() {
 
             {/* Floating Batch Action Toolbar */}
             {selectedIds.length > 0 && (
-              <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 max-w-2xl w-[92%] sm:w-auto">
+              <div className="fixed bottom-6 mb-[env(safe-area-inset-bottom,0px)] left-1/2 -translate-x-1/2 z-40 max-w-2xl w-[92%] sm:w-auto">
                 <div className="flex flex-wrap items-center justify-between sm:justify-start gap-3 bg-gray-900/95 dark:bg-gray-800/95 backdrop-blur-md text-white px-4 sm:px-6 py-3 rounded-2xl shadow-2xl border border-gray-700/60 ring-1 ring-white/10">
                   <div className="flex items-center gap-2">
                     <span className="flex h-6 w-6 items-center justify-center rounded-full bg-indigo-500 text-xs font-bold text-white shadow-sm">
@@ -956,7 +956,7 @@ export default function StudentDirectory() {
 
                   <div className="h-4 w-px bg-gray-700 hidden sm:block"></div>
 
-                  <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                  <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
                     <button
                       type="button"
                       onClick={handleExportCSV}
