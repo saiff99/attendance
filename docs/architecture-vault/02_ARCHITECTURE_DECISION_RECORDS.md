@@ -16,6 +16,8 @@
 | **ADR-007** | Persistent Atomic Rate Limiting via Postgres Advisory Locks | **Accepted** | Oct 2026 | Anti-Abuse & DDoS Defense |
 | **ADR-008** | Database-Enforced Non-Cascading Foreign Key Retention | **Accepted** | Oct 2026 | Data Governance & DPDP Act |
 | **ADR-009** | Client-Side Canvas Compression for Classroom Group Photo Batch Attendance | **Accepted** | Oct 2026 | Frontend / Batch Ingestion |
+| **ADR-010** | Automated Database Migration Runner & Audit Ledger | **Accepted** | Oct 2026 | Database DevOps / Migrations |
+| **ADR-011** | Permanent Pure Dark Mode & Theme Switcher Deprecation | **Accepted** | Nov 2026 | UI/UX / Mobile PWA Reliability |
 
 ---
 
@@ -127,5 +129,25 @@
   - *Positive:* SHA-256 checksum tracking guarantees immutability and alerts developers if past migration scripts are retroactively altered.
   - *Positive:* Works seamlessly in both live PostgreSQL network connections and zero-network offline sandbox environments via `--bundle` and `--dry-run`.
   - *Negative:* Developers must adhere to the strict `NN_descriptive_name.sql` numbering standard for all future schema changes.
+
+---
+
+### ADR-011: Permanent Pure Dark Mode & Theme Switcher Deprecation
+- **Context:**
+  1. The platform originally supported dynamic light/dark mode switching via `next-themes` with theme toggle controls on the login screen (`login/page.tsx`) and navigation sidebar (`Sidebar.tsx`).
+  2. In mobile PWA and multi-device deployments (e.g., Android devices running browser WebViews), local storage desynchronization, accidental tap triggers, or device system defaults frequently caused the app to drop the `.dark` class from `<html>`.
+  3. Because component styles were engineered around a high-contrast deep slate aesthetic (`#070B12`, `slate-900`, `slate-950`) for biometric face scanning and camera previews, dropping `.dark` resulted in jarring hybrid layouts—such as white page wrappers (`bg-slate-50`) enclosing dark result cards, degrading visual hierarchy and legibility.
+  4. Supporting dual themes across hundreds of biometric modals, SVG charts, and live camera overlays introduced continuous regression overhead and maintenance bloat.
+- **Decision:**
+  1. **Enforce Forced Dark Mode Invariant (`frontend/src/app/layout.tsx`):** Configure `ThemeProvider` with `forcedTheme="dark"`, `defaultTheme="dark"`, and `enableSystem={false}`. This guarantees that `next-themes` permanently injects the `.dark` class onto `<html>` and ignores any residual `localStorage` or OS-level light preferences.
+  2. **Dark-By-Default Fallback CSS (`frontend/src/app/globals.css`):** Set `:root` variables to `--background: #070B12` and `--foreground: #f9fafb`, completely eliminating flash of unstyled light content (FOUC) during initial SSR/hydration.
+  3. **Universal Deprecation of Theme Switchers:** Removed all theme toggles from the UI (the floating Sun/Moon button on `login/page.tsx`, the mobile header toggle, and the sidebar footer theme pill).
+  4. **Purged Light Background Classes:** Replaced transitional `bg-slate-50 dark:bg-[#070B12]` wrappers (e.g., in `SelfieAttendClient.tsx` and `login/page.tsx`) with pure `bg-[#070B12]`.
+- **Consequences:**
+  - *Positive:* 100% visual consistency across all platforms (Android, iOS, iPadOS, macOS, Windows). Accidental theme corruption is mathematically impossible.
+  - *Positive:* Significant power savings on OLED mobile screens during campus check-ins and optimal contrast for camera feeds.
+  - *Positive:* Simplifies component CSS maintenance; eliminated 100+ lines of redundant theme toggle and state synchronization boilerplate.
+  - *Negative:* Users who personally prefer a high-brightness white background no longer have an in-app option to toggle themes.
+
 
 
