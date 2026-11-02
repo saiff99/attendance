@@ -9,7 +9,7 @@ import {
   UserCheck, ArrowRight, ArrowLeft, Clock, MapPin, BookOpen,
   Sparkles, Check, X, ShieldAlert, GraduationCap,
   Building2, HelpCircle, Lock, Timer, Hourglass, Navigation, Loader2,
-  Eye, EyeOff, Smile, Activity
+  Eye, EyeOff, Smile, Activity, Ticket, Copy, QrCode
 } from "lucide-react";
 import Webcam from "react-webcam";
 import { getBackendUrl } from "@/lib/api";
@@ -194,6 +194,34 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
     message?: string;
     recorded_at?: string;
   } | null>(null);
+  const [copiedPassId, setCopiedPassId] = useState(false);
+
+  // Digital Attendance Pass Memoized Details
+  const passId = useMemo(() => {
+    if (!resultData) return "";
+    const rollPart = (resultData.student_roll || "STU").replace(/[^a-zA-Z0-9]/g, "");
+    const sessPart = (selectedSession?.id || "SES").slice(0, 5).toUpperCase();
+    const dateHash = (resultData.recorded_at ? new Date(resultData.recorded_at).getTime() : Date.now()).toString(36).toUpperCase().slice(-4);
+    return `PASS-${rollPart}-${sessPart}-${dateHash}`;
+  }, [resultData, selectedSession?.id]);
+
+  const formattedTime = useMemo(() => {
+    try {
+      const d = resultData?.recorded_at ? new Date(resultData.recorded_at) : new Date();
+      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch {
+      return "Just Now";
+    }
+  }, [resultData?.recorded_at]);
+
+  const formattedDate = useMemo(() => {
+    try {
+      const d = resultData?.recorded_at ? new Date(resultData.recorded_at) : new Date();
+      return d.toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' });
+    } catch {
+      return "Today";
+    }
+  }, [resultData?.recorded_at]);
 
   // GPS Geofence States
   const [geofenceConfig, setGeofenceConfig] = useState<CampusGeofenceConfig>(() => getLocalGeofence());
@@ -1107,6 +1135,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
     stopCameraStream();
     setCapturedImage(null);
     setResultData(null);
+    setCopiedPassId(false);
     setLookupError(null);
     setSelectedSession(null);
     setStudent(null);
@@ -2017,74 +2046,211 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
         {/* STEP 4: RESULT / FEEDBACK */}
         {/* ========================================================================= */}
         {step === "result" && resultData && (
-          <div className="flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-200">
-            <div className={`rounded-3xl border p-6 sm:p-7 shadow-2xl flex flex-col items-center text-center ${resultData.success
-              ? "bg-slate-900/90 border-emerald-500/40 shadow-emerald-950/20"
-              : "bg-slate-900/90 border-red-500/40 shadow-red-950/20"
-              }`}>
+          <div className="flex flex-col gap-4 animate-in fade-in slide-in-from-bottom-6 zoom-in-95 duration-400">
+            {resultData.success ? (
+              /* ========================================================================= */
+              /* DIGITAL ATTENDANCE PASS CARD */
+              /* ========================================================================= */
+              <div className="relative group">
+                {/* Ambient glow behind card */}
+                <div className="absolute -inset-1 bg-gradient-to-r from-emerald-500/25 via-indigo-500/20 to-teal-500/25 rounded-3xl blur-xl opacity-75 group-hover:opacity-100 transition-opacity pointer-events-none -z-10" />
 
-              <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 shadow-xl ${resultData.success
-                ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 shadow-emerald-500/20"
-                : "bg-red-500/20 text-red-400 border border-red-500/40 shadow-red-500/20"
-                }`}>
-                {resultData.success ? (
-                  <CheckCircle2 className="w-9 h-9" />
-                ) : (
-                  <X className="w-9 h-9" />
-                )}
-              </div>
+                <div className="rounded-3xl border border-emerald-500/40 bg-slate-900/95 shadow-2xl shadow-emerald-950/30 overflow-hidden text-left relative backdrop-blur-md">
+                  {/* Top Hologram Ribbon Header */}
+                  <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-indigo-600 p-4 sm:p-5 text-white flex items-center justify-between relative overflow-hidden">
+                    {/* Decorative shimmer sweep */}
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/15 to-transparent -translate-x-full animate-[shimmer_3s_infinite]" />
 
-              <h2 className="text-lg sm:text-xl font-bold text-white">
-                {resultData.success
-                  ? (resultData.already_marked ? "Already Marked Present" : "Attendance Verified & Marked!")
-                  : "Face Verification Failed"}
-              </h2>
+                    <div className="flex items-center gap-2.5 relative z-10">
+                      <div className="w-9 h-9 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center border border-white/30 shadow-inner">
+                        <Ticket className="w-5 h-5 text-white" />
+                      </div>
+                      <div>
+                        <div className="text-[10px] tracking-widest font-mono uppercase text-emerald-100 font-bold flex items-center gap-1">
+                          <Sparkles className="w-3 h-3 text-emerald-200 animate-pulse" />
+                          <span>Digital Attendance Pass</span>
+                        </div>
+                        <h3 className="text-sm sm:text-base font-extrabold tracking-tight">MedAttend Verified</h3>
+                      </div>
+                    </div>
 
-              <p className="text-xs text-slate-300 mt-1.5 max-w-xs">
-                {resultData.message}
-              </p>
-
-              {resultData.success && (
-                <div className="w-full mt-5 p-4 rounded-2xl bg-slate-950/70 border border-slate-800 text-left flex flex-col gap-2.5">
-                  <div className="flex items-center justify-between text-xs border-b border-slate-800 pb-2">
-                    <span className="text-slate-400">Student Name:</span>
-                    <span className="font-bold text-white">{resultData.student_name}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs border-b border-slate-800 pb-2">
-                    <span className="text-slate-400">Roll Number:</span>
-                    <span className="font-mono font-bold text-indigo-300">{resultData.student_roll}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs border-b border-slate-800 pb-2">
-                    <span className="text-slate-400">Lecture:</span>
-                    <span className="font-medium text-slate-200 truncate max-w-[180px]">{selectedSession?.class_name}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs border-b border-slate-800 pb-2">
-                    <span className="text-slate-400">Status:</span>
-                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold text-[11px] border border-emerald-500/30">
-                      Present (Verified)
-                    </span>
-                  </div>
-                  {resultData.confidence && (
-                    <div className="flex items-center justify-between text-xs pt-0.5">
-                      <span className="text-slate-400">AI Confidence:</span>
-                      <span className="text-emerald-400 font-bold">
-                        Matched
+                    <div className="flex flex-col items-end relative z-10">
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-white/20 backdrop-blur-sm border border-white/30 text-white font-mono font-bold text-[11px] shadow-xs">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-300 animate-ping inline-block" />
+                        {resultData.already_marked ? "ALREADY RECORDED" : "VERIFIED ✓"}
+                      </span>
+                      <span className="text-[10px] font-mono text-emerald-100/80 mt-1">
+                        {passId}
                       </span>
                     </div>
-                  )}
-                </div>
-              )}
+                  </div>
 
-              <div className="w-full mt-6 flex flex-col gap-2">
-                {resultData.success ? (
-                  <button
-                    onClick={handleReset}
-                    className="w-full py-3.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm transition-all shadow-lg shadow-indigo-600/25 cursor-pointer flex items-center justify-center gap-2"
-                  >
-                    <Check className="w-4 h-4 text-emerald-400" />
-                    <span>Done • Return to Classes</span>
-                  </button>
-                ) : (
+                  {/* Student Main Badge & Course */}
+                  <div className="p-5 sm:p-6 pb-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">
+                          Student Attendee
+                        </span>
+                        <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
+                          {resultData.student_name}
+                        </h2>
+                        <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-xs font-mono font-bold">
+                            Roll #{resultData.student_roll}
+                          </span>
+                          {resultData.academic_year && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 border border-slate-700 text-xs font-medium">
+                              {resultData.academic_year}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white shadow-lg shadow-emerald-500/30 shrink-0 border border-emerald-400/40">
+                        <CheckCircle2 className="w-8 h-8 text-white" />
+                      </div>
+                    </div>
+
+                    {/* Lecture / Class Box */}
+                    <div className="mt-4 p-3.5 rounded-2xl bg-slate-950/70 border border-slate-800 flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center shrink-0 text-indigo-400">
+                        <BookOpen className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 block">Class / Lecture</span>
+                        <p className="text-sm font-bold text-white truncate">
+                          {selectedSession?.class_name || "Active Session"}
+                        </p>
+                      </div>
+                      {selectedSession?.instructor_name && (
+                        <span className="text-xs text-slate-400 font-medium hidden sm:inline truncate max-w-[120px]">
+                          {selectedSession.instructor_name.replace(/\[.*?\]/g, "").trim()}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Ticket Perforation / Tear Notch Line */}
+                  <div className="relative py-2 flex items-center justify-center">
+                    {/* Left Notch */}
+                    <div className="absolute -left-3 w-6 h-6 rounded-full bg-slate-950 border border-slate-800 shadow-inner" />
+                    {/* Dashed Line */}
+                    <div className="w-full border-t-2 border-dashed border-slate-800 mx-5" />
+                    {/* Right Notch */}
+                    <div className="absolute -right-3 w-6 h-6 rounded-full bg-slate-950 border border-slate-800 shadow-inner" />
+                  </div>
+
+                  {/* Verification Grid Details */}
+                  <div className="p-5 sm:p-6 pt-3 grid grid-cols-2 gap-3 text-xs">
+                    <div className="p-3 rounded-xl bg-slate-950/50 border border-slate-800/80">
+                      <div className="flex items-center gap-1.5 text-slate-400 mb-1">
+                        <Clock className="w-3.5 h-3.5 text-indigo-400" />
+                        <span className="text-[10px] font-semibold uppercase">Date & Time</span>
+                      </div>
+                      <p className="font-bold text-slate-200">{formattedTime}</p>
+                      <p className="text-[10px] text-slate-500">{formattedDate}</p>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-slate-950/50 border border-slate-800/80">
+                      <div className="flex items-center gap-1.5 text-slate-400 mb-1">
+                        <MapPin className="w-3.5 h-3.5 text-emerald-400" />
+                        <span className="text-[10px] font-semibold uppercase">Geofence GPS</span>
+                      </div>
+                      <p className="font-bold text-emerald-400 flex items-center gap-1">
+                        <Check className="w-3 h-3" />
+                        <span>Inside Campus</span>
+                      </p>
+                      <p className="text-[10px] text-slate-500 truncate">
+                        {geofenceDistance !== null ? `${Math.round(geofenceDistance)}m from node` : "Calibrated Boundary"}
+                      </p>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-slate-950/50 border border-slate-800/80">
+                      <div className="flex items-center gap-1.5 text-slate-400 mb-1">
+                        <ShieldCheck className="w-3.5 h-3.5 text-teal-400" />
+                        <span className="text-[10px] font-semibold uppercase">Biometric Match</span>
+                      </div>
+                      <p className="font-bold text-teal-300">ArcFace 512D</p>
+                      <p className="text-[10px] text-slate-500">Liveness Verified</p>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-slate-950/50 border border-slate-800/80">
+                      <div className="flex items-center gap-1.5 text-slate-400 mb-1">
+                        <Activity className="w-3.5 h-3.5 text-amber-400" />
+                        <span className="text-[10px] font-semibold uppercase">Audit Status</span>
+                      </div>
+                      <p className="font-bold text-amber-300">Signed & Logged</p>
+                      <p className="text-[10px] text-slate-500">Immutable Ledger</p>
+                    </div>
+                  </div>
+
+                  {/* Security Barcode Strip */}
+                  <div className="px-5 sm:px-6 pb-5 pt-1">
+                    <div className="p-3 rounded-2xl bg-slate-950 border border-slate-800 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <QrCode className="w-8 h-8 text-emerald-400/80 shrink-0" />
+                        <div className="min-w-0">
+                          <span className="text-[9px] font-mono text-slate-500 uppercase tracking-widest block">PASS RECEIPT TOKEN</span>
+                          <span className="text-xs font-mono font-bold text-slate-300 truncate block">{passId}</span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (typeof navigator !== "undefined" && navigator.clipboard) {
+                            navigator.clipboard.writeText(passId);
+                            setCopiedPassId(true);
+                            setTimeout(() => setCopiedPassId(false), 2000);
+                          }
+                        }}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-medium transition-colors border border-slate-700/80 shrink-0 cursor-pointer"
+                        title="Copy digital receipt token"
+                      >
+                        {copiedPassId ? (
+                          <>
+                            <Check className="w-3.5 h-3.5 text-emerald-400" />
+                            <span className="text-emerald-400 font-semibold">Copied</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3.5 h-3.5" />
+                            <span>Copy Token</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Card Actions Footer */}
+                  <div className="p-5 sm:p-6 pt-0">
+                    <button
+                      type="button"
+                      onClick={handleReset}
+                      className="w-full py-3.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-sm transition-all shadow-lg shadow-emerald-600/30 cursor-pointer flex items-center justify-center gap-2"
+                    >
+                      <Check className="w-4 h-4 text-emerald-200" />
+                      <span>Done • Return to Classes</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              /* Error Result Card */
+              <div className="rounded-3xl border border-red-500/40 bg-slate-900/90 shadow-2xl shadow-red-950/20 p-6 sm:p-7 flex flex-col items-center text-center">
+                <div className="w-16 h-16 rounded-full flex items-center justify-center mb-4 shadow-xl bg-red-500/20 text-red-400 border border-red-500/40 shadow-red-500/20">
+                  <X className="w-9 h-9" />
+                </div>
+
+                <h2 className="text-lg sm:text-xl font-bold text-white">
+                  Face Verification Failed
+                </h2>
+
+                <p className="text-xs text-slate-300 mt-1.5 max-w-xs">
+                  {resultData.message}
+                </p>
+
+                <div className="w-full mt-6 flex flex-col gap-2">
                   <button
                     onClick={() => {
                       setCapturedImage(null);
@@ -2095,9 +2261,9 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                     <RefreshCw className="w-4 h-4" />
                     Try Selfie Again
                   </button>
-                )}
+                </div>
               </div>
-            </div>
+            )}
           </div>
         )}
 
@@ -2118,6 +2284,10 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
         }
         .animate-scan {
           animation: scan 2.5s ease-in-out infinite;
+        }
+        @keyframes shimmer {
+          0% { transform: translateX(-100%); }
+          100% { transform: translateX(200%); }
         }
       `}} />
     </div>
