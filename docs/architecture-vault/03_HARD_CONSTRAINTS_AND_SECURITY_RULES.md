@@ -82,3 +82,15 @@ The rules documented in this specification are **Hard Constraints**. Under no ci
   - Any subsequent attempts during the active lockout throw `HTTP 429: Cooldown active: 3 failed face attempts recorded... Please wait {wait_seconds}s.` with `Retry-After: {wait_seconds}` header, where `wait_seconds = min(60, max(1, math.ceil(locked_until - now_ts)))`.
   - Client (`SelfieAttendClient.tsx`) initiates a 1-second live countdown ticker decrementing `cooldownSeconds` to 0, visually disables the retry button, and automatically unlocks upon expiry without page refresh.
 
+### Rule 10: Student Registry Mutation Least-Privilege Role Isolation (RBAC)
+- **Constraint:** Teaching Faculty members (`role: 'Faculty'`) are strictly prohibited from creating, updating, archiving, deleting, or purging student biometrics and credentials in the student registry.
+- **Permission Matrix:**
+  - `GET /api/students` & `GET /api/students/[id]`: Allowed for `Super Admin`, `Admin`, `Faculty` (essential for Live Scan matching, classroom attendance rosters, and student profile inspection).
+  - `POST /api/students` (Create student): Restricted strictly to `Super Admin` and `Admin`.
+  - `PUT /api/students/[id]` (Update student profile / roll / name): Restricted strictly to `Super Admin` and `Admin`.
+  - `DELETE /api/students/[id]` (Soft-delete / archive student & purge biometrics): Restricted strictly to `Super Admin` and `Admin`.
+  - `POST /api/students/bulk` (Bulk import & bulk archive / delete): Restricted strictly to `Super Admin` and `Admin`.
+  - `POST /api/students/[id]/revoke-biometrics`: Restricted strictly to `Super Admin` and `Admin`.
+  - `POST /api/students/[id]/reset-pin`: Restricted strictly to `Super Admin` and `Admin`.
+- **Violation Guard:** Never grant `Faculty` role mutation or deletion capabilities on student records. Hiding UI elements is insufficient; least-privilege must be strictly enforced at the API route layer.
+
