@@ -195,6 +195,25 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
     recorded_at?: string;
   } | null>(null);
 
+  // 3-Attempt Face Verification Failure Lockout Cooldown (Strictly capped at 60s max)
+  const [cooldownSeconds, setCooldownSeconds] = useState<number | null>(null);
+
+  // Live 1-second countdown ticker for face verification lockout
+  useEffect(() => {
+    if (cooldownSeconds === null || cooldownSeconds <= 0) return;
+
+    const interval = setInterval(() => {
+      setCooldownSeconds((prev) => {
+        if (prev === null || prev <= 1) {
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [cooldownSeconds]);
+
   // GPS Geofence States
   const [geofenceConfig, setGeofenceConfig] = useState<CampusGeofenceConfig>(() => getLocalGeofence());
   const [userCoords, setUserCoords] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -1070,6 +1089,33 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
           }
         }
 
+        // Extract 3-attempt cooldown if active (Strictly capped at 60s max)
+        let cooldownWait: number | null = null;
+        const retryHeader = response.headers.get("retry-after");
+        if (retryHeader) {
+          const parsed = parseInt(retryHeader, 10);
+          if (!isNaN(parsed) && parsed > 0) {
+            cooldownWait = Math.min(60, parsed);
+          }
+        }
+        if (!cooldownWait) {
+          const detailStr = String(data?.detail || "");
+          const match = detailStr.match(/wait\s+(\d+)\s*s/i) || detailStr.match(/(\d+)\s*second/i);
+          if (match && match[1]) {
+            const parsed = parseInt(match[1], 10);
+            if (!isNaN(parsed) && parsed > 0) {
+              cooldownWait = Math.min(60, parsed);
+            }
+          }
+        }
+        if (response.status === 429 && cooldownWait === null) {
+          cooldownWait = 60;
+        }
+
+        if (cooldownWait !== null) {
+          setCooldownSeconds(cooldownWait);
+        }
+
         throw new Error(data.detail || "Face verification failed.");
       }
 
@@ -1091,6 +1137,19 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
       if (err.name === "AbortError") {
         errorMsg = "Verification timed out. Please check your internet connection or backend server and try again.";
       }
+
+      // Check errorMsg for cooldown if not already captured (Strictly capped at 60s max)
+      const match = errorMsg.match(/wait\s+(\d+)\s*s/i) || errorMsg.match(/(\d+)\s*second/i);
+      if (match && match[1]) {
+        const parsed = parseInt(match[1], 10);
+        if (!isNaN(parsed) && parsed > 0) {
+          const cappedSec = Math.min(60, parsed);
+          setCooldownSeconds(cappedSec);
+          // Strictly replace any wait number with capped seconds (e.g. 97s -> 60s)
+          errorMsg = errorMsg.replace(/wait\s+\d+\s*s/i, `wait ${cappedSec}s`);
+        }
+      }
+
       setResultData({
         success: false,
         message: errorMsg,
@@ -1107,6 +1166,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
     stopCameraStream();
     setCapturedImage(null);
     setResultData(null);
+    setCooldownSeconds(null);
     setLookupError(null);
     setSelectedSession(null);
     setStudent(null);
@@ -2046,8 +2106,25 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
               </h2>
 
               <p className="text-xs text-slate-300 mt-1.5 max-w-xs">
-                {resultData.message}
+                {cooldownSeconds !== null && cooldownSeconds > 0
+                  ? (resultData.message || "").replace(/wait\s+\d+\s*s(\.|\b)/i, `wait ${cooldownSeconds}s$1`)
+                  : resultData.message}
               </p>
+
+              {/* Real-time 60-Second Cooldown Status Badge */}
+              {!resultData.success && cooldownSeconds !== null && cooldownSeconds > 0 && (
+                <div className="w-full mt-3.5 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center gap-2 text-amber-400 text-xs font-semibold animate-pulse">
+                  <Clock className="w-4 h-4 shrink-0 text-amber-400 animate-spin" style={{ animationDuration: '4s' }} />
+                  <span>Cooldown Active: Please wait {cooldownSeconds}s before retrying</span>
+                </div>
+              )}
+
+              {!resultData.success && cooldownSeconds === 0 && (
+                <div className="w-full mt-3.5 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center gap-2 text-emerald-400 text-xs font-semibold">
+                  <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+                  <span>Cooldown expired! You may now take a selfie again.</span>
+                </div>
+              )}
 
               {resultData.success && (
                 <div className="w-full mt-5 p-4 rounded-2xl bg-slate-950/70 border border-slate-800 text-left flex flex-col gap-2.5">
@@ -2091,14 +2168,30 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                   </button>
                 ) : (
                   <button
+                    disabled={cooldownSeconds !== null && cooldownSeconds > 0}
                     onClick={() => {
+                      if (cooldownSeconds !== null && cooldownSeconds > 0) return;
+                      setCooldownSeconds(null);
                       setCapturedImage(null);
                       setStep("capture_selfie");
                     }}
-                    className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm transition-all shadow-lg shadow-indigo-600/25 cursor-pointer flex items-center justify-center gap-1.5"
+                    className={`w-full py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${
+                      cooldownSeconds !== null && cooldownSeconds > 0
+                        ? "bg-slate-800 text-slate-400 cursor-not-allowed border border-slate-700/60 shadow-none opacity-80"
+                        : "bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/25 cursor-pointer"
+                    }`}
                   >
-                    <RefreshCw className="w-4 h-4" />
-                    Try Selfie Again
+                    {cooldownSeconds !== null && cooldownSeconds > 0 ? (
+                      <>
+                        <Clock className="w-4 h-4 text-amber-400" />
+                        <span>Please wait {cooldownSeconds}s to retry</span>
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="w-4 h-4" />
+                        <span>Try Selfie Again</span>
+                      </>
+                    )}
                   </button>
                 )}
               </div>

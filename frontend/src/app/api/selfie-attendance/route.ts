@@ -93,7 +93,13 @@ export async function POST(request: Request) {
       }
     }
 
-    return NextResponse.json(data, { status: res.status });
+    const responseHeaders: Record<string, string> = {};
+    const retryAfter = res.headers.get('retry-after');
+    if (retryAfter) {
+      responseHeaders['Retry-After'] = retryAfter;
+    }
+
+    return NextResponse.json(data, { status: res.status, headers: responseHeaders });
   } catch (err: any) {
     console.error('Selfie attendance error:', err);
     return NextResponse.json(

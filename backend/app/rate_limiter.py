@@ -224,7 +224,7 @@ def record_device_lock(session_id: str, device_id: Optional[str], clean_roll: st
 
 # ==============================================================================
 # 2. Failed Face Verification Attempt Tracker (Atomic Concurrency Protected)
-# Enforces: 3 consecutive failed face attempts -> 2-minute lockout cooldown.
+# Enforces: 3 consecutive failed face attempts -> 60-second lockout cooldown.
 # Scoped to Session + Roll + Client IP to prevent DoS against innocent students.
 # ==============================================================================
 
@@ -263,7 +263,7 @@ def check_fail_cooldown(session_id: str, clean_roll: str, client_ip: str) -> Dic
 
         # 3. Enforce Cooldown if active
         if now_ts < lock_info.get("locked_until", 0.0):
-            wait_seconds = max(1, math.ceil(lock_info["locked_until"] - now_ts))
+            wait_seconds = min(60, max(1, math.ceil(lock_info["locked_until"] - now_ts)))
             raise HTTPException(
                 status_code=429,
                 detail=f"Cooldown active: 3 failed face attempts recorded for Roll '{clean_roll}' on this device. Please wait {wait_seconds}s.",
@@ -275,7 +275,7 @@ def check_fail_cooldown(session_id: str, clean_roll: str, client_ip: str) -> Dic
 
 def record_face_failure(session_id: str, clean_roll: str, client_ip: str, current_fails: int) -> None:
     """
-    Records a failed face match. If fails reach 3, activates 120s lockout cooldown.
+    Records a failed face match. If fails reach 3, activates 60s lockout cooldown.
     Persists atomically to L1 cache and L2 database under key lock.
     """
     clean_r = clean_roll.strip().upper()
@@ -288,7 +288,7 @@ def record_face_failure(session_id: str, clean_roll: str, client_ip: str, curren
         new_fails = current_fails + 1
         locked_until = 0.0
         if new_fails >= 3:
-            locked_until = now_ts + 120.0 # 2-minute cooldown
+            locked_until = now_ts + 60.0 # 60-second cooldown
 
         record = {"fails": new_fails, "locked_until": locked_until, "updated_at": now_ts}
 
@@ -308,8 +308,8 @@ def record_face_failure(session_id: str, clean_roll: str, client_ip: str, curren
         if new_fails >= 3:
             raise HTTPException(
                 status_code=429,
-                detail=f"Face mismatch! 3 consecutive failed attempts recorded for Roll '{clean_roll}'. Temporary cooldown active for 2 minutes.",
-                headers={"Retry-After": "120"}
+                detail=f"Face mismatch! 3 consecutive failed attempts recorded for Roll '{clean_roll}'. Temporary cooldown active. Please wait 60s.",
+                headers={"Retry-After": "60"}
             )
 
 

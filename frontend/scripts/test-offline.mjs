@@ -152,6 +152,42 @@ console.log('\n--- 4. Persistent Rate Limiting Parameters & Math ---');
   const now = 1000000;
   assert(calculateRemainingSeconds(now + 30000, now) === 30, 'Remaining lock seconds calculated accurately');
   assert(calculateRemainingSeconds(now - 1000, now) === 0, 'Expired lock returns 0 remaining seconds');
+
+  // 3-Attempt Face Verification Failure Lockout Cap & Ticker Invariants
+  const FACE_FAIL_LOCKOUT_MAX_SECONDS = 60;
+  function clampCooldownSeconds(waitSec) {
+    if (waitSec === null || waitSec === undefined || isNaN(waitSec)) return null;
+    return Math.min(FACE_FAIL_LOCKOUT_MAX_SECONDS, Math.max(0, waitSec));
+  }
+  assert(clampCooldownSeconds(97) === 60, 'Cooldown of 97s is strictly clamped to 60s max');
+  assert(clampCooldownSeconds(120) === 60, 'Cooldown of 120s is strictly clamped to 60s max');
+  assert(clampCooldownSeconds(45) === 45, 'Cooldown under 60s is preserved accurately');
+  assert(clampCooldownSeconds(0) === 0, 'Zero cooldown returns 0');
+
+  // Verify backend rate_limiter.py enforces 60s cap
+  const backendRateLimiterPath = path.resolve(__dirname, '../../backend/app/rate_limiter.py');
+  if (fs.existsSync(backendRateLimiterPath)) {
+    const limiterContent = fs.readFileSync(backendRateLimiterPath, 'utf8');
+    assert(
+      limiterContent.includes('locked_until = now_ts + 60.0'),
+      'Backend sets 3-attempt failure lockout duration to 60.0 seconds'
+    );
+    assert(
+      limiterContent.includes('wait_seconds = min(60,'),
+      'Backend strictly caps wait_seconds at 60s max'
+    );
+  }
+
+  // Verify Next.js API proxy forwards Retry-After header
+  const selfieProxyPath = path.resolve(__dirname, '../src/app/api/selfie-attendance/route.ts');
+  if (fs.existsSync(selfieProxyPath)) {
+    const proxyContent = fs.readFileSync(selfieProxyPath, 'utf8');
+    assert(
+      proxyContent.includes("res.headers.get('retry-after')") &&
+      proxyContent.includes("responseHeaders['Retry-After']"),
+      'Next.js selfie proxy forwards Retry-After header from backend'
+    );
+  }
 }
 
 // --- 5. RTSP Credential Masking ---
