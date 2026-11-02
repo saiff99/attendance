@@ -249,7 +249,7 @@ export function FaceRegistrationModal({ isOpen, onClose, studentId, studentName,
         </div>
 
         {/* Content */}
-        <div className="p-6 flex flex-col items-center">
+        <div className="p-4 sm:p-6 flex flex-col items-center">
           
           <div className="text-center mb-8">
             <p className="text-gray-500 dark:text-gray-400 text-sm">
@@ -352,24 +352,52 @@ export function FaceRegistrationModal({ isOpen, onClose, studentId, studentName,
             {status === 'scanning' && (
               <>
                 {instructionIndex === 1 && (
-                  <div className="absolute top-1/2 left-full ml-2 -translate-y-1/2 text-emerald-400 font-bold text-xl animate-pulse drop-shadow-md whitespace-nowrap">
-                    Right →
-                  </div>
+                  <>
+                    <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 text-emerald-400 font-bold text-xl animate-pulse drop-shadow-md whitespace-nowrap">
+                      Right →
+                    </div>
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 z-20 pointer-events-none">
+                      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500/90 text-white font-bold text-base shadow-lg shadow-emerald-500/50 animate-pulse">
+                        →
+                      </span>
+                    </div>
+                  </>
                 )}
                 {instructionIndex === 2 && (
-                  <div className="absolute top-1/2 right-full mr-2 -translate-y-1/2 text-emerald-400 font-bold text-xl animate-pulse drop-shadow-md whitespace-nowrap">
-                    ← Left
-                  </div>
+                  <>
+                    <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 text-emerald-400 font-bold text-xl animate-pulse drop-shadow-md whitespace-nowrap">
+                      ← Left
+                    </div>
+                    <div className="absolute left-3 top-1/2 -translate-y-1/2 z-20 pointer-events-none">
+                      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500/90 text-white font-bold text-base shadow-lg shadow-emerald-500/50 animate-pulse">
+                        ←
+                      </span>
+                    </div>
+                  </>
                 )}
                 {instructionIndex === 3 && (
-                  <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 text-emerald-400 font-bold text-xl animate-pulse drop-shadow-md whitespace-nowrap">
-                    ↑ Up
-                  </div>
+                  <>
+                    <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 text-emerald-400 font-bold text-xl animate-pulse drop-shadow-md whitespace-nowrap">
+                      ↑ Up
+                    </div>
+                    <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
+                      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500/90 text-white font-bold text-base shadow-lg shadow-emerald-500/50 animate-pulse">
+                        ↑
+                      </span>
+                    </div>
+                  </>
                 )}
                 {instructionIndex === 4 && (
-                  <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 text-emerald-400 font-bold text-xl animate-pulse drop-shadow-md whitespace-nowrap">
-                    ↓ Down
-                  </div>
+                  <>
+                    <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 text-emerald-400 font-bold text-xl animate-pulse drop-shadow-md whitespace-nowrap">
+                      ↓ Down
+                    </div>
+                    <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
+                      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500/90 text-white font-bold text-base shadow-lg shadow-emerald-500/50 animate-pulse">
+                        ↓
+                      </span>
+                    </div>
+                  </>
                 )}
               </>
             )}
