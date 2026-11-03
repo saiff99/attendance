@@ -27,12 +27,14 @@ export async function GET(request: NextRequest) {
     let student: any = null;
     let stuErr: any = null;
 
+    const portalStudentFields = 'id, student_roll, full_name, email, academic_year, biometric_consent, portal_pin, portal_password_hash, created_at';
+
     // 1. If Super Admin, Admin or Faculty explicitly requested a specific student roll
     if ((session.role === 'Super Admin' || session.role === 'Admin' || session.role === 'Faculty') && requestedRoll) {
       const cleanReqRoll = requestedRoll.trim();
       const res = await supabaseServer
         .from('students')
-        .select('id, student_roll, full_name, email, academic_year, face_encoding, portal_pin, portal_password_hash, created_at')
+        .select(portalStudentFields)
         .ilike('student_roll', cleanReqRoll)
         .maybeSingle();
       student = res.data;
@@ -44,7 +46,7 @@ export async function GET(request: NextRequest) {
       if (session.studentId) {
         const res = await supabaseServer
           .from('students')
-          .select('id, student_roll, full_name, email, academic_year, face_encoding, portal_pin, portal_password_hash, created_at')
+          .select(portalStudentFields)
           .eq('id', session.studentId)
           .maybeSingle();
         student = res.data;
@@ -53,7 +55,7 @@ export async function GET(request: NextRequest) {
       if (!student && session.studentRoll) {
         const res = await supabaseServer
           .from('students')
-          .select('id, student_roll, full_name, email, academic_year, face_encoding, portal_pin, portal_password_hash, created_at')
+          .select(portalStudentFields)
           .ilike('student_roll', session.studentRoll.trim())
           .maybeSingle();
         student = res.data;
@@ -65,7 +67,7 @@ export async function GET(request: NextRequest) {
     if (!student && (session.role === 'Super Admin' || session.role === 'Admin' || session.role === 'Faculty')) {
       const res = await supabaseServer
         .from('students')
-        .select('id, student_roll, full_name, email, academic_year, face_encoding, portal_pin, portal_password_hash, created_at')
+        .select(portalStudentFields)
         .order('student_roll', { ascending: true })
         .limit(1)
         .maybeSingle();
@@ -77,7 +79,7 @@ export async function GET(request: NextRequest) {
     if (!student && session.studentRoll) {
       const res = await supabaseServer
         .from('students')
-        .select('id, student_roll, full_name, email, academic_year, face_encoding, portal_pin, portal_password_hash, created_at')
+        .select(portalStudentFields)
         .ilike('student_roll', session.studentRoll.trim())
         .maybeSingle();
       student = res.data;
@@ -335,6 +337,14 @@ export async function GET(request: NextRequest) {
       };
     });
 
+    const enrolledCheck = student?.id ? await supabaseServer
+      .from('students')
+      .select('id')
+      .eq('id', student.id)
+      .not('face_encoding', 'is', null)
+      .maybeSingle() : null;
+    const hasFaceEnrolled = Boolean(student?.biometric_consent !== false && enrolledCheck?.data?.id);
+
     return NextResponse.json({
       success: true,
       viewerRole: session.role,
@@ -346,7 +356,7 @@ export async function GET(request: NextRequest) {
         academicYear: student.academic_year || '1st Year',
         email: student.email,
         parentPhone: getParentPhone(student),
-        hasFaceEnrolled: Boolean(student.face_encoding),
+        hasFaceEnrolled,
         hasCustomPin: Boolean(student.portal_password_hash && student.portal_pin !== 'TEMP'),
       },
       summary: {

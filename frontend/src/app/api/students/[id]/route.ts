@@ -25,22 +25,37 @@ export async function GET(
     }
 
     const { id } = await params;
-    const { data, error } = await supabaseServer
-      .from('students')
-      .select('id, student_roll, full_name, email, academic_year, face_encoding, created_at')
-      .eq('id', id)
-      .maybeSingle();
+    const [studentRes, enrolledRes] = await Promise.all([
+      supabaseServer
+        .from('students')
+        .select('id, student_roll, full_name, email, academic_year, created_at, biometric_consent')
+        .eq('id', id)
+        .maybeSingle(),
+      supabaseServer
+        .from('students')
+        .select('id')
+        .eq('id', id)
+        .not('face_encoding', 'is', null)
+        .maybeSingle(),
+    ]);
 
-    if (error || !data) {
+    let data: any = studentRes.data;
+    if (studentRes.error && (studentRes.error.code === '42703' || studentRes.error.message?.includes('biometric_consent'))) {
+      const fallback = await supabaseServer
+        .from('students')
+        .select('id, student_roll, full_name, email, academic_year, created_at')
+        .eq('id', id)
+        .maybeSingle();
+      data = fallback.data;
+    }
+
+    if (!data) {
       return NextResponse.json({ success: false, error: 'Student not found.' }, { status: 404 });
     }
 
-    const hasFace = !!(
-      data.face_encoding &&
-      (Array.isArray(data.face_encoding)
-        ? data.face_encoding.length > 0
-        : typeof data.face_encoding === 'object' && Object.keys(data.face_encoding).length > 0 && !(data.face_encoding as any).parent_phone)
-    );
+    const hasEnrolledVector = Boolean(enrolledRes.data?.id);
+    const hasConsent = (data as any).biometric_consent !== false;
+    const hasFace = Boolean(hasEnrolledVector && hasConsent);
 
     const phone = getParentPhone(data) || null;
 
@@ -123,22 +138,23 @@ export async function PUT(
     };
     if (cleanPhone) basePayload.parent_phone = cleanPhone;
 
-    const selectFields = 'id, student_roll, full_name, email, academic_year, face_encoding, created_at';
+    const selectFields = 'id, student_roll, full_name, email, academic_year, created_at, biometric_consent';
 
-    let { data, error } = await supabaseServer
+    let { data, error }: { data: any; error: any } = await supabaseServer
       .from('students')
       .update(basePayload)
       .eq('id', id)
       .select(selectFields)
       .single();
 
-    if (error && (error.code === 'PGRST204' || error.message?.includes('parent_phone'))) {
+    if (error && (error.code === 'PGRST204' || error.message?.includes('parent_phone') || error.message?.includes('biometric_consent'))) {
       delete basePayload.parent_phone;
+      const fallbackFields = 'id, student_roll, full_name, email, academic_year, created_at';
       const retry = await supabaseServer
         .from('students')
         .update(basePayload)
         .eq('id', id)
-        .select(selectFields)
+        .select(fallbackFields)
         .single();
       if (retry.error) throw retry.error;
       data = retry.data;
@@ -161,12 +177,16 @@ export async function PUT(
       },
     });
 
-    const hasFace = !!(
-      data?.face_encoding &&
-      (Array.isArray(data.face_encoding)
-        ? data.face_encoding.length > 0
-        : typeof data.face_encoding === 'object' && Object.keys(data.face_encoding).length > 0 && !(data.face_encoding as any).parent_phone)
-    );
+    const enrolledRes = await supabaseServer
+      .from('students')
+      .select('id')
+      .eq('id', id)
+      .not('face_encoding', 'is', null)
+      .maybeSingle();
+
+    const hasEnrolledVector = Boolean(enrolledRes.data?.id);
+    const hasConsent = (data as any)?.biometric_consent !== false;
+    const hasFace = Boolean(hasEnrolledVector && hasConsent);
 
     const phone = getParentPhone(data) || cleanPhone || null;
 
