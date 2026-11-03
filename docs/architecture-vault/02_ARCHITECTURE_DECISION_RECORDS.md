@@ -193,6 +193,29 @@
   - *Positive:* Fault-tolerant attendance resilience: classroom photo recognition remains operational even during intermittent external network hiccups.
   - *Negative:* Student self-enrollments made directly through Supabase require up to 60 seconds (TTL window) to be reflected in photo scans unless explicitly invalidated.
 
+---
+
+### ADR-014: Zero-Trust Biometric Vector Minimization in Student API Layer
+- **Status:** Accepted & Enforced (November 2026)
+- **Context:**
+  1. The student directory interface (`/students`) and student profile lookups required fetching student records to display name, roll, year, and a badge indicating whether facial biometrics were enrolled (`Active` vs `Missing`).
+  2. Previously, `GET /api/students` and `GET /api/students/{id}` executed SQL queries selecting the entire `face_encoding` JSONB column. Because each ArcFace unit vector contains 512 high-precision floating-point numbers (~10 KB per student), querying 300+ students pulled **3 MB to 5 MB** of raw numeric strings from Supabase to Next.js on every directory load.
+  3. The Next.js server then immediately discarded the 512 floating-point numbers, reducing it to a boolean `true` or `null` before sending it to the browser. Thus, 99% of the downloaded bytes were completely discarded CPU and bandwidth waste.
+  4. From a privacy and regulatory perspective (DPDP Act 2023 & Zero-Trust), raw biometric vectors should never leave secure storage unless an active biometric matching operation is executing. General administration rosters have no legitimate operational need for 512D unit vectors.
+- **Decision:**
+  1. Omit the `face_encoding` column entirely from the primary student query in `frontend/src/app/api/students/route.ts`, `frontend/src/app/api/students/[id]/route.ts`, and `frontend/src/app/api/student/portal-data/route.ts`.
+  2. Perform parallel lightweight verification using `Promise.all`:
+     - Query 1: Student demographic metadata (`id, student_roll, full_name, email, academic_year, is_active, archived_at, created_at, biometric_consent`).
+     - Query 2: Lightweight ID-only index query for students with enrolled templates (`.select('id').not('face_encoding', 'is', null)`).
+  3. Form a fast in-memory `Set` of enrolled student IDs and synthesize `has_face: boolean` and `face_encoding: boolean | null`.
+  4. Maintain 100% backward compatibility with all frontend UI components and unit test contracts.
+- **Consequences:**
+  - *Positive:* API response payload size plummeted from **~3 MB–5 MB down to ~35 KB** (a **~98% reduction**).
+  - *Positive:* Student directory loading time accelerated dramatically; eliminates V8 JSON parsing lag.
+  - *Positive:* Reduced Supabase database egress bandwidth and storage I/O consumption.
+  - *Positive:* Strengthens DPDP Act 2023 biometric minimization: raw 512D ArcFace embeddings are never transmitted across the Next.js API layer.
+
+
 
 
 

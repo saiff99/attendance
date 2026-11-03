@@ -237,4 +237,49 @@ Tracks all executed schema migrations, SHA-256 integrity checksums, and executio
   - `403 Forbidden`: Authenticated user does not possess `Super Admin` privileges.
   - `500 Internal Server Error`: Database query failure.
 
+---
+
+### 2.5. `GET /api/students` & `GET /api/students/{id}` (Student Registry & Biometric Minimization)
+- **Callers:** Admin Student Management Directory (`/students`), Profile Modal, and Student Detail View.
+- **Access Control:** Restricted strictly to authenticated `Super Admin`, `Admin`, or `Faculty` roles via `verifySessionToken()`.
+- **Zero-Trust Biometric Minimization (Ref: ADR-014):**
+  - **Omission of Raw 512D Biometric Embeddings:** Raw InsightFace 512-dimensional floating-point vectors (`face_encoding`) are strictly omitted from both the PostgreSQL database queries and the JSON API response contracts.
+  - **Parallel ID-Only Enrollment Verification:** Rather than downloading multi-megabyte JSON arrays of raw unit vectors, the API executes parallel lightweight queries:
+    ```typescript
+    const [studentsRes, enrolledRes] = await Promise.all([
+      supabaseServer.from('students').select('id, student_roll, full_name, email, academic_year, is_active, archived_at, created_at, biometric_consent').order('student_roll'),
+      supabaseServer.from('students').select('id').not('face_encoding', 'is', null)
+    ]);
+    ```
+  - **Bandwidth Reduction:** Shrinks network payload size from ~3 MB–5 MB down to **~35 KB** (a **~98% reduction** across 300+ students).
+  - **Client Representation:** The client receives a boolean enrollment indicator (`has_face: boolean` and `face_encoding: boolean | null`), ensuring full compatibility with existing UI badge states without ever exposing raw biometric templates to web clients.
+- **Query Parameters for `GET /api/students`:**
+  - `cohort` *(optional)*: Filter by target academic year (`1st Year`, `2nd Year`, etc., or `All`).
+  - `include_archived` *(optional, default: `false`)*: When `true`, includes soft-deleted/archived students.
+- **Response Payload (`200 OK`):**
+```json
+{
+  "success": true,
+  "students": [
+    {
+      "id": "0221e62c-690d-4c93-9899-8cb26b4f68c5",
+      "student_roll": "26002",
+      "full_name": "SK SAIFUDDIN",
+      "email": "26002__p919876543210@student.local",
+      "academic_year": "1st Year",
+      "parent_phone": "919876543210",
+      "created_at": "2026-10-28T10:00:00.000Z",
+      "has_face": true,
+      "face_encoding": true
+    }
+  ]
+}
+```
+- **Error Responses:**
+  - `401 Unauthorized`: Session token missing or invalid.
+  - `403 Forbidden`: Authenticated user does not possess administrative or faculty permissions.
+  - `404 Not Found`: Student not found (in single student route).
+  - `500 Internal Server Error`: Database query failure.
+
+
 
