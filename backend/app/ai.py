@@ -77,3 +77,100 @@ def calculate_confidence_score(sim: float) -> float:
     clamped_sim = min(max(sim, 0.42), 0.75)
     mapped = 0.80 + ((clamped_sim - 0.42) / (0.75 - 0.42)) * (0.99 - 0.80)
     return round(float(mapped), 2)
+
+
+def match_faces_vectorized(
+    faces: list,
+    enrolled_students: list,
+    similarity_threshold: float = 0.42,
+    det_score_threshold: float = 0.20
+) -> list:
+    """
+    Vectorized 2D Matrix Cosine Similarity matching for batch face recognition.
+    Accelerated via NumPy BLAS / AVX2 matrix operations (O(1) matrix multiplication).
+    
+    Args:
+        faces: List of detected face objects (InsightFace Face objects or objects with .embedding and optional .det_score)
+        enrolled_students: List of student dicts containing 'face_encoding' and 'id'
+        similarity_threshold: Cosine similarity threshold (default 0.42 for ArcFace 512D)
+        det_score_threshold: Minimum face detection confidence to consider (default 0.20)
+        
+    Returns:
+        List of matched student dicts with added 'confidence' score, deduplicated by student id.
+    """
+    if not faces or not enrolled_students:
+        return []
+
+    # 1. Stack enrolled students into a normalized 2D matrix for vectorized matching
+    valid_students = []
+    valid_encodings = []
+    legacy_students = []
+
+    for s in enrolled_students:
+        enc = s.get("face_encoding")
+        if enc is not None:
+            if isinstance(enc, (list, np.ndarray)) and len(enc) == 512:
+                arr = np.asarray(enc, dtype=np.float32)
+                arr_norm = float(norm(arr))
+                if arr_norm > 1e-6:
+                    valid_encodings.append(arr / arr_norm)
+                    valid_students.append(s)
+                    continue
+            # Legacy or non-standard dimension
+            legacy_students.append(s)
+
+    has_matrix = len(valid_encodings) > 0
+    enc_matrix = np.vstack(valid_encodings) if has_matrix else None
+
+    recognized = []
+
+    for face in faces:
+        if hasattr(face, 'det_score') and face.det_score is not None and face.det_score < det_score_threshold:
+            continue
+
+        unknown_encoding = getattr(face, 'embedding', None)
+        if unknown_encoding is None:
+            continue
+
+        best_match_student = None
+        highest_sim = float(similarity_threshold)
+
+        # Fast Vectorized 2D Matrix Path (AVX2/BLAS accelerated)
+        if has_matrix and enc_matrix is not None and len(unknown_encoding) == 512:
+            unknown_arr = np.asarray(unknown_encoding, dtype=np.float32)
+            unknown_norm = float(norm(unknown_arr))
+            if unknown_norm > 1e-6:
+                unknown_unit = unknown_arr / unknown_norm
+                sims = np.dot(enc_matrix, unknown_unit)
+                best_idx = int(np.argmax(sims))
+                max_sim = float(sims[best_idx])
+                if max_sim >= highest_sim:
+                    highest_sim = max_sim
+                    best_match_student = valid_students[best_idx]
+
+        # Safe fallback for any legacy student records with non-512D vectors
+        if legacy_students:
+            for student in legacy_students:
+                try:
+                    known_encoding = np.asarray(student['face_encoding'])
+                    if known_encoding.shape != np.asarray(unknown_encoding).shape:
+                        continue
+                    norm_prod = norm(known_encoding) * norm(unknown_encoding)
+                    if norm_prod > 1e-6:
+                        sim = float(np.dot(known_encoding, unknown_encoding) / norm_prod)
+                        if sim > highest_sim:
+                            highest_sim = sim
+                            best_match_student = student
+                except Exception:
+                    continue
+
+        if best_match_student:
+            # Avoid duplicates in the same scan
+            if not any(s['id'] == best_match_student['id'] for s in recognized):
+                recognized.append({
+                    **best_match_student,
+                    "confidence": calculate_confidence_score(float(highest_sim))
+                })
+
+    return recognized
+

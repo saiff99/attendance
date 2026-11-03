@@ -30,7 +30,7 @@ from app.config import (
     calculate_haversine_distance,
     has_valid_face_encoding,
 )
-from app.ai import app_fa, AI_ENABLED, calculate_confidence_score
+from app.ai import app_fa, AI_ENABLED, calculate_confidence_score, match_faces_vectorized
 from app.antispoof import verify_face_liveness
 from app.stream import generate_video_feed
 import cv2  # type: ignore
@@ -696,39 +696,11 @@ async def process_attendance(request: Request, file: UploadFile = File(...), ses
         image_np = np.array(image)
         image_bgr = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
         
-        # Detect faces
-        faces = app_fa.get(image_bgr)
-        recognized = []
+        # Detect faces with InsightFace AI
+        faces = app_fa.get(image_bgr) or []
         
-        for face in faces:
-            if hasattr(face, 'det_score') and face.det_score < 0.20:
-                continue
-                
-            unknown_encoding = face.embedding
-            best_match_student = None
-            highest_sim = 0.42 # High-precision calibrated similarity threshold (cosine similarity >= 0.42)
-            
-            for student in enrolled_students:
-                known_encoding = np.array(student['face_encoding'])
-                
-                # Enforce vector dimension alignment (reject legacy/mismatched dimensions without overwriting authoritative templates)
-                if known_encoding.shape != unknown_encoding.shape:
-                    continue
-                    
-                sim = np.dot(known_encoding, unknown_encoding) / (norm(known_encoding) * norm(unknown_encoding))
-                
-                if sim > highest_sim:
-                    highest_sim = sim
-                    best_match_student = student
-            
-            if best_match_student:
-                # Avoid duplicates in the same scan
-                if not any(s['id'] == best_match_student['id'] for s in recognized):
-                    recognized.append({
-                        **best_match_student,
-                        "confidence": calculate_confidence_score(float(highest_sim))
-                    })
-        return recognized
+        # High-performance Vectorized 2D Matrix Cosine Matching (NumPy BLAS/AVX2 accelerated)
+        return match_faces_vectorized(faces, enrolled_students, similarity_threshold=0.42)
 
     try:
         recognized_students = await asyncio.to_thread(_match_photo_faces)
