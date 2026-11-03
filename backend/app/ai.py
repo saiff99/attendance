@@ -1,8 +1,6 @@
 import os
 import numpy as np
 from numpy.linalg import norm
-import onnxruntime as ort
-
 # Configurable InsightFace Detector Tuning for Large Classroom (300+ Students)
 AI_FRAME_WIDTH = int(os.getenv("AI_FRAME_WIDTH", "960"))
 AI_FRAME_HEIGHT = int(os.getenv("AI_FRAME_HEIGHT", "540"))
@@ -19,13 +17,15 @@ else:
 # Initialize AI modules
 app_fa = None
 active_engine = "Disabled"
+ort = None
 
 try:
+    import onnxruntime as ort
     from insightface.app import FaceAnalysis
     
     # 1. Determine optimal hardware execution providers
     # Priority: Apple Neural Engine (CoreML) -> Nvidia GPU (CUDA) -> Windows GPU (DirectML) -> CPU
-    available_providers = ort.get_available_providers()
+    available_providers = ort.get_available_providers() if ort else []
     selected_providers = []
     
     if 'CoreMLExecutionProvider' in available_providers:

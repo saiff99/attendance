@@ -458,30 +458,34 @@ class TestActiveSessionsRateLimiterUnit(unittest.TestCase):
             reset_active_sessions_rate_limit
         )
         from fastapi import HTTPException
+        from unittest.mock import patch
 
         test_ip = "192.0.2.77"
-        reset_active_sessions_rate_limit(test_ip)
 
-        # 30 allowed calls
-        for i in range(30):
+        # Offline unit test: isolate from external database network roundtrips
+        with patch("app.rate_limiter.supabase", None):
+            reset_active_sessions_rate_limit(test_ip)
+
+            # 30 allowed calls
+            for i in range(30):
+                try:
+                    check_active_sessions_rate_limit(test_ip)
+                except HTTPException:
+                    self.fail(f"Call {i+1} should have been allowed within 30-call limit")
+
+            # 31st call must trigger 429 Too Many Requests
+            with self.assertRaises(HTTPException) as ctx:
+                check_active_sessions_rate_limit(test_ip)
+            self.assertEqual(ctx.exception.status_code, 429)
+            self.assertIn("Retry-After", ctx.exception.headers)
+
+            # Reset clears the limit
+            reset_active_sessions_rate_limit(test_ip)
             try:
                 check_active_sessions_rate_limit(test_ip)
             except HTTPException:
-                self.fail(f"Call {i+1} should have been allowed within 30-call limit")
-
-        # 31st call must trigger 429 Too Many Requests
-        with self.assertRaises(HTTPException) as ctx:
-            check_active_sessions_rate_limit(test_ip)
-        self.assertEqual(ctx.exception.status_code, 429)
-        self.assertIn("Retry-After", ctx.exception.headers)
-
-        # Reset clears the limit
-        reset_active_sessions_rate_limit(test_ip)
-        try:
-            check_active_sessions_rate_limit(test_ip)
-        except HTTPException:
-            self.fail("Call after reset should have been allowed")
-        reset_active_sessions_rate_limit(test_ip)
+                self.fail("Call after reset should have been allowed")
+            reset_active_sessions_rate_limit(test_ip)
 
 
 class TestTrustedIPUnit(unittest.TestCase):
