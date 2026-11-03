@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   Search, Download, Users, AlertTriangle, CheckCircle, XCircle, BarChart3,
   ChevronDown, ChevronUp, Shield, UserCheck, UserX, Filter, RefreshCw, FileBarChart,
-  GraduationCap, BookOpen, Sparkles
+  GraduationCap, BookOpen, Sparkles, Calendar
 } from "lucide-react";
 // Academic Attendance Reports Component
 import { isCohortMatching } from "@/lib/cohort";
@@ -89,10 +89,52 @@ export default function ReportsPage() {
   const [loadingHistory, setLoadingHistory] = useState<string | null>(null);
   const [totalSessions, setTotalSessions] = useState(0);
 
-  const fetchReports = async () => {
+  // Date Range Filtering State
+  const [startDate, setStartDate] = useState<string>("");
+  const [endDate, setEndDate] = useState<string>("");
+  const [dateRangePreset, setDateRangePreset] = useState<string>("all");
+
+  const handleDatePresetChange = (preset: string) => {
+    setDateRangePreset(preset);
+    const today = new Date();
+    let newStart = "";
+    let newEnd = "";
+
+    if (preset === "all") {
+      newStart = "";
+      newEnd = "";
+    } else if (preset === "this_month") {
+      const y = today.getFullYear();
+      const m = String(today.getMonth() + 1).padStart(2, "0");
+      newStart = `${y}-${m}-01`;
+      newEnd = today.toISOString().split("T")[0];
+    } else if (preset === "last_30_days") {
+      const past = new Date(today);
+      past.setDate(today.getDate() - 30);
+      newStart = past.toISOString().split("T")[0];
+      newEnd = today.toISOString().split("T")[0];
+    } else if (preset === "last_90_days") {
+      const past = new Date(today);
+      past.setDate(today.getDate() - 90);
+      newStart = past.toISOString().split("T")[0];
+      newEnd = today.toISOString().split("T")[0];
+    } else if (preset === "custom") {
+      return; // Keep existing start & end for manual entry
+    }
+
+    setStartDate(newStart);
+    setEndDate(newEnd);
+    fetchReports(newStart, newEnd);
+  };
+
+  const fetchReports = async (start = startDate, end = endDate) => {
     setLoading(true);
     try {
-      const res = await fetch("/api/reports");
+      const params = new URLSearchParams();
+      if (start) params.set("start_date", start);
+      if (end) params.set("end_date", end);
+      const url = params.toString() ? `/api/reports?${params.toString()}` : "/api/reports";
+      const res = await fetch(url);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to fetch reports");
 
@@ -344,7 +386,7 @@ export default function ReportsPage() {
           </div>
           <div className="flex gap-2 ml-11 sm:ml-0">
             <button
-              onClick={fetchReports}
+              onClick={() => fetchReports(startDate, endDate)}
               disabled={loading}
               className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 hover:border-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all disabled:opacity-50"
             >
@@ -422,6 +464,48 @@ export default function ReportsPage() {
             />
           </div>
           <div className="flex items-center gap-2 flex-wrap">
+            {/* Date Range Selector */}
+            <div className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-sm">
+              <Calendar className="w-4 h-4 text-indigo-500 shrink-0" />
+              <select
+                value={dateRangePreset}
+                onChange={e => handleDatePresetChange(e.target.value)}
+                className="text-xs font-semibold bg-transparent text-gray-700 dark:text-gray-200 focus:outline-none cursor-pointer"
+              >
+                <option value="all" className="bg-white dark:bg-gray-900">All Time</option>
+                <option value="this_month" className="bg-white dark:bg-gray-900">This Month</option>
+                <option value="last_30_days" className="bg-white dark:bg-gray-900">Last 30 Days</option>
+                <option value="last_90_days" className="bg-white dark:bg-gray-900">Last 90 Days</option>
+                <option value="custom" className="bg-white dark:bg-gray-900">Custom Range</option>
+              </select>
+            </div>
+
+            {/* Custom Date Pickers */}
+            {dateRangePreset === "custom" && (
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={e => setStartDate(e.target.value)}
+                  className="px-2.5 py-1.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-base sm:text-xs text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                />
+                <span className="text-xs text-gray-400">to</span>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={e => setEndDate(e.target.value)}
+                  className="px-2.5 py-1.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-base sm:text-xs text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => fetchReports(startDate, endDate)}
+                  className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white transition-colors"
+                >
+                  Apply
+                </button>
+              </div>
+            )}
+
             <div className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-sm">
               <GraduationCap className="w-4 h-4 text-indigo-500 shrink-0" />
               <select
