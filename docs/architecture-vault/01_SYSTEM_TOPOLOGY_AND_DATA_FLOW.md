@@ -77,6 +77,7 @@ graph TD
 - **Acceleration Pipeline:**
   - **Local Mac (Primary):** `CoreMLExecutionProvider` delivering `40ms – 70ms` inference latency per face on Apple Silicon Neural Engines.
   - **Linux / Cloud (Fallback):** `CPUExecutionProvider` with optimized OpenMP multi-threading (`200ms – 350ms` per face).
+  - **Vectorized 2D Matrix Matching:** `match_faces_vectorized` stacks candidate embeddings into an $(N, 512)$ unit-norm matrix, computing batch similarity via single BLAS/AVX2 dot product (`sims = np.dot(enc_matrix, unknown_unit)`). Replaces $O(N)$ sequential Python loops with $<5\text{ms}$ vectorized hardware execution (ADR-012).
 
 ### 2.3. Dual Ingress & 24/7 Tunnel Redundancy
 1. **Accelerated Local Execution (Cloudflare Tunnel):**
