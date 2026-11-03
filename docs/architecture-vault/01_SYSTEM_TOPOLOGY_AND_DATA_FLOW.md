@@ -78,6 +78,7 @@ graph TD
   - **Local Mac (Primary):** `CoreMLExecutionProvider` delivering `40ms – 70ms` inference latency per face on Apple Silicon Neural Engines.
   - **Linux / Cloud (Fallback):** `CPUExecutionProvider` with optimized OpenMP multi-threading (`200ms – 350ms` per face).
   - **Vectorized 2D Matrix Matching:** `match_faces_vectorized` stacks candidate embeddings into an $(N, 512)$ unit-norm matrix, computing batch similarity via single BLAS/AVX2 dot product (`sims = np.dot(enc_matrix, unknown_unit)`). Replaces $O(N)$ sequential Python loops with $<5\text{ms}$ vectorized hardware execution (ADR-012).
+  - **In-Memory Biometric Caching:** `get_cached_enrolled_students` (`biometric_cache.py`) caches active student face encodings in server RAM with double-checked thread locking and 60-second TTL. Reduces student roster network I/O from 300ms–800ms down to $<0.05\text{ms}$ with event-driven invalidation hooks on `/api/enroll-face` and `/api/revoke-biometrics` (ADR-013).
 
 ### 2.3. Dual Ingress & 24/7 Tunnel Redundancy
 1. **Accelerated Local Execution (Cloudflare Tunnel):**

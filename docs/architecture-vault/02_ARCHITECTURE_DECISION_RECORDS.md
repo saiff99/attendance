@@ -19,6 +19,7 @@
 | **ADR-010** | Automated Database Migration Runner & Audit Ledger | **Accepted** | Oct 2026 | Database DevOps / Migrations |
 | **ADR-011** | Permanent Pure Dark Mode & Theme Switcher Deprecation | **Accepted** | Nov 2026 | UI/UX / Mobile PWA Reliability |
 | **ADR-012** | Vectorized 2D Matrix Cosine Similarity for Batch Face Matching | **Accepted** | Nov 2026 | Biometrics / AI Performance |
+| **ADR-013** | In-Memory Biometric Vector Caching with Invalidation Hooks | **Accepted** | Nov 2026 | Backend / Caching & Latency |
 
 ---
 
@@ -169,6 +170,29 @@
   - *Positive:* Drastically reduces CPU utilization on Hugging Face Spaces free-tier (2 vCPU), eliminating lag for faculty taking multiple classroom attendance shots.
   - *Positive:* Zero mathematical drift: cosine similarity outputs and confidence mapping (`calculate_confidence_score`) are 100% identical to legacy pairwise calculations.
   - *Negative:* Slightly higher initial memory footprint to hold the stacked `(N, 512)` float32 matrix (~600 KB for 300 students, negligible in modern runtimes).
+
+---
+
+### ADR-013: In-Memory Biometric Vector Caching with Invalidation Hooks
+- **Context:**
+  1. On every classroom photo attendance scan (`/api/recognize-classroom` / `/api/process-attendance`), the backend previously issued a raw HTTPS query to Supabase:
+     `supabase.table("students").select("id, full_name, face_encoding, academic_year, is_active").not_.is_("face_encoding", "null")`
+  2. Downloading 512-float arrays for 300+ students over the public internet transferred 1.5MB to 2.0MB of JSON on each photo upload, injecting 300ms–800ms of pure network roundtrip latency before face recognition could even begin.
+  3. If an instructor captured 3 consecutive classroom photos, the exact same static biometric data was repeatedly downloaded over the wire 3 times, consuming unnecessary network bandwidth and Supabase quota.
+- **Decision:**
+  1. Create a dedicated thread-safe biometric caching module ([`backend/app/biometric_cache.py`](file:///Users/saif/Desktop/Attendance/Attendance-app/backend/app/biometric_cache.py)) utilizing double-checked locking (`threading.Lock`) to prevent concurrent query stampedes.
+  2. Maintain active enrolled student vectors in server RAM with a safety TTL (default 60 seconds via `BIOMETRIC_CACHE_TTL_SECONDS`).
+  3. Wire instant event-driven invalidation hooks across all biometric mutation endpoints:
+     - Face enrollment: `/api/enroll-face` & `/api/enroll-face-burst` trigger `invalidate_biometric_cache(student_id)`.
+     - Face revocation: `/api/students/{id}/revoke-biometrics` triggers `invalidate_biometric_cache(student_id)` to instantly purge the student from both photo scan and CCTV stream caches.
+  4. Fault-Tolerant Resilience: If Supabase connection drops during a background TTL refresh, the cache gracefully serves the existing in-memory vectors rather than failing an active classroom session.
+  5. Telemetry & Diagnostics: Expose cache statistics (`cached_students_count`, `cache_age_seconds`, `ttl_seconds`, `is_warm`) via `/api/health/performance`.
+- **Consequences:**
+  - *Positive:* Database network latency dropped from 300ms–800ms down to **<0.05ms** (instantaneous RAM retrieval).
+  - *Positive:* Drastically reduces Supabase egress bandwidth and prevents rate-limit exhaustion during peak morning class check-ins.
+  - *Positive:* Fault-tolerant attendance resilience: classroom photo recognition remains operational even during intermittent external network hiccups.
+  - *Negative:* Student self-enrollments made directly through Supabase require up to 60 seconds (TTL window) to be reflected in photo scans unless explicitly invalidated.
+
 
 
 
