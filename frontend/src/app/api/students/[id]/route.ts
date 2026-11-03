@@ -112,7 +112,7 @@ export async function PUT(
       }, { status: 409 });
     }
 
-    // Persistently encode WhatsApp phone into student.local email
+    // Persistently encode parent phone into student.local email
     const encodedEmail = encodeStudentEmail(cleanRoll, cleanPhone || undefined);
 
     const basePayload: any = {

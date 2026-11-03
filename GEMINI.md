@@ -9,7 +9,7 @@
   - `01_SYSTEM_TOPOLOGY_AND_DATA_FLOW.md` (Topology, failover, Vercel Edge, FastAPI, Cloudflare, Supabase)
   - `02_ARCHITECTURE_DECISION_RECORDS.md` (ADR-001 to ADR-008: InsightFace 512D, Cloudflare, Hugging Face failover, etc.)
   - `03_HARD_CONSTRAINTS_AND_SECURITY_RULES.md` (5-minute window, geofence, liveness, device lock, RLS)
-  - `04_API_CONTRACTS_AND_DATABASE_SCHEMAS.md` (PostgreSQL schemas, tag syntax `[GPS:...][BY:...][WA:...]`, REST contracts)
+  - `04_API_CONTRACTS_AND_DATABASE_SCHEMAS.md` (PostgreSQL schemas, tag syntax `[GPS:...][BY:...]`, REST contracts)
   - `05_EDGE_CASES_AND_SOLVED_GOTCHAS.md` (16px Safari zoom fix, Faraday cage GPS calibration, on-demand re-check sync)
 
 ---

@@ -24,10 +24,10 @@ Tracks individual lecture periods, target student cohorts, duration windows, and
 #### 🏷️ Composite Tag Format in `instructor_name`
 To maintain seamless cross-version compatibility without altering legacy database columns, instructors' session metadata is encoded as follows:
 ```
-{Topic Name} [GPS:{lat},{lng},{radius},{enabled},{campusName}] [BY:{username}] [WA:{0|1}]
+{Topic Name} [GPS:{lat},{lng},{radius},{enabled},{campusName}] [BY:{username}]
 ```
-- Example: `Gross Anatomy Thorax [GPS:22.451550,88.172366,30,1,JIMSH%20Campus] [BY:dr_sharma] [WA:0]`
-- Decoded via: `decodeSessionMetadata()` in `frontend/src/lib/geofence.ts`.
+- Example: `Gross Anatomy Thorax [GPS:22.451550,88.172366,30,1,JIMSH%20Campus] [BY:dr_sharma]`
+- Decoded via: `decodeSessionMetadata()` in `frontend/src/lib/geofence.ts` (automatically strips any historical legacy tags).
 
 ---
 

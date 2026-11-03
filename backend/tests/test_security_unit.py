@@ -294,12 +294,12 @@ class TestProcessAttributionUnit(unittest.TestCase):
             )
         )
 
-        # MedAttend whatsapp via CWD
+        # MedAttend internal service via CWD
         self.assertTrue(
             is_medattend_process(
                 pid=99994,
                 cmd_override="node server.js",
-                cwd_override=os.path.join(BASE_DIR, "whatsapp-service")
+                cwd_override=os.path.join(BASE_DIR, "internal-service")
             )
         )
 

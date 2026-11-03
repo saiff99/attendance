@@ -85,7 +85,7 @@ def is_authorized_request(request: Request) -> bool:
 class APISecurityMiddleware(BaseHTTPMiddleware):
     """
     Enterprise Security Guard Middleware.
-    Enforces authentication for all management, video stream, PTZ, WhatsApp, diagnostics, and face enrollment APIs
+    Enforces authentication for all management, video stream, PTZ, diagnostics, and face enrollment APIs
     while keeping student selfie attendance and basic liveness check open.
     """
     async def dispatch(self, request: Request, call_next):

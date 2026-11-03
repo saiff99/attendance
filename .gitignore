@@ -62,10 +62,6 @@ backend/ngrok
 backend/ngrok*
 cloudflared
 backend/bin/cloudflared
-# WhatsApp Multi-Device Session State
-whatsapp-service/session/
-whatsapp-service/session*
-whatsapp_session/
 
 # Local Scratch & Process Locks
 scratch/
