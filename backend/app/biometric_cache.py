@@ -132,3 +132,4 @@ def get_biometric_cache_stats() -> Dict[str, Any]:
         "ttl_seconds": BIOMETRIC_CACHE_TTL_SECONDS,
         "is_warm": len(_enrolled_students_cache) > 0 and (now - _cache_last_fetched) < BIOMETRIC_CACHE_TTL_SECONDS
     }
+
