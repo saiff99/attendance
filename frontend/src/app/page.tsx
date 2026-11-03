@@ -28,46 +28,74 @@ export default async function Dashboard() {
   const userSession = sessionCookie ? await verifySessionToken(sessionCookie) : null;
   const isFaculty = userSession?.role === "Faculty";
 
-  // Fetch Total Students
-  const { count: totalStudents } = await supabaseServer
-    .from('students')
-    .select('*', { count: 'exact', head: true });
-
   // Get start of today in IST local date
   const startOfToday = getStartOfTodayISO();
 
-  // Fetch Today's Total Attendances (Cumulative sum of all present attendances marked today)
-  const { count: todayTotalPresent } = await supabaseServer
-    .from('attendance')
-    .select('*', { count: 'exact', head: true })
-    .eq('status', 'Present')
-    .gte('recorded_at', startOfToday);
+  // Fetch attendance for the last 7 days for the chart
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+  const startDate = sevenDaysAgo.toISOString();
 
-  // Fetch Today's Unique Attendance (unique students who attended classes today for Overall Distribution)
-  const { data: todayAttendanceRecords } = await supabaseServer
-    .from('attendance')
-    .select('student_id')
-    .eq('status', 'Present')
-    .gte('recorded_at', startOfToday);
+  // Fetch all independent dashboard data concurrently via Promise.all (Eliminates async waterfall)
+  const [
+    totalStudentsRes,
+    todayTotalPresentRes,
+    todayAttendanceRes,
+    rawSessionsRes,
+    appUsersRes,
+    recentAttendanceRes,
+  ] = await Promise.all([
+    // 1. Total Registered Students Count
+    supabaseServer
+      .from('students')
+      .select('*', { count: 'exact', head: true }),
+
+    // 2. Today's Total Present Attendances (Cumulative sum of present records marked today)
+    supabaseServer
+      .from('attendance')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'Present')
+      .gte('recorded_at', startOfToday),
+
+    // 3. Today's Unique Attendance Records (For unique student distribution & absence calculation)
+    supabaseServer
+      .from('attendance')
+      .select('student_id')
+      .eq('status', 'Present')
+      .gte('recorded_at', startOfToday),
+
+    // 4. Recent Sessions (fetch up to 80 so faculty sees all their classes)
+    supabaseServer
+      .from('sessions')
+      .select('id, class_name, instructor_name, created_at, attendance(count)')
+      .neq('class_name', '__SYSTEM_CONFIG__')
+      .neq('class_name', '__GEOFENCE_CONFIG__')
+      .order('created_at', { ascending: false })
+      .limit(80),
+
+    // 5. Registered users to map usernames to full names
+    supabaseServer
+      .from('app_users')
+      .select('username, full_name'),
+
+    // 6. Last 7 days attendance records for the chart
+    supabaseServer
+      .from('attendance')
+      .select('status, recorded_at')
+      .gte('recorded_at', startDate),
+  ]);
+
+  const totalStudents = totalStudentsRes.count;
+  const todayTotalPresent = todayTotalPresentRes.count;
+  const todayAttendanceRecords = todayAttendanceRes.data;
+  const rawSessions = rawSessionsRes.data;
+  const appUsers = appUsersRes.data;
+  const recentAttendance = recentAttendanceRes.data;
 
   const uniquePresentStudentIds = new Set((todayAttendanceRecords || []).map(r => r.student_id));
   const todayUniquePresent = uniquePresentStudentIds.size;
   const totalRegistered = totalStudents || 0;
   const todayUniqueAbsent = Math.max(0, totalRegistered - todayUniquePresent);
-
-  // Fetch Recent Sessions (fetch up to 80 so faculty sees all their classes)
-  const { data: rawSessions } = await supabaseServer
-    .from('sessions')
-    .select('id, class_name, instructor_name, created_at, attendance(count)')
-    .neq('class_name', '__SYSTEM_CONFIG__')
-    .neq('class_name', '__GEOFENCE_CONFIG__')
-    .order('created_at', { ascending: false })
-    .limit(80);
-
-  // Fetch registered users to map usernames to full names
-  const { data: appUsers } = await supabaseServer
-    .from('app_users')
-    .select('username, full_name');
 
   const userMap: Record<string, string> = {
     admin: "System Administrator",
@@ -93,16 +121,6 @@ export default async function Dashboard() {
   const lastClassPresent = rawSessions && rawSessions.length > 0 
     ? ((rawSessions[0].attendance as any)?.[0]?.count || 0)
     : 0;
-
-  // Fetch attendance for the last 7 days for the chart
-  const sevenDaysAgo = new Date();
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-  const startDate = sevenDaysAgo.toISOString();
-
-  const { data: recentAttendance } = await supabaseServer
-    .from('attendance')
-    .select('status, recorded_at')
-    .gte('recorded_at', startDate);
 
   const last7DaysMap = new Map();
   for (let i = 6; i >= 0; i--) {
