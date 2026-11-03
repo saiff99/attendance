@@ -5,9 +5,21 @@ import { useRouter } from "next/navigation";
 import { Search, UserPlus, FileDown, MoreHorizontal, X, UploadCloud, Loader2, Edit2, Trash2, Folder, ArrowLeft, Users, FileSpreadsheet, ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle, AlertCircle, Lock, KeyRound, CheckCircle2, UserX } from "lucide-react";
 // Student Directory
 import type { Student } from "@/types/database";
-import { StudentProfileModal } from "@/components/StudentProfileModal";
-import { FaceRegistrationModal } from "@/components/FaceRegistrationModal";
-import { BulkImportModal } from "@/components/BulkImportModal";
+import dynamic from "next/dynamic";
+
+const StudentProfileModal = dynamic(
+  () => import("@/components/StudentProfileModal").then((mod) => mod.StudentProfileModal),
+  { ssr: false }
+);
+const FaceRegistrationModal = dynamic(
+  () => import("@/components/FaceRegistrationModal").then((mod) => mod.FaceRegistrationModal),
+  { ssr: false }
+);
+const BulkImportModal = dynamic(
+  () => import("@/components/BulkImportModal").then((mod) => mod.BulkImportModal),
+  { ssr: false }
+);
+
 import { getParentPhone, encodeStudentEmail, cleanPhoneNumber } from "@/lib/studentContact";
 import { useAuth } from "@/lib/auth";
 

@@ -10,7 +10,12 @@ import {
   Eye, EyeOff, Bell, WifiOff
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
-import { FaceRegistrationModal } from "@/components/FaceRegistrationModal";
+import dynamic from "next/dynamic";
+
+const FaceRegistrationModal = dynamic(
+  () => import("@/components/FaceRegistrationModal").then((mod) => mod.FaceRegistrationModal),
+  { ssr: false }
+);
 
 interface SubjectRow {
   subject: string;
