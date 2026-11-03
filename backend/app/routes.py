@@ -126,10 +126,14 @@ async def health_check():
 async def health_performance():
     """
     Lightweight performance & diagnostic endpoint for all configured cameras,
-    AI inference duration, FPS metrics, and queue status.
+    AI inference duration, FPS metrics, queue status, and biometric cache telemetry.
     """
     from app.stream import get_performance_diagnostics
-    return get_performance_diagnostics()
+    from app.biometric_cache import get_biometric_cache_stats
+    diag = get_performance_diagnostics()
+    if isinstance(diag, dict):
+        diag["biometric_cache"] = get_biometric_cache_stats()
+    return diag
 
 # =========================================================================
 # Secure Image Upload Validation & Anti-DoS File Processing
@@ -360,8 +364,8 @@ async def enroll_face(
         if hasattr(res, 'error') and res.error:
             raise RuntimeError(f"Database error: {res.error}")
 
-        from app.stream import cleanup_session_state
-        cleanup_session_state(None)
+        from app.biometric_cache import invalidate_biometric_cache
+        invalidate_biometric_cache(student_id)
 
         # 4. Immutable Security Audit Log Entry
         try:
@@ -521,8 +525,8 @@ async def enroll_face_burst(
         if hasattr(res, 'error') and res.error:
             raise RuntimeError(f"Database error: {res.error}")
 
-        from app.stream import cleanup_session_state
-        cleanup_session_state(None)
+        from app.biometric_cache import invalidate_biometric_cache
+        invalidate_biometric_cache(student_id)
 
         # 4. Immutable Security Audit Log Entry
         try:
@@ -605,9 +609,9 @@ async def revoke_biometrics(student_id: str, request: Request):
         print(f"[ERROR] Failed to erase biometric data from DB for {student_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to erase biometric data from database: {str(e)}")
 
-    # 4. Immediately purge student from in-memory stream caches
-    from app.stream import invalidate_student_biometrics
-    invalidation_result = invalidate_student_biometrics(student_id)
+    # 4. Immediately purge student from in-memory photo scan & stream caches
+    from app.biometric_cache import invalidate_biometric_cache
+    invalidation_result = invalidate_biometric_cache(student_id)
 
     # 5. Immutable Security Audit Log Entry (Severity: CRITICAL)
     try:
@@ -667,16 +671,15 @@ async def process_attendance(request: Request, file: UploadFile = File(...), ses
         if sess_item.get("target_academic_year"):
             target_year = sess_item["target_academic_year"]
 
-    # 2. Fetch active enrolled students (restricted by cohort and sub-batch if applicable)
-    query = supabase.table("students").select("id, full_name, face_encoding, academic_year, is_active").not_.is_("face_encoding", "null")
-    students_res = query.execute()
-    all_enrolled = students_res.data or []
-
+    # 2. Fetch active enrolled students from high-speed in-memory biometric cache (0ms latency, 60s TTL)
+    from app.biometric_cache import get_cached_enrolled_students
+    all_enrolled = get_cached_enrolled_students(target_academic_year=target_year)
+    
+    # Defense-in-depth: Exclude any inactive or archived students
     enrolled_students = [
         s for s in all_enrolled 
         if s.get("is_active") is not False 
         and not str(s.get("academic_year", "")).startswith("[ARCHIVED]")
-        and is_cohort_matching(target_year, s.get("academic_year"))
     ]
     
     if not enrolled_students:
