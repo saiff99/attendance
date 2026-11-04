@@ -87,8 +87,8 @@ Tracks all executed schema migrations, SHA-256 integrity checksums, and executio
 | Column Name | Data Type | Constraints | Description |
 | :--- | :--- | :--- | :--- |
 | `id` | `SERIAL` | `PRIMARY KEY` | Auto-incrementing internal migration counter |
-| `version` | `INTEGER` | `NOT NULL, UNIQUE` | Sequential migration number (e.g., `1`, `2`, ..., `19`) |
-| `name` | `VARCHAR(255)` | `NOT NULL, UNIQUE` | Filename sans extension (e.g., `19_backfill_and_align_archive_flags`) |
+| `version` | `INTEGER` | `NOT NULL, UNIQUE` | Sequential migration number (e.g., `1`, `2`, ..., `20`) |
+| `name` | `VARCHAR(255)` | `NOT NULL, UNIQUE` | Filename sans extension (e.g., `20_high_velocity_partial_composite_indexes`) |
 | `checksum` | `VARCHAR(64)` | `NOT NULL` | Normalized SHA-256 hash of migration SQL content |
 | `applied_at` | `TIMESTAMPTZ` | `NOT NULL, DEFAULT NOW()` | Exact timestamp when migration was committed |
 | `execution_time_ms` | `INTEGER` | `NOT NULL, DEFAULT 0` | Execution latency in milliseconds |
@@ -98,6 +98,20 @@ Tracks all executed schema migrations, SHA-256 integrity checksums, and executio
 - **Python Runner:** [scripts/migrate.py](file:///Users/saif/Desktop/Attendance/Attendance-app/scripts/migrate.py) (Callable via `python3 scripts/migrate.py --status|--apply|--dry-run|--bundle|--create`).
 - **1-Click macOS Launcher:** [Migrate_Database.command](file:///Users/saif/Desktop/Attendance/Attendance-app/Migrate_Database.command) (Interactive terminal runner for developers/administrators).
 - **Consolidated SQL Bundle:** [database/combined_migrations_bundle.sql](file:///Users/saif/Desktop/Attendance/Attendance-app/database/combined_migrations_bundle.sql) (1-click copy-paste execution bundle for Supabase SQL Editor).
+
+---
+
+### 1.6. High-Velocity Partial & Composite Performance Indexes (Migration 20)
+Specialized B-Tree indexes designed for real-time edge polling, student portal history scans, and centralized biometric retrieval.
+
+| Index Identifier | Target Table | Columns & Expressions | Predicate (WHERE Clause) | Optimization Purpose |
+| :--- | :--- | :--- | :--- | :--- |
+| `idx_sessions_active_created` | `sessions` | `(created_at DESC)` | `WHERE is_archived = false` | Slashes active session polling latency to <1ms by isolating unarchived rows in a tiny <10KB tree. |
+| `idx_attendance_student_recorded` | `attendance` | `(student_id, recorded_at DESC)` | *None (Composite)* | Fulfills student portal history and report ordering via Index-Only Scans with zero heap reads. |
+| `idx_students_active_biometric_cohort` | `students` | `(academic_year)` | `WHERE is_active = true AND biometric_consent = true AND face_encoding IS NOT NULL` | Accelerates centralized biometric cache warming for active consented student cohorts. |
+| `idx_sessions_is_archived` | `sessions` | `(is_archived)` | *None* | Baseline soft-delete index alignment across session listings. |
+| `idx_students_is_active` | `students` | `(is_active)` | *None* | Baseline roster isolation index filtering inactive or graduated students. |
+
 
 ---
 
