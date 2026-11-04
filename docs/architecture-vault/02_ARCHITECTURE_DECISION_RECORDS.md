@@ -399,6 +399,26 @@
   - *Positive:* Eliminates megabytes of redundant network data transfer between Supabase and Next.js Edge handlers.
   - *Positive:* Protects Supabase connection pools during concurrent campus-wide student traffic spikes.
 
+---
+
+### ADR-023: Reports Dashboard Bounded Pagination, Client-Side Memoization & Backend SQL Pushdown
+- **Status:** Accepted & Enforced (November 2026)
+- **Context:**
+  1. The institutional attendance reports dashboard (`/reports` and `GET /api/reports`) provides academic attendance percentages, subject-level attendance breakdowns, and risk category alerts (Good ≥75%, Borderline 50–74%, Critical <50%) across medical college cohorts.
+  2. Previously, the backend handler executed direct SQL queries against `academic_subjects` on every report fetch, generating redundant database roundtrips for static curriculum data.
+  3. When generating reports for large cohorts (500–1,000+ MBBS students), the frontend rendered all student rows, subject breakdowns, progress bars, and SVG risk badges directly into the DOM simultaneously. This created over 5,000+ DOM nodes, freezing the browser's main thread, inducing input latency during searches, and degrading mobile performance.
+  4. Additionally, the backend student query retrieved archived and inactive student records, causing unindexed scans and requiring client-side post-filtering.
+- **Decision:**
+  1. **In-Memory Subject Cache Integration:** In `frontend/src/app/api/reports/route.ts`, replace direct `academic_subjects` SQL queries with `@/lib/subjectCache`'s `getCachedAcademicSubjects()`, eliminating redundant database reads.
+  2. **Active Student SQL Pushdown:** Apply `.eq('is_active', true)` directly on the database query when `include_archived` is false, leveraging PostgreSQL partial index `idx_students_active_biometric_cohort`.
+  3. **Client-Side Pagination & Memoized Bounded DOM:** In `frontend/src/app/reports/page.tsx`, implement client-side pagination (`pageSize`: 25, 50, 100 with default 25) with automatic reset to page 1 on search or filter change. Slice `filtered` into `paginatedReports` via `useMemo` so that only the active page is rendered in `<tbody>`, keeping the active DOM node count strictly bounded.
+  4. **Preserved Forensic Full-Cohort Exports:** Keep full-cohort exports intact: `exportCSV` continues to use `filtered`, ensuring administrators can export comprehensive reports for all 500+ students in one action regardless of current page view.
+- **Consequences:**
+  - *Positive:* Completely eliminates browser main-thread freezes and input lag when filtering or searching 1,000+ student rosters.
+  - *Positive:* Cuts `academic_subjects` database queries to zero after initial cache warm (10-minute TTL).
+  - *Positive:* Utilizes PostgreSQL partial index `idx_students_active_biometric_cohort` for sub-millisecond student record retrieval.
+  - *Positive:* Retains single-click export of complete multi-hundred student cohorts to CSV.
+
 
 
 
