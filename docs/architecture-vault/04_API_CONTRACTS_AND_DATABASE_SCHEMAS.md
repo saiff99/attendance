@@ -357,6 +357,44 @@ Tracks all executed schema migrations, SHA-256 integrity checksums, and executio
   - `403 Forbidden`: Authenticated user lacks administrative privileges.
   - `500 Internal Server Error`: Database query failure.
 
+---
+
+### 2.7. `POST /api/process-attendance` (Classroom Photo Face Matching & Atomic Batch Ingestion)
+- **Caller:** Next.js authenticated proxy (`live-scan/page.tsx`).
+- **Authorization:** Strictly restricted to Super Admin, Admin, and Faculty roles (`is_authorized_request`). Rejects unauthenticated callers with `401` and unauthorized roles with `403`.
+- **Ingestion Mode:** Multipart form-data containing:
+  - `file`: High-resolution classroom photograph (`MAX_CLASSROOM_IMAGE_SIZE = 15 MB`).
+  - `session_id`: Active lecture session UUID.
+- **Biometric Matching Pipeline:**
+  1. InsightFace detection identifies all face regions in BGR image (`det_thresh = 0.15`, `det_size = 640x640`).
+  2. In-memory biometric cache (`ADR-013`) resolves enrolled student vectors for the session cohort.
+  3. Accelerated NumPy 2D matrix multiplication (`ADR-012`) matches all detected faces simultaneously.
+- **Database Persistence Contract (`ADR-017`):**
+  - Executes a single atomic PostgREST batch upsert: `supabase.table("attendance").upsert(batch_payload, on_conflict="session_id,student_id").execute()`.
+  - Replaces legacy N+1 sequential loops, reducing database latency from 8,000–15,000ms down to ~80ms.
+  - Automatically deduplicates and updates existing attendance rows without data pollution.
+  - Features fault-tolerant individual retry fallback in case of payload size exceptions.
+- **Response Payload (`200 OK`):**
+```json
+{
+  "success": true,
+  "message": "Processed image. Recognized 48 students.",
+  "recognized": [
+    {
+      "name": "Rahim Ahmed",
+      "confidence": 0.94
+    },
+    {
+      "name": "Fatima Begum",
+      "confidence": 0.89
+    }
+  ],
+  "ai_used": true
+}
+```
+- **Audit Logging:** Emits `CLASSROOM_PHOTO_ATTENDANCE_PROCESSED` audit event to `audit_logs` ledger detailing session ID, recognized student count, and faculty actor.
+
+
 
 
 
