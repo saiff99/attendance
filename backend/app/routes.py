@@ -785,24 +785,30 @@ async def api_end_session(request: Optional[EndSessionRequest] = None):
     """
     s_id = request.session_id if request else None
     from app.stream import ai_coordinator, cleanup_session_state
+    from app.rate_limiter import prune_all_expired_rate_limit_state
     ai_coordinator.end_active_session(s_id)
     result = cleanup_session_state(s_id)
+    rl_result = prune_all_expired_rate_limit_state(session_id=s_id)
     return {
         "success": True,
         "message": "Session memory cleaned up successfully. RTSP streams remain connected.",
-        "details": result
+        "details": result,
+        "rate_limiter_cleanup": rl_result
     }
 
 @router.post("/api/sessions/{session_id}/end")
 async def api_end_session_by_id(session_id: str):
     """Ends a specific session and purges its cached state."""
     from app.stream import ai_coordinator, cleanup_session_state
+    from app.rate_limiter import prune_all_expired_rate_limit_state
     ai_coordinator.end_active_session(session_id)
     result = cleanup_session_state(session_id)
+    rl_result = prune_all_expired_rate_limit_state(session_id=session_id)
     return {
         "success": True,
         "message": f"Session {session_id} ended and memory cleaned up successfully.",
-        "details": result
+        "details": result,
+        "rate_limiter_cleanup": rl_result
     }
 
 @router.post("/api/upload-photo")

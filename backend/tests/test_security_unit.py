@@ -572,6 +572,67 @@ class TestClassroomPhotoBatchUpsertUnit(unittest.TestCase):
         self.assertIn("Attempting individual fallback...", content)
 
 
+class TestRateLimiterMemoryPrunerUnit(unittest.TestCase):
+    """Unit tests for Unbounded Rate Limiter Memory Pruner (Issue 9)."""
+
+    def test_prune_all_expired_rate_limit_state(self):
+        import time
+        from app.rate_limiter import (
+            prune_all_expired_rate_limit_state,
+            _memory_dev_locks,
+            _memory_selfie_limits,
+            _memory_fail_cooldowns,
+            _get_key_lock,
+            _key_locks
+        )
+        from unittest.mock import patch
+
+        with patch("app.rate_limiter.supabase", None):
+            # 1. Setup stale device locks
+            sess_a = "session-to-prune-111"
+            sess_b = "session-active-222"
+            _memory_dev_locks[f"{sess_a}:dev-1"] = "24001"
+            _memory_dev_locks[f"{sess_b}:dev-2"] = "24002"
+
+            # 2. Setup expired sliding window timestamps (> 120s old)
+            old_ts = time.time() - 300.0
+            _memory_selfie_limits["old_client_ip:roll"] = [old_ts, old_ts + 1]
+            _memory_selfie_limits["fresh_client_ip:roll"] = [time.time()]
+
+            # 3. Setup expired fail cooldown (> 3600s old)
+            _memory_fail_cooldowns[f"{sess_a}:24001:1.1.1.1"] = {
+                "fails": 3,
+                "locked_until": time.time() - 4000.0
+            }
+            _memory_fail_cooldowns[f"{sess_b}:24002:2.2.2.2"] = {
+                "fails": 1,
+                "locked_until": time.time() + 60.0
+            }
+
+            # 4. Setup dummy unused lock
+            _get_key_lock("stale_unreferenced_lock_key_999")
+
+            # Execute targeted prune for sess_a
+            counts = prune_all_expired_rate_limit_state(session_id=sess_a)
+
+            # Verify target session device lock was pruned, active session preserved
+            self.assertNotIn(f"{sess_a}:dev-1", _memory_dev_locks)
+            self.assertIn(f"{sess_b}:dev-2", _memory_dev_locks)
+
+            # Verify expired sliding window was pruned, fresh preserved
+            self.assertNotIn("old_client_ip:roll", _memory_selfie_limits)
+            self.assertIn("fresh_client_ip:roll", _memory_selfie_limits)
+
+            # Verify expired failure cooldown was pruned, active preserved
+            self.assertNotIn(f"{sess_a}:24001:1.1.1.1", _memory_fail_cooldowns)
+            self.assertIn(f"{sess_b}:24002:2.2.2.2", _memory_fail_cooldowns)
+
+            # Cleanup test artifacts
+            _memory_dev_locks.pop(f"{sess_b}:dev-2", None)
+            _memory_selfie_limits.pop("fresh_client_ip:roll", None)
+            _memory_fail_cooldowns.pop(f"{sess_b}:24002:2.2.2.2", None)
+
+
 if __name__ == "__main__":
     unittest.main()
 

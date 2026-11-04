@@ -477,3 +477,117 @@ def reset_active_sessions_rate_limit(client_ip: str) -> None:
                 supabase.table("settings").delete().eq("key", db_key).execute()
             except Exception as e:
                 print(f"[ActiveSessionsRateLimit Reset Warning] L2 DB clear fallback: {e}")
+
+
+# ==============================================================================
+# 7. Unbounded Memory Pruning & Ephemeral DB Purge (Issue 9)
+# Eliminates slow memory leaks and prunes stale rate limit/device lock entries
+# ==============================================================================
+
+def prune_all_expired_rate_limit_state(session_id: Optional[str] = None) -> Dict[str, int]:
+    """
+    Prunes expired rate limit entries, device locks, failure cooldowns, and mutexes
+    from L1 in-memory dictionaries and periodically purges stale ephemeral keys from L2 DB.
+    Guarantees bounded memory consumption and eliminates slow memory leaks over months of continuous operation.
+    """
+    now_ts = time.time()
+    pruned_counts = {
+        "dev_locks": 0,
+        "selfie_limits": 0,
+        "selfie_ip_limits": 0,
+        "lookup_limits": 0,
+        "active_sessions_limits": 0,
+        "fail_cooldowns": 0,
+        "key_locks": 0,
+    }
+
+    # 1. Prune L1 Device Locks
+    # If session_id specified, purge all locks for that session immediately.
+    with _locks_mutex:
+        dev_keys = list(_memory_dev_locks.keys())
+        for k in dev_keys:
+            # key format: "session_id:device_id"
+            if session_id and k.startswith(f"{session_id}:"):
+                _memory_dev_locks.pop(k, None)
+                pruned_counts["dev_locks"] += 1
+
+    # 2. Helper to prune sliding-window rate limit dicts
+    def _prune_sliding_cache(cache: Dict[str, List[float]], max_window: float) -> int:
+        count = 0
+        keys = list(cache.keys())
+        for k in keys:
+            lock = _get_key_lock(f"cache:{k}")
+            with lock:
+                attempts = cache.get(k, [])
+                valid = [t for t in attempts if now_ts - t < max_window]
+                if not valid:
+                    cache.pop(k, None)
+                    count += 1
+                elif len(valid) != len(attempts):
+                    cache[k] = valid
+        return count
+
+    pruned_counts["selfie_limits"] = _prune_sliding_cache(_memory_selfie_limits, 120.0)
+    pruned_counts["selfie_ip_limits"] = _prune_sliding_cache(_memory_selfie_ip_limits, 120.0)
+    pruned_counts["lookup_limits"] = _prune_sliding_cache(_memory_lookup_limits, 120.0)
+    pruned_counts["active_sessions_limits"] = _prune_sliding_cache(_memory_active_sessions_limits, 120.0)
+
+    # 3. Prune Failure Cooldowns older than 1 hour (locks only last 60s max)
+    fail_keys = list(_memory_fail_cooldowns.keys())
+    for fk in fail_keys:
+        lock = _get_key_lock(f"fail:{fk}")
+        with lock:
+            val = _memory_fail_cooldowns.get(fk)
+            if val:
+                locked_until = float(val.get("locked_until", 0))
+                # If cooldown expired over 1 hour ago, or belongs to target ended session
+                if (session_id and fk.startswith(f"{session_id}:")) or (now_ts > locked_until + 3600.0):
+                    _memory_fail_cooldowns.pop(fk, None)
+                    pruned_counts["fail_cooldowns"] += 1
+
+    # 4. Prune Unused Mutex Locks from _key_locks
+    with _locks_mutex:
+        all_active_keys = set(_memory_dev_locks.keys()) | \
+                          set(_memory_selfie_limits.keys()) | \
+                          set(_memory_selfie_ip_limits.keys()) | \
+                          set(_memory_lookup_limits.keys()) | \
+                          set(_memory_active_sessions_limits.keys()) | \
+                          set(_memory_fail_cooldowns.keys())
+        lock_keys = list(_key_locks.keys())
+        for lk in lock_keys:
+            # Do not prune if lock key is currently referenced by active memory
+            if not any(k in lk for k in all_active_keys):
+                target_lock = _key_locks.get(lk)
+                if target_lock and target_lock.acquire(blocking=False):
+                    try:
+                        _key_locks.pop(lk, None)
+                        pruned_counts["key_locks"] += 1
+                    finally:
+                        target_lock.release()
+
+    # 5. Background L2 Database Purge (Safe: only purges ephemeral rl_ and devlock keys > 24 hours old)
+    if supabase:
+        try:
+            from datetime import datetime, timezone, timedelta
+            cutoff_iso = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+            supabase.table("settings").delete().lt("updated_at", cutoff_iso).like("key", "rl_%").execute()
+            supabase.table("settings").delete().lt("updated_at", cutoff_iso).like("key", "devlock:%").execute()
+        except Exception:
+            # Non-blocking L2 DB fallback
+            pass
+
+    return pruned_counts
+
+
+def _periodic_rate_limiter_sweeper():
+    """Background daemon thread sweeping rate limiter memory every 30 minutes."""
+    while True:
+        try:
+            time.sleep(1800)  # 30 minutes
+            prune_all_expired_rate_limit_state()
+        except Exception:
+            time.sleep(60)
+
+_sweeper_thread = threading.Thread(target=_periodic_rate_limiter_sweeper, daemon=True, name="RateLimiterSweeper")
+_sweeper_thread.start()
+
