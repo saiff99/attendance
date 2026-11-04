@@ -20,6 +20,9 @@
 | **ADR-011** | Permanent Pure Dark Mode & Theme Switcher Deprecation | **Accepted** | Nov 2026 | UI/UX / Mobile PWA Reliability |
 | **ADR-012** | Vectorized 2D Matrix Cosine Similarity for Batch Face Matching | **Accepted** | Nov 2026 | Biometrics / AI Performance |
 | **ADR-013** | In-Memory Biometric Vector Caching with Invalidation Hooks | **Accepted** | Nov 2026 | Backend / Caching & Latency |
+| **ADR-014** | Zero-Trust Biometric Vector Minimization in Student API Responses | **Accepted** | Nov 2026 | Privacy / Network Payload |
+| **ADR-015** | Parallelized Reports Aggregation with Date-Range Windowing & Chunked Pagination Safeguard | **Accepted** | Nov 2026 | Analytics / Scalability |
+| **ADR-016** | Adaptive Visibility-Aware Polling and In-Memory User Map Caching | **Accepted** | Nov 2026 | Networking / Database Scalability |
 
 ---
 
@@ -235,6 +238,30 @@
   - *Positive:* ~70% reduction in API response latency through concurrent query execution.
   - *Positive:* Enables administrators to examine specific semesters, examination eligibility windows, or custom date ranges without loading years of historical logs.
   - *Positive:* Protects server and browser memory from ballooning as institutional data accumulates.
+
+---
+
+### ADR-016: Adaptive Visibility-Aware Polling and In-Memory User Map Caching
+- **Status:** Accepted & Enforced (November 2026)
+- **Context:**
+  1. The persistent navigation `Sidebar` and the `/ongoing` session tracker polled `/api/active-sessions` on an unthrottled 3-second `setInterval` unconditionally across all open tabs.
+  2. If an administrative or faculty user left browser tabs open or minimized overnight, a single workstation fired ~9,600 requests to `/api/active-sessions` per day (~300,000 monthly Vercel function invocations per user).
+  3. On shared campus Wi-Fi networks (single NAT public IP), 2 or more faculty members with open tabs generated 40+ requests/minute, triggering the built-in 30-request/minute rate limit (`HTTP 429 Too Many Requests`) and blocking legitimate student selfie submissions.
+  4. Furthermore, each invocation of `GET /api/active-sessions` executed a redundant SQL query selecting static `app_users` records (`SELECT username, full_name`), producing hundreds of thousands of useless database hits.
+- **Decision:**
+  1. Integrate the browser **Page Visibility API** (`document.visibilityState`):
+     - Suppress network polling completely whenever the document is hidden or minimized (`if (document.visibilityState !== 'visible') return;`).
+     - Register `visibilitychange` event listener on `document` to execute an **Instant Wakeup** fetch the exact millisecond the user refocuses the tab.
+  2. Relax persistent background polling intervals:
+     - Global `Sidebar.tsx`: Relaxed from 3s to **12s** (event-driven listeners `medattend-session-changed` and `storage` already guarantee 0ms instant sync upon session lifecycle mutations).
+     - Dedicated `/ongoing/page.tsx`: Relaxed from 3s to **6s** while visible (the 1-second countdown ticker runs locally in React state without network requests).
+  3. Implement an in-memory TTL cache (5 minutes) for `app_users` mapping in `frontend/src/app/api/active-sessions/route.ts` via `getCachedUserMap()`.
+- **Consequences:**
+  - *Positive:* Eliminates ~90% of all background polling requests, conserving Vercel serverless invocation quotas and Supabase connection pool slots.
+  - *Positive:* Completely eradicates campus Wi-Fi NAT rate-limit collisions (HTTP 429) caused by idle background tabs.
+  - *Positive:* Zero degradation in user experience; Instant Wakeup guarantees real-time fresh data upon tab focus.
+  - *Positive:* Saves device battery and network bandwidth on mobile and laptop clients.
+
 
 
 

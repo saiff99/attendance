@@ -239,4 +239,36 @@ This document catalogs critical real-world edge cases, platform-specific quirks,
      - Automatically transitioned to an emerald green alert (`✅ Cooldown expired! You may now take a selfie again.`) and unlocked the button instantly at `0s` without requiring page reload.
 - **Rule:** Never display static countdown warnings to end-users without an active reactive ticker. All rate-limit lockout intervals must be strictly bounded (capped at 60s max) and synchronize live client decrementing with backend header contracts.
 
+---
+
+### Gotcha 13: Background Tab Polling Storms, Campus Wi-Fi NAT 429 Collisions & Instant Visibility Wakeup
+- **Symptom:**
+  Faculty and administrative users leaving MedAttend browser tabs open or minimized during the school day inadvertently triggered `HTTP 429 Too Many Requests` for all users on the same campus Wi-Fi network, while consuming hundreds of thousands of Vercel serverless function invocations per month.
+- **Root Cause:**
+  1. `Sidebar.tsx` and `ongoing/page.tsx` executed unthrottled `setInterval(..., 3000)` polling loops regardless of whether the browser tab was active, minimized, or occluded.
+  2. A single open tab made 20 requests per minute (~9,600/day). Two teachers on the same campus Wi-Fi NAT generated 40 requests/minute, breaching the 30-request/minute active-session IP rate limit.
+  3. Redundant SQL queries were executed against static tables (`app_users`) on every single poll.
+- **Architectural Fix:**
+  1. **Page Visibility API Check:** In `Sidebar.tsx` and `ongoing/page.tsx`, suppress network fetches during interval ticks when `document.visibilityState !== 'visible'`.
+  2. **Instant Wakeup Listener:** Register a `visibilitychange` listener on `document` that triggers an immediate fetch (`0ms` latency) the exact moment the tab becomes visible again, guaranteeing zero stale data.
+  3. **Relaxed Adaptive Intervals:** Extended background intervals to 12s on the persistent sidebar and 6s on the ongoing monitor.
+  4. **In-Memory TTL User Map Caching:** In `frontend/src/app/api/active-sessions/route.ts`, cached the `app_users` mapping in memory for 5 minutes (`getCachedUserMap()`), eliminating thousands of redundant SQL queries.
+- **Rule:** Background client intervals must always be visibility-aware. Never poll unthrottled when the tab is hidden; always use `document.visibilityState` guards combined with `visibilitychange` instant-wakeup listeners.
+
+---
+
+### Gotcha 14: Headless Minimal CI Runners Missing Heavy C++ AI Binaries (`onnxruntime`) & Offline Unit Test Isolation
+- **Symptom:**
+  GitHub Actions CI failed on commit `b6bc0f5` during the backend test suite with:
+  `ModuleNotFoundError: No module named 'onnxruntime'` when loading `test_vectorized_matching.py`, followed by `FAIL: test_active_sessions_rate_limit_and_reset` due to network timeouts.
+- **Root Cause:**
+  1. In `.github/workflows/ci.yml`, the headless CI runner purposely installs only minimal offline Python dependencies (`numpy`, `opencv-python-headless`, `fastapi`, `supabase`) to keep test runs fast and lightweight, avoiding massive 300MB+ C++ AI runtimes (`onnxruntime`, `insightface`).
+  2. `backend/app/ai.py` had `import onnxruntime as ort` at top-level outside any `try...except` block. When `test_vectorized_matching.py` imported mathematical matrix functions (`match_faces_vectorized`) which only require `numpy`, `ai.py` crashed on file load.
+  3. In `test_security_unit.py`, the active sessions rate limiter test ran 30 iterations in a loop. With mock `ci-test-mock.supabase.co`, each iteration attempted 3 failing TCP/DNS roundtrips. The 30 iterations accumulated 4+ minutes of runner delay, causing the 60-second sliding-window timestamps to expire during the test run itself and failing the 31st call 429 assertion.
+- **Architectural Fix:**
+  1. Guarded `import onnxruntime as ort` inside the existing `try...except Exception as e:` block in `backend/app/ai.py` with `ort = None` fallback, allowing NumPy matrix functions to load anywhere without requiring `onnxruntime`.
+  2. Isolated `test_active_sessions_rate_limit_and_reset` with `unittest.mock.patch("app.rate_limiter.supabase", None)` so offline unit tests test memory sliding-window algorithms in microseconds without external network dependencies.
+- **Rule:** Never top-level import heavy, platform-compiled machine learning runtimes without a `try...except ImportError` fallback. Mathematical vector algorithms (`numpy`) must run cleanly in minimal headless environments without requiring runtime AI inference engines. Offline unit tests must strictly mock external database connections.
+
+
 

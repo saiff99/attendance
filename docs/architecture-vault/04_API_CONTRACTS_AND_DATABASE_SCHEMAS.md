@@ -105,7 +105,8 @@ Tracks all executed schema migrations, SHA-256 integrity checksums, and executio
 
 ### 2.1. `GET /api/active-sessions`
 - **Caller:** Student Mobile Portal (`/selfieattend`) & Faculty Dashboard.
-- **Cache Policy:** `Cache-Control: no-cache, no-store, must-revalidate` (Requires `_t=${Date.now()}`).
+- **Cache Policy:** `Cache-Control: no-cache, no-store, must-revalidate` (Requires `_t=${Date.now()}` on manual refresh). Static `app_users` role mapping cached in-memory on Next.js server for 5 minutes (`USER_MAP_TTL_MS = 300000`) to eliminate redundant SQL queries.
+- **Client Polling Policy:** Must be guarded by `document.visibilityState === 'visible'`. Background polling is suppressed when tab is hidden/minimized; instant `0ms` synchronization executed upon `visibilitychange` focus. Interval set to 12s on global sidebar and 6s on active ongoing monitor.
 - **Rate Limit:** 30 requests / minute per client IP.
 - **Response Payload (`200 OK`):**
 ```json
