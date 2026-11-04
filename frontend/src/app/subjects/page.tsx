@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import {
-  AcademicSubject, ACADEMIC_YEARS, DEFAULT_MBBS_SUBJECTS,
+  AcademicSubject, ACADEMIC_YEARS,
   getCachedSubjects, saveCachedSubjects
 } from "@/lib/academicSubjects";
 
@@ -55,7 +55,13 @@ export default function AcademicSubjectsPage() {
   };
 
   useEffect(() => {
-    fetchSubjects();
+    let isMounted = true;
+    void (async () => {
+      if (isMounted) await fetchSubjects();
+    })();
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const handleCreateSubject = async (e: React.FormEvent) => {
@@ -76,9 +82,10 @@ export default function AcademicSubjectsPage() {
       setIsAddSubjectModalOpen(false);
       setNewSubject({ academic_year: "1st Year", name: "", code: "" });
       setActionSuccess(`Academic Subject "${data.subject.name}" added successfully.`);
-      fetchSubjects();
-    } catch (err: any) {
-      setSubjectError(err.message || "Failed to create subject.");
+      void fetchSubjects();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to create subject.";
+      setSubjectError(message);
     } finally {
       setIsSubjectSubmitting(false);
     }
@@ -96,9 +103,10 @@ export default function AcademicSubjectsPage() {
       }
       setActionSuccess(`Subject "${subjectToDelete.name}" removed successfully.`);
       setSubjectToDelete(null);
-      fetchSubjects();
-    } catch (err: any) {
-      setSubjectError(err.message || "Network error deleting subject.");
+      void fetchSubjects();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Network error deleting subject.";
+      setSubjectError(message);
     } finally {
       setIsDeletingSubject(false);
     }

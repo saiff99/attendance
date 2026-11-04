@@ -12,7 +12,20 @@ import { SystemHealth } from "@/components/SystemHealth";
 import { useAuth } from "@/lib/auth";
 import { decodeSessionMetadata } from "@/lib/geofence";
 
-const navigation = [
+declare global {
+  interface Window {
+    __toggleMedAttendSidebar?: (force?: boolean) => void;
+  }
+}
+
+interface SidebarNavItem {
+  name: string;
+  href: string;
+  icon: React.ComponentType<{ className?: string; "aria-hidden"?: boolean | "true" | "false" }>;
+  superAdminOnly?: boolean;
+}
+
+const navigation: SidebarNavItem[] = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
   { name: "Live Scan", href: "/live-scan", icon: ScanLine },
   { name: "Ongoing", href: "/ongoing", icon: Radio },
@@ -25,7 +38,7 @@ const navigation = [
   { name: "Database Backup", href: "/backup", icon: Database, superAdminOnly: true },
 ];
 
-const studentNavigation = [
+const studentNavigation: SidebarNavItem[] = [
   { name: "My Attendance Portal", href: "/portal", icon: GraduationCap },
   { name: "Selfie Attendance", href: "/selfieattend", icon: Smartphone },
 ];
@@ -37,8 +50,6 @@ function classNames(...classes: string[]) {
 export default function Sidebar() {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
-  const [mounted, setMounted] = useState(false);
-  const [hasActiveLiveSession, setHasActiveLiveSession] = useState(false);
   const [ongoingCount, setOngoingCount] = useState<number>(0);
   const { user, logout } = useAuth();
   const isStudentPortal = pathname?.startsWith("/selfieattend") || pathname?.startsWith("/self-attendance") || pathname?.startsWith("/portal");
@@ -49,8 +60,8 @@ export default function Sidebar() {
     if (initialPathRef.current !== pathname) {
       initialPathRef.current = pathname;
       setIsOpen(false);
-      if (typeof window !== "undefined" && (window as any).__toggleMedAttendSidebar) {
-        (window as any).__toggleMedAttendSidebar(false);
+      if (typeof window !== "undefined" && window.__toggleMedAttendSidebar) {
+        window.__toggleMedAttendSidebar(false);
       }
     }
   }, [pathname]);
@@ -59,12 +70,13 @@ export default function Sidebar() {
   useEffect(() => {
     const sb = document.getElementById("medattend-sidebar");
     if (sb && sb.classList.contains("translate-x-0")) {
-      setIsOpen(true);
+      queueMicrotask(() => setIsOpen(true));
     }
 
-    const handleSync = (e: any) => {
-      if (typeof e.detail?.open === "boolean") {
-        setIsOpen(e.detail.open);
+    const handleSync = (e: Event) => {
+      const customEvent = e as CustomEvent<{ open?: boolean }>;
+      if (typeof customEvent.detail?.open === "boolean") {
+        setIsOpen(customEvent.detail.open);
       }
     };
     window.addEventListener("medattend-sidebar-sync", handleSync);
@@ -74,12 +86,8 @@ export default function Sidebar() {
   }, []);
 
   useEffect(() => {
-    setMounted(true);
     const checkActive = async () => {
       if (typeof window !== "undefined") {
-        const activeId = localStorage.getItem("medattend_active_session_id");
-        setHasActiveLiveSession(!!activeId);
-
         // Efficiency & Battery Shield: Do not poll when the tab/window is hidden or minimized
         if (typeof document !== "undefined" && document.visibilityState !== "visible") {
           return;
@@ -92,11 +100,11 @@ export default function Sidebar() {
           });
           if (res.ok) {
             const data = await res.json();
-            let activeList = (data.sessions || []).filter((s: any) => !s.is_expired && s.remaining_seconds > 0);
+            let activeList = (data.sessions || []).filter((s: { is_expired?: boolean; remaining_seconds?: number }) => !s.is_expired && (s.remaining_seconds ?? 0) > 0);
             if (user?.role === "Faculty") {
               const u = (user.username || "").toLowerCase();
               const n = (user.name || "").toLowerCase();
-              activeList = activeList.filter((s: any) => {
+              activeList = activeList.filter((s: { instructor_name?: string; created_by?: string }) => {
                 const cb = (s.created_by || "").toLowerCase();
                 const dec = decodeSessionMetadata(s.instructor_name || "");
                 const byTag = (dec.facultyUsername || "").toLowerCase();
@@ -106,7 +114,7 @@ export default function Sidebar() {
             }
             setOngoingCount(activeList.length);
           }
-        } catch (e) {
+        } catch {
           // silent fallback
         }
       }
@@ -154,8 +162,8 @@ export default function Sidebar() {
               id="mobile-sidebar-toggle"
               type="button"
               onClick={() => {
-                if (typeof window !== "undefined" && (window as any).__toggleMedAttendSidebar) {
-                  (window as any).__toggleMedAttendSidebar();
+                if (typeof window !== "undefined" && window.__toggleMedAttendSidebar) {
+                  window.__toggleMedAttendSidebar();
                 } else {
                   setIsOpen((prev) => !prev);
                 }
@@ -180,8 +188,8 @@ export default function Sidebar() {
             isOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none hidden"
           )}
           onClick={() => {
-            if (typeof window !== "undefined" && (window as any).__toggleMedAttendSidebar) {
-              (window as any).__toggleMedAttendSidebar(false);
+            if (typeof window !== "undefined" && window.__toggleMedAttendSidebar) {
+              window.__toggleMedAttendSidebar(false);
             } else {
               setIsOpen(false);
             }
@@ -210,8 +218,8 @@ export default function Sidebar() {
             id="mobile-sidebar-close"
             type="button"
             onClick={() => {
-              if (typeof window !== "undefined" && (window as any).__toggleMedAttendSidebar) {
-                (window as any).__toggleMedAttendSidebar(false);
+              if (typeof window !== "undefined" && window.__toggleMedAttendSidebar) {
+                window.__toggleMedAttendSidebar(false);
               } else {
                 setIsOpen(false);
               }
@@ -226,7 +234,7 @@ export default function Sidebar() {
         <nav className="mt-2 flex-1 space-y-1 px-3">
           {(user?.role === "Student"
             ? studentNavigation
-            : navigation.filter((item: any) => {
+            : navigation.filter((item: SidebarNavItem) => {
                 if (
                   item.superAdminOnly &&
                   user?.role !== "Super Admin" &&
@@ -248,8 +256,7 @@ export default function Sidebar() {
                 return true;
               })
           ).map((item) => {
-              const isActive = pathname === item.href;
-            const isLiveScan = item.href === "/live-scan";
+            const isActive = pathname === item.href;
             const isOngoing = item.href === "/ongoing";
             return (
               <Link
@@ -264,8 +271,8 @@ export default function Sidebar() {
                 onClick={() => {
                   if (typeof window !== "undefined") {
                     window.dispatchEvent(new CustomEvent("medattend-navigate"));
-                    if ((window as any).__toggleMedAttendSidebar) {
-                      (window as any).__toggleMedAttendSidebar(false);
+                    if (window.__toggleMedAttendSidebar) {
+                      window.__toggleMedAttendSidebar(false);
                     }
                   }
                   setIsOpen(false);

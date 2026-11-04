@@ -20,7 +20,7 @@ const memoryRateCache: Record<string, RateLimitEntry> = {};
 const inFlightAttempts = new Map<string, number>();
 
 // In-flight serialization mutex per key to prevent internal race conditions
-const inFlightMutexes = new Map<string, Promise<any>>();
+const inFlightMutexes = new Map<string, Promise<unknown>>();
 
 /**
  * Runs an async operation with per-key mutual exclusion, serializing concurrent operations
@@ -169,7 +169,7 @@ async function checkSingleKey(
         return { locked: true, remainingSeconds };
       }
     }
-  } catch (err) {
+  } catch {
     // Fail-Closed: If DB query fails, fall back strictly to local in-memory records
     if (mem && mem.count >= maxAttempts) {
       const remaining = Math.max(1, Math.ceil(((mem.lockedUntil || (mem.firstAttempt + LOCKOUT_WINDOW_MS)) - now) / 1000));
@@ -470,7 +470,7 @@ export async function checkStudentLookupRateLimit(
   }
 
   // 2. Degraded In-Memory Fail-Closed Fallback (If RPC or database is offline/unreachable)
-  let attempts: number[] = (memoryLookupLimits[clientIp] || []).filter(
+  const attempts: number[] = (memoryLookupLimits[clientIp] || []).filter(
     (ts) => nowSec - ts < windowSeconds
   );
 
@@ -539,7 +539,7 @@ export async function checkActiveSessionsRateLimit(
   }
 
   // 2. Degraded In-Memory Fail-Closed Fallback (If RPC or database is offline/unreachable)
-  let attempts: number[] = (memoryActiveSessionsLimits[clientIp] || []).filter(
+  const attempts: number[] = (memoryActiveSessionsLimits[clientIp] || []).filter(
     (ts) => nowSec - ts < windowSeconds
   );
 
@@ -608,7 +608,7 @@ export async function checkPinChangeRateLimit(
   }
 
   // 2. Degraded In-Memory Fail-Closed Fallback (If RPC or database is offline/unreachable)
-  let attempts: number[] = (memoryPinChangeLimits[normId] || []).filter(
+  const attempts: number[] = (memoryPinChangeLimits[normId] || []).filter(
     (ts) => nowSec - ts < windowSeconds
   );
 

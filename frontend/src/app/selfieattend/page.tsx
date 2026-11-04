@@ -5,6 +5,7 @@ import { SelfieAttendContent, ActiveSession } from './SelfieAttendClient';
 import { getTodayDateStr, getStartOfTodayISO } from '@/lib/dateUtils';
 import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/serverAuth';
 import { decodeSessionMetadata } from '@/lib/geofence';
+import { Session } from '@/types/database';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -24,7 +25,7 @@ async function getInitialSessions(): Promise<ActiveSession[]> {
           return data.sessions;
         }
       }
-    } catch (e) {
+    } catch {
       // Backend unreachable, fall through to Supabase
     }
 
@@ -42,14 +43,14 @@ async function getInitialSessions(): Promise<ActiveSession[]> {
     if (error || !sessionData) return [];
 
     // Filter strictly for today's sessions
-    const todaySessions = (sessionData || []).filter((s: any) => {
+    const todaySessions = (sessionData || []).filter((s: Session) => {
       const dateVal = s.date || '';
       const createdVal = s.created_at || '';
       return dateVal === todayStr || createdVal.startsWith(todayStr) || createdVal >= startOfTodayIso;
     });
 
     const nowUtc = Date.now();
-    return todaySessions.map((s: any) => {
+    return todaySessions.map((s: Session) => {
       const timeStr = s.start_time || s.created_at;
       let remainingSeconds = 0;
       let isExpired = true;
@@ -75,7 +76,7 @@ async function getInitialSessions(): Promise<ActiveSession[]> {
         window_duration_seconds: 300,
       };
     });
-  } catch (e) {
+  } catch {
     return [];
   }
 }
@@ -89,8 +90,8 @@ export default async function SelfieAttendPortal() {
   if (authUser?.role === "Faculty") {
     const u = (authUser.username || "").toLowerCase();
     const n = (authUser.name || "").toLowerCase();
-    initialSessions = initialSessions.filter((s: any) => {
-      const cb = ((s as any).created_by || "").toLowerCase();
+    initialSessions = initialSessions.filter((s: { instructor_name?: string; created_by?: string }) => {
+      const cb = (s.created_by || "").toLowerCase();
       const dec = decodeSessionMetadata(s.instructor_name || "");
       const byTag = (dec.facultyUsername || "").toLowerCase();
       const topic = (dec.topic || "").toLowerCase();

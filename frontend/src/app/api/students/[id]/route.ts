@@ -39,14 +39,14 @@ export async function GET(
         .maybeSingle(),
     ]);
 
-    let data: any = studentRes.data;
+    let data: Record<string, unknown> | null = studentRes.data as Record<string, unknown> | null;
     if (studentRes.error && (studentRes.error.code === '42703' || studentRes.error.message?.includes('biometric_consent'))) {
       const fallback = await supabaseServer
         .from('students')
         .select('id, student_roll, full_name, email, academic_year, created_at')
         .eq('id', id)
         .maybeSingle();
-      data = fallback.data;
+      data = fallback.data as Record<string, unknown> | null;
     }
 
     if (!data) {
@@ -54,7 +54,7 @@ export async function GET(
     }
 
     const hasEnrolledVector = Boolean(enrolledRes.data?.id);
-    const hasConsent = (data as any).biometric_consent !== false;
+    const hasConsent = data.biometric_consent !== false;
     const hasFace = Boolean(hasEnrolledVector && hasConsent);
 
     const phone = getParentPhone(data) || null;
@@ -73,9 +73,10 @@ export async function GET(
         face_encoding: hasFace ? true : null,
       },
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : String(err);
     console.error('Error fetching student via API:', err);
-    return NextResponse.json({ success: false, error: err.message || 'Failed to fetch student' }, { status: 500 });
+    return NextResponse.json({ success: false, error: errMsg }, { status: 500 });
   }
 }
 
@@ -130,7 +131,7 @@ export async function PUT(
     // Persistently encode parent phone into student.local email
     const encodedEmail = encodeStudentEmail(cleanRoll, cleanPhone || undefined);
 
-    const basePayload: any = {
+    const basePayload: Record<string, unknown> = {
       student_roll: cleanRoll,
       full_name: cleanName,
       email: encodedEmail,
@@ -140,12 +141,15 @@ export async function PUT(
 
     const selectFields = 'id, student_roll, full_name, email, academic_year, created_at, biometric_consent';
 
-    let { data, error }: { data: any; error: any } = await supabaseServer
+    const updateRes = await supabaseServer
       .from('students')
       .update(basePayload)
       .eq('id', id)
       .select(selectFields)
       .single();
+
+    let data: Record<string, unknown> | null = updateRes.data as Record<string, unknown> | null;
+    const error = updateRes.error;
 
     if (error && (error.code === 'PGRST204' || error.message?.includes('parent_phone') || error.message?.includes('biometric_consent'))) {
       delete basePayload.parent_phone;
@@ -157,7 +161,7 @@ export async function PUT(
         .select(fallbackFields)
         .single();
       if (retry.error) throw retry.error;
-      data = retry.data;
+      data = retry.data as Record<string, unknown> | null;
     } else if (error) {
       throw error;
     }
@@ -185,7 +189,7 @@ export async function PUT(
       .maybeSingle();
 
     const hasEnrolledVector = Boolean(enrolledRes.data?.id);
-    const hasConsent = (data as any)?.biometric_consent !== false;
+    const hasConsent = data?.biometric_consent !== false;
     const hasFace = Boolean(hasEnrolledVector && hasConsent);
 
     const phone = getParentPhone(data) || cleanPhone || null;
@@ -206,9 +210,10 @@ export async function PUT(
       success: true,
       student: sanitizedStudent,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : String(err);
     console.error('Error updating student via API:', err);
-    return NextResponse.json({ success: false, error: err.message || 'Failed to update student' }, { status: 500 });
+    return NextResponse.json({ success: false, error: errMsg }, { status: 500 });
   }
 }
 
@@ -233,7 +238,7 @@ export async function DELETE(
     const { id } = await params;
 
     // Step 1: Check if the student has any historical attendance records
-    const { count: attendanceCount, error: countErr } = await supabaseServer
+    const { count: attendanceCount } = await supabaseServer
       .from('attendance')
       .select('*', { count: 'exact', head: true })
       .eq('student_id', id);
@@ -312,8 +317,9 @@ export async function DELETE(
     });
 
     return NextResponse.json({ success: true, message: 'Student record deleted successfully.' });
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : String(err);
     console.error('Error deleting student via API:', err);
-    return NextResponse.json({ success: false, error: err.message || 'Failed to delete student' }, { status: 500 });
+    return NextResponse.json({ success: false, error: errMsg }, { status: 500 });
   }
 }

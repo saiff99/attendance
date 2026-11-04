@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import Link from "next/link";
 import { CalendarDays, RefreshCw, Sparkles } from "lucide-react";
 import { useAuth } from "@/lib/auth";
@@ -13,7 +13,7 @@ interface SessionItem {
   class_name: string;
   instructor_name?: string | null;
   created_at: string;
-  attendance?: any;
+  attendance?: Array<{ count?: number }> | Array<Record<string, unknown>> | null;
   creator_name?: string | null;
 }
 
@@ -144,9 +144,12 @@ export function RecentClassSessionsTable({ initialSessions, userRole }: RecentCl
                 </td>
               </tr>
             ) : displaySessions && displaySessions.length > 0 ? (
-              displaySessions.map((session: any) => {
-                const attendanceCount = (session.attendance as any)?.[0]?.count ?? 0;
-                const meta = decodeSessionMetadata(session.instructor_name);
+              displaySessions.map((session: SessionItem) => {
+                const rawAtt = session.attendance;
+                const attendanceCount = Array.isArray(rawAtt) && rawAtt[0] && typeof rawAtt[0] === 'object' && 'count' in rawAtt[0]
+                  ? Number((rawAtt[0] as { count?: unknown }).count ?? 0)
+                  : 0;
+                const meta = decodeSessionMetadata(session.instructor_name || "");
                 const topic = meta.topic;
 
                 return (

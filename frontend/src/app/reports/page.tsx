@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, Fragment } from "react";
+import { useState, useEffect, useMemo, useRef, Fragment } from "react";
 import { useRouter } from "next/navigation";
 import {
   Search, Download, Users, AlertTriangle, CheckCircle, XCircle, BarChart3,
@@ -12,6 +12,17 @@ import {
 import { isCohortMatching } from "@/lib/cohort";
 import { DEFAULT_MBBS_SUBJECTS, getSubjectsForCohort } from "@/lib/academicSubjects";
 import { useAuth } from "@/lib/auth";
+import { Student, Session, Attendance } from "@/types/database";
+
+interface SessionHistoryRecord {
+  id: string;
+  status: string;
+  recorded_at: string;
+  capture_mode?: string;
+  sessions?: {
+    class_name?: string;
+  } | null;
+}
 
 function getPageNumbers(current: number, total: number): (number | string)[] {
   if (total <= 7) {
@@ -99,7 +110,7 @@ export default function ReportsPage() {
   const [cohortFilter, setCohortFilter] = useState<string>("all");
   const [riskFilter, setRiskFilter] = useState<RiskFilter>("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [sessionHistory, setSessionHistory] = useState<Record<string, any[]>>({});
+  const [sessionHistory, setSessionHistory] = useState<Record<string, SessionHistoryRecord[]>>({});
   const [loadingHistory, setLoadingHistory] = useState<string | null>(null);
   const [totalSessions, setTotalSessions] = useState(0);
 
@@ -165,7 +176,7 @@ export default function ReportsPage() {
 
       // Group attendance by student
       const attMap: Record<string, { present: number; manual: number; last?: string; attendedSessionIds: Set<string> }> = {};
-      (attendance || []).forEach((a: any) => {
+      (attendance || []).forEach((a: Attendance) => {
         if (!attMap[a.student_id]) {
           attMap[a.student_id] = { present: 0, manual: 0, attendedSessionIds: new Set() };
         }
@@ -188,11 +199,11 @@ export default function ReportsPage() {
         allCurriculumSubjects = data.subjects;
       }
 
-      const built: StudentReport[] = (students || []).map((s: any) => {
+      const built: StudentReport[] = (students || []).map((s: Student) => {
         const stats = attMap[s.id] || { present: 0, manual: 0, attendedSessionIds: new Set() };
 
         // Identify sessions targeted to or applicable to this student's specific cohort / year
-        const applicableSessions = (allSessions || []).filter((sess: any) =>
+        const applicableSessions = (allSessions || []).filter((sess: Session) =>
           isCohortMatching(sess.target_academic_year, s.academic_year)
         );
 
@@ -203,13 +214,13 @@ export default function ReportsPage() {
         const rate = studentSessionCount > 0 ? Math.min(100, Math.round((present / studentSessionCount) * 100)) : 0;
 
         // Compute Subject-wise Attendance Breakdown for this student
-        const cohortSubs = getSubjectsForCohort(allCurriculumSubjects, s.academic_year);
+        const cohortSubs = getSubjectsForCohort(allCurriculumSubjects, s.academic_year || "");
         const subjectStatsMap: Record<string, { totalClasses: number; present: number }> = {};
         cohortSubs.forEach(sub => {
           subjectStatsMap[sub.name.toLowerCase()] = { totalClasses: 0, present: 0 };
         });
 
-        applicableSessions.forEach((sess: any) => {
+        applicableSessions.forEach((sess: Session) => {
           const rawSub = sess.class_name?.includes(" - ") ? sess.class_name.split(" - ")[0].trim() : sess.class_name?.trim() || "General";
           const key = rawSub.toLowerCase();
           const matchedKey = Object.keys(subjectStatsMap).find(k => k === key || key.includes(k) || k.includes(key));
@@ -282,9 +293,14 @@ export default function ReportsPage() {
     }
   };
 
+  const fetchReportsRef = useRef(fetchReports);
+  useEffect(() => {
+    fetchReportsRef.current = fetchReports;
+  });
+
   useEffect(() => {
     if (!isLoading && user?.role !== "Faculty") {
-      fetchReports();
+      void fetchReportsRef.current();
     }
   }, [isLoading, user?.role]);
 
@@ -337,7 +353,7 @@ export default function ReportsPage() {
 
   // Reset pagination to first page when filtering or sorting changes
   useEffect(() => {
-    setCurrentPage(1);
+    queueMicrotask(() => setCurrentPage(1));
   }, [searchTerm, cohortFilter, riskFilter, startDate, endDate, dateRangePreset, sortField, sortOrder, pageSize]);
 
   const totalPages = Math.ceil(filtered.length / pageSize) || 1;
@@ -831,7 +847,7 @@ export default function ReportsPage() {
                                   <p className="text-xs text-gray-400">No attendance records found.</p>
                                 ) : (
                                   <div className="flex flex-wrap gap-2">
-                                    {sessionHistory[student.id].map((rec: any, idx: number) => (
+                                    {sessionHistory[student.id].map((rec: SessionHistoryRecord, idx: number) => (
                                       <div
                                         key={idx}
                                         className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs border ${

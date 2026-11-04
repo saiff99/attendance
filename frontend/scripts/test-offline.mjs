@@ -1250,7 +1250,8 @@ console.log('\n--- 21. Student Registry Client-Side Pagination & Memoization ---
   // 3. Reset to page 1 on filter changes
   assert(
     studentsContent.includes('setCurrentPage(1)') &&
-    studentsContent.includes('useEffect(() => {\n    setCurrentPage(1);\n  }, [searchTerm, activeView, activeSubBatch, pageSize])'),
+    (studentsContent.includes('useEffect(() => {\n    setCurrentPage(1);\n  }, [searchTerm, activeView, activeSubBatch, pageSize])') ||
+     studentsContent.includes('queueMicrotask(() => setCurrentPage(1))')),
     'students/page.tsx resets to page 1 on search term, cohort view, or page size change'
   );
 

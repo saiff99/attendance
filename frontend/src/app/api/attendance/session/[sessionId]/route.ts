@@ -98,8 +98,9 @@ export async function GET(
       success: true,
       logs: data || [],
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Error fetching session attendance logs:', err);
-    return NextResponse.json({ success: false, error: err.message || 'Failed to fetch logs' }, { status: 500 });
+    const message = err instanceof Error ? err.message : 'Failed to fetch logs';
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }

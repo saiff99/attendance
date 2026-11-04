@@ -4,7 +4,7 @@ import { fetchBackend } from '@/lib/serverBackend';
 export const dynamic = 'force-dynamic';
 
 export async function GET(
-  request: Request,
+  _request: Request,
   { params }: { params: Promise<{ sessionId: string }> }
 ) {
   try {
@@ -14,7 +14,7 @@ export async function GET(
       const data = await res.json();
       return NextResponse.json(data);
     }
-  } catch (e) {}
+  } catch {}
 
   return NextResponse.json({ success: true, logs: [] });
 }

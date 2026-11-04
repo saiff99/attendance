@@ -48,7 +48,7 @@ export async function POST(request: Request) {
       body: createFormData(),
     });
 
-    let data: any;
+    let data: Record<string, unknown>;
     try {
       data = await res.json();
     } catch {
@@ -100,10 +100,11 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json(data, { status: res.status, headers: responseHeaders });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Selfie attendance error:', err);
+    const message = err instanceof Error ? err.message : 'Face verification service unavailable.';
     return NextResponse.json(
-      { detail: err.message || 'Face verification service unavailable.' },
+      { detail: message },
       { status: 500 }
     );
   }

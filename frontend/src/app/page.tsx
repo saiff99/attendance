@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import nextDynamic from "next/dynamic";
-import { Users, UserCheck, CalendarCheck, Activity, CalendarDays, TrendingUp } from "lucide-react";
+import { Users, UserCheck, CalendarCheck, TrendingUp } from "lucide-react";
 import { supabaseServer } from "@/lib/supabaseServer";
 import { getStartOfTodayISO } from "@/lib/dateUtils";
 import { verifySessionToken, SESSION_COOKIE_NAME } from "@/lib/serverAuth";
@@ -27,7 +27,6 @@ export default async function Dashboard() {
   const cookieStore = await cookies();
   const sessionCookie = cookieStore.get(SESSION_COOKIE_NAME)?.value;
   const userSession = sessionCookie ? await verifySessionToken(sessionCookie) : null;
-  const isFaculty = userSession?.role === "Faculty";
 
   // Get start of today in IST local date
   const startOfToday = getStartOfTodayISO();
@@ -97,7 +96,7 @@ export default async function Dashboard() {
   const totalRegistered = totalStudents || 0;
   const todayUniqueAbsent = Math.max(0, totalRegistered - todayUniquePresent);
 
-  const enrichedRawSessions = (rawSessions || []).map((s: any) => {
+  const enrichedRawSessions = (rawSessions || []).map((s) => {
     const meta = decodeSessionMetadata(s.instructor_name || "");
     const facUser = (meta.facultyUsername || "").toLowerCase();
     return {
@@ -107,7 +106,7 @@ export default async function Dashboard() {
   });
 
   const lastClassPresent = rawSessions && rawSessions.length > 0 
-    ? ((rawSessions[0].attendance as any)?.[0]?.count || 0)
+    ? ((rawSessions[0].attendance as Array<{ count?: number }>)?.[0]?.count || 0)
     : 0;
 
   const last7DaysMap = new Map();
@@ -125,10 +124,9 @@ export default async function Dashboard() {
   }
 
   let totalPresentCount = 0;
-  let totalAbsentCount = 0;
 
   if (recentAttendance) {
-    recentAttendance.forEach((record: any) => {
+    recentAttendance.forEach((record) => {
       const dateStr = record.recorded_at.split('T')[0];
       if (last7DaysMap.has(dateStr)) {
         const entry = last7DaysMap.get(dateStr);
@@ -137,7 +135,6 @@ export default async function Dashboard() {
           totalPresentCount++;
         } else {
           entry.absent++;
-          totalAbsentCount++;
         }
       }
     });

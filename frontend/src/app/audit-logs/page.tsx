@@ -6,18 +6,14 @@ import {
   ShieldAlert, 
   Search, 
   RefreshCw, 
-  Filter, 
   User, 
-  Calendar, 
   Clock, 
   Database, 
   FileText, 
-  AlertTriangle, 
   Trash2, 
   UserPlus, 
   ScanFace, 
   Edit3, 
-  CheckCircle2, 
   Info, 
   X, 
   ChevronRight,
@@ -51,7 +47,13 @@ interface AuditLogEntry {
   action: string;
   target_type: string;
   target_id: string | null;
-  details: Record<string, any> | null;
+  details: {
+    student_name?: string;
+    student_roll?: string;
+    actor_name?: string;
+    actor_role?: string;
+    [key: string]: unknown;
+  } | null;
   ip_address: string | null;
   created_at: string;
 }
@@ -140,11 +142,32 @@ export default function AuditLogsPage() {
   };
 
   useEffect(() => {
+    let isMounted = true;
     if (!authLoading && isSuperAdmin) {
-      fetchLogs();
+      void (async () => {
+        try {
+          setIsRefreshing(true);
+          const res = await fetch("/api/audit-logs?limit=1000", { cache: "no-store" });
+          if (res.ok && isMounted) {
+            const data = await res.json();
+            setLogs(data.logs || []);
+            if (data.checksum) setLedgerChecksum(data.checksum);
+          }
+        } catch (err) {
+          console.error("Error fetching audit logs:", err);
+        } finally {
+          if (isMounted) {
+            setLoading(false);
+            setIsRefreshing(false);
+          }
+        }
+      })();
     } else if (!authLoading && !isSuperAdmin) {
-      setLoading(false);
+      queueMicrotask(() => setLoading(false));
     }
+    return () => {
+      isMounted = false;
+    };
   }, [authLoading, isSuperAdmin]);
 
   // Filtered logs based on search and dropdown filters
@@ -182,7 +205,7 @@ export default function AuditLogsPage() {
 
   // Reset to page 1 on search or filter change
   useEffect(() => {
-    setCurrentPage(1);
+    queueMicrotask(() => setCurrentPage(1));
   }, [searchTerm, selectedActionFilter, selectedTargetFilter, activeDatePreset, startDate, endDate, pageSize]);
 
   const totalPages = Math.ceil(filteredLogs.length / pageSize) || 1;

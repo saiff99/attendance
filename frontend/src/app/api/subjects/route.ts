@@ -24,14 +24,15 @@ export async function GET(request: NextRequest) {
       subjects,
       tableReady: true,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Error fetching academic subjects:', err);
+    const message = err instanceof Error ? err.message : 'Unknown error';
     // Graceful fallback to default subjects so app never crashes
     return NextResponse.json({
       success: true,
       subjects: DEFAULT_MBBS_SUBJECTS,
       tableReady: false,
-      error: err.message,
+      error: message,
     });
   }
 }
@@ -113,10 +114,11 @@ export async function POST(request: NextRequest) {
       success: true,
       subject: data,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Error creating academic subject:', err);
+    const message = err instanceof Error ? err.message : 'Failed to create subject.';
     return NextResponse.json(
-      { success: false, error: err.message || 'Failed to create subject.' },
+      { success: false, error: message },
       { status: 500 }
     );
   }

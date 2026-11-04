@@ -92,10 +92,11 @@ export async function POST(
       data = { detail: text || `Upstream returned status ${res.status}` };
     }
     return NextResponse.json(data, { status: res.status });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Face enrollment single error:', err);
+    const message = err instanceof Error ? err.message : 'Face enrollment AI engine unreachable.';
     return NextResponse.json(
-      { detail: err.message || 'Face enrollment AI engine unreachable.' },
+      { detail: message },
       { status: 500 }
     );
   }

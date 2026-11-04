@@ -56,9 +56,10 @@ export async function GET(
       success: true,
       session: data,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : String(err);
     console.error('Error fetching session by id:', err);
-    return NextResponse.json({ success: false, error: err.message || 'Failed to fetch session' }, { status: 500 });
+    return NextResponse.json({ success: false, error: errMsg }, { status: 500 });
   }
 }
 
@@ -81,7 +82,7 @@ export async function PATCH(
     }
 
     const { id } = await params;
-    let existingSession: any = null;
+    let existingSession: { id: string; instructor_name: string | null; class_name?: string } | null = null;
 
     if (session.role === 'Faculty') {
       const { data: existing } = await supabaseServer
@@ -101,7 +102,7 @@ export async function PATCH(
 
     const body = await request.json();
 
-    const updatePayload: any = {};
+    const updatePayload: Record<string, unknown> = {};
     if (body.class_name !== undefined) updatePayload.class_name = body.class_name;
     if (body.end_time !== undefined) updatePayload.end_time = body.end_time;
 
@@ -167,9 +168,10 @@ export async function PATCH(
       session: data,
     });
 
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : String(err);
     console.error('Error updating session:', err);
-    return NextResponse.json({ success: false, error: err.message || 'Failed to update session' }, { status: 500 });
+    return NextResponse.json({ success: false, error: errMsg }, { status: 500 });
   }
 }
 
@@ -282,9 +284,10 @@ export async function DELETE(
     invalidateSessionInfoCache(id);
 
     return NextResponse.json({ success: true, message: 'Empty session deleted successfully.' });
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : String(err);
     console.error('Error deleting session:', err);
-    return NextResponse.json({ success: false, error: err.message || 'Failed to delete session' }, { status: 500 });
+    return NextResponse.json({ success: false, error: errMsg }, { status: 500 });
   }
 }
 

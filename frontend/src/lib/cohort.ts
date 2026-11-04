@@ -33,7 +33,6 @@ export function isCohortMatching(
 
   if (!studentYear) return false;
   const s = studentYear.trim();
-  const sLower = s.toLowerCase();
 
   // Helper: extract base year (e.g. "1st Year", "2nd Year")
   const getBaseYear = (str: string) => {

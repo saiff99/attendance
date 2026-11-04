@@ -9,20 +9,22 @@ export const dynamic = 'force-dynamic';
 let cachedGeofence: CampusGeofenceConfig = { ...DEFAULT_GEOFENCE_CONFIG };
 
 export function validateGeofenceInput(
-  body: any,
+  body: unknown,
   current: CampusGeofenceConfig
 ): { valid: true; config: CampusGeofenceConfig } | { valid: false; error: string } {
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
     return { valid: false, error: 'Request body must be a valid JSON object.' };
   }
 
+  const b = body as Record<string, unknown>;
+
   // 1. Latitude validation: must be finite number in [-90, 90]
   let latitude = current.latitude;
-  if ('latitude' in body) {
-    if (body.latitude === null || body.latitude === '') {
+  if ('latitude' in b) {
+    if (b.latitude === null || b.latitude === '') {
       return { valid: false, error: 'Latitude cannot be empty.' };
     }
-    const latNum = typeof body.latitude === 'number' ? body.latitude : Number(body.latitude);
+    const latNum = typeof b.latitude === 'number' ? b.latitude : Number(b.latitude);
     if (!Number.isFinite(latNum) || Number.isNaN(latNum)) {
       return { valid: false, error: 'Latitude must be a valid finite number.' };
     }
@@ -34,11 +36,11 @@ export function validateGeofenceInput(
 
   // 2. Longitude validation: must be finite number in [-180, 180]
   let longitude = current.longitude;
-  if ('longitude' in body) {
-    if (body.longitude === null || body.longitude === '') {
+  if ('longitude' in b) {
+    if (b.longitude === null || b.longitude === '') {
       return { valid: false, error: 'Longitude cannot be empty.' };
     }
-    const lngNum = typeof body.longitude === 'number' ? body.longitude : Number(body.longitude);
+    const lngNum = typeof b.longitude === 'number' ? b.longitude : Number(b.longitude);
     if (!Number.isFinite(lngNum) || Number.isNaN(lngNum)) {
       return { valid: false, error: 'Longitude must be a valid finite number.' };
     }
@@ -50,11 +52,11 @@ export function validateGeofenceInput(
 
   // 3. Radius validation: positive number within allowable bounds (10m to 5000m)
   let radiusMeters = current.radiusMeters;
-  if ('radiusMeters' in body) {
-    if (body.radiusMeters === null || body.radiusMeters === '') {
+  if ('radiusMeters' in b) {
+    if (b.radiusMeters === null || b.radiusMeters === '') {
       return { valid: false, error: 'Radius cannot be empty.' };
     }
-    const radNum = typeof body.radiusMeters === 'number' ? body.radiusMeters : Number(body.radiusMeters);
+    const radNum = typeof b.radiusMeters === 'number' ? b.radiusMeters : Number(b.radiusMeters);
     if (!Number.isFinite(radNum) || Number.isNaN(radNum)) {
       return { valid: false, error: 'Radius must be a valid positive number.' };
     }
@@ -69,25 +71,25 @@ export function validateGeofenceInput(
 
   // 4. Enabled flag validation
   let enabled = current.enabled;
-  if ('enabled' in body) {
-    if (typeof body.enabled !== 'boolean') {
-      if (body.enabled === 'true' || body.enabled === 1) enabled = true;
-      else if (body.enabled === 'false' || body.enabled === 0) enabled = false;
+  if ('enabled' in b) {
+    if (typeof b.enabled !== 'boolean') {
+      if (b.enabled === 'true' || b.enabled === 1) enabled = true;
+      else if (b.enabled === 'false' || b.enabled === 0) enabled = false;
       else {
         return { valid: false, error: 'Enabled field must be a valid boolean.' };
       }
     } else {
-      enabled = body.enabled;
+      enabled = b.enabled;
     }
   }
 
   // 5. Campus Name validation
   let campusName = current.campusName;
-  if ('campusName' in body) {
-    if (typeof body.campusName !== 'string') {
+  if ('campusName' in b) {
+    if (typeof b.campusName !== 'string') {
       return { valid: false, error: 'Campus name must be a string.' };
     }
-    const trimmed = body.campusName.trim();
+    const trimmed = b.campusName.trim();
     if (trimmed.length === 0) {
       return { valid: false, error: 'Campus name cannot be empty.' };
     }
@@ -174,8 +176,9 @@ export async function GET() {
     }
 
     return NextResponse.json({ success: true, config: cachedGeofence });
-  } catch (err: any) {
-    return NextResponse.json({ success: false, error: err?.message || 'Failed to retrieve geofence configuration' }, { status: 500 });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Failed to retrieve geofence configuration';
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }
 
@@ -186,7 +189,7 @@ export async function POST(request: Request) {
       return NextResponse.json(auth.errorResponse.body, { status: auth.errorResponse.status });
     }
 
-    let body: any;
+    let body: unknown;
     try {
       body = await request.json();
     } catch {
@@ -205,7 +208,7 @@ export async function POST(request: Request) {
     const simulateDbFail = request.headers.get('x-test-simulate-db-failure') === '1';
 
     let persisted = false;
-    let lastError: any = null;
+    let lastErrorMessage: string | null = null;
 
     if (!simulateDbFail) {
       // 1. Try settings table
@@ -217,12 +220,12 @@ export async function POST(request: Request) {
         if (!settingsError) {
           persisted = true;
         } else {
-          lastError = settingsError;
+          lastErrorMessage = settingsError.message;
           console.warn('Supabase settings upsert error for geofence:', settingsError.message);
         }
-      } catch (e: any) {
-        lastError = e;
-        console.warn('Exception during settings upsert for geofence:', e?.message);
+      } catch (e: unknown) {
+        lastErrorMessage = e instanceof Error ? e.message : String(e);
+        console.warn('Exception during settings upsert for geofence:', lastErrorMessage);
       }
 
       // 2. Also persist to sessions table backup config row for guaranteed durability
@@ -243,18 +246,18 @@ export async function POST(request: Request) {
           persisted = true;
         } else {
           if (!persisted) {
-            lastError = sessionsError;
+            lastErrorMessage = sessionsError.message;
           }
           console.warn('Supabase sessions backup row upsert error for geofence:', sessionsError.message);
         }
-      } catch (e: any) {
+      } catch (e: unknown) {
         if (!persisted) {
-          lastError = e;
+          lastErrorMessage = e instanceof Error ? e.message : String(e);
         }
-        console.warn('Exception during sessions backup row upsert for geofence:', e?.message);
+        console.warn('Exception during sessions backup row upsert for geofence:', lastErrorMessage);
       }
     } else {
-      lastError = new Error('Simulated database network timeout/failure.');
+      lastErrorMessage = 'Simulated database network timeout/failure.';
     }
 
     // Fail-closed persistence: If persistent save was not confirmed, do NOT change in-memory cache and do NOT report success
@@ -262,7 +265,7 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           success: false,
-          error: `Database persistence failed: ${lastError?.message || 'Failed to persist geofence configuration to persistent storage.'}`,
+          error: `Database persistence failed: ${lastErrorMessage || 'Failed to persist geofence configuration to persistent storage.'}`,
         },
         { status: 500 }
       );
@@ -272,7 +275,8 @@ export async function POST(request: Request) {
     cachedGeofence = targetConfig;
 
     return NextResponse.json({ success: true, config: cachedGeofence });
-  } catch (err: any) {
-    return NextResponse.json({ success: false, error: err?.message || 'Internal server error' }, { status: 500 });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Internal server error';
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }

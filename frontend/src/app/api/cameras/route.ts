@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
       const data = await res.json();
       return NextResponse.json(data);
     }
-  } catch (e) {}
+  } catch {}
 
   return NextResponse.json({ count: 6, cameras: [] });
 }

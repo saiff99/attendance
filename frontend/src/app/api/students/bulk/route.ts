@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
         .select('student_id')
         .in('student_id', ids);
 
-      const studentIdsWithAttendance = new Set((attRecords || []).map((r: any) => r.student_id));
+      const studentIdsWithAttendance = new Set((attRecords || []).map((r: { student_id?: string | null }) => r.student_id));
       const toArchiveIds = ids.filter(id => studentIdsWithAttendance.has(id));
       const toDeleteIds = ids.filter(id => !studentIdsWithAttendance.has(id));
 
@@ -102,7 +102,15 @@ export async function POST(request: NextRequest) {
 
     // --- CASE 2: BULK IMPORT ---
     if (action === 'import') {
-      const rawStudents: any[] = body.students || [];
+      interface RawImportStudent {
+        student_roll?: string;
+        full_name?: string;
+        email?: string;
+        parent_phone?: string;
+        academic_year?: string;
+      }
+
+      const rawStudents: RawImportStudent[] = (body.students || []) as RawImportStudent[];
       const selectedYear: string = body.selectedYear || '1st Year';
       const useFileYear: boolean = Boolean(body.useFileYear);
 
@@ -117,15 +125,15 @@ export async function POST(request: NextRequest) {
 
       if (fetchErr) throw fetchErr;
 
-      const existingMap = new Map<string, any>();
+      const existingMap = new Map<string, { id: string; student_roll: string }>();
       (existingStudents || []).forEach(s => {
         if (s.student_roll) existingMap.set(s.student_roll.toLowerCase().trim(), s);
       });
 
-      const toInsert: any[] = [];
-      const toUpdate: any[] = [];
+      const toInsert: Record<string, unknown>[] = [];
+      const toUpdate: Array<{ id: string; student_roll: string; full_name: string; email: string; academic_year: string; parent_phone: string | null; is_active: boolean; archived_at: null }> = [];
 
-      rawStudents.forEach((student: any) => {
+      rawStudents.forEach((student) => {
         const cleanRoll = (student.student_roll || '').trim();
         if (!cleanRoll) return;
 
@@ -134,7 +142,7 @@ export async function POST(request: NextRequest) {
         const academicYear = useFileYear && student.academic_year ? student.academic_year : selectedYear;
 
         if (existingMap.has(cleanKey)) {
-          const existing = existingMap.get(cleanKey);
+          const existing = existingMap.get(cleanKey)!;
           toUpdate.push({
             id: existing.id,
             student_roll: cleanRoll,
@@ -169,7 +177,7 @@ export async function POST(request: NextRequest) {
             // If parent_phone column fails, fallback without parent_phone
             if (insertErr.code === 'PGRST204' || insertErr.message?.includes('parent_phone')) {
               const fallbackChunk = chunk.map(c => {
-                const { parent_phone, ...rest } = c;
+                const { parent_phone: _unusedPhone, ...rest } = c;
                 return rest;
               });
               const { error: retryErr } = await supabaseServer.from('students').insert(fallbackChunk);
@@ -184,7 +192,7 @@ export async function POST(request: NextRequest) {
       // Update existing students
       if (toUpdate.length > 0) {
         for (const updateItem of toUpdate) {
-          const updatePayload: any = {
+          const updatePayload: Record<string, unknown> = {
             full_name: updateItem.full_name,
             email: updateItem.email,
             academic_year: updateItem.academic_year,
@@ -227,8 +235,9 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({ success: false, error: 'Unknown bulk action.' }, { status: 400 });
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : String(err);
     console.error('Error in /api/students/bulk:', err);
-    return NextResponse.json({ success: false, error: err.message || 'Bulk operation failed.' }, { status: 500 });
+    return NextResponse.json({ success: false, error: errMsg }, { status: 500 });
   }
 }

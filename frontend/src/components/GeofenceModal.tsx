@@ -1,18 +1,14 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { X, MapPin, ShieldCheck, ShieldAlert, Navigation, Loader2, Check, RefreshCw, RotateCcw } from "lucide-react";
+import { X, MapPin, ShieldCheck, ShieldAlert, Navigation, Loader2, Check, RotateCcw } from "lucide-react";
 import { 
   CampusGeofenceConfig, 
   DEFAULT_GEOFENCE_CONFIG, 
-  calculateDistanceMeters, 
-  formatDistance, 
-  getUserCoordinates,
   getCalibratedHighPrecisionGPS,
   getLocalGeofence,
   saveLocalGeofence
 } from "@/lib/geofence";
-
 
 interface GeofenceModalProps {
   isOpen: boolean;
@@ -23,17 +19,14 @@ interface GeofenceModalProps {
 
 export function GeofenceModal({ isOpen, onClose, initialConfig, onConfigSaved }: GeofenceModalProps) {
   const [config, setConfig] = useState<CampusGeofenceConfig>(() => initialConfig || getLocalGeofence());
-  const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [capturingGPS, setCapturingGPS] = useState(false);
   const [gpsStatus, setGpsStatus] = useState<string | null>(null);
   const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null);
-  const [currentGPS, setCurrentGPS] = useState<{ latitude: number; longitude: number } | null>(null);
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [savedSuccess, setSavedSuccess] = useState(false);
 
   const fetchConfig = async () => {
-    setLoading(true);
     try {
       const res = await fetch("/api/geofence");
       if (res.ok) {
@@ -45,25 +38,24 @@ export function GeofenceModal({ isOpen, onClose, initialConfig, onConfigSaved }:
       }
     } catch (e) {
       console.error("Failed to fetch geofence config", e);
-    } finally {
-      setLoading(false);
     }
   };
 
   useEffect(() => {
     if (isOpen) {
-      setSavedSuccess(false);
-      setGpsError(null);
-      setGpsStatus(null);
-      setGpsAccuracy(null);
-      if (initialConfig) {
-        setConfig(initialConfig);
-        setLoading(false);
-      } else {
-        const local = getLocalGeofence();
-        setConfig(local);
-        fetchConfig();
-      }
+      queueMicrotask(() => {
+        setSavedSuccess(false);
+        setGpsError(null);
+        setGpsStatus(null);
+        setGpsAccuracy(null);
+        if (initialConfig) {
+          setConfig(initialConfig);
+        } else {
+          const local = getLocalGeofence();
+          setConfig(local);
+          void fetchConfig();
+        }
+      });
     }
   }, [isOpen, initialConfig]);
 
@@ -77,7 +69,6 @@ export function GeofenceModal({ isOpen, onClose, initialConfig, onConfigSaved }:
         setGpsStatus(`Acquiring satellite lock (Sample ${progress.sampleCount}, Accuracy: ±${progress.bestAccuracy}m)...`);
       }, 3500);
 
-      setCurrentGPS({ latitude: coords.latitude, longitude: coords.longitude });
       setGpsAccuracy(coords.accuracy);
       setGpsStatus(`🎯 High-Precision GPS Locked (Accuracy: ±${coords.accuracy}m)`);
 
@@ -88,9 +79,10 @@ export function GeofenceModal({ isOpen, onClose, initialConfig, onConfigSaved }:
       };
       setConfig(updated);
       saveLocalGeofence(updated);
-    } catch (err: any) {
+    } catch (err: unknown) {
       setGpsStatus(null);
-      setGpsError(err.message || "Failed to capture high-precision location");
+      const message = err instanceof Error ? err.message : "Failed to capture high-precision location";
+      setGpsError(message);
     } finally {
       setCapturingGPS(false);
     }
@@ -115,8 +107,9 @@ export function GeofenceModal({ isOpen, onClose, initialConfig, onConfigSaved }:
       setTimeout(() => {
         onClose();
       }, 800);
-    } catch (err: any) {
-      setGpsError(err.message || "Failed to save geofence configuration");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to save geofence configuration";
+      setGpsError(message);
     } finally {
       setSaving(false);
     }

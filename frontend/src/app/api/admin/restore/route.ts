@@ -9,7 +9,7 @@ export const maxDuration = 300; // 5 minutes for full disaster recovery restorat
 
 async function batchUpsert(
   tableName: string,
-  records: any[],
+  records: Record<string, unknown>[],
   chunkSize: number = 100,
   onConflictKey: string = 'id'
 ): Promise<number> {
@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 2. Parse and Validate Payload
-    let payload: any;
+    let payload: { data?: { students?: Record<string, unknown>[]; sessions?: Record<string, unknown>[]; attendance?: Record<string, unknown>[]; subjects?: Record<string, unknown>[]; settings?: Record<string, unknown>[] }; checksum?: string; exported_at?: string };
     try {
       payload = await request.json();
     } catch {
@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
 
     // Step B: Restore System Settings (non-rate-limiting & non-ephemeral device-locks)
     const validSettings = settings.filter(
-      (s: any) => s && s.key && !s.key.startsWith('rl_') && !s.key.startsWith('devlock:')
+      (s: Record<string, unknown>) => typeof s?.key === 'string' && !s.key.startsWith('rl_') && !s.key.startsWith('devlock:')
     );
     const restoredSettings = await batchUpsert('settings', validSettings, 50, 'key');
 
@@ -108,7 +108,7 @@ export async function POST(request: NextRequest) {
       request,
       details: {
         restored_by: session.username || session.name,
-        backup_exported_at: payload.exported_at || 'unknown',
+        backup_exported_at: (payload.exported_at as string) || 'unknown',
         restored_counts: {
           students: restoredStudents,
           sessions: restoredSessions,
@@ -130,10 +130,11 @@ export async function POST(request: NextRequest) {
         settings: restoredSettings,
       },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errMsg = error instanceof Error ? error.message : String(error);
     console.error('[Database Restore Fatal Error]:', error);
     return NextResponse.json(
-      { error: error.message || 'Database restoration encountered an unexpected error.' },
+      { error: errMsg || 'Database restoration encountered an unexpected error.' },
       { status: 500 }
     );
   }

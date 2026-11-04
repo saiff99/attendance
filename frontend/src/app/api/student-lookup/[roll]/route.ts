@@ -30,14 +30,14 @@ export function maskStudentName(fullName: string): string {
   }).join(' ');
 }
 
-export function hasValidFaceEncoding(faceEncoding: any): boolean {
+export function hasValidFaceEncoding(faceEncoding: unknown): boolean {
   if (!faceEncoding) return false;
   if (Array.isArray(faceEncoding)) {
     return faceEncoding.length >= 128;
   }
   if (typeof faceEncoding === 'object') {
-    const keys = Object.keys(faceEncoding);
-    return keys.length > 0 && !(keys.length === 1 && 'parent_phone' in faceEncoding);
+    const keys = Object.keys(faceEncoding as Record<string, unknown>);
+    return keys.length > 0 && !(keys.length === 1 && 'parent_phone' in (faceEncoding as Record<string, unknown>));
   }
   return false;
 }
@@ -97,8 +97,8 @@ export async function GET(
     const canSeeFullProfile = isStaff || isOwnStudent;
 
     // Strict check: verifyCheckinToken will only return true if token is a 4-part token matching cleanRoll
-    let hasValidCheckinToken = verifyCheckinToken(token, cleanSessId, cleanRoll);
-    let hasValidSessionToken = verifyCheckinToken(token, cleanSessId);
+    const hasValidCheckinToken = verifyCheckinToken(token, cleanSessId, cleanRoll);
+    const hasValidSessionToken = verifyCheckinToken(token, cleanSessId);
 
     // Optional Verification Challenge: If unauthenticated caller doesn't have a roll-bound token, verify via Student PIN
     const studentPin = (searchParams.get('pin') || request.headers.get('x-student-pin') || '').trim();
@@ -175,7 +175,7 @@ export async function GET(
         if (retryAfter) headers['Retry-After'] = retryAfter;
         return NextResponse.json(errData, { status: res.status, headers });
       }
-    } catch (e) {
+    } catch {
       // Fall back to server-side Supabase verification
     }
 
@@ -279,8 +279,9 @@ export async function GET(
         target_academic_year: targetAcademicYear,
       }
     });
-  } catch (err: any) {
-    return NextResponse.json({ detail: err.message || 'Lookup failed' }, { status: 500 });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Lookup failed';
+    return NextResponse.json({ detail: message }, { status: 500 });
   }
 }
 

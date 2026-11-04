@@ -3,8 +3,13 @@
 import React, { useEffect, useState } from "react";
 import { Download, Share2, PlusSquare, X, Check, Smartphone, Laptop } from "lucide-react";
 
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
+}
+
 export function PwaInstallPrompt() {
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isIos, setIsIos] = useState<boolean>(false);
   const [isMobile, setIsMobile] = useState<boolean>(false);
   const [isStandalone, setIsStandalone] = useState<boolean>(false);
@@ -15,18 +20,18 @@ export function PwaInstallPrompt() {
     // 1. Check if running in standalone mode (already installed as PWA)
     const isStandaloneMode =
       window.matchMedia("(display-mode: standalone)").matches ||
-      (window.navigator as any).standalone === true ||
+      (window.navigator as Navigator & { standalone?: boolean }).standalone === true ||
       document.referrer.includes("android-app://");
 
     if (isStandaloneMode) {
-      setIsStandalone(true);
+      queueMicrotask(() => setIsStandalone(true));
       return;
     }
 
     // Check if previously dismissed in last 2 days
     const dismissedTime = localStorage.getItem("medattend_pwa_dismissed");
     if (dismissedTime && Date.now() - parseInt(dismissedTime, 10) < 2 * 24 * 60 * 60 * 1000) {
-      setIsDismissed(true);
+      queueMicrotask(() => setIsDismissed(true));
       return;
     }
 
@@ -45,18 +50,21 @@ export function PwaInstallPrompt() {
     // 3. Detect iOS and Mobile vs Desktop device
     const userAgent = window.navigator.userAgent.toLowerCase();
     const isAppleIos =
-      /iphone|ipad|ipod/.test(userAgent) && !(window as any).MSStream;
-    setIsIos(isAppleIos);
+      /iphone|ipad|ipod/.test(userAgent) && !(window as unknown as { MSStream?: unknown }).MSStream;
 
     const isMobileDevice =
       /android|iphone|ipod|blackberry|iemobile|opera mini/i.test(userAgent) ||
       (navigator.maxTouchPoints > 1 && !/windows nt/i.test(userAgent) && /ipad|macintosh/i.test(userAgent));
-    setIsMobile(Boolean(isMobileDevice));
+
+    queueMicrotask(() => {
+      setIsIos(isAppleIos);
+      setIsMobile(Boolean(isMobileDevice));
+    });
 
     // 4. Android / Chrome beforeinstallprompt event
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
-      setDeferredPrompt(e);
+      setDeferredPrompt(e as BeforeInstallPromptEvent);
       setShowPrompt(true);
     };
 
@@ -160,7 +168,7 @@ export function PwaInstallPrompt() {
                 </span>
                 <span>
                   Scroll down & select{" "}
-                  <strong className="text-white">"Add to Home Screen"</strong>{" "}
+                  <strong className="text-white">&ldquo;Add to Home Screen&rdquo;</strong>{" "}
                   <PlusSquare className="w-3.5 h-3.5 inline text-emerald-400 -mt-0.5" />.
                 </span>
               </div>

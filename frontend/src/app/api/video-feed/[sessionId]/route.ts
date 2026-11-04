@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { fetchBackend } from '@/lib/serverBackend';
 import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/serverAuth';
 
@@ -39,7 +39,7 @@ export async function GET(
         'Connection': 'keep-alive',
       },
     });
-  } catch (err: any) {
+  } catch {
     return new Response('Backend stream error', { status: 502 });
   }
 }

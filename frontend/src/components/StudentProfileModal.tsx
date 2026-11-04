@@ -2,38 +2,51 @@
 
 import { useEffect, useState } from "react";
 import { X, Calendar as CalendarIcon, CheckCircle2, XCircle } from "lucide-react";
+import { Student } from "@/types/database";
+
+interface AttendanceRecord {
+  id: string;
+  session_id: string;
+  status: string;
+  recorded_at: string;
+  sessions?: {
+    class_name?: string;
+    date?: string;
+  } | null;
+}
 
 interface StudentProfileModalProps {
-  student: any;
+  student: Student | null;
   isOpen: boolean;
   onClose: () => void;
 }
 
 export function StudentProfileModal({ student, isOpen, onClose }: StudentProfileModalProps) {
-  const [attendance, setAttendance] = useState<any[]>([]);
+  const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let isMounted = true;
     if (isOpen && student?.id) {
-      setLoading(true);
-      const fetchAttendance = async () => {
+      void (async () => {
+        setLoading(true);
         try {
           const res = await fetch(`/api/students/${student.id}/attendance`);
           const data = await res.json();
-          if (res.ok && data.attendance) {
-            setAttendance(data.attendance);
-          } else {
-            setAttendance([]);
+          if (isMounted) {
+            setAttendance(res.ok && data.attendance ? data.attendance : []);
           }
         } catch {
-          setAttendance([]);
+          if (isMounted) setAttendance([]);
         } finally {
-          setLoading(false);
+          if (isMounted) setLoading(false);
         }
-      };
-      fetchAttendance();
+      })();
     }
-  }, [isOpen, student]);
+    return () => {
+      isMounted = false;
+    };
+  }, [isOpen, student?.id]);
 
   if (!isOpen || !student) return null;
 

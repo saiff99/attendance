@@ -1,13 +1,14 @@
 import { supabaseServer } from "@/lib/supabaseServer";
 import { getSessionFromRequest } from "@/lib/serverAuth";
+import type { NextRequest } from "next/server";
 
 export interface AuditEventParams {
   action: string;
   targetType: "student" | "attendance" | "session" | "system" | "user" | "subject";
   targetId?: string;
-  details?: Record<string, any>;
+  details?: Record<string, unknown>;
   actorId?: string;
-  request?: Request | any;
+  request?: Request | NextRequest;
 }
 
 /**
@@ -52,7 +53,7 @@ export async function logAuditEvent({
     // Ultimate fallback if no session or actor specified
     resolvedActor = resolvedActor || "admin";
 
-    const payload: any = {
+    const payload: Record<string, unknown> = {
       action,
       target_type: targetType,
       target_id: targetId || null,
@@ -69,7 +70,7 @@ export async function logAuditEvent({
     if (error) {
       console.warn("[AUDIT LOG WARNING] Failed to record audit log:", error.message);
     }
-  } catch (e) {
+  } catch (e: unknown) {
     console.warn("[AUDIT LOG EXCEPTION]", e);
   }
 }

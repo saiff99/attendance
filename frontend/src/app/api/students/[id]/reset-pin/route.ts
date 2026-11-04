@@ -81,10 +81,11 @@ export async function POST(
       fullName: student.full_name,
       message: `Temporary activation PIN for ${student.full_name} (Roll: ${student.student_roll}) has been generated successfully.`,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Error resetting student PIN:', err);
+    const message = err instanceof Error ? err.message : 'Failed to reset PIN.';
     return NextResponse.json(
-      { success: false, error: err.message || 'Failed to reset PIN.' },
+      { success: false, error: message },
       { status: 500 }
     );
   }

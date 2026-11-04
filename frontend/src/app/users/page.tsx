@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Users, UserPlus, Shield, KeyRound, Search, RefreshCw, CheckCircle2,
-  XCircle, Trash2, Power, AlertTriangle, Eye, EyeOff,
-  Sparkles, Lock, Building2, UserX, Loader2, Pencil
+  Users, UserPlus, KeyRound, Search, RefreshCw, CheckCircle2,
+  Trash2, Power, AlertTriangle, Eye, EyeOff,
+  Sparkles, UserX, Loader2, Pencil
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 
@@ -28,7 +28,6 @@ export default function UsersManagementPage() {
 
   const [users, setUsers] = useState<AppUser[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tableReady, setTableReady] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [roleFilter, setRoleFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -77,30 +76,37 @@ export default function UsersManagementPage() {
     }
   }, [currentUser, isAuthLoading, router]);
 
-  const fetchUsers = async () => {
-    setLoading(true);
+  const fetchUsers = useCallback(async (showLoading = false) => {
+    if (showLoading) setLoading(true);
     try {
       const res = await fetch("/api/users");
       const data = await res.json();
       if (res.ok && data.success) {
         setUsers(data.users || []);
-        setTableReady(data.tableReady !== false);
       } else {
         setFormError(data.error || "Failed to load users list.");
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
       setFormError("Network error while connecting to user service.");
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
+    let isMounted = true;
     if (currentUser?.role === "Super Admin" || currentUser?.role === "Admin") {
-      fetchUsers();
+      void (async () => {
+        if (isMounted) {
+          await fetchUsers();
+        }
+      })();
     }
-  }, [currentUser]);
+    return () => {
+      isMounted = false;
+    };
+  }, [currentUser, fetchUsers]);
 
   const generateRandomPassword = () => {
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%";
@@ -157,8 +163,9 @@ export default function UsersManagementPage() {
       setIsEditModalOpen(false);
       setUserToEdit(null);
       fetchUsers();
-    } catch (err: any) {
-      setEditError(err.message || "Failed to update user.");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to update user.";
+      setEditError(msg);
     } finally {
       setIsEditSubmitting(false);
     }
@@ -182,8 +189,9 @@ export default function UsersManagementPage() {
       setIsAddModalOpen(false);
       setActionSuccess(`Account for ${newUser.full_name} (@${newUser.username}) created successfully.`);
       fetchUsers();
-    } catch (err: any) {
-      setFormError(err.message || "Network error while creating account.");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Network error while creating account.";
+      setFormError(msg);
     } finally {
       setIsSubmitting(false);
     }
@@ -207,8 +215,9 @@ export default function UsersManagementPage() {
       }
       setIsResetModalOpen(false);
       setActionSuccess(`Password for @${selectedUser.username} updated successfully.`);
-    } catch (err: any) {
-      setFormError(err.message || "Network error while updating password.");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Network error while updating password.";
+      setFormError(msg);
     } finally {
       setIsSubmitting(false);
     }
@@ -228,7 +237,7 @@ export default function UsersManagementPage() {
       } else {
         setFormError(data.error || "Failed to toggle user status.");
       }
-    } catch (err: any) {
+    } catch {
       setFormError("Network error.");
     }
   };
@@ -250,8 +259,9 @@ export default function UsersManagementPage() {
       setActionSuccess(`User account @${userToDeleteState.username} deleted permanently.`);
       setUserToDeleteState(null);
       fetchUsers();
-    } catch (err: any) {
-      setFormError(err.message || "Network error deleting user.");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Network error deleting user.";
+      setFormError(msg);
     } finally {
       setIsDeletingUser(false);
     }
@@ -305,7 +315,7 @@ export default function UsersManagementPage() {
 
           <div className="flex items-center gap-2.5 ml-11 sm:ml-0">
             <button
-              onClick={fetchUsers}
+              onClick={() => void fetchUsers(true)}
               disabled={loading}
               className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 hover:border-indigo-400 hover:text-indigo-600 transition-all disabled:opacity-50"
             >
@@ -591,7 +601,7 @@ export default function UsersManagementPage() {
                   </label>
                   <select
                     value={newUser.role}
-                    onChange={(e) => setNewUser({ ...newUser, role: e.target.value as any })}
+                    onChange={(e) => setNewUser({ ...newUser, role: e.target.value as "Super Admin" | "Admin" | "Faculty" })}
                     className="w-full px-3 py-2 rounded-xl text-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-400 focus:outline-none"
                   >
                     <option value="Faculty">Faculty (Lectures & Attendance Only)</option>
@@ -754,7 +764,7 @@ export default function UsersManagementPage() {
                     </label>
                     <select
                       value={editFormData.role}
-                      onChange={(e) => setEditFormData({ ...editFormData, role: e.target.value as any })}
+                      onChange={(e) => setEditFormData({ ...editFormData, role: e.target.value as "Super Admin" | "Admin" | "Faculty" })}
                       className="w-full px-3 py-2 rounded-xl text-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-400 focus:outline-none"
                     >
                       <option value="Faculty">Faculty</option>

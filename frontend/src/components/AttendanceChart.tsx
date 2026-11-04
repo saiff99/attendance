@@ -12,10 +12,89 @@ interface AttendanceChartProps {
   data: ChartData[];
   todayPresent: number;
   todayAbsent: number;
-  totalStudents: number;
+  totalStudents?: number;
 }
 
-export function AttendanceChart({ data, todayPresent, todayAbsent, totalStudents }: AttendanceChartProps) {
+interface BarTooltipItem {
+  dataKey?: string;
+  value?: number;
+}
+
+interface CustomBarTooltipProps {
+  active?: boolean;
+  payload?: BarTooltipItem[];
+  label?: string;
+}
+
+const CustomBarTooltip = ({ active, payload, label }: CustomBarTooltipProps) => {
+  if (active && payload && payload.length) {
+    const present = payload.find((p) => p.dataKey === 'present')?.value || 0;
+    const absent = payload.find((p) => p.dataKey === 'absent')?.value || 0;
+    const totalDay = present + absent;
+    const rate = totalDay > 0 ? Math.round((present / totalDay) * 100) : 0;
+    return (
+      <div className="bg-slate-900/95 backdrop-blur-md border border-slate-800 rounded-xl p-3 shadow-2xl text-xs space-y-1.5 pointer-events-none select-none min-w-[130px]">
+        <div className="font-bold text-white text-xs border-b border-slate-800 pb-1 flex items-center justify-between gap-4">
+          <span>{label}</span>
+          <span className="text-[10px] text-emerald-400 font-semibold">{rate}% Present</span>
+        </div>
+        <div className="flex items-center justify-between gap-4 text-slate-300">
+          <span className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-emerald-500" />
+            <span>Present:</span>
+          </span>
+          <span className="font-bold text-emerald-400">{present}</span>
+        </div>
+        <div className="flex items-center justify-between gap-4 text-slate-300">
+          <span className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-rose-500" />
+            <span>Absent:</span>
+          </span>
+          <span className="font-bold text-rose-400">{absent}</span>
+        </div>
+      </div>
+    );
+  }
+  return null;
+};
+
+interface PieTooltipItem {
+  name?: string;
+  value?: number;
+}
+
+interface CustomPieTooltipProps {
+  active?: boolean;
+  payload?: PieTooltipItem[];
+  presentRate?: number;
+  absentRate?: number;
+  total?: number;
+}
+
+const CustomPieTooltip = ({ active, payload, presentRate = 0, absentRate = 0, total = 0 }: CustomPieTooltipProps) => {
+  if (active && payload && payload.length) {
+    const entry = payload[0];
+    const isPresent = entry.name === 'Present';
+    const pct = isPresent ? presentRate : absentRate;
+    return (
+      <div className="bg-slate-900/95 backdrop-blur-md border border-slate-800 rounded-xl p-3 shadow-2xl text-xs pointer-events-none select-none">
+        <div className="flex items-center gap-2 mb-1">
+          <span className={`w-2.5 h-2.5 rounded-full ${isPresent ? 'bg-emerald-500' : 'bg-red-500'}`} />
+          <span className="font-semibold text-white text-sm">{entry.name} Today</span>
+        </div>
+        <p className="text-gray-300 font-medium">
+          <span className="text-white font-bold">{entry.value}</span> student{entry.value !== 1 ? 's' : ''} ({pct}%)
+        </p>
+        <p className="text-[11px] text-gray-400 mt-0.5">
+          {isPresent ? `${entry.value} of ${total} attended today` : `${entry.value} of ${total} not attended`}
+        </p>
+      </div>
+    );
+  }
+  return null;
+};
+
+export function AttendanceChart({ data, todayPresent, todayAbsent, totalStudents: _totalStudents }: AttendanceChartProps) {
   const pieData = [
     { name: 'Present', value: todayPresent, color: '#10b981' },
     { name: 'Absent', value: todayAbsent, color: '#ef4444' },
@@ -24,63 +103,6 @@ export function AttendanceChart({ data, todayPresent, todayAbsent, totalStudents
   const total = todayPresent + todayAbsent;
   const presentRate = total > 0 ? Math.round((todayPresent / total) * 100) : 0;
   const absentRate = total > 0 ? Math.round((todayAbsent / total) * 100) : 0;
-
-  // Custom tooltip for 7-Day Trend Bar Chart
-  const CustomBarTooltip = ({ active, payload, label }: any) => {
-    if (active && payload && payload.length) {
-      const present = payload.find((p: any) => p.dataKey === 'present')?.value || 0;
-      const absent = payload.find((p: any) => p.dataKey === 'absent')?.value || 0;
-      const totalDay = present + absent;
-      const rate = totalDay > 0 ? Math.round((present / totalDay) * 100) : 0;
-      return (
-        <div className="bg-slate-900/95 backdrop-blur-md border border-slate-800 rounded-xl p-3 shadow-2xl text-xs space-y-1.5 pointer-events-none select-none min-w-[130px]">
-          <div className="font-bold text-white text-xs border-b border-slate-800 pb-1 flex items-center justify-between gap-4">
-            <span>{label}</span>
-            <span className="text-[10px] text-emerald-400 font-semibold">{rate}% Present</span>
-          </div>
-          <div className="flex items-center justify-between gap-4 text-slate-300">
-            <span className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-500" />
-              <span>Present:</span>
-            </span>
-            <span className="font-bold text-emerald-400">{present}</span>
-          </div>
-          <div className="flex items-center justify-between gap-4 text-slate-300">
-            <span className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-rose-500" />
-              <span>Absent:</span>
-            </span>
-            <span className="font-bold text-rose-400">{absent}</span>
-          </div>
-        </div>
-      );
-    }
-    return null;
-  };
-
-  // Custom tooltip for Pie Chart showing percentage and count
-  const CustomPieTooltip = ({ active, payload }: any) => {
-    if (active && payload && payload.length) {
-      const entry = payload[0];
-      const isPresent = entry.name === 'Present';
-      const pct = isPresent ? presentRate : absentRate;
-      return (
-        <div className="bg-slate-900/95 backdrop-blur-md border border-slate-800 rounded-xl p-3 shadow-2xl text-xs pointer-events-none select-none">
-          <div className="flex items-center gap-2 mb-1">
-            <span className={`w-2.5 h-2.5 rounded-full ${isPresent ? 'bg-emerald-500' : 'bg-red-500'}`} />
-            <span className="font-semibold text-white text-sm">{entry.name} Today</span>
-          </div>
-          <p className="text-gray-300 font-medium">
-            <span className="text-white font-bold">{entry.value}</span> student{entry.value !== 1 ? 's' : ''} ({pct}%)
-          </p>
-          <p className="text-[11px] text-gray-400 mt-0.5">
-            {isPresent ? `${entry.value} of ${total} attended today` : `${entry.value} of ${total} not attended`}
-          </p>
-        </div>
-      );
-    }
-    return null;
-  };
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8 min-w-0 w-full select-none outline-none focus:outline-none">
@@ -137,7 +159,7 @@ export function AttendanceChart({ data, todayPresent, todayAbsent, totalStudents
                   <Cell key={`cell-${index}`} fill={entry.color} />
                 ))}
               </Pie>
-              <Tooltip content={<CustomPieTooltip />} />
+              <Tooltip content={<CustomPieTooltip presentRate={presentRate} absentRate={absentRate} total={total} />} />
               <Legend 
                 verticalAlign="bottom" 
                 height={36}

@@ -73,9 +73,8 @@ export async function POST(
     }
 
     // 2. Notify AI backend to immediately invalidate in-memory stream and session cache
-    let backendInvalidationResult: any = null;
     try {
-      const backendRes = await fetchBackend(`/api/students/${encodeURIComponent(id)}/revoke-biometrics`, {
+      await fetchBackend(`/api/students/${encodeURIComponent(id)}/revoke-biometrics`, {
         method: 'POST',
         headers: {
           'X-Actor-Id': session.username || session.userId || '',
@@ -83,10 +82,7 @@ export async function POST(
           'X-Actor-Role': session.role || 'Admin',
         },
       });
-      if (backendRes.ok) {
-        backendInvalidationResult = await backendRes.json().catch(() => null);
-      }
-    } catch (bErr) {
+    } catch (bErr: unknown) {
       console.warn('[WARN] AI backend unreachable for immediate stream cache invalidation:', bErr);
     }
 
@@ -111,10 +107,11 @@ export async function POST(
       success: true,
       message: `Facial biometric template for ${student.full_name} (${student.student_roll}) has been permanently erased and consent revoked.`,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Error revoking biometrics:', err);
+    const message = err instanceof Error ? err.message : 'Failed to revoke biometric data.';
     return NextResponse.json(
-      { success: false, error: err.message || 'Failed to revoke biometric data.' },
+      { success: false, error: message },
       { status: 500 }
     );
   }

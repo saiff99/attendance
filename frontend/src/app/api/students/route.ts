@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
       enrolledQuery,
     ]);
 
-    let data: any[] | null = studentsRes.data;
+    let data: Record<string, unknown>[] | null = (studentsRes.data || null) as Record<string, unknown>[] | null;
     if (studentsRes.error && (studentsRes.error.code === '42703' || studentsRes.error.message?.includes('biometric_consent'))) {
       let fallbackQuery = supabaseServer
         .from('students')
@@ -61,31 +61,32 @@ export async function GET(request: NextRequest) {
       }
       const fallback = await fallbackQuery.order('student_roll', { ascending: true });
       if (fallback.error) throw fallback.error;
-      data = fallback.data;
+      data = (fallback.data || null) as Record<string, unknown>[] | null;
     } else if (studentsRes.error) {
       throw studentsRes.error;
     }
 
-    const enrolledIds = new Set((enrolledRes.data || []).map((e: any) => e.id));
+    const enrolledIds = new Set((enrolledRes.data || []).map((e: { id: string }) => e.id));
 
     let rawStudents = data || [];
     if (!includeArchived) {
-      rawStudents = rawStudents.filter((s: any) => s.is_active !== false && !String(s.academic_year || '').startsWith('[ARCHIVED]'));
+      rawStudents = rawStudents.filter((s: Record<string, unknown>) => s.is_active !== false && !String(s.academic_year || '').startsWith('[ARCHIVED]'));
     }
     if (cohort && cohort !== 'All') {
-      rawStudents = rawStudents.filter(s => isCohortMatching(cohort, s.academic_year));
+      rawStudents = rawStudents.filter(s => isCohortMatching(cohort, s.academic_year as string | undefined));
     }
 
-    const students = rawStudents.map((s: any) => {
+    const students = rawStudents.map((s: Record<string, unknown>) => {
       // DPDP Act 2023 & Zero-Trust: Biometric template exists AND explicit biometric_consent is not false
-      const hasEnrolledVector = enrolledIds.has(s.id);
+      const studentId = String(s.id || '');
+      const hasEnrolledVector = enrolledIds.has(studentId);
       const hasConsent = s.biometric_consent !== false;
       const hasFace = Boolean(hasEnrolledVector && hasConsent);
 
       const phone = getParentPhone(s) || null;
 
       return {
-        id: s.id,
+        id: studentId,
         student_roll: s.student_roll,
         full_name: s.full_name,
         email: s.email,
@@ -101,9 +102,10 @@ export async function GET(request: NextRequest) {
       success: true,
       students,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : String(err);
     console.error('Error fetching students via API:', err);
-    return NextResponse.json({ success: false, error: err.message || 'Failed to fetch students' }, { status: 500 });
+    return NextResponse.json({ success: false, error: errMsg }, { status: 500 });
   }
 }
 
@@ -156,7 +158,7 @@ export async function POST(request: NextRequest) {
 
       // Seamlessly reactivate and restore archived student
       const encodedEmail = encodeStudentEmail(cleanRoll, cleanPhone || undefined);
-      const updatePayload: any = {
+      const updatePayload: Record<string, unknown> = {
         full_name: cleanName,
         academic_year: cleanYear,
         email: encodedEmail,
@@ -170,15 +172,16 @@ export async function POST(request: NextRequest) {
       };
       if (cleanPhone) updatePayload.parent_phone = cleanPhone;
 
-      let { data: reactivated, error: reactivateErr } = await supabaseServer
+      const { data: reactivatedData, error: reactivateErr } = await supabaseServer
         .from('students')
         .update(updatePayload)
         .eq('id', existingCheck.id)
         .select(selectFields)
         .single();
+      let reactivated = reactivatedData;
 
       if (reactivateErr && (reactivateErr.code === 'PGRST204' || reactivateErr.message?.includes('parent_phone') || reactivateErr.message?.includes('biometric_consent') || reactivateErr.message?.includes('is_active'))) {
-        const fallbackPayload: any = {
+        const fallbackPayload: Record<string, unknown> = {
           full_name: cleanName,
           academic_year: cleanYear,
           email: encodedEmail,
@@ -236,14 +239,14 @@ export async function POST(request: NextRequest) {
     // Persistently encode parent phone into student.local email
     const encodedEmail = encodeStudentEmail(cleanRoll, cleanPhone || undefined);
 
-    const basePayload: any = {
+    const basePayload: Record<string, unknown> = {
       student_roll: cleanRoll,
       full_name: cleanName,
       email: encodedEmail,
       academic_year: cleanYear,
     };
 
-    const fullPayload: any = {
+    const fullPayload: Record<string, unknown> = {
       ...basePayload,
       face_encoding: cleanPhone ? { parent_phone: cleanPhone } : null,
       biometric_consent: false,
@@ -251,14 +254,17 @@ export async function POST(request: NextRequest) {
     };
     if (cleanPhone) fullPayload.parent_phone = cleanPhone;
 
-    let { data, error } = await supabaseServer
+    const initialInsert = await supabaseServer
       .from('students')
       .insert([fullPayload])
       .select(selectFields)
       .single();
 
+    let data = initialInsert.data;
+    const error = initialInsert.error;
+
     if (error && (error.code === 'PGRST204' || error.message?.includes('parent_phone') || error.message?.includes('biometric_consent'))) {
-      const fallbackPayload: any = {
+      const fallbackPayload: Record<string, unknown> = {
         ...basePayload,
         face_encoding: cleanPhone ? { parent_phone: cleanPhone } : null,
       };
@@ -304,8 +310,9 @@ export async function POST(request: NextRequest) {
       success: true,
       student: sanitizedStudent,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : String(err);
     console.error('Error creating student via API:', err);
-    return NextResponse.json({ success: false, error: err.message || 'Failed to create student' }, { status: 500 });
+    return NextResponse.json({ success: false, error: errMsg }, { status: 500 });
   }
 }

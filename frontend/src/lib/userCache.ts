@@ -20,7 +20,7 @@ export async function getCachedUserMap(): Promise<Record<string, string>> {
       .from('app_users')
       .select('username, full_name');
     if (appUsers) {
-      appUsers.forEach((u: any) => {
+      appUsers.forEach((u: { username?: string | null; full_name?: string | null }) => {
         if (u.username && u.full_name) {
           userMap[u.username.toLowerCase()] = u.full_name;
         }
@@ -28,7 +28,7 @@ export async function getCachedUserMap(): Promise<Record<string, string>> {
     }
     cachedUserMap = userMap;
     userMapCachedAt = now;
-  } catch (e) {
+  } catch {
     if (cachedUserMap) return cachedUserMap;
   }
   return userMap;

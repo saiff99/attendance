@@ -273,7 +273,7 @@ export async function fetchBackend(path: string, options: RequestInit = {}): Pro
     verifiedTargets.push('http://127.0.0.1:8000');
   }
 
-  let lastError: any = null;
+  let lastError: unknown = null;
 
   for (const baseUrl of verifiedTargets) {
     try {
@@ -293,8 +293,9 @@ export async function fetchBackend(path: string, options: RequestInit = {}): Pro
 
       let targetSignal: AbortSignal = controller.signal;
       if (options.signal) {
-        if (typeof (AbortSignal as any).any === 'function') {
-          targetSignal = (AbortSignal as any).any([options.signal, controller.signal]);
+        const signalAny = (AbortSignal as unknown as { any?: (signals: AbortSignal[]) => AbortSignal }).any;
+        if (typeof signalAny === 'function') {
+          targetSignal = signalAny([options.signal, controller.signal]);
         } else if (options.signal.aborted) {
           throw new Error('Request aborted');
         }
@@ -325,10 +326,11 @@ export async function fetchBackend(path: string, options: RequestInit = {}): Pro
 
       // Legitimate application level response (400 Bad Request, 401 Unauthorized, 404 Not Found, 422, etc.)
       return res;
-    } catch (err: any) {
+    } catch (err: unknown) {
       lastError = err;
       if (!isHealthCheck) {
-        console.warn(`[fetchBackend] Connection to ${baseUrl}${normalizedPath} failed:`, err.message);
+        const errMsg = err instanceof Error ? err.message : String(err);
+        console.warn(`[fetchBackend] Connection to ${baseUrl}${normalizedPath} failed:`, errMsg);
       }
     }
   }

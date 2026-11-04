@@ -7,10 +7,14 @@ import { logAuditEvent } from '@/lib/auditLog';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120; // 2 minutes for large datasets
 
+type FilterableQuery = {
+  not: (column: string, operator: string, value: unknown) => FilterableQuery;
+};
+
 async function fetchAllRows<T = Record<string, unknown>>(
   tableName: string,
   selectFields: string,
-  filterFn?: (query: any) => any
+  filterFn?: (query: FilterableQuery) => FilterableQuery
 ): Promise<T[]> {
   const allRows: T[] = [];
   let from = 0;
@@ -19,7 +23,7 @@ async function fetchAllRows<T = Record<string, unknown>>(
   while (true) {
     let query = supabaseServer.from(tableName).select(selectFields).range(from, from + step - 1);
     if (filterFn) {
-      query = filterFn(query);
+      query = filterFn(query as unknown as FilterableQuery) as unknown as typeof query;
     }
     const { data, error } = await query;
     if (error) {
@@ -136,10 +140,11 @@ export async function GET(request: NextRequest) {
         'Cache-Control': 'no-store, no-cache, must-revalidate',
       },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errMsg = error instanceof Error ? error.message : String(error);
     console.error('[Database Backup Error]:', error);
     return NextResponse.json(
-      { error: error.message || 'Failed to generate database backup' },
+      { error: errMsg || 'Failed to generate database backup' },
       { status: 500 }
     );
   }

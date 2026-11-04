@@ -1,12 +1,11 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   GraduationCap, BookOpen, CheckCircle2, AlertTriangle, XCircle,
-  Calendar, Clock, MapPin, Smartphone, Shield, LogOut, KeyRound,
-  RefreshCw, ChevronRight, ChevronDown, User, Sparkles, Check, ArrowUpRight, Camera, ShieldCheck,
+  Calendar, Clock, Smartphone, LogOut, KeyRound,
+  RefreshCw, ChevronDown, User, Sparkles, Check, ArrowUpRight, Camera, ShieldCheck,
   Eye, EyeOff, Bell, WifiOff
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
@@ -79,7 +78,6 @@ function formatSessionTime(isoString?: string | null): string {
 
 export default function StudentPortalPage() {
   const { user, logout } = useAuth();
-  const router = useRouter();
 
   const [data, setData] = useState<PortalData | null>(null);
   const [selectedRoll, setSelectedRoll] = useState<string>("");
@@ -108,7 +106,7 @@ export default function StudentPortalPage() {
   // Sync mounting and unmounting for smooth spring exit transition
   useEffect(() => {
     if (isProfileMenuOpen) {
-      setShouldRenderProfileMenu(true);
+      queueMicrotask(() => setShouldRenderProfileMenu(true));
     } else if (shouldRenderProfileMenu) {
       const timer = setTimeout(() => {
         setShouldRenderProfileMenu(false);
@@ -141,23 +139,21 @@ export default function StudentPortalPage() {
   }, [isProfileMenuOpen]);
 
   // PWA Offline Status & Push Notification States
-  const [isOnline, setIsOnline] = useState<boolean>(true);
-  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | "unsupported">("default");
+  const [isOnline, setIsOnline] = useState<boolean>(() => (typeof window !== "undefined" ? navigator.onLine : true));
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | "unsupported">(() => {
+    if (typeof window !== "undefined") {
+      return "Notification" in window ? Notification.permission : "unsupported";
+    }
+    return "default";
+  });
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      setIsOnline(navigator.onLine);
       const handleOnline = () => setIsOnline(true);
       const handleOffline = () => setIsOnline(false);
 
       window.addEventListener("online", handleOnline);
       window.addEventListener("offline", handleOffline);
-
-      if ("Notification" in window) {
-        setNotificationPermission(Notification.permission);
-      } else {
-        setNotificationPermission("unsupported");
-      }
 
       return () => {
         window.removeEventListener("online", handleOnline);
@@ -202,9 +198,10 @@ export default function StudentPortalPage() {
       if (json.student?.studentRoll) {
         setSelectedRoll((prev) => prev || json.student.studentRoll);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (!isSilent) {
-        setError(err.message || "Failed to load attendance portal.");
+        const msg = err instanceof Error ? err.message : "Failed to load attendance portal.";
+        setError(msg);
       }
     } finally {
       if (!isSilent) {
@@ -219,7 +216,15 @@ export default function StudentPortalPage() {
 
   // 1. Initial mount fetch: executes strictly once without re-triggering on roll state change
   useEffect(() => {
-    fetchPortalData();
+    let isMounted = true;
+    void (async () => {
+      if (isMounted) {
+        await fetchPortalData();
+      }
+    })();
+    return () => {
+      isMounted = false;
+    };
   }, [fetchPortalData]);
 
   // Keep a stable ref of selectedRoll for window focus events without causing re-renders
@@ -326,8 +331,9 @@ export default function StudentPortalPage() {
         setShowConfirmPin(false);
         setPinMessage(null);
       }, 700);
-    } catch (err: any) {
-      setPinMessage({ type: "error", text: err.message || "Could not update PIN." });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Could not update PIN.";
+      setPinMessage({ type: "error", text: msg });
     } finally {
       setPinLoading(false);
     }

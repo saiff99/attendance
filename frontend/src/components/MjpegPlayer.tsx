@@ -26,10 +26,10 @@ export function MjpegPlayer({
 
     let isCancelled = false;
     const abortController = new AbortController();
-    setError(false);
 
     const fetchStream = async () => {
       try {
+        setError(false);
         const response = await fetch(url, {
           headers: {
             'ngrok-skip-browser-warning': 'true'
@@ -103,9 +103,10 @@ export function MjpegPlayer({
             buffer = new Uint8Array();
           }
         }
-      } catch (err: any) {
-        if (err.name !== 'AbortError' && !isCancelled) {
-          console.warn("MJPEG Stream glitch, auto-reconnecting:", err.message);
+      } catch (err: unknown) {
+        const errorObj = err as Error;
+        if (errorObj?.name !== 'AbortError' && !isCancelled) {
+          console.warn("MJPEG Stream glitch, auto-reconnecting:", errorObj?.message);
           setError(true);
           // Auto-reconnect after 2.5 seconds
           if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
@@ -159,6 +160,7 @@ export function MjpegPlayer({
   }
 
   return (
+    // eslint-disable-next-line @next/next/no-img-element
     <img
       src={frameSrc}
       className={className}

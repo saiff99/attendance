@@ -115,10 +115,11 @@ export async function POST(
     }
 
     return NextResponse.json(data, { status: res.status });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Face enrollment error:', err);
+    const message = err instanceof Error ? err.message : 'Face enrollment AI engine unreachable. Please ensure your backend is running.';
     return NextResponse.json(
-      { detail: err.message || 'Face enrollment AI engine unreachable. Please ensure your backend is running.' },
+      { detail: message },
       { status: 500 }
     );
   }

@@ -3,6 +3,7 @@ import { fetchBackend } from '@/lib/serverBackend';
 import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/serverAuth';
 import { supabaseServer } from '@/lib/supabaseServer';
 import { logAuditEvent } from '@/lib/auditLog';
+import { Student } from '@/types/database';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -39,7 +40,7 @@ export async function POST(request: NextRequest) {
 
     // 1. Resolve student record from verified session
     let targetStudentId = session.studentId;
-    let student: any = null;
+    let student: (Partial<Student> & { id: string; full_name: string; student_roll: string }) | null = null;
 
     if (targetStudentId) {
       const { data, error } = await supabaseServer
@@ -176,10 +177,11 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json(data, { status: res.status });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('[SELF_ENROLL_FACE ERROR]', err);
+    const message = err instanceof Error ? err.message : 'Face enrollment AI vision engine unreachable. Please ensure the server is active.';
     return NextResponse.json(
-      { detail: err.message || 'Face enrollment AI vision engine unreachable. Please ensure the server is active.' },
+      { detail: message },
       { status: 500 }
     );
   }

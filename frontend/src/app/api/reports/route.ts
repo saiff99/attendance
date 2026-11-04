@@ -84,21 +84,21 @@ export async function GET(request: NextRequest) {
 
     if (!includeArchived) {
       students = students.filter(
-        (s: any) => s.is_active !== false && !String(s.academic_year || '').startsWith('[ARCHIVED]')
+        (s: { is_active?: boolean | null; academic_year?: string | null }) => s.is_active !== false && !String(s.academic_year || '').startsWith('[ARCHIVED]')
       );
     }
 
     if (cohort && cohort.toLowerCase() !== 'all') {
-      allSessions = allSessions.filter((sess: any) =>
+      allSessions = allSessions.filter((sess: { target_academic_year?: string | null }) =>
         isCohortMatching(cohort, sess.target_academic_year)
       );
-      students = students.filter((s: any) =>
+      students = students.filter((s: { academic_year?: string | null }) =>
         isCohortMatching(cohort, s.academic_year)
       );
     }
 
     // 5. Fetch Attendance with Safe Chunked Pagination (prevents Supabase 1,000-row silent truncation)
-    let attendance: any[] = [];
+    const attendance: Array<{ id?: string; session_id?: string; student_id?: string; status?: string; recorded_at?: string }> = [];
     const CHUNK_SIZE = 1000;
     const MAX_ATTENDANCE_LIMIT = 50000;
     let from = 0;
@@ -112,7 +112,7 @@ export async function GET(request: NextRequest) {
       from += CHUNK_SIZE;
     }
 
-    const activeSubjects = (allSubjects || []).filter((s: any) => s.is_active !== false);
+    const activeSubjects = (allSubjects || []).filter((s: { is_active?: boolean | null }) => s.is_active !== false);
 
     return NextResponse.json({
       success: true,
@@ -129,10 +129,11 @@ export async function GET(request: NextRequest) {
         cohort: cohort || 'all',
       },
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : String(err);
     console.error('Error fetching reports data:', err);
     return NextResponse.json(
-      { success: false, error: err.message || 'Failed to fetch reports data' },
+      { success: false, error: errMsg },
       { status: 500 }
     );
   }

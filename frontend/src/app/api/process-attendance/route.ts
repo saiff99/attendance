@@ -98,10 +98,11 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json(data, { status: res.status });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Failed to process classroom attendance:', err);
+    const message = err instanceof Error ? err.message : 'Face processing service unavailable.';
     return NextResponse.json(
-      { success: false, detail: err.message || 'Face processing service unavailable.', error: err.message || 'Face processing service unavailable.' },
+      { success: false, detail: message, error: message },
       { status: 500 }
     );
   }

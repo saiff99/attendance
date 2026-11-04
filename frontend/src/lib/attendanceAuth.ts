@@ -163,8 +163,8 @@ export async function isFacultyAuthorizedForSession(
 
   if (auditRecord) {
     const actor = (auditRecord.actor_id || '').toLowerCase();
-    const details = (auditRecord.details || {}) as Record<string, any>;
-    const actorName = (details.actor_name || details.instructor || '').toLowerCase();
+    const details = (auditRecord.details || {}) as Record<string, unknown>;
+    const actorName = String(details.actor_name || details.instructor || '').toLowerCase();
 
     if (
       (userUsername && actor === userUsername) ||
@@ -237,8 +237,8 @@ export async function filterSessionsForFaculty<
       const allowedTargetIds = new Set<string>();
       for (const rec of auditRecords) {
         const actor = (rec.actor_id || '').toLowerCase();
-        const details = (rec.details || {}) as Record<string, any>;
-        const actorName = (details.actor_name || details.instructor || '').toLowerCase();
+        const details = (rec.details || {}) as Record<string, unknown>;
+        const actorName = String(details.actor_name || details.instructor || '').toLowerCase();
 
         if (
           (u && actor === u) ||

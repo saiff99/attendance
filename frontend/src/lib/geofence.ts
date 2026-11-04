@@ -209,7 +209,7 @@ export function getCalibratedHighPrecisionGPS(
           setTimeout(finish, 200);
         }
       },
-      (error) => {
+      (_error) => {
         // If high accuracy watchPosition reports POSITION_UNAVAILABLE or error, fallback to standard accuracy
         if (samples.length === 0) {
           clearTimeout(timer);
@@ -245,7 +245,7 @@ export function getUserCoordinates(
           accuracy: position.coords.accuracy,
         });
       },
-      (error) => {
+      (_error) => {
         // If high accuracy fails, gracefully try standard accuracy
         navigator.geolocation.getCurrentPosition(
           (pos) => {
@@ -308,7 +308,7 @@ export function decodeSessionMetadata(rawTopicOrInstructor: string): {
   if (byMatch) {
     try {
       facultyUsername = decodeURIComponent(byMatch[1]);
-    } catch (e) {
+    } catch {
       facultyUsername = byMatch[1];
     }
   }
@@ -332,7 +332,7 @@ export function decodeSessionMetadata(rawTopicOrInstructor: string): {
   if (gpsMatch && gpsMatch[5]) {
     try {
       campusName = decodeURIComponent(gpsMatch[5]);
-    } catch (e) {
+    } catch {
       campusName = gpsMatch[5];
     }
   }
@@ -359,7 +359,7 @@ export function saveLocalGeofence(config: CampusGeofenceConfig): void {
   if (typeof window !== "undefined") {
     try {
       localStorage.setItem("campus_geofence_config", JSON.stringify(config));
-    } catch (e) { }
+    } catch { }
   }
 }
 
@@ -373,7 +373,7 @@ export function getLocalGeofence(): CampusGeofenceConfig {
       if (stored) {
         return JSON.parse(stored);
       }
-    } catch (e) { }
+    } catch { }
   }
   return DEFAULT_GEOFENCE_CONFIG;
 }

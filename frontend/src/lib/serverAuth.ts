@@ -122,14 +122,22 @@ export async function verifySessionToken(token: string): Promise<SessionPayload 
   }
 }
 
+import { NextRequest } from 'next/server';
+
+export interface AuthErrorResponse {
+  status: number;
+  body: { success: false; error: string };
+}
+
 /**
  * Extract and verify SessionPayload directly from incoming Request or NextRequest.
  */
-export async function getSessionFromRequest(request: Request | any): Promise<SessionPayload | null> {
+export async function getSessionFromRequest(request: Request | NextRequest): Promise<SessionPayload | null> {
   try {
     // 1. If NextRequest with cookies API
-    if (request && typeof request.cookies?.get === 'function') {
-      const cookieVal = request.cookies.get(SESSION_COOKIE_NAME)?.value;
+    const reqWithCookies = request as NextRequest;
+    if (reqWithCookies && typeof reqWithCookies.cookies?.get === 'function') {
+      const cookieVal = reqWithCookies.cookies.get(SESSION_COOKIE_NAME)?.value;
       if (cookieVal) return verifySessionToken(cookieVal);
     }
 
@@ -151,9 +159,9 @@ export async function getSessionFromRequest(request: Request | any): Promise<Ses
  * Enforce role authorization for API routes.
  */
 export async function requireRoles(
-  request: Request | any,
+  request: Request | NextRequest,
   allowedRoles: ('Super Admin' | 'Admin' | 'Faculty' | 'Student')[]
-): Promise<{ user: SessionPayload; errorResponse?: never } | { user?: never; errorResponse: any }> {
+): Promise<{ user: SessionPayload; errorResponse?: never } | { user?: never; errorResponse: AuthErrorResponse }> {
   const session = await getSessionFromRequest(request);
   if (!session) {
     return {

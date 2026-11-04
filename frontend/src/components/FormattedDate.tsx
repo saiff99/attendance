@@ -12,64 +12,69 @@ export function FormattedDate({ date, format = "dateTime", className }: Formatte
   const [formattedText, setFormattedText] = useState<string>("");
 
   useEffect(() => {
-    if (!date) {
-      setFormattedText("N/A");
-      return;
-    }
+    let isMounted = true;
+    const formatString = () => {
+      if (!date) return "N/A";
+      try {
+        const d = typeof date === "string" ? new Date(date) : date;
+        if (isNaN(d.getTime())) return String(date);
 
-    try {
-      const d = typeof date === "string" ? new Date(date) : date;
-      if (isNaN(d.getTime())) {
-        setFormattedText(String(date));
-        return;
-      }
-
-      if (format === "time") {
-        setFormattedText(
-          d.toLocaleTimeString([], {
+        if (format === "time") {
+          return d.toLocaleTimeString([], {
             hour: "numeric",
             minute: "2-digit",
             hour12: true,
-          })
-        );
-      } else if (format === "date") {
-        setFormattedText(
-          d.toLocaleDateString([], {
+          });
+        } else if (format === "date") {
+          return d.toLocaleDateString([], {
             year: "numeric",
             month: "short",
             day: "numeric",
-          })
-        );
-      } else {
-        // "dateTime" - user's exact local date & time
-        setFormattedText(
-          d.toLocaleString([], {
+          });
+        } else {
+          return d.toLocaleString([], {
             year: "numeric",
             month: "short",
             day: "numeric",
             hour: "numeric",
             minute: "2-digit",
             hour12: true,
-          })
-        );
+          });
+        }
+      } catch {
+        return String(date);
       }
-    } catch {
-      setFormattedText(String(date));
-    }
+    };
+
+    const text = formatString();
+    queueMicrotask(() => {
+      if (isMounted) {
+        setFormattedText(text);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
   }, [date, format]);
 
   if (!formattedText) {
     if (!date) return <span className={className}>-</span>;
+    let fallback = String(date);
     try {
       const d = typeof date === "string" ? new Date(date) : date;
-      return (
-        <span suppressHydrationWarning className={className}>
-          {d.toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}
-        </span>
-      );
+      if (!isNaN(d.getTime())) {
+        fallback = d.toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
+      }
     } catch {
-      return <span className={className}>{String(date)}</span>;
+      // fallback to String(date)
     }
+
+    return (
+      <span suppressHydrationWarning className={className}>
+        {fallback}
+      </span>
+    );
   }
 
   return <span className={className}>{formattedText}</span>;

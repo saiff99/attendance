@@ -21,7 +21,8 @@ export async function POST(request: Request) {
     });
     const data = await res.json();
     return NextResponse.json(data, { status: res.status });
-  } catch (err: any) {
-    return NextResponse.json({ detail: err.message || 'Error uploading photo' }, { status: 500 });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Error uploading photo';
+    return NextResponse.json({ detail: message }, { status: 500 });
   }
 }

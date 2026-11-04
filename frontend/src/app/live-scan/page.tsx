@@ -32,6 +32,7 @@ import {
 } from "@/lib/geofence";
 import { isCohortMatching } from "@/lib/cohort";
 import { AcademicSubject, getCachedSubjects, saveCachedSubjects, getSubjectsForCohort } from "@/lib/academicSubjects";
+import type { Session } from "@/types/database";
 
 interface CameraMeta {
   index: number;
@@ -52,16 +53,28 @@ const DEFAULT_CAMERAS: CameraMeta[] = [
   { index: 5, id: "cam-6", name: "2R", row: "2nd Row (Back)", position: "Right", ip: "172.16.7.9" },
 ];
 
+interface AttendanceLogItem {
+  id: string;
+  student_id: string;
+  session_id: string;
+  status: string;
+  capture_mode: string;
+  recorded_at: string;
+  confidence_score?: number;
+  students?: {
+    full_name?: string;
+    student_roll?: string | number;
+  } | null;
+}
+
 export default function LiveScan() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<"grid" | "cctv" | "photo" | "manual">("grid");
 
   // Attendance & Manual Override State
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [logs, setLogs] = useState<any[]>([]);
+  const [logs, setLogs] = useState<AttendanceLogItem[]>([]);
   const [sidebarTab, setSidebarTab] = useState<"present" | "absent">("present");
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [enrolledStudents, setEnrolledStudents] = useState<any[]>([]);
+  const [enrolledStudents, setEnrolledStudents] = useState<Record<string, unknown>[]>([]);
   const [markingStudentId, setMarkingStudentId] = useState<string | null>(null);
   const [undoingLogId, setUndoingLogId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -79,8 +92,7 @@ export default function LiveScan() {
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
   // Session State
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [activeSession, setActiveSession] = useState<any>(null);
+  const [activeSession, setActiveSession] = useState<Session | null>(null);
   const [isLoadingSession, setIsLoadingSession] = useState(true);
   const [setupData, setSetupData] = useState({
     subject: "Anatomy",
@@ -455,7 +467,8 @@ export default function LiveScan() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `Attendance_${activeSession.class_name.replace(/\s+/g, '_')}_${localDateStr}.csv`);
+    const classNameSlug = activeSession?.class_name ? activeSession.class_name.replace(/\s+/g, '_') : 'Session';
+    link.setAttribute("download", `Attendance_${classNameSlug}_${localDateStr}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

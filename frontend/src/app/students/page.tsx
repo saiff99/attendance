@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Search, UserPlus, FileDown, MoreHorizontal, X, UploadCloud, Loader2, Edit2, Trash2, Folder, ArrowLeft, Users, FileSpreadsheet, ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle, AlertCircle, Lock, KeyRound, CheckCircle2, UserX, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
 // Student Directory
@@ -169,8 +169,8 @@ export default function StudentDirectory() {
     setIsFaceModalOpen(true);
   };
 
-  const fetchStudents = async (forceLoading = false) => {
-    if (forceLoading || (!students.length && !memoryStudentsCache)) {
+  const fetchStudents = useCallback(async (forceLoading = false) => {
+    if (forceLoading || (!memoryStudentsCache)) {
       setLoading(true);
     }
     try {
@@ -190,11 +190,19 @@ export default function StudentDirectory() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    fetchStudents();
-  }, []);
+    let isMounted = true;
+    void (async () => {
+      if (isMounted) {
+        await fetchStudents();
+      }
+    })();
+    return () => {
+      isMounted = false;
+    };
+  }, [fetchStudents]);
 
   const handleSaveStudent = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -258,9 +266,10 @@ export default function StudentDirectory() {
 
       closeModal();
       fetchStudents(); // Refresh the list
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error saving student:', error);
-      setFormError(error.message || 'Failed to save student.');
+      const msg = error instanceof Error ? error.message : 'Failed to save student.';
+      setFormError(msg);
     } finally {
       setIsSubmitting(false);
     }
@@ -299,9 +308,10 @@ export default function StudentDirectory() {
       setResetPinTempPin(data.tempPin || null);
       setResetPinSuccess(data.message || `Temporary activation PIN generated successfully.`);
       fetchStudents();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error resetting student PIN:", err);
-      setResetPinError(err.message || "Failed to reset PIN.");
+      const msg = err instanceof Error ? err.message : "Failed to reset PIN.";
+      setResetPinError(msg);
     } finally {
       setIsResettingPin(false);
     }
@@ -326,9 +336,10 @@ export default function StudentDirectory() {
         setRevokeBiometricSuccess(null);
         setRevokeBiometricError(null);
       }, 1500);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error revoking biometrics:", err);
-      setRevokeBiometricError(err.message || "Failed to revoke biometrics.");
+      const msg = err instanceof Error ? err.message : "Failed to revoke biometrics.";
+      setRevokeBiometricError(msg);
     } finally {
       setIsRevokingBiometric(false);
     }
@@ -379,11 +390,12 @@ export default function StudentDirectory() {
         setDeleteModalState({ isOpen: false, type: "single" });
         await fetchStudents();
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error during deletion:', error);
+      const msg = error instanceof Error ? error.message : 'Failed to delete. Please try again.';
       setDeleteModalState((prev) => ({
         ...prev,
-        error: error.message || 'Failed to delete. Please try again.',
+        error: msg,
       }));
     } finally {
       setIsDeleting(false);
@@ -439,7 +451,7 @@ export default function StudentDirectory() {
 
   // Reset to page 1 whenever search, view, sub-batch or page size changes
   useEffect(() => {
-    setCurrentPage(1);
+    queueMicrotask(() => setCurrentPage(1));
   }, [searchTerm, activeView, activeSubBatch, pageSize]);
 
   // Derived Pagination slices
@@ -456,10 +468,6 @@ export default function StudentDirectory() {
   const isPageSomeSelected = paginatedStudents.some(s => selectedIds.includes(s.id)) && !isPageAllSelected;
   const isAllFilteredSelected = filteredStudents.length > 0 && filteredStudents.every(s => selectedIds.includes(s.id));
 
-  // Alias for table header checkbox
-  const isAllSelected = isPageAllSelected;
-  const isSomeSelected = isPageSomeSelected;
-
   const handleToggleSelectPage = () => {
     if (isPageAllSelected) {
       const pageIdSet = new Set(paginatedStudents.map(s => s.id));
@@ -470,8 +478,6 @@ export default function StudentDirectory() {
       setSelectedIds(Array.from(newSelected));
     }
   };
-
-  const handleToggleSelectAll = handleToggleSelectPage;
 
   const handleSelectAllFiltered = () => {
     const newSelected = new Set(selectedIds);

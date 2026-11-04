@@ -6,6 +6,7 @@ import { DEFAULT_MBBS_SUBJECTS, getSubjectsForCohort } from '@/lib/academicSubje
 import { getCachedAcademicSubjects } from '@/lib/subjectCache';
 import { getParentPhone } from '@/lib/studentContact';
 import { decodeSessionMetadata } from '@/lib/geofence';
+import { Student } from '@/types/database';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,8 +26,8 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const requestedRoll = searchParams.get('roll');
 
-    let student: any = null;
-    let stuErr: any = null;
+    let student: Student | null = null;
+    let stuErr: { message: string } | null = null;
 
     const portalStudentFields = 'id, student_roll, full_name, email, academic_year, biometric_consent, portal_pin, portal_password_hash, created_at';
 
@@ -372,10 +373,11 @@ export async function GET(request: NextRequest) {
       subjects: subjectRows,
       recentSessions,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Failed to fetch student portal data:', err);
+    const message = err instanceof Error ? err.message : 'Internal server error';
     return NextResponse.json(
-      { success: false, error: err.message || 'Internal server error' },
+      { success: false, error: message },
       { status: 500 }
     );
   }

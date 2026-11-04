@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
-import { useRouter, usePathname } from "next/navigation";
+import { useRouter } from "next/navigation";
 
 export interface AuthUser {
   username: string;
@@ -37,7 +37,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const router = useRouter();
-  const pathname = usePathname();
 
   const refreshSession = useCallback(async () => {
     try {
@@ -64,7 +63,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    refreshSession();
+    let isMounted = true;
+    void (async () => {
+      if (isMounted) {
+        await refreshSession();
+      }
+    })();
+    return () => {
+      isMounted = false;
+    };
   }, [refreshSession]);
 
   const login = async (
@@ -119,7 +126,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(authUser));
 
       return { success: true, user: authUser };
-    } catch (err: any) {
+    } catch {
       return {
         success: false,
         error: "Server connection failed. Please try again.",

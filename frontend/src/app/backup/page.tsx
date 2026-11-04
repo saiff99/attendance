@@ -28,7 +28,7 @@ export default function DatabaseBackupPage() {
     exported_at?: string;
     record_counts?: { students: number; sessions: number; attendance: number; subjects: number };
     checksum?: string;
-    payloadData?: any;
+    payloadData?: Record<string, unknown>;
   } | null>(null);
   const [restoreError, setRestoreError] = useState<string | null>(null);
   const [isRestoring, setIsRestoring] = useState(false);
@@ -64,9 +64,15 @@ export default function DatabaseBackupPage() {
   };
 
   useEffect(() => {
+    let isMounted = true;
     if (currentUser?.role === "Super Admin") {
-      fetchDbStats();
+      void (async () => {
+        if (isMounted) await fetchDbStats();
+      })();
     }
+    return () => {
+      isMounted = false;
+    };
   }, [currentUser?.role]);
 
   const handleDownloadBackup = async () => {
@@ -95,8 +101,9 @@ export default function DatabaseBackupPage() {
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
       setBackupDownloadSuccess(`Backup downloaded successfully as ${filename} (${(blob.size / 1024).toFixed(1)} KB)`);
-    } catch (err: any) {
-      setBackupDownloadError(err.message || "Failed to download backup");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to download backup";
+      setBackupDownloadError(message);
     } finally {
       setIsDownloadingBackup(false);
     }
@@ -160,9 +167,10 @@ export default function DatabaseBackupPage() {
       setRestoreConfirmText("");
       setSelectedBackupFile(null);
       setBackupPreview(null);
-      fetchDbStats();
-    } catch (err: any) {
-      setRestoreError(err.message || "Failed to restore database");
+      void fetchDbStats();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to restore database";
+      setRestoreError(message);
     } finally {
       setIsRestoring(false);
     }

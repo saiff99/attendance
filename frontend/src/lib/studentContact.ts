@@ -44,9 +44,12 @@ export function getParentPhone(student: Partial<Student> | null | undefined): st
   }
 
   // 3. Face encoding metadata dictionary if present
-  const fe = student.face_encoding as any;
-  if (fe && typeof fe === "object" && !Array.isArray(fe) && fe.parent_phone) {
-    return cleanPhoneNumber(fe.parent_phone);
+  const fe = student.face_encoding;
+  if (fe && typeof fe === "object" && !Array.isArray(fe) && "parent_phone" in fe) {
+    const parentPhone = (fe as Record<string, unknown>).parent_phone;
+    if (typeof parentPhone === "string") {
+      return cleanPhoneNumber(parentPhone);
+    }
   }
 
   return "";

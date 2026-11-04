@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { X, UploadCloud, FileSpreadsheet, Download, CheckCircle2, AlertCircle, Loader2, ArrowRight } from "lucide-react";
+import { X, UploadCloud, FileSpreadsheet, Download, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
 import ExcelJS from "exceljs";
 // Bulk Import Modal Component
-import { encodeStudentEmail, cleanPhoneNumber } from "@/lib/studentContact";
+import { cleanPhoneNumber } from "@/lib/studentContact";
 
 interface BulkImportModalProps {
   isOpen: boolean;
@@ -30,8 +30,8 @@ export function BulkImportModal({
   onSuccess,
 }: BulkImportModalProps) {
   const [selectedYear, setSelectedYear] = useState<string>(defaultAcademicYear || "1st Year");
-  const [selectedBatch, setSelectedBatch] = useState<string>("All");
-  const [useFileYear, setUseFileYear] = useState<boolean>(!defaultAcademicYear);
+  const selectedBatch = "All";
+  const useFileYear = !defaultAcademicYear;
   const [file, setFile] = useState<File | null>(null);
   const [parsedData, setParsedData] = useState<ParsedStudentRow[]>([]);
   const [isProcessingFile, setIsProcessingFile] = useState(false);
@@ -72,7 +72,7 @@ export function BulkImportModal({
 
     try {
       const buffer = await uploadedFile.arrayBuffer();
-      const rawRows: Record<string, any>[] = [];
+      const rawRows: Record<string, unknown>[] = [];
 
       if (uploadedFile.name.toLowerCase().endsWith(".csv")) {
         const text = new TextDecoder().decode(buffer);
@@ -81,7 +81,7 @@ export function BulkImportModal({
           const headerCols = lines[0].split(",").map(c => c.replace(/^["']|["']$/g, "").trim());
           for (let i = 1; i < lines.length; i++) {
             const cols = lines[i].split(",").map(c => c.replace(/^["']|["']$/g, "").trim());
-            const rowObj: Record<string, any> = {};
+            const rowObj: Record<string, unknown> = {};
             headerCols.forEach((h, idx) => {
               if (h) rowObj[h] = cols[idx] || "";
             });
@@ -101,16 +101,17 @@ export function BulkImportModal({
                 headers[colNumber] = String(cell.value ?? "").trim();
               });
             } else {
-              const rowObj: Record<string, any> = {};
+              const rowObj: Record<string, unknown> = {};
               row.eachCell((cell, colNumber) => {
                 const header = headers[colNumber];
                 if (header) {
-                  let val = cell.value;
+                  let val: unknown = cell.value;
                   if (val && typeof val === "object") {
-                    if ("result" in val) val = (val as any).result;
-                    else if ("text" in val) val = (val as any).text;
-                    else if ("richText" in val && Array.isArray((val as any).richText)) {
-                      val = (val as any).richText.map((t: any) => t.text).join("");
+                    const obj = val as Record<string, unknown>;
+                    if ("result" in obj) val = obj.result;
+                    else if ("text" in obj) val = obj.text;
+                    else if ("richText" in obj && Array.isArray(obj.richText)) {
+                      val = (obj.richText as Array<{ text?: string }>).map((t) => t.text || "").join("");
                     }
                   }
                   rowObj[header] = val !== null && val !== undefined ? String(val).trim() : "";
@@ -191,7 +192,7 @@ export function BulkImportModal({
       .sort((a, b) => (a.student_roll || '').localeCompare(b.student_roll || '', undefined, { numeric: true, sensitivity: 'base' }));
 
       setParsedData(parsed);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error reading file:", err);
       setImportStatus("error");
       setStatusMessage("Failed to parse the file. Please ensure it is a valid .xlsx, .xls, or .csv file.");
@@ -283,10 +284,11 @@ export function BulkImportModal({
         onSuccess();
         handleClose();
       }, 2000);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error during bulk import:", err);
       setImportStatus("error");
-      setStatusMessage(err.message || "Failed to import students. Please check your network and try again.");
+      const message = err instanceof Error ? err.message : "Failed to import students. Please check your network and try again.";
+      setStatusMessage(message);
     } finally {
       setIsImporting(false);
     }

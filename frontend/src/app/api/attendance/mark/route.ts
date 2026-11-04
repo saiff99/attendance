@@ -258,9 +258,10 @@ export async function POST(request: NextRequest) {
       success: true,
       data,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Error marking attendance via API:', err);
-    return NextResponse.json({ success: false, error: err.message || 'Failed to mark attendance' }, { status: 500 });
+    const message = err instanceof Error ? err.message : 'Failed to mark attendance';
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }
 
@@ -415,8 +416,9 @@ export async function DELETE(request: NextRequest) {
       success: true,
       message: 'Attendance record removed successfully.',
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Error undoing attendance via API:', err);
-    return NextResponse.json({ success: false, error: err.message || 'Failed to undo attendance' }, { status: 500 });
+    const message = err instanceof Error ? err.message : 'Failed to undo attendance';
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }

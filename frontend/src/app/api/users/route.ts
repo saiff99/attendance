@@ -4,6 +4,7 @@ import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/serverAuth';
 import { supabaseServer } from '@/lib/supabaseServer';
 import { logAuditEvent } from '@/lib/auditLog';
 import { invalidateUserMapCache } from '@/lib/userCache';
+import { AppUser } from '@/types/database';
 
 export async function GET(request: NextRequest) {
   try {
@@ -47,7 +48,7 @@ export async function GET(request: NextRequest) {
       throw error;
     }
 
-    const mappedUsers = (dbUsers || []).map((u: any) => ({
+    const mappedUsers = (dbUsers || []).map((u: AppUser) => ({
       ...u,
       is_builtin: u.username.toLowerCase() === 'admin' || Boolean(u.is_builtin),
     }));
@@ -57,10 +58,11 @@ export async function GET(request: NextRequest) {
       users: mappedUsers,
       tableReady: true,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[GET /api/users ERROR]', error);
+    const message = error instanceof Error ? error.message : 'Failed to fetch users.';
     return NextResponse.json(
-      { success: false, error: error.message || 'Failed to fetch users.' },
+      { success: false, error: message },
       { status: 500 }
     );
   }
@@ -198,10 +200,11 @@ export async function POST(request: NextRequest) {
       user: newUser,
       message: `Account for ${fullName} (${username}) created successfully.`,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[POST /api/users ERROR]', error);
+    const message = error instanceof Error ? error.message : 'Failed to create user account.';
     return NextResponse.json(
-      { success: false, error: error.message || 'Failed to create user account.' },
+      { success: false, error: message },
       { status: 500 }
     );
   }

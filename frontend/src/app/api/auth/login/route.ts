@@ -14,7 +14,7 @@ export async function POST(request: Request) {
     const simulateStorageFailure = request.headers.get('x-test-simulate-storage-failure') === '1';
     const clientIp = getTrustedClientIp(request);
 
-    let body: any;
+    let body: { username?: string; password?: string; mode?: string } = {};
     try {
       body = await request.json();
     } catch {
@@ -324,7 +324,7 @@ export async function POST(request: Request) {
     });
 
     return response;
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (slot) {
       try {
         await slot.release(false);

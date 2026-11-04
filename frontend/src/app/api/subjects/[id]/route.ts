@@ -27,7 +27,7 @@ export async function PATCH(
     const { id } = await params;
     const body = await request.json();
 
-    const updatePayload: Record<string, any> = {};
+    const updatePayload: Record<string, unknown> = {};
     if (typeof body.name === 'string') updatePayload.name = body.name.trim();
     if (typeof body.code === 'string') updatePayload.code = body.code.trim();
     if (typeof body.academic_year === 'string') updatePayload.academic_year = body.academic_year.trim();
@@ -66,10 +66,11 @@ export async function PATCH(
       success: true,
       subject: data,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Error updating subject:', err);
+    const message = err instanceof Error ? err.message : 'Failed to update subject.';
     return NextResponse.json(
-      { success: false, error: err.message || 'Failed to update subject.' },
+      { success: false, error: message },
       { status: 500 }
     );
   }
@@ -120,10 +121,11 @@ export async function DELETE(
       success: true,
       message: 'Subject deleted successfully.',
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Error deleting subject:', err);
+    const message = err instanceof Error ? err.message : 'Failed to delete subject.';
     return NextResponse.json(
-      { success: false, error: err.message || 'Failed to delete subject.' },
+      { success: false, error: message },
       { status: 500 }
     );
   }

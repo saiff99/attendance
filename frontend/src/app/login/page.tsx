@@ -32,19 +32,22 @@ export default function LoginPage() {
       const urlParams = new URLSearchParams(window.location.search);
       const paramMode = urlParams.get("mode");
       if (paramMode === "student" || paramMode === "admin") {
-        setLoginMode(paramMode);
+        queueMicrotask(() => setLoginMode(paramMode));
         localStorage.setItem(LOGIN_MODE_STORAGE_KEY, paramMode);
         return;
       }
       const savedMode = localStorage.getItem(LOGIN_MODE_STORAGE_KEY);
       if (savedMode === "student" || savedMode === "admin") {
-        setLoginMode(savedMode);
+        queueMicrotask(() => setLoginMode(savedMode));
       }
     }
   }, []);
 
   const handleSwitchMode = (mode: "admin" | "student") => {
     setLoginMode(mode);
+    setError(null);
+    setUsername("");
+    setPassword("");
     if (typeof window !== "undefined") {
       localStorage.setItem(LOGIN_MODE_STORAGE_KEY, mode);
     }
@@ -58,9 +61,6 @@ export default function LoginPage() {
   }, [isAuthenticated, isLoading, user, router]);
 
   useEffect(() => {
-    setError(null);
-    setUsername("");
-    setPassword("");
     // Only auto-focus on desktop with physical keyboard to prevent mobile soft-keyboard popups & layout jumping
     if (typeof window !== "undefined" && window.innerWidth >= 768) {
       const timer = setTimeout(() => {

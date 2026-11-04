@@ -24,7 +24,7 @@ export async function GET() {
         });
       }
     }
-  } catch (e) {
+  } catch {
     // Backend unreachable
   }
 

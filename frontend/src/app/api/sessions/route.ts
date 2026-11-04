@@ -2,6 +2,7 @@ import { NextResponse, NextRequest } from 'next/server';
 import { supabaseServer } from '@/lib/supabaseServer';
 import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/serverAuth';
 import { logAuditEvent } from '@/lib/auditLog';
+import { Session } from '@/types/database';
 
 import { decodeSessionMetadata } from '@/lib/geofence';
 import { getCachedUserMap } from '@/lib/userCache';
@@ -87,7 +88,7 @@ export async function GET(request: NextRequest) {
 
     if (error) throw error;
 
-    let filteredSessions = (data || []).filter((s: any) => {
+    let filteredSessions = (data || []).filter((s: Session) => {
       if (s.class_name?.startsWith('__')) return false;
       if (!includeArchived && (s.is_archived === true || s.class_name?.startsWith('[ARCHIVED]') || s.target_academic_year === 'Archived')) return false;
       return true;
@@ -95,7 +96,7 @@ export async function GET(request: NextRequest) {
     if (session.role === 'Faculty') {
       const u = (session.username || '').toLowerCase();
       const n = (session.name || '').toLowerCase();
-      filteredSessions = filteredSessions.filter((s: any) => {
+      filteredSessions = filteredSessions.filter((s: Session) => {
         const raw = s.instructor_name || '';
         const dec = decodeSessionMetadata(raw);
         const fac = (dec.facultyUsername || '').toLowerCase();
@@ -107,7 +108,7 @@ export async function GET(request: NextRequest) {
     // Use cached in-memory user map (5-min TTL) to eliminate redundant app_users table queries
     const userMap = await getCachedUserMap();
 
-    const enrichedSessions = filteredSessions.map((s: any) => {
+    const enrichedSessions = filteredSessions.map((s: Session) => {
       const dec = decodeSessionMetadata(s.instructor_name || '');
       const facUser = (dec.facultyUsername || '').toLowerCase();
       const rawUser = dec.facultyUsername || '';
@@ -127,9 +128,10 @@ export async function GET(request: NextRequest) {
         total: count ?? enrichedSessions.length,
       },
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Error fetching sessions:', err);
-    return NextResponse.json({ success: false, error: err.message || 'Failed to fetch sessions' }, { status: 500 });
+    const message = err instanceof Error ? err.message : 'Failed to fetch sessions';
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }
 
@@ -196,8 +198,9 @@ export async function POST(request: NextRequest) {
       success: true,
       session: data,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Error creating session:', err);
-    return NextResponse.json({ success: false, error: err.message || 'Failed to start session' }, { status: 500 });
+    const message = err instanceof Error ? err.message : 'Failed to start session';
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }

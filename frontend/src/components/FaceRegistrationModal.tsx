@@ -3,7 +3,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import Webcam from 'react-webcam';
 import { X, CheckCircle2, AlertCircle, Camera, Loader2, ShieldAlert } from 'lucide-react';
-import { getBackendUrl } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 
 interface FaceRegistrationModalProps {
@@ -24,6 +23,61 @@ const INSTRUCTIONS = [
   "Tilt your head slightly up",
   "Tilt your head slightly down",
 ];
+
+// Resize and compress base64 data URL to optimized Blob (Crisp 960px @ 0.90 quality, ~60KB per frame)
+const fallbackDataURLtoBlob = (dataurl: string): Blob => {
+  const arr = dataurl.split(',');
+  const mimeMatch = arr[0].match(/:(.*?);/);
+  const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+  const bstr = atob(arr[1]);
+  let n = bstr.length;
+  const u8arr = new Uint8Array(n);
+  while (n--) {
+    u8arr[n] = bstr.charCodeAt(n);
+  }
+  return new Blob([u8arr], { type: mime });
+};
+
+const compressImage = async (dataurl: string, maxWidth = 960, maxHeight = 960, quality = 0.90): Promise<Blob> => {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      let width = img.width;
+      let height = img.height;
+      if (width > height) {
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+      } else {
+        if (height > maxHeight) {
+          width = Math.round((width * maxHeight) / height);
+          height = maxHeight;
+        }
+      }
+
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.drawImage(img, 0, 0, width, height);
+      }
+
+      canvas.toBlob((blob) => {
+        if (blob) {
+          resolve(blob);
+        } else {
+          resolve(fallbackDataURLtoBlob(dataurl));
+        }
+      }, "image/jpeg", quality);
+    };
+    img.onerror = () => {
+      resolve(fallbackDataURLtoBlob(dataurl));
+    };
+    img.src = dataurl;
+  });
+};
 
 export function FaceRegistrationModal({ isOpen, onClose, studentId, studentName, onSuccess, isSelfEnrollment }: FaceRegistrationModalProps) {
   const { user } = useAuth();
@@ -46,17 +100,19 @@ export function FaceRegistrationModal({ isOpen, onClose, studentId, studentName,
   // Reset state when modal opens
   useEffect(() => {
     if (isOpen) {
-      setStatus('idle');
-      setInstructionIndex(0);
-      setProgress(0);
-      setErrorMessage("");
-      setCountdown(null);
-      setConsentConfirmed(false);
+      queueMicrotask(() => {
+        setStatus('idle');
+        setInstructionIndex(0);
+        setProgress(0);
+        setErrorMessage("");
+        setCountdown(null);
+        setConsentConfirmed(false);
+        if (typeof window !== 'undefined' && typeof navigator !== 'undefined') {
+          const supported = !!(navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function');
+          setHasCameraSupport(supported);
+        }
+      });
       framesRef.current = [];
-      if (typeof window !== 'undefined' && typeof navigator !== 'undefined') {
-        const supported = !!(navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function');
-        setHasCameraSupport(supported);
-      }
     }
   }, [isOpen]);
 
@@ -78,62 +134,7 @@ export function FaceRegistrationModal({ isOpen, onClose, studentId, studentName,
     setCountdown(3);
   };
 
-  // Resize and compress base64 data URL to optimized Blob (Crisp 960px @ 0.90 quality, ~60KB per frame)
-  const compressImage = async (dataurl: string, maxWidth = 960, maxHeight = 960, quality = 0.90): Promise<Blob> => {
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.onload = () => {
-        let width = img.width;
-        let height = img.height;
-        if (width > height) {
-          if (width > maxWidth) {
-            height = Math.round((height * maxWidth) / width);
-            width = maxWidth;
-          }
-        } else {
-          if (height > maxHeight) {
-            width = Math.round((width * maxHeight) / height);
-            height = maxHeight;
-          }
-        }
-
-        const canvas = document.createElement("canvas");
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext("2d");
-        if (ctx) {
-          ctx.drawImage(img, 0, 0, width, height);
-        }
-
-        canvas.toBlob((blob) => {
-          if (blob) {
-            resolve(blob);
-          } else {
-            resolve(fallbackDataURLtoBlob(dataurl));
-          }
-        }, "image/jpeg", quality);
-      };
-      img.onerror = () => {
-        resolve(fallbackDataURLtoBlob(dataurl));
-      };
-      img.src = dataurl;
-    });
-  };
-
-  const fallbackDataURLtoBlob = (dataurl: string): Blob => {
-    const arr = dataurl.split(',');
-    const mimeMatch = arr[0].match(/:(.*?);/);
-    const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg';
-    const bstr = atob(arr[1]);
-    let n = bstr.length;
-    const u8arr = new Uint8Array(n);
-    while (n--) {
-      u8arr[n] = bstr.charCodeAt(n);
-    }
-    return new Blob([u8arr], { type: mime });
-  };
-
-  const processFrames = async () => {
+  const processFrames = useCallback(async () => {
     setStatus('processing');
     
     try {
@@ -187,12 +188,13 @@ export function FaceRegistrationModal({ isOpen, onClose, studentId, studentName,
         onClose();
       }, 2000);
       
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error processing frames:', error);
       setStatus('error');
-      setErrorMessage(error.message || "Failed to process face. Please try again in better lighting.");
+      const message = error instanceof Error ? error.message : "Failed to process face. Please try again in better lighting.";
+      setErrorMessage(message);
     }
-  };
+  }, [isStudent, studentName, user, isSuperAdmin, studentId, onSuccess, onClose]);
 
   useEffect(() => {
     if (status !== 'scanning' || countdown === null) return;
@@ -229,7 +231,7 @@ export function FaceRegistrationModal({ isOpen, onClose, studentId, studentName,
         processFrames();
       }
     }
-  }, [countdown, status]);
+  }, [countdown, status, processFrames]);
 
   if (!isOpen) return null;
 
