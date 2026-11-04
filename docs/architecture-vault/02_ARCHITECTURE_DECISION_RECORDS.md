@@ -419,6 +419,25 @@
   - *Positive:* Utilizes PostgreSQL partial index `idx_students_active_biometric_cohort` for sub-millisecond student record retrieval.
   - *Positive:* Retains single-click export of complete multi-hundred student cohorts to CSV.
 
+---
+
+### ADR-024: User Mutation-Driven Invalidation for In-Memory User Map Cache
+- **Status:** Accepted & Enforced (November 2026)
+- **Context:**
+  1. In ADR-016, an in-memory 5-minute TTL cache (`getCachedUserMap()`) was established in `frontend/src/lib/userCache.ts` to shield Supabase from redundant queries during high-frequency active session polling (`/api/active-sessions`) and session roster views (`/api/sessions`).
+  2. However, when institutional administrators created new faculty accounts (`POST /api/users`), updated faculty names or profiles (`PATCH /api/users/[id]`), or deleted user accounts (`DELETE /api/users/[id]`), the in-memory cache was not invalidated.
+  3. Consequently, modified display names (e.g., updating a faculty title or correcting typos) or newly provisioned instructor names took up to 300 seconds (5 minutes) to reflect across session monitoring dashboards, generating a stale-data window.
+- **Decision:**
+  1. Trigger `invalidateUserMapCache()` immediately following successful database persistence in:
+     - `frontend/src/app/api/users/route.ts` (`POST` handler upon user creation)
+     - `frontend/src/app/api/users/[id]/route.ts` (`PATCH` handler upon profile/name updates)
+     - `frontend/src/app/api/users/[id]/route.ts` (`DELETE` handler upon account deletion)
+  2. The invalidation synchronously resets `cachedUserMap = null` and `userMapCachedAt = 0`. The subsequent read request transparently warms the cache with fresh data from `app_users`.
+- **Consequences:**
+  - *Positive:* Eradicates stale faculty display name latency (0ms stale window across active session sidebars and monitoring tables).
+  - *Positive:* Retains the 5-minute database load shield during quiescent periods without risking stale data.
+  - *Positive:* Zero runtime overhead: cache invalidation is an atomic in-memory pointer nullification with zero blocking I/O.
+
 
 
 
