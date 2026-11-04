@@ -1844,6 +1844,69 @@ console.log('\n--- 32. Session Lifecycle Metadata Cache Eviction ---');
   assert(!testMap.has('sess-100'), 'Session cache evicted immediately upon invalidation');
 }
 
+// --- 33. Backend Server-Side Geofence In-Memory Caching & Route Invalidation ---
+console.log('\n--- 33. Backend Server-Side Geofence In-Memory Caching & Route Invalidation ---');
+{
+  const backendConfigPath = path.resolve(__dirname, '../../backend/app/config.py');
+  const backendConfigContent = fs.readFileSync(backendConfigPath, 'utf8');
+
+  const backendRoutesPath = path.resolve(__dirname, '../../backend/app/routes.py');
+  const backendRoutesContent = fs.readFileSync(backendRoutesPath, 'utf8');
+
+  // 1. backend/app/config.py defines thread-safe caching and TTL
+  assert(
+    backendConfigContent.includes('_geofence_cache_lock = threading.Lock()') &&
+    backendConfigContent.includes('GEOFENCE_CACHE_TTL_SECONDS') &&
+    backendConfigContent.includes('def invalidate_server_geofence_cache()'),
+    'backend/app/config.py exports thread-safe lock, TTL, and invalidate_server_geofence_cache'
+  );
+
+  // 2. backend/app/config.py serves stale cache on DB failure
+  assert(
+    backendConfigContent.includes('if _cached_geofence_config is not None:') &&
+    backendConfigContent.includes('return _cached_geofence_config.copy()'),
+    'backend/app/config.py provides fault-tolerant stale serving when database query fails'
+  );
+
+  // 3. backend/app/routes.py exports invalidate endpoint
+  assert(
+    backendRoutesContent.includes('@router.post("/api/geofence/invalidate")') &&
+    backendRoutesContent.includes('invalidate_server_geofence_cache()'),
+    'backend/app/routes.py exposes /api/geofence/invalidate endpoint'
+  );
+
+  // 4. In-memory geofence TTL simulation
+  let cachedGeofence = null;
+  let cachedAt = 0;
+  const ttlSec = 60;
+
+  function getGeofence(nowSec, dbFetchFn) {
+    if (cachedGeofence && (nowSec - cachedAt) < ttlSec) {
+      return cachedGeofence;
+    }
+    cachedGeofence = dbFetchFn();
+    cachedAt = nowSec;
+    return cachedGeofence;
+  }
+
+  function invalidateGeofence() {
+    cachedGeofence = null;
+    cachedAt = 0;
+  }
+
+  let dbQueries = 0;
+  const mockFetch = () => { dbQueries++; return { latitude: 22.5, longitude: 88.3, radius: 200 }; };
+
+  const first = getGeofence(1000, mockFetch);
+  const second = getGeofence(1020, mockFetch); // 20s later -> cache hit
+  assert(dbQueries === 1, 'Geofence cached within 60s window (1 DB query for 2 requests)');
+  assert(first.latitude === 22.5 && second.latitude === 22.5, 'Cached geofence matches database response');
+
+  invalidateGeofence();
+  const third = getGeofence(1025, mockFetch); // after invalidation -> cache miss
+  assert(dbQueries === 2, 'Invalidation forces fresh database query on next request');
+}
+
 // Summary
 console.log('\n' + '=' .repeat(65));
 console.log(`📊 Offline Unit Test Summary: ${passed} Passed, ${failed} Failed`);

@@ -2,7 +2,9 @@ import os
 import sys
 import json
 import math
-from typing import Any
+import time
+import threading
+from typing import Any, Optional, Dict
 from dotenv import load_dotenv
 try:
     from supabase import create_client, Client
@@ -337,29 +339,68 @@ def _parse_and_sanitize_geofence(val: dict) -> dict:
     }
 
 
-def get_server_geofence_config() -> dict:
-    """Fetches the latest geofence settings from Supabase (settings table or system session row) or returns secure defaults."""
-    # 1. Try public.settings table
-    try:
-        if supabase:
-            res = supabase.table("settings").select("value").eq("key", "campus_geofence").execute()
-            if res.data and res.data[0].get("value"):
-                return _parse_and_sanitize_geofence(res.data[0]["value"])
-    except Exception:
-        pass
+_geofence_cache_lock = threading.Lock()
+_cached_geofence_config: Optional[dict] = None
+_geofence_cache_timestamp: float = 0.0
+GEOFENCE_CACHE_TTL_SECONDS: float = float(os.getenv("GEOFENCE_CACHE_TTL_SECONDS", "60.0"))
 
-    # 2. Fallback to sessions table system config row (00000000-0000-0000-0000-000000000001)
-    try:
-        if supabase:
-            res2 = supabase.table("sessions").select("instructor_name").eq("id", "00000000-0000-0000-0000-000000000001").execute()
-            if res2.data and res2.data[0].get("instructor_name"):
-                raw_json = res2.data[0]["instructor_name"]
-                parsed = json.loads(raw_json)
-                return _parse_and_sanitize_geofence(parsed)
-    except Exception:
-        pass
 
-    return DEFAULT_GEOFENCE_CONFIG.copy()
+def invalidate_server_geofence_cache() -> None:
+    """Invalidates the in-memory server geofence cache so updates take effect immediately."""
+    global _cached_geofence_config, _geofence_cache_timestamp
+    with _geofence_cache_lock:
+        _cached_geofence_config = None
+        _geofence_cache_timestamp = 0.0
+
+
+def get_server_geofence_config(force_refresh: bool = False) -> dict:
+    """
+    Fetches the latest geofence settings from Supabase (settings table or system session row)
+    with thread-safe in-memory caching (60s TTL) to eliminate hundreds of redundant SQL queries
+    during concurrent student selfie check-in bursts.
+    """
+    global _cached_geofence_config, _geofence_cache_timestamp
+
+    now = time.time()
+    if not force_refresh and _cached_geofence_config is not None and (now - _geofence_cache_timestamp) < GEOFENCE_CACHE_TTL_SECONDS:
+        return _cached_geofence_config.copy()
+
+    with _geofence_cache_lock:
+        now = time.time()
+        if not force_refresh and _cached_geofence_config is not None and (now - _geofence_cache_timestamp) < GEOFENCE_CACHE_TTL_SECONDS:
+            return _cached_geofence_config.copy()
+
+        config = None
+        # 1. Try public.settings table
+        try:
+            if supabase:
+                res = supabase.table("settings").select("value").eq("key", "campus_geofence").execute()
+                if res.data and res.data[0].get("value"):
+                    config = _parse_and_sanitize_geofence(res.data[0]["value"])
+        except Exception:
+            pass
+
+        # 2. Fallback to sessions table system config row (00000000-0000-0000-0000-000000000001)
+        if config is None:
+            try:
+                if supabase:
+                    res2 = supabase.table("sessions").select("instructor_name").eq("id", "00000000-0000-0000-0000-000000000001").execute()
+                    if res2.data and res2.data[0].get("instructor_name"):
+                        raw_json = res2.data[0]["instructor_name"]
+                        parsed = json.loads(raw_json)
+                        config = _parse_and_sanitize_geofence(parsed)
+            except Exception:
+                pass
+
+        if config is None:
+            # Fault tolerance: if we had a previous cache, serve stale rather than reverting to hardcoded defaults
+            if _cached_geofence_config is not None:
+                return _cached_geofence_config.copy()
+            config = DEFAULT_GEOFENCE_CONFIG.copy()
+
+        _cached_geofence_config = config
+        _geofence_cache_timestamp = now
+        return _cached_geofence_config.copy()
 
 
 def calculate_haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:

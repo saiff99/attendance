@@ -27,6 +27,7 @@ from app.config import (
     get_camera_details,
     is_cohort_matching,
     get_server_geofence_config,
+    invalidate_server_geofence_cache,
     calculate_haversine_distance,
     has_valid_face_encoding,
 )
@@ -810,6 +811,12 @@ async def api_end_session_by_id(session_id: str):
         "details": result,
         "rate_limiter_cleanup": rl_result
     }
+
+@router.post("/api/geofence/invalidate")
+async def api_invalidate_geofence():
+    """Invalidates the in-memory server geofence cache."""
+    invalidate_server_geofence_cache()
+    return {"success": True, "message": "Server geofence cache invalidated successfully."}
 
 @router.post("/api/upload-photo")
 async def upload_photo(file: UploadFile = File(...)):
