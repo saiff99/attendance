@@ -483,6 +483,27 @@
   - *Positive:* Preserves the 60-second database shield during active classroom attendance monitoring.
   - *Positive:* Modular code structure consistent with `lib/userCache.ts` and `lib/subjectCache.ts`.
 
+---
+
+### ADR-027: Server-Side Geofence In-Memory Caching & Fault-Tolerant Fallback
+- **Status:** Accepted & Enforced (November 2026)
+- **Context:**
+  1. In `backend/app/routes.py` and `backend/app/config.py`, student selfie check-in submissions (`POST /api/verify-selfie`) invoke `get_server_geofence_config()` to retrieve campus GPS coordinates (`campus_geofence`) from Supabase's `settings` table.
+  2. During attendance sessions with up to 150 students submitting selfies concurrently within a 5-minute window, this resulted in 150 identical synchronous SQL roundtrips to the `settings` table within seconds.
+  3. Under high database load or transient network latency, this caused request queuing, artificial verification slowdowns, and potential Supabase timeouts.
+  4. Furthermore, if Supabase experienced a momentary network interruption, `get_server_geofence_config()` previously fell back immediately to hardcoded college defaults, which might differ from an administrator's dynamically configured geofence radius.
+- **Decision:**
+  1. In `backend/app/config.py`, introduce a thread-safe in-memory cache protected by `threading.Lock()` (`_geofence_cache_lock`) with an adjustable 60-second TTL (`GEOFENCE_CACHE_TTL_SECONDS`).
+  2. Implement `invalidate_server_geofence_cache()` to allow immediate cache eviction.
+  3. Implement fault-tolerant stale serving: if a Supabase connection fails during cache refresh, serve the previously cached valid configuration rather than abruptly reverting to hardcoded defaults.
+  4. In `backend/app/routes.py`, expose `@router.post("/api/geofence/invalidate")` so external administrative updates can clear the server cache instantaneously.
+- **Consequences:**
+  - *Positive:* Database queries for geofence validation reduced from 150 to 1 during concurrent cohort check-in bursts (99.3% reduction in redundant database traffic).
+  - *Positive:* Significant reduction in selfie verification API latency on student mobile devices.
+  - *Positive:* High fault-tolerance: temporary database glitches do not break campus geofence enforcement.
+  - *Positive:* Immediate invalidation supported via internal API.
+
+
 
 
 
