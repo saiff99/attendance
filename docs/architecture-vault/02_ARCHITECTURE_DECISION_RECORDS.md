@@ -438,6 +438,27 @@
   - *Positive:* Retains the 5-minute database load shield during quiescent periods without risking stale data.
   - *Positive:* Zero runtime overhead: cache invalidation is an atomic in-memory pointer nullification with zero blocking I/O.
 
+---
+
+### ADR-025: Ephemeral Device-Lock Sanitization from Institutional Database Backups
+- **Status:** Accepted & Enforced (November 2026)
+- **Context:**
+  1. The MedAttend AI biometric ecosystem utilizes physical device locking (`check_device_lock` and `record_device_lock` in `backend/app/rate_limiter.py`) to prevent proxy attendance by multiple students from the same smartphone.
+  2. Active device locks are stored in the `settings` PostgreSQL table under keys formatted as `devlock:<session_id>:<device_id>`.
+  3. The database backup export endpoint (`GET /api/admin/backup`) previously excluded rate-limiting keys (`.not('key', 'like', 'rl_%')`), but did not filter out `devlock:%` keys.
+  4. Across multi-month college operations with hundreds of sessions, thousands of historical, expired device lock keys accumulated in `settings`, inflating backup archive files with megabytes of ephemeral data.
+  5. Similarly, the database disaster recovery restoration endpoint (`POST /api/admin/restore`) lacked an exclusion filter for `devlock:` keys when restoring `settings`.
+- **Decision:**
+  1. In `frontend/src/app/api/admin/backup/route.ts`, append `.not('key', 'like', 'devlock:%')` to the `settings` export query:
+     `fetchAllRows('settings', '*', (q) => q.not('key', 'like', 'rl_%').not('key', 'like', 'devlock:%'))`
+  2. In `frontend/src/app/api/admin/restore/route.ts`, filter out legacy `devlock:` keys prior to batch-upserting restored settings:
+     `settings.filter((s: any) => s && s.key && !s.key.startsWith('rl_') && !s.key.startsWith('devlock:'))`
+- **Consequences:**
+  - *Positive:* Database backup JSON payload size drastically reduced, saving storage and export bandwidth.
+  - *Positive:* Speeds up backup downloads and reduces memory overhead on Super Admin clients.
+  - *Positive:* Prevents expired, stale device fingerprints from re-entering production during disaster recovery restorations.
+  - *Positive:* Active in-session device locking is completely unaffected, as device locks are only required during live active session windows.
+
 
 
 
