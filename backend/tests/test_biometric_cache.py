@@ -222,6 +222,50 @@ class TestBiometricCache(unittest.TestCase):
             # Exactly 1 DB execution despite 10 simultaneous threads
             self.assertEqual(mock_query.execute.call_count, 1)
 
+    def test_stream_delegates_to_centralized_biometric_cache(self):
+        """Verify stream.py's get_enrolled_data delegates to get_cached_enrolled_students (Issue 11)."""
+        import app.stream as stream_mod
+
+        # Reset stream state
+        stream_mod.session_enrolled_cache.clear()
+        stream_mod.session_matrix_cache.clear()
+        stream_mod.session_last_fetch.clear()
+
+        mock_session_query = MagicMock()
+        mock_session_res = MagicMock()
+        mock_session_res.data = [{"target_academic_year": "1st Year MBBS"}]
+        mock_session_query.execute.return_value = mock_session_res
+
+        with patch.object(stream_mod, "supabase") as mock_sb:
+            mock_sb.table.return_value.select.return_value.eq.return_value = mock_session_query
+
+            with patch("app.biometric_cache.get_cached_enrolled_students") as mock_get_cached:
+                mock_get_cached.return_value = [
+                    {
+                        "id": "student-1",
+                        "full_name": "Rahim Ahmed",
+                        "student_roll": "101",
+                        "academic_year": "1st Year MBBS",
+                        "is_active": True,
+                        "biometric_consent": True,
+                        "face_encoding": [0.1] * 512
+                    }
+                ]
+
+                enrolled, matrix = stream_mod.get_enrolled_data("test-session-123")
+
+                # Verify get_cached_enrolled_students was called with target_academic_year
+                mock_get_cached.assert_called_once_with(target_academic_year="1st Year MBBS")
+                self.assertEqual(len(enrolled), 1)
+                self.assertEqual(enrolled[0]["id"], "student-1")
+                self.assertIsNotNone(matrix)
+                self.assertEqual(matrix.shape, (1, 512))
+
+                # Verify clean cache hit on subsequent call
+                enrolled2, matrix2 = stream_mod.get_enrolled_data("test-session-123")
+                # Still called only once due to stream session cache within 60s
+                self.assertEqual(mock_get_cached.call_count, 1)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -44,27 +44,9 @@ def get_enrolled_data(session_id: str):
         if session_res.data and session_res.data[0].get("target_academic_year"):
             target_year = session_res.data[0]["target_academic_year"]
 
-        # Strict DPDP Act Compliance: Query ONLY students with non-null face_encoding AND explicit biometric_consent=True
-        try:
-            query = supabase.table("students").select(
-                "id, full_name, face_encoding, student_roll, academic_year, is_active, biometric_consent"
-            ).not_.is_("face_encoding", "null").eq("biometric_consent", True)
-            students_res = query.execute()
-            all_enrolled = students_res.data or []
-        except Exception as q_err:
-            print(f"[WARN] Failed to filter by biometric_consent in DB: {q_err}. Falling back to safe in-memory filter.")
-            query = supabase.table("students").select("id, full_name, face_encoding, student_roll, academic_year, is_active, biometric_consent").not_.is_("face_encoding", "null")
-            students_res = query.execute()
-            all_enrolled = [s for s in (students_res.data or []) if s.get("biometric_consent") is True]
-        
-        # Filter enrolled list: must have biometric_consent is True, active status, and match target academic year
-        enrolled = [
-            s for s in all_enrolled 
-            if s.get("biometric_consent") is True 
-            and s.get("is_active") is not False
-            and not str(s.get("academic_year", "")).startswith("[ARCHIVED]")
-            and is_cohort_matching(target_year, s.get("academic_year"))
-        ]
+        # Unified In-Memory Biometric Cache with DPDP Consent & Invalidation (Issue 11 / ADR-019)
+        from app.biometric_cache import get_cached_enrolled_students
+        enrolled = get_cached_enrolled_students(target_academic_year=target_year)
 
         matrix = None
         if enrolled:

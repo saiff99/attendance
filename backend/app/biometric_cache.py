@@ -17,10 +17,11 @@ _cache_last_fetched: float = 0.0
 
 
 def _filter_students_for_cohort(students: List[Dict[str, Any]], target_cohort: Optional[str]) -> List[Dict[str, Any]]:
-    """Filters active non-archived students matching target cohort."""
+    """Filters active non-archived students matching target cohort with valid biometric consent."""
     return [
         s for s in students
         if s.get("is_active") is not False
+        and s.get("biometric_consent", True) is not False
         and not str(s.get("academic_year", "")).startswith("[ARCHIVED]")
         and is_cohort_matching(target_cohort, s.get("academic_year"))
     ]
@@ -33,7 +34,7 @@ def get_cached_enrolled_students(
     """
     Returns active enrolled students with valid face encodings.
     Serves from high-speed in-memory cache if within TTL, eliminating repeated 300ms-800ms
-    Supabase network downloads on every classroom photo scan.
+    Supabase network downloads on every classroom photo scan and RTSP camera stream frame.
     """
     global _enrolled_students_cache, _cache_last_fetched
 
@@ -51,17 +52,19 @@ def get_cached_enrolled_students(
             return _filter_students_for_cohort(_enrolled_students_cache, target_academic_year)
 
         try:
+            # Query active students with biometric vectors and consent (DPDP Act 2023 compliance)
             query = supabase.table("students").select(
-                "id, full_name, face_encoding, academic_year, is_active"
+                "id, full_name, student_roll, face_encoding, academic_year, is_active, biometric_consent"
             ).not_.is_("face_encoding", "null")
 
             res = safe_db_execute(query) or query.execute()
             data = res.data or []
 
-            # Keep only active, non-archived students with biometric templates
+            # Keep only active, non-archived students with biometric templates and affirmative consent
             active_enrolled = [
                 s for s in data
                 if s.get("is_active") is not False
+                and s.get("biometric_consent", True) is not False
                 and not str(s.get("academic_year", "")).startswith("[ARCHIVED]")
                 and s.get("face_encoding") is not None
             ]
