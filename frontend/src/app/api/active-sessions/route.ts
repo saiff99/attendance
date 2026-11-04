@@ -6,7 +6,9 @@ import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/serverAuth';
 import { decodeSessionMetadata } from '@/lib/geofence';
 import { generateCheckinToken } from '@/lib/attendanceAuth';
 import { getTrustedClientIp, checkActiveSessionsRateLimit } from '@/lib/rateLimiter';
+import { getCachedUserMap, USER_MAP_TTL_MS } from '@/lib/userCache';
 
+export { getCachedUserMap, USER_MAP_TTL_MS };
 export const dynamic = 'force-dynamic';
 
 /**
@@ -29,40 +31,6 @@ export function isInternalSession(s: any): boolean {
     id === '00000000-0000-0000-0000-000000000001' ||
     id === '00000000-0000-0000-0000-000000000000'
   );
-}
-
-// In-Memory User Map Cache (5-minute TTL)
-// Avoids querying Supabase app_users table on every 3-12 second polling request
-let cachedUserMap: Record<string, string> | null = null;
-let userMapCachedAt = 0;
-const USER_MAP_TTL_MS = 5 * 60 * 1000;
-
-export async function getCachedUserMap(): Promise<Record<string, string>> {
-  const now = Date.now();
-  if (cachedUserMap && now - userMapCachedAt < USER_MAP_TTL_MS) {
-    return cachedUserMap;
-  }
-  const userMap: Record<string, string> = {
-    admin: 'System Administrator',
-    faculty: 'Faculty Member',
-  };
-  try {
-    const { data: appUsers } = await supabaseServer
-      .from('app_users')
-      .select('username, full_name');
-    if (appUsers) {
-      appUsers.forEach((u: any) => {
-        if (u.username && u.full_name) {
-          userMap[u.username.toLowerCase()] = u.full_name;
-        }
-      });
-    }
-    cachedUserMap = userMap;
-    userMapCachedAt = now;
-  } catch (e) {
-    if (cachedUserMap) return cachedUserMap;
-  }
-  return userMap;
 }
 
 /**

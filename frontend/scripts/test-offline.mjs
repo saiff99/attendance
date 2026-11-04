@@ -1444,6 +1444,54 @@ console.log('\n--- 24. Student Portal Full-Table Unbounded Sessions Query Storm 
   assert(filtered[0].id === 'sess-1' && filtered[1].id === 'sess-2', 'Expected active sessions preserved');
 }
 
+// --- 25. Sessions API User Map Caching & SQL Archive Filter Pushdown (Issue 15) ---
+console.log('\n--- 25. Sessions API User Map Caching & SQL Archive Filter Pushdown ---');
+{
+  const sessionsRoutePath = path.resolve(__dirname, '../src/app/api/sessions/route.ts');
+  const sessionsRouteContent = fs.readFileSync(sessionsRoutePath, 'utf8');
+
+  const userCachePath = path.resolve(__dirname, '../src/lib/userCache.ts');
+  const userCacheContent = fs.readFileSync(userCachePath, 'utf8');
+
+  const activeSessionsRoutePath = path.resolve(__dirname, '../src/app/api/active-sessions/route.ts');
+  const activeSessionsRouteContent = fs.readFileSync(activeSessionsRoutePath, 'utf8');
+
+  // 1. sessions/route.ts imports and calls getCachedUserMap
+  assert(
+    sessionsRouteContent.includes('getCachedUserMap') &&
+    sessionsRouteContent.includes('const userMap = await getCachedUserMap()'),
+    'api/sessions/route.ts uses getCachedUserMap instead of querying app_users directly'
+  );
+
+  // 2. sessions/route.ts eradicated redundant direct app_users query
+  assert(
+    !sessionsRouteContent.includes(".from('app_users')"),
+    'api/sessions/route.ts eradicated redundant direct app_users query'
+  );
+
+  // 3. sessions/route.ts pushes down is_archived = false BEFORE range
+  assert(
+    sessionsRouteContent.includes('if (!includeArchived)') &&
+    sessionsRouteContent.includes("sessionsQuery = sessionsQuery.eq('is_archived', false)"),
+    'api/sessions/route.ts conditionally pushes down is_archived = false before range pagination'
+  );
+
+  // 4. userCache.ts exports getCachedUserMap, invalidateUserMapCache, and USER_MAP_TTL_MS
+  assert(
+    userCacheContent.includes('export async function getCachedUserMap') &&
+    userCacheContent.includes('export function invalidateUserMapCache') &&
+    userCacheContent.includes('USER_MAP_TTL_MS = 5 * 60 * 1000'),
+    'lib/userCache.ts exports getCachedUserMap, invalidateUserMapCache, and 5-min TTL'
+  );
+
+  // 5. active-sessions/route.ts re-exports getCachedUserMap for backward compatibility
+  assert(
+    activeSessionsRouteContent.includes("from '@/lib/userCache'") &&
+    activeSessionsRouteContent.includes('export { getCachedUserMap'),
+    'api/active-sessions/route.ts re-exports getCachedUserMap from lib/userCache'
+  );
+}
+
 // Summary
 console.log('\n' + '=' .repeat(65));
 console.log(`📊 Offline Unit Test Summary: ${passed} Passed, ${failed} Failed`);

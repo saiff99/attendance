@@ -4,6 +4,7 @@ import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/serverAuth';
 import { logAuditEvent } from '@/lib/auditLog';
 
 import { decodeSessionMetadata } from '@/lib/geofence';
+import { getCachedUserMap } from '@/lib/userCache';
 
 export const dynamic = 'force-dynamic';
 
@@ -64,21 +65,28 @@ export async function GET(request: NextRequest) {
     }
 
     const offset = (page - 1) * limit;
+    const includeArchived = searchParams.get('include_archived') === 'true';
 
-    const { data, error, count } = await supabaseServer
+    // SQL pushdown: apply is_archived = false BEFORE range pagination so partial index idx_sessions_active_created is utilized
+    let sessionsQuery = supabaseServer
       .from('sessions')
       .select('id, class_name, date, start_time, end_time, instructor_name, target_academic_year, is_archived, archived_at, created_at, attendance(count)', { count: 'exact' })
       .neq('class_name', '__SYSTEM_CONFIG__')
       .neq('class_name', '__GEOFENCE_CONFIG__')
       .neq('id', '00000000-0000-0000-0000-000000000001')
       .neq('id', '00000000-0000-0000-0000-000000000000')
-      .neq('target_academic_year', 'System')
+      .neq('target_academic_year', 'System');
+
+    if (!includeArchived) {
+      sessionsQuery = sessionsQuery.eq('is_archived', false);
+    }
+
+    const { data, error, count } = await sessionsQuery
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
 
     if (error) throw error;
 
-    const includeArchived = searchParams.get('include_archived') === 'true';
     let filteredSessions = (data || []).filter((s: any) => {
       if (s.class_name?.startsWith('__')) return false;
       if (!includeArchived && (s.is_archived === true || s.class_name?.startsWith('[ARCHIVED]') || s.target_academic_year === 'Archived')) return false;
@@ -96,22 +104,8 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Fetch registered users to map usernames to full names
-    const { data: appUsers } = await supabaseServer
-      .from('app_users')
-      .select('username, full_name');
-
-    const userMap: Record<string, string> = {
-      admin: 'System Administrator',
-      faculty: 'Faculty Member',
-    };
-    if (appUsers) {
-      appUsers.forEach((u: any) => {
-        if (u.username && u.full_name) {
-          userMap[u.username.toLowerCase()] = u.full_name;
-        }
-      });
-    }
+    // Use cached in-memory user map (5-min TTL) to eliminate redundant app_users table queries
+    const userMap = await getCachedUserMap();
 
     const enrichedSessions = filteredSessions.map((s: any) => {
       const dec = decodeSessionMetadata(s.instructor_name || '');
