@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { Search, UserPlus, FileDown, MoreHorizontal, X, UploadCloud, Loader2, Edit2, Trash2, Folder, ArrowLeft, Users, FileSpreadsheet, ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle, AlertCircle, Lock, KeyRound, CheckCircle2, UserX } from "lucide-react";
+import { Search, UserPlus, FileDown, MoreHorizontal, X, UploadCloud, Loader2, Edit2, Trash2, Folder, ArrowLeft, Users, FileSpreadsheet, ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle, AlertCircle, Lock, KeyRound, CheckCircle2, UserX, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
 // Student Directory
 import type { Student } from "@/types/database";
 import dynamic from "next/dynamic";
@@ -45,6 +45,22 @@ function getInitialStudents(): Student[] {
   return [];
 }
 
+/**
+ * Calculates page numbers to display with smart ellipsis for pagination controls (Issue 10)
+ */
+function getPageNumbers(current: number, total: number): (number | string)[] {
+  if (total <= 7) {
+    return Array.from({ length: total }, (_, i) => i + 1);
+  }
+  if (current <= 4) {
+    return [1, 2, 3, 4, 5, '...', total];
+  }
+  if (current >= total - 3) {
+    return [1, '...', total - 4, total - 3, total - 2, total - 1, total];
+  }
+  return [1, '...', current - 1, current, current + 1, '...', total];
+}
+
 export default function StudentDirectory() {
   const router = useRouter();
   const { user, isLoading } = useAuth();
@@ -85,6 +101,10 @@ export default function StudentDirectory() {
   type SortOrder = 'asc' | 'desc';
   const [sortField, setSortField] = useState<SortField>('student_roll');
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
+
+  // Client-Side Pagination State (Issue 10)
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(25); // Default 25 students per page for fast 60fps rendering
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -385,47 +405,83 @@ export default function StudentDirectory() {
     setNewStudent({ student_roll: '', full_name: '', email: '', academic_year: activeView || '1st Year', sub_batch: 'All', parent_phone: '' });
   };
 
-  const filteredStudents = students
-    .filter(student => {
-      const matchesSearch = student.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        student.student_roll?.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesYear = activeView ? (student.academic_year?.startsWith(activeView) ?? false) : true;
-      const matchesSubBatch = activeSubBatch === 'All'
-        ? true
-        : ((student.academic_year?.includes(`(${activeSubBatch})`) ||
-          (activeSubBatch.startsWith('Group') && student.academic_year?.includes(`(${activeSubBatch.replace('Group', 'Batch')})`))) ?? false);
-      return matchesSearch && matchesYear && matchesSubBatch;
-    })
-    .sort((a, b) => {
-      let comparison = 0;
-      if (sortField === 'student_roll') {
-        const rollA = a.student_roll || '';
-        const rollB = b.student_roll || '';
-        comparison = rollA.localeCompare(rollB, undefined, { numeric: true, sensitivity: 'base' });
-      } else if (sortField === 'full_name') {
-        const nameA = a.full_name || '';
-        const nameB = b.full_name || '';
-        comparison = nameA.localeCompare(nameB, undefined, { sensitivity: 'base' });
-      } else if (sortField === 'academic_year') {
-        const yearA = a.academic_year || '';
-        const yearB = b.academic_year || '';
-        comparison = yearA.localeCompare(yearB, undefined, { numeric: true, sensitivity: 'base' });
-      }
-      return sortOrder === 'asc' ? comparison : -comparison;
-    });
+  // Memoized Search & Sort to avoid CPU re-computation on unrelated state changes (Issue 10)
+  const filteredStudents = useMemo(() => {
+    return students
+      .filter(student => {
+        const matchesSearch = student.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          student.student_roll?.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesYear = activeView ? (student.academic_year?.startsWith(activeView) ?? false) : true;
+        const matchesSubBatch = activeSubBatch === 'All'
+          ? true
+          : ((student.academic_year?.includes(`(${activeSubBatch})`) ||
+            (activeSubBatch.startsWith('Group') && student.academic_year?.includes(`(${activeSubBatch.replace('Group', 'Batch')})`))) ?? false);
+        return matchesSearch && matchesYear && matchesSubBatch;
+      })
+      .sort((a, b) => {
+        let comparison = 0;
+        if (sortField === 'student_roll') {
+          const rollA = a.student_roll || '';
+          const rollB = b.student_roll || '';
+          comparison = rollA.localeCompare(rollB, undefined, { numeric: true, sensitivity: 'base' });
+        } else if (sortField === 'full_name') {
+          const nameA = a.full_name || '';
+          const nameB = b.full_name || '';
+          comparison = nameA.localeCompare(nameB, undefined, { sensitivity: 'base' });
+        } else if (sortField === 'academic_year') {
+          const yearA = a.academic_year || '';
+          const yearB = b.academic_year || '';
+          comparison = yearA.localeCompare(yearB, undefined, { numeric: true, sensitivity: 'base' });
+        }
+        return sortOrder === 'asc' ? comparison : -comparison;
+      });
+  }, [students, searchTerm, activeView, activeSubBatch, sortField, sortOrder]);
 
-  const isAllSelected = filteredStudents.length > 0 && filteredStudents.every(s => selectedIds.includes(s.id));
-  const isSomeSelected = filteredStudents.some(s => selectedIds.includes(s.id)) && !isAllSelected;
+  // Reset to page 1 whenever search, view, sub-batch or page size changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, activeView, activeSubBatch, pageSize]);
 
-  const handleToggleSelectAll = () => {
-    if (isAllSelected) {
-      const filteredIdSet = new Set(filteredStudents.map(s => s.id));
-      setSelectedIds(prev => prev.filter(id => !filteredIdSet.has(id)));
+  // Derived Pagination slices
+  const totalPages = Math.ceil(filteredStudents.length / pageSize) || 1;
+  const safeCurrentPage = Math.min(Math.max(currentPage, 1), totalPages);
+  const startIndex = (safeCurrentPage - 1) * pageSize;
+  const endIndex = Math.min(startIndex + pageSize, filteredStudents.length);
+  const paginatedStudents = useMemo(() => {
+    return filteredStudents.slice(startIndex, endIndex);
+  }, [filteredStudents, startIndex, endIndex]);
+
+  // Selection states: page-level and global cohort-level
+  const isPageAllSelected = paginatedStudents.length > 0 && paginatedStudents.every(s => selectedIds.includes(s.id));
+  const isPageSomeSelected = paginatedStudents.some(s => selectedIds.includes(s.id)) && !isPageAllSelected;
+  const isAllFilteredSelected = filteredStudents.length > 0 && filteredStudents.every(s => selectedIds.includes(s.id));
+
+  // Alias for table header checkbox
+  const isAllSelected = isPageAllSelected;
+  const isSomeSelected = isPageSomeSelected;
+
+  const handleToggleSelectPage = () => {
+    if (isPageAllSelected) {
+      const pageIdSet = new Set(paginatedStudents.map(s => s.id));
+      setSelectedIds(prev => prev.filter(id => !pageIdSet.has(id)));
     } else {
       const newSelected = new Set(selectedIds);
-      filteredStudents.forEach(s => newSelected.add(s.id));
+      paginatedStudents.forEach(s => newSelected.add(s.id));
       setSelectedIds(Array.from(newSelected));
     }
+  };
+
+  const handleToggleSelectAll = handleToggleSelectPage;
+
+  const handleSelectAllFiltered = () => {
+    const newSelected = new Set(selectedIds);
+    filteredStudents.forEach(s => newSelected.add(s.id));
+    setSelectedIds(Array.from(newSelected));
+  };
+
+  const handleClearAllFiltered = () => {
+    const filteredIdSet = new Set(filteredStudents.map(s => s.id));
+    setSelectedIds(prev => prev.filter(id => !filteredIdSet.has(id)));
   };
 
   const handleToggleSelect = (id: string, e?: React.MouseEvent) => {
@@ -683,9 +739,38 @@ export default function StudentDirectory() {
               <span className="text-[11px] text-gray-400 sm:hidden ml-auto shrink-0">Scroll →</span>
             </div>
 
+            {/* Cohort-wide selection banner when current page is selected (Issue 10) */}
+            {isPageAllSelected && filteredStudents.length > paginatedStudents.length && (
+              <div className="bg-indigo-50/90 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800/80 rounded-xl mb-3 py-2.5 px-4 text-center text-xs sm:text-sm text-indigo-900 dark:text-indigo-200 flex flex-wrap items-center justify-center gap-2 shadow-2xs">
+                {!isAllFilteredSelected ? (
+                  <>
+                    <span>All <strong>{paginatedStudents.length}</strong> students on this page are selected.</span>
+                    <button
+                      type="button"
+                      onClick={handleSelectAllFiltered}
+                      className="font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-200 underline cursor-pointer ml-1"
+                    >
+                      Select all {filteredStudents.length} students in {activeView || 'this cohort'}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <span>All <strong>{filteredStudents.length}</strong> students in {activeView || 'this cohort'} are selected.</span>
+                    <button
+                      type="button"
+                      onClick={handleClearAllFiltered}
+                      className="font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-200 underline cursor-pointer ml-1"
+                    >
+                      Clear selection
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+
             {/* Data Table */}
             <div className="bg-white dark:bg-gray-900 rounded-b-xl border border-gray-200 dark:border-gray-800 shadow-sm transition-colors">
-              <div className="overflow-x-auto min-h-[280px] pb-24">
+              <div className="overflow-x-auto min-h-[280px]">
                 <table className="min-w-[720px] w-full divide-y divide-gray-200 dark:divide-gray-800">
                   <thead className="bg-gray-50 dark:bg-gray-800/50">
                     <tr>
@@ -694,12 +779,12 @@ export default function StudentDirectory() {
                           <input
                             type="checkbox"
                             ref={(el) => {
-                              if (el) el.indeterminate = isSomeSelected;
+                              if (el) el.indeterminate = isPageSomeSelected;
                             }}
-                            checked={isAllSelected}
-                            onChange={handleToggleSelectAll}
+                            checked={isPageAllSelected}
+                            onChange={handleToggleSelectPage}
                             className="h-4 w-4 rounded border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-indigo-600 focus:ring-indigo-500 focus:ring-offset-gray-900 cursor-pointer transition-all"
-                            title={isAllSelected ? "Deselect All" : "Select All"}
+                            title={isPageAllSelected ? "Deselect page" : "Select all on this page"}
                           />
                         </div>
                       </th>
@@ -782,7 +867,7 @@ export default function StudentDirectory() {
                         </td>
                       </tr>
                     ) : (
-                      filteredStudents.map((student, idx) => {
+                      paginatedStudents.map((student, idx) => {
                         const isSelected = selectedIds.includes(student.id);
                         return (
                           <tr
@@ -864,7 +949,7 @@ export default function StudentDirectory() {
                                   {openDropdownId === student.id && (
                                     <>
                                       <div className="fixed inset-0 z-40" onClick={() => setOpenDropdownId(null)}></div>
-                                      <div className={`absolute right-0 z-50 w-40 rounded-xl bg-white dark:bg-gray-800 shadow-2xl border border-gray-200 dark:border-gray-700 py-1.5 ring-1 ring-black/10 focus:outline-none ${filteredStudents.length > 3 && idx >= filteredStudents.length - 2
+                                      <div className={`absolute right-0 z-50 w-40 rounded-xl bg-white dark:bg-gray-800 shadow-2xl border border-gray-200 dark:border-gray-700 py-1.5 ring-1 ring-black/10 focus:outline-none ${paginatedStudents.length > 3 && idx >= paginatedStudents.length - 2
                                           ? 'bottom-full mb-2 origin-bottom-right'
                                           : 'top-full mt-1.5 origin-top-right'
                                         }`}>
@@ -951,6 +1036,113 @@ export default function StudentDirectory() {
                   </tbody>
                 </table>
               </div>
+
+              {/* Client-Side Pagination Controls (Issue 10) */}
+              {filteredStudents.length > 0 && (
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3.5 px-4 sm:px-6 py-3.5 border-t border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-850/50 rounded-b-xl">
+                  {/* Left: Summary & Per-Page Selector */}
+                  <div className="flex flex-wrap items-center justify-between sm:justify-start w-full sm:w-auto gap-3 text-xs sm:text-sm text-gray-500 dark:text-gray-400">
+                    <span>
+                      Showing <strong className="font-semibold text-gray-900 dark:text-gray-100">{startIndex + 1}</strong> to{" "}
+                      <strong className="font-semibold text-gray-900 dark:text-gray-100">{endIndex}</strong> of{" "}
+                      <strong className="font-semibold text-gray-900 dark:text-gray-100">{filteredStudents.length}</strong> students
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <label htmlFor="pageSizeSelect" className="text-xs text-gray-400 dark:text-gray-500">
+                        Per page:
+                      </label>
+                      <select
+                        id="pageSizeSelect"
+                        value={pageSize}
+                        onChange={(e) => setPageSize(Number(e.target.value))}
+                        className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-2 py-1 text-xs font-medium text-gray-700 dark:text-gray-200 shadow-2xs hover:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+                      >
+                        <option value={25}>25</option>
+                        <option value={50}>50</option>
+                        <option value={100}>100</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Right: Page Buttons */}
+                  {totalPages > 1 && (
+                    <div className="flex items-center gap-1 self-center sm:self-auto">
+                      {/* First Page */}
+                      <button
+                        type="button"
+                        onClick={() => setCurrentPage(1)}
+                        disabled={safeCurrentPage === 1}
+                        className="inline-flex items-center justify-center p-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                        title="First Page"
+                      >
+                        <ChevronsLeft className="w-4 h-4" />
+                      </button>
+
+                      {/* Previous Page */}
+                      <button
+                        type="button"
+                        onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
+                        disabled={safeCurrentPage === 1}
+                        className="inline-flex items-center justify-center p-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                        title="Previous Page"
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                      </button>
+
+                      {/* Desktop Page Numbers */}
+                      <div className="hidden sm:flex items-center gap-1 px-1">
+                        {getPageNumbers(safeCurrentPage, totalPages).map((pNum, pIdx) =>
+                          typeof pNum === "string" ? (
+                            <span key={`ellipsis-${pIdx}`} className="px-2 py-1 text-xs text-gray-400 dark:text-gray-500">
+                              …
+                            </span>
+                          ) : (
+                            <button
+                              key={`page-${pNum}`}
+                              type="button"
+                              onClick={() => setCurrentPage(pNum)}
+                              className={`min-w-[32px] h-8 px-2 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                                safeCurrentPage === pNum
+                                  ? "bg-indigo-600 text-white shadow-2xs"
+                                  : "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700"
+                              }`}
+                            >
+                              {pNum}
+                            </button>
+                          )
+                        )}
+                      </div>
+
+                      {/* Mobile Page Indicator */}
+                      <span className="sm:hidden text-xs font-medium text-gray-700 dark:text-gray-300 px-2">
+                        {safeCurrentPage} / {totalPages}
+                      </span>
+
+                      {/* Next Page */}
+                      <button
+                        type="button"
+                        onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
+                        disabled={safeCurrentPage === totalPages}
+                        className="inline-flex items-center justify-center p-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                        title="Next Page"
+                      >
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+
+                      {/* Last Page */}
+                      <button
+                        type="button"
+                        onClick={() => setCurrentPage(totalPages)}
+                        disabled={safeCurrentPage === totalPages}
+                        className="inline-flex items-center justify-center p-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                        title="Last Page"
+                      >
+                        <ChevronsRight className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Floating Batch Action Toolbar */}

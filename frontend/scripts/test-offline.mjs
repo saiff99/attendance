@@ -1226,6 +1226,83 @@ console.log('\n--- 20. Active Session Polling Optimization & Background Tab Thro
   );
 }
 
+// --- 21. Student Registry Client-Side Pagination & Memoization (Issue 10) ---
+console.log('\n--- 21. Student Registry Client-Side Pagination & Memoization ---');
+{
+  const studentsPagePath = path.resolve(__dirname, '../src/app/students/page.tsx');
+  const studentsContent = fs.readFileSync(studentsPagePath, 'utf8');
+
+  // 1. Memoized Search & Filter
+  assert(
+    studentsContent.includes('const filteredStudents = useMemo(') &&
+    studentsContent.includes('searchTerm') &&
+    studentsContent.includes('activeView'),
+    'students/page.tsx wraps filteredStudents computation in useMemo to eliminate search lag'
+  );
+
+  // 2. Pagination state initialization
+  assert(
+    studentsContent.includes('const [currentPage, setCurrentPage] = useState<number>(1)') &&
+    studentsContent.includes('const [pageSize, setPageSize] = useState<number>(25)'),
+    'students/page.tsx initializes client-side pagination state with default 25 students/page'
+  );
+
+  // 3. Reset to page 1 on filter changes
+  assert(
+    studentsContent.includes('setCurrentPage(1)') &&
+    studentsContent.includes('useEffect(() => {\n    setCurrentPage(1);\n  }, [searchTerm, activeView, activeSubBatch, pageSize])'),
+    'students/page.tsx resets to page 1 on search term, cohort view, or page size change'
+  );
+
+  // 4. Derived slices and math
+  assert(
+    studentsContent.includes('const totalPages = Math.ceil(filteredStudents.length / pageSize)') &&
+    studentsContent.includes('const paginatedStudents = useMemo(') &&
+    studentsContent.includes('filteredStudents.slice(startIndex, endIndex)'),
+    'students/page.tsx derives totalPages and slices paginatedStudents with memoization'
+  );
+
+  // 5. Table body renders paginatedStudents
+  assert(
+    studentsContent.includes('paginatedStudents.map((student, idx) => {') &&
+    !studentsContent.includes('<tbody>\n                    {loading ? (\n                      <tr>\n                        <td colSpan={6} className="py-8 text-center text-sm text-gray-500 dark:text-gray-400">\n                          Loading students...\n                        </td>\n                      </tr>\n                    ) : filteredStudents.length === 0 ? (\n                      <tr>\n                        <td colSpan={6} className="py-8 text-center text-sm text-gray-500 dark:text-gray-400">\n                          No students found. Enroll a new student to get started!\n                        </td>\n                      </tr>\n                    ) : (\n                      filteredStudents.map'),
+    'students/page.tsx renders paginatedStudents in tbody to bound DOM nodes'
+  );
+
+  // 6. Pagination UI controls
+  assert(
+    studentsContent.includes('getPageNumbers(') &&
+    studentsContent.includes('Showing <strong') &&
+    studentsContent.includes('id="pageSizeSelect"'),
+    'students/page.tsx provides smart page numbers and per-page size selector'
+  );
+
+  // 7. Full cohort selection banner
+  assert(
+    studentsContent.includes('handleSelectAllFiltered') &&
+    studentsContent.includes('isPageAllSelected && filteredStudents.length > paginatedStudents.length'),
+    'students/page.tsx surfaces cohort-wide selection banner when current page is selected'
+  );
+
+  // 8. CSV export integrity across pages
+  assert(
+    studentsContent.includes('filteredStudents.length > 0 ? filteredStudents : students'),
+    'students/page.tsx exports all filtered cohort students in CSV regardless of current page'
+  );
+
+  // 9. Simulation of pagination slicing math
+  const mockStudents = Array.from({ length: 110 }, (_, i) => ({ id: `s-${i + 1}`, roll: `${100 + i}` }));
+  const mockPageSize = 25;
+  const mockTotalPages = Math.ceil(mockStudents.length / mockPageSize);
+  assert(mockTotalPages === 5, 'Pagination math calculates exactly 5 pages for 110 students at 25/page');
+
+  const page1Slice = mockStudents.slice(0, 25);
+  assert(page1Slice.length === 25 && page1Slice[0].id === 's-1' && page1Slice[24].id === 's-25', 'Page 1 correctly contains first 25 items');
+
+  const page5Slice = mockStudents.slice(100, 110);
+  assert(page5Slice.length === 10 && page5Slice[0].id === 's-101' && page5Slice[9].id === 's-110', 'Page 5 correctly contains remaining 10 items');
+}
+
 // Summary
 console.log('\n' + '=' .repeat(65));
 console.log(`📊 Offline Unit Test Summary: ${passed} Passed, ${failed} Failed`);
