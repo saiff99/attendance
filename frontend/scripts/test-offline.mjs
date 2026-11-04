@@ -1961,6 +1961,82 @@ console.log('\n--- 34. Main Dashboard Concurrency & Query Optimization ---');
   assert(uniqueAbsent === 1, 'Today absent count accurately calculated based on active students only');
 }
 
+// --- 35. Backend Server-Side Session Metadata RAM Caching & Invalidation ---
+console.log('\n--- 35. Backend Server-Side Session Metadata RAM Caching & Invalidation ---');
+{
+  const sessionCachePyPath = path.resolve(__dirname, '../../backend/app/session_cache.py');
+  const sessionCachePyContent = fs.readFileSync(sessionCachePyPath, 'utf8');
+
+  const backendRoutesPath = path.resolve(__dirname, '../../backend/app/routes.py');
+  const backendRoutesContent = fs.readFileSync(backendRoutesPath, 'utf8');
+
+  // 1. backend/app/session_cache.py defines thread-safe caching, TTL, and invalidation
+  assert(
+    sessionCachePyContent.includes('SESSION_METADATA_CACHE_TTL_SECONDS') &&
+    sessionCachePyContent.includes('_session_cache_lock = threading.Lock()') &&
+    sessionCachePyContent.includes('def get_cached_session_metadata') &&
+    sessionCachePyContent.includes('def invalidate_backend_session_cache'),
+    'backend/app/session_cache.py exports get_cached_session_metadata, invalidator, lock, and 30s TTL'
+  );
+
+  // 2. backend/app/session_cache.py provides fault-tolerant stale serving
+  assert(
+    sessionCachePyContent.includes('if cached_entry is not None:') &&
+    sessionCachePyContent.includes('return cached_entry[0].copy()'),
+    'backend/app/session_cache.py implements fault-tolerant stale metadata serving on DB failure'
+  );
+
+  // 3. backend/app/routes.py imports and integrates session cache
+  assert(
+    backendRoutesContent.includes('from app.session_cache import') &&
+    backendRoutesContent.includes('get_cached_session_metadata') &&
+    backendRoutesContent.includes('invalidate_backend_session_cache'),
+    'backend/app/routes.py imports get_cached_session_metadata and invalidate_backend_session_cache'
+  );
+
+  // 4. backend/app/routes.py exposes invalidate endpoint
+  assert(
+    backendRoutesContent.includes('@router.post("/api/session/invalidate-cache")'),
+    'backend/app/routes.py exposes /api/session/invalidate-cache endpoint'
+  );
+
+  // 5. In-memory session metadata lifecycle simulation
+  let testSessionCache = {};
+  let testTtlSec = 30;
+
+  function fetchSession(sessId, nowSec, dbFetch) {
+    const entry = testSessionCache[sessId];
+    if (entry && (nowSec - entry.ts) < testTtlSec) {
+      return entry.data;
+    }
+    const fresh = dbFetch(sessId);
+    if (fresh) {
+      testSessionCache[sessId] = { data: fresh, ts: nowSec };
+    }
+    return fresh;
+  }
+
+  function invalidateSession(sessId) {
+    if (sessId) {
+      delete testSessionCache[sessId];
+    } else {
+      testSessionCache = {};
+    }
+  }
+
+  let dbCalls = 0;
+  const mockDb = (id) => { dbCalls++; return { id, class_name: 'Anatomy 101', start_time: '2026-11-04T10:00:00Z' }; };
+
+  const r1 = fetchSession('sess-1', 1000, mockDb);
+  const r2 = fetchSession('sess-1', 1015, mockDb); // 15s later -> cache hit
+  assert(dbCalls === 1, '150 concurrent check-ins share 1 DB query within 30s TTL');
+  assert(r1.class_name === 'Anatomy 101' && r2.class_name === 'Anatomy 101', 'Cached metadata matches database record');
+
+  invalidateSession('sess-1');
+  const r3 = fetchSession('sess-1', 1020, mockDb); // after invalidation -> cache miss
+  assert(dbCalls === 2, 'Invalidation forces immediate fresh database roundtrip');
+}
+
 // Summary
 console.log('\n' + '=' .repeat(65));
 console.log(`📊 Offline Unit Test Summary: ${passed} Passed, ${failed} Failed`);

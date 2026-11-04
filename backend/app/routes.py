@@ -31,6 +31,10 @@ from app.config import (
     calculate_haversine_distance,
     has_valid_face_encoding,
 )
+from app.session_cache import (
+    get_cached_session_metadata,
+    invalidate_backend_session_cache,
+)
 from app.ai import app_fa, AI_ENABLED, calculate_confidence_score, match_faces_vectorized
 from app.antispoof import verify_face_liveness
 from app.stream import generate_video_feed
@@ -662,11 +666,10 @@ async def process_attendance(request: Request, file: UploadFile = File(...), ses
     if not session_id:
         raise HTTPException(status_code=400, detail="session_id is required.")
 
-    # 1. Fetch Session to get target_academic_year and verify active status
-    session_res = supabase.table("sessions").select("target_academic_year, is_archived, class_name").eq("id", session_id).execute()
+    # 1. Fetch Session to get target_academic_year and verify active status (from high-speed in-memory cache)
+    sess_item = get_cached_session_metadata(session_id)
     target_year = "All"
-    if session_res.data:
-        sess_item = session_res.data[0]
+    if sess_item:
         if sess_item.get("is_archived") or str(sess_item.get("class_name", "")).startswith("[ARCHIVED]"):
             raise HTTPException(status_code=403, detail="Cannot process attendance for an archived session.")
         if sess_item.get("target_academic_year"):
@@ -790,6 +793,7 @@ async def api_end_session(request: Optional[EndSessionRequest] = None):
     ai_coordinator.end_active_session(s_id)
     result = cleanup_session_state(s_id)
     rl_result = prune_all_expired_rate_limit_state(session_id=s_id)
+    invalidate_backend_session_cache(s_id)
     return {
         "success": True,
         "message": "Session memory cleaned up successfully. RTSP streams remain connected.",
@@ -805,6 +809,7 @@ async def api_end_session_by_id(session_id: str):
     ai_coordinator.end_active_session(session_id)
     result = cleanup_session_state(session_id)
     rl_result = prune_all_expired_rate_limit_state(session_id=session_id)
+    invalidate_backend_session_cache(session_id)
     return {
         "success": True,
         "message": f"Session {session_id} ended and memory cleaned up successfully.",
@@ -817,6 +822,18 @@ async def api_invalidate_geofence():
     """Invalidates the in-memory server geofence cache."""
     invalidate_server_geofence_cache()
     return {"success": True, "message": "Server geofence cache invalidated successfully."}
+
+@router.post("/api/session/invalidate-cache")
+async def api_invalidate_session_cache(request: Request):
+    """Invalidates the in-memory backend session metadata cache."""
+    session_id = None
+    try:
+        body = await request.json()
+        session_id = body.get("session_id")
+    except Exception:
+        pass
+    invalidate_backend_session_cache(session_id)
+    return {"success": True, "message": f"Session cache invalidated for: {session_id or 'all'}"}
 
 @router.post("/api/upload-photo")
 async def upload_photo(file: UploadFile = File(...)):
@@ -1146,11 +1163,9 @@ async def student_lookup(
             detail="Valid signed check-in token or authenticated session required. Unauthenticated student lookup is prohibited."
         )
 
-    sess_res = safe_db_execute(supabase.table("sessions").select("id, class_name, start_time, created_at, target_academic_year, is_archived").eq("id", clean_sess_id))
-    if not sess_res.data:
+    sess_obj = get_cached_session_metadata(clean_sess_id)
+    if not sess_obj:
         raise HTTPException(status_code=404, detail="Lecture session not found.")
-        
-    sess_obj = sess_res.data[0]
     if sess_obj.get("is_archived") or str(sess_obj.get("class_name", "")).startswith("[ARCHIVED]"):
         raise HTTPException(
             status_code=403,
@@ -1320,12 +1335,10 @@ async def selfie_attendance(
     # 4. Device Lock Check (Shared & Persistent: 1 mobile device per student per session)
     check_device_lock(clean_sess_id, clean_dev_id, clean_roll)
 
-    # 5. Check Session Expiration & Load Metadata
-    session_res = safe_db_execute(supabase.table("sessions").select("id, start_time, created_at, class_name, target_academic_year, instructor_name").eq("id", clean_sess_id))
-    if not session_res.data:
+    # 5. Check Session Expiration & Load Metadata (from high-speed in-memory cache)
+    sess_obj = get_cached_session_metadata(clean_sess_id)
+    if not sess_obj:
         raise HTTPException(status_code=404, detail="Lecture session not found.")
-        
-    sess_obj = session_res.data[0]
     time_str = sess_obj.get("start_time") or sess_obj.get("created_at")
     if time_str:
         try:
