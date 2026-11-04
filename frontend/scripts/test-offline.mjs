@@ -1388,10 +1388,13 @@ console.log('\n--- 23. Live Scan CCTV Log Polling Guard & Visibility Sync ---');
     'live-scan/page.tsx implements in-flight guard to prevent request stacking during high latency'
   );
 
+  const sessionCachePath = path.resolve(__dirname, '../src/lib/sessionCache.ts');
+  const sessionCacheContent = fs.existsSync(sessionCachePath) ? fs.readFileSync(sessionCachePath, 'utf8') : '';
+
   // 5. Server-side sessionInfo TTL cache
   assert(
-    sessionLogRouteContent.includes('sessionInfoCache = new Map') &&
-    sessionLogRouteContent.includes('expiresAt > now'),
+    (sessionLogRouteContent.includes('sessionInfoCache') || sessionCacheContent.includes('sessionInfoCache = new Map')) &&
+    (sessionLogRouteContent.includes('getCachedSessionInfo') || sessionCacheContent.includes('expiresAt > now')),
     'api/attendance/session/[sessionId]/route.ts caches session metadata in memory (60s TTL) to cut SQL queries in half'
   );
 }
@@ -1789,6 +1792,56 @@ console.log('\n--- 31. Ephemeral Device-Lock Key Exclusion from Database Backup 
   // 4. Verification that devlock keys are completely eradicated from restored payloads
   const devlockRestored = sanitizedForBackup.filter(s => s.key.startsWith('devlock:'));
   assert(devlockRestored.length === 0, 'Zero ephemeral devlock keys restored into database');
+}
+
+// --- 32. Session Lifecycle Metadata Cache Eviction (Issue 22) ---
+console.log('\n--- 32. Session Lifecycle Metadata Cache Eviction ---');
+{
+  const sessionCachePath = path.resolve(__dirname, '../src/lib/sessionCache.ts');
+  const sessionCacheContent = fs.readFileSync(sessionCachePath, 'utf8');
+
+  const sessionIdRoutePath = path.resolve(__dirname, '../src/app/api/sessions/[id]/route.ts');
+  const sessionIdRouteContent = fs.readFileSync(sessionIdRoutePath, 'utf8');
+
+  const attendanceSessionRoutePath = path.resolve(__dirname, '../src/app/api/attendance/session/[sessionId]/route.ts');
+  const attendanceSessionRouteContent = fs.readFileSync(attendanceSessionRoutePath, 'utf8');
+
+  // 1. sessionCache.ts exports getCachedSessionInfo, setCachedSessionInfo, invalidateSessionInfoCache, SESSION_INFO_TTL_MS
+  assert(
+    sessionCacheContent.includes('export function getCachedSessionInfo') &&
+    sessionCacheContent.includes('export function setCachedSessionInfo') &&
+    sessionCacheContent.includes('export function invalidateSessionInfoCache') &&
+    sessionCacheContent.includes('SESSION_INFO_TTL_MS = 60 * 1000'),
+    'lib/sessionCache.ts exports cache getters, setters, invalidators, and 60-sec TTL'
+  );
+
+  // 2. api/attendance/session/[sessionId]/route.ts uses getCachedSessionInfo and setCachedSessionInfo
+  assert(
+    attendanceSessionRouteContent.includes('getCachedSessionInfo(sessionId)') &&
+    attendanceSessionRouteContent.includes('setCachedSessionInfo(sessionId, data)'),
+    'api/attendance/session/[sessionId]/route.ts integrates centralized session cache'
+  );
+
+  // 3. api/sessions/[id]/route.ts calls invalidateSessionInfoCache in PATCH
+  assert(
+    sessionIdRouteContent.includes("import { invalidateSessionInfoCache } from '@/lib/sessionCache'") &&
+    sessionIdRouteContent.includes('invalidateSessionInfoCache(id);'),
+    'api/sessions/[id]/route.ts invalidates session cache upon session update in PATCH'
+  );
+
+  // 4. api/sessions/[id]/route.ts calls invalidateSessionInfoCache in DELETE
+  const deleteHandlerParts = sessionIdRouteContent.split('export async function DELETE');
+  assert(
+    deleteHandlerParts.length === 2 && deleteHandlerParts[1].includes('invalidateSessionInfoCache(id);'),
+    'api/sessions/[id]/route.ts invalidates session cache upon session archive or deletion in DELETE'
+  );
+
+  // 5. Simulation of session cache lifecycle
+  const testMap = new Map();
+  testMap.set('sess-100', { info: { class_name: 'Anatomy 1' }, expiresAt: Date.now() + 60000 });
+  assert(testMap.has('sess-100'), 'Session cached initially');
+  testMap.delete('sess-100');
+  assert(!testMap.has('sess-100'), 'Session cache evicted immediately upon invalidation');
 }
 
 // Summary

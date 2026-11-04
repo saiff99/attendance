@@ -3,11 +3,17 @@ import { supabaseServer } from '@/lib/supabaseServer';
 import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/serverAuth';
 import { isValidUuid, isFacultyAuthorizedForSession } from '@/lib/attendanceAuth';
 import { logAuditEvent } from '@/lib/auditLog';
+import {
+  sessionInfoCache,
+  getCachedSessionInfo,
+  setCachedSessionInfo,
+  invalidateSessionInfoCache,
+} from '@/lib/sessionCache';
 
 export const dynamic = 'force-dynamic';
 
-// In-memory 60s TTL cache for session existence & metadata to eliminate redundant SQL queries during polling (Issue 13)
-const sessionInfoCache = new Map<string, { info: any; expiresAt: number }>();
+// Re-export session info cache and eviction utilities
+export { sessionInfoCache, invalidateSessionInfoCache };
 
 export async function GET(
   request: NextRequest,
@@ -37,12 +43,8 @@ export async function GET(
     }
 
     // 1. Fetch Session to verify existence and faculty authorization (with 60s memory cache)
-    let sessionInfo: any = null;
-    const now = Date.now();
-    const cached = sessionInfoCache.get(sessionId);
-    if (cached && cached.expiresAt > now) {
-      sessionInfo = cached.info;
-    } else {
+    let sessionInfo = getCachedSessionInfo(sessionId);
+    if (!sessionInfo) {
       const { data } = await supabaseServer
         .from('sessions')
         .select('id, class_name, instructor_name, target_academic_year')
@@ -50,7 +52,7 @@ export async function GET(
         .maybeSingle();
 
       if (data) {
-        sessionInfoCache.set(sessionId, { info: data, expiresAt: now + 60000 });
+        setCachedSessionInfo(sessionId, data);
         sessionInfo = data;
       }
     }

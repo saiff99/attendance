@@ -4,6 +4,7 @@ import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/serverAuth';
 import { isFacultyAuthorizedForSession } from '@/lib/attendanceAuth';
 import { decodeSessionMetadata } from '@/lib/geofence';
 import { logAuditEvent } from '@/lib/auditLog';
+import { invalidateSessionInfoCache } from '@/lib/sessionCache';
 
 export const dynamic = 'force-dynamic';
 
@@ -159,6 +160,8 @@ export async function PATCH(
       },
     });
 
+    invalidateSessionInfoCache(id);
+
     return NextResponse.json({
       success: true,
       session: data,
@@ -244,6 +247,8 @@ export async function DELETE(
         },
       });
 
+      invalidateSessionInfoCache(id);
+
       return NextResponse.json({
         success: true,
         archived: true,
@@ -273,6 +278,8 @@ export async function DELETE(
         actor_role: session.role,
       },
     });
+
+    invalidateSessionInfoCache(id);
 
     return NextResponse.json({ success: true, message: 'Empty session deleted successfully.' });
   } catch (err: any) {
