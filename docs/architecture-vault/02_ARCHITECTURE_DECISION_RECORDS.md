@@ -299,6 +299,29 @@
   - *Positive:* Eliminates Cloudflare / Vercel 504 Gateway Timeout hazards for large classroom cohorts.
   - *Positive:* Guarantees atomic consistency: all recognized students are recorded simultaneously in one database transaction.
 
+---
+
+### ADR-018: Periodic Rate-Limiter In-Memory Pruning & Ephemeral Settings DB Purging
+- **Status:** Accepted & Enforced (November 2026)
+- **Context:**
+  1. The backend rate-limiter and device-locking subsystem (`backend/app/rate_limiter.py`) maintains L1 fast in-memory dictionaries: `_memory_dev_locks`, `_memory_selfie_limits`, `_memory_selfie_ip_limits`, `_memory_lookup_limits`, `_memory_active_sessions_limits`, `_memory_fail_cooldowns`, and thread mutexes `_key_locks`.
+  2. In high-traffic production operations with continuous 24/7 uptime across semesters, hundreds of attendance sessions occur. In-memory locks, empty sliding-window arrays, and expired device locks (`session_id:device_id`) accumulated without bound because keys were never explicitly pruned once expired.
+  3. Over months of continuous execution, uncollected dictionary keys would cause unbounded heap memory growth, eventual system degradation, and memory leaks.
+  4. In the L2 fallback storage (`settings` table in Supabase), ephemeral keys prefixed with `rl_` and `devlock:` persisted indefinitely after their expiration windows elapsed, cluttering the system configuration table.
+- **Decision:**
+  1. Implement a comprehensive pruning function `prune_all_expired_rate_limit_state(session_id: Optional[str] = None)` in `backend/app/rate_limiter.py`:
+     - **Session Lifecycle Pruning:** Hook directly into `/api/end-session` and `/api/sessions/{session_id}/end` to instantly drop all device locks (`{session_id}:{device_id}`) and fail cooldowns for the terminated session.
+     - **Sliding-Window Pruning:** Remove timestamps older than their evaluation window (120s); if no valid timestamps remain, delete the client IP/roll key from memory.
+     - **Stale Failure Cooldowns:** Purge lockout records whose lockout period expired more than 1 hour ago (`now_ts > locked_until + 3600.0`).
+     - **Dead Mutex Cleanup:** Drop unused `threading.Lock` entries in `_key_locks` using non-blocking lock acquisition (`acquire(blocking=False)`) whenever their corresponding keys are no longer referenced in memory.
+     - **Safe L2 DB Cleanup:** Delete ephemeral keys (`rl_%`, `devlock:%`) from the `settings` table older than 24 hours, while strictly preserving persistent system configurations (`campus_wifi_ip_list`, geofence boundaries, etc.).
+  2. Deploy a lightweight background daemon thread (`_periodic_rate_limiter_sweeper`) running every 30 minutes to guarantee automatic self-healing memory maintenance even during periods of unattended server uptime.
+- **Consequences:**
+  - *Positive:* Strict bounded memory consumption: memory footprint remains lean, deterministic, and constant across months of continuous operation.
+  - *Positive:* Prevents heap memory bloat and protects low-resource host environments (e.g., Mac mini, cloud instances).
+  - *Positive:* L2 database `settings` table remains clean and uncluttered without touching critical persistent settings.
+
+
 
 
 

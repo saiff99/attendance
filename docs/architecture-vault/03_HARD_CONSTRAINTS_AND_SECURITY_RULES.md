@@ -113,5 +113,15 @@ The rules documented in this specification are **Hard Constraints**. Under no ci
   - **Biometric Template Immutability:** During batch classroom attendance recognition, facial embeddings extracted from low-resolution or angled classroom snapshots must **NEVER** overwrite or mutate the authoritative 512D ArcFace unit vector stored in `students.face_encoding`. Template enrollment is permitted strictly via explicit DPDP Act 2023 compliant enrollment pathways (`/api/enroll-face` and `/api/enroll-face-burst`).
 - **Violation Guard:** Never expose `/api/process-attendance` without session token verification and never re-introduce automated face encoding overwriting during attendance scans.
 
+### Rule 13: Bounded In-Memory Rate Limiting & Ephemeral State Purge Lifecycle
+- **Constraint:** In-memory rate limiting dictionaries, mutexes, and device locks must strictly maintain bounded memory limits and never produce unbounded memory growth or persistent table clutter over prolonged server lifecycles.
+- **Implementation:**
+  - `backend/app/rate_limiter.py` registers automated pruning via `prune_all_expired_rate_limit_state(session_id)`.
+  - Termination of any session via `/api/end-session` or `/api/sessions/{session_id}/end` automatically purges all associated device locks (`session_id:device_id`) and session-specific cooldowns.
+  - Background daemon thread sweeps all sliding-window timestamp buffers, 1-hour-old fail cooldowns, and unreferenced mutexes every 30 minutes.
+  - Ephemeral database keys (`rl_%`, `devlock:%`) in `settings` older than 24 hours are safely purged without touching persistent campus configuration rows.
+- **Violation Guard:** Never store unbounded dictionaries in module-level scope without TTL expiration or automated pruning mechanisms.
+
+
 
 
