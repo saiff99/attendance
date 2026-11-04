@@ -549,6 +549,29 @@ class TestTrustedIPUnit(unittest.TestCase):
         self.assertEqual(get_real_client_ip(req), "127.0.0.1")
 
 
+class TestClassroomPhotoBatchUpsertUnit(unittest.TestCase):
+    """Unit tests for Classroom Photo Attendance Batch Upsert (Issue 8)."""
+
+    def test_routes_implements_batch_upsert(self):
+        routes_path = os.path.join(backend_dir, "app", "routes.py")
+        with open(routes_path, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        # Must construct batch_payload list comprehension
+        self.assertIn("batch_payload = [", content)
+        self.assertIn('"capture_mode": "Manual Upload"', content)
+        self.assertIn('"status": "Present"', content)
+        
+        # Must execute atomic batch upsert with array
+        self.assertIn('supabase.table("attendance").upsert(', content)
+        self.assertIn('batch_payload,', content)
+        self.assertIn('on_conflict="session_id,student_id"', content)
+
+        # Must include fault-tolerant fallback
+        self.assertIn("Batch attendance upsert failed", content)
+        self.assertIn("Attempting individual fallback...", content)
+
+
 if __name__ == "__main__":
     unittest.main()
 

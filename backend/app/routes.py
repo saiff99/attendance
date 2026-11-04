@@ -711,22 +711,47 @@ async def process_attendance(request: Request, file: UploadFile = File(...), ses
         print("Error matching faces:", str(e))
         raise HTTPException(status_code=500, detail="Failed to run AI face matching.")
 
-    # 3. Record Attendance
+    # 3. Record Attendance via High-Performance Atomic Batch Upsert (1 network call vs N sequential calls)
     results = []
-    for student in recognized_students:
-        try:
-            supabase.table("attendance").upsert({
+    if recognized_students:
+        batch_payload = [
+            {
                 "session_id": session_id,
-                "student_id": student['id'],
+                "student_id": student["id"],
                 "status": "Present",
                 "capture_mode": "Manual Upload",
-                "confidence_score": student['confidence']
-            }, on_conflict="session_id,student_id").execute()
-            results.append({"name": student['full_name'], "confidence": student['confidence']})
-        except Exception as e:
-            print(f"Attendance recorded/duplicate for {student['full_name']}:", str(e))
-            # If UNIQUE constraint fails (already scanned today), we ignore it.
-            pass
+                "confidence_score": student["confidence"]
+            }
+            for student in recognized_students
+        ]
+
+        try:
+            # Atomic single-roundtrip batch upsert (PostgREST ACID transaction)
+            supabase.table("attendance").upsert(
+                batch_payload,
+                on_conflict="session_id,student_id"
+            ).execute()
+
+            results = [
+                {"name": student["full_name"], "confidence": student["confidence"]}
+                for student in recognized_students
+            ]
+        except Exception as batch_err:
+            print(f"[WARN] Batch attendance upsert failed: {batch_err}. Attempting individual fallback...")
+            # Fault-tolerant individual fallback
+            for student in recognized_students:
+                try:
+                    supabase.table("attendance").upsert({
+                        "session_id": session_id,
+                        "student_id": student["id"],
+                        "status": "Present",
+                        "capture_mode": "Manual Upload",
+                        "confidence_score": student["confidence"]
+                    }, on_conflict="session_id,student_id").execute()
+                    results.append({"name": student["full_name"], "confidence": student["confidence"]})
+                except Exception as ind_err:
+                    print(f"Attendance recorded/duplicate for {student['full_name']}:", str(ind_err))
+                    pass
 
     return {
         "success": True,
