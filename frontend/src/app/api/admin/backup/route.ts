@@ -80,7 +80,7 @@ export async function GET(request: NextRequest) {
       fetchAllRows('sessions', '*'),
       fetchAllRows('attendance', '*'),
       fetchAllRows('academic_subjects', '*'),
-      fetchAllRows('settings', '*', (q) => q.not('key', 'like', 'rl_%')),
+      fetchAllRows('settings', '*', (q) => q.not('key', 'like', 'rl_%').not('key', 'like', 'devlock:%')),
     ]);
 
     const backupData = {

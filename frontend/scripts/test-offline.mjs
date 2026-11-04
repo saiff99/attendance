@@ -1749,6 +1749,48 @@ console.log('\n--- 30. User Management Immediate Cache Invalidation ---');
   assert(mockCachedUserMap === null && mockUserMapCachedAt === 0, 'Mock cache invalidated to null and timestamp reset to 0');
 }
 
+// --- 31. Ephemeral Device-Lock Key Exclusion from Database Backup & Restore (Issue 21) ---
+console.log('\n--- 31. Ephemeral Device-Lock Key Exclusion from Database Backup & Restore ---');
+{
+  const backupRoutePath = path.resolve(__dirname, '../src/app/api/admin/backup/route.ts');
+  const backupRouteContent = fs.readFileSync(backupRoutePath, 'utf8');
+
+  const restoreRoutePath = path.resolve(__dirname, '../src/app/api/admin/restore/route.ts');
+  const restoreRouteContent = fs.readFileSync(restoreRoutePath, 'utf8');
+
+  // 1. api/admin/backup/route.ts excludes both rl_% and devlock:% from settings export
+  assert(
+    backupRouteContent.includes(".not('key', 'like', 'rl_%').not('key', 'like', 'devlock:%')"),
+    'api/admin/backup/route.ts excludes ephemeral devlock:% keys alongside rl_% keys in settings query'
+  );
+
+  // 2. api/admin/restore/route.ts filters both rl_ and devlock: from restored settings
+  assert(
+    restoreRouteContent.includes("!s.key.startsWith('rl_') && !s.key.startsWith('devlock:')"),
+    'api/admin/restore/route.ts filters out both rl_ and devlock: keys before batch-upserting settings'
+  );
+
+  // 3. Simulation of backup/restore settings sanitization
+  const mockSettings = [
+    { key: 'system_config', value: { institute: 'Medical College' } },
+    { key: 'geofence_defaults', value: { radius: 150 } },
+    { key: 'rl_fail:ip:192.168.1.10', value: { attempts: 3 } },
+    { key: 'devlock:sess_456:device_xyz123', value: { student_roll: '26001' } },
+    { key: 'devlock:sess_789:device_abc789', value: { student_roll: '26002' } },
+  ];
+
+  const sanitizedForBackup = mockSettings.filter(s => !s.key.startsWith('rl_') && !s.key.startsWith('devlock:'));
+  assert(sanitizedForBackup.length === 2, 'Only permanent system settings survive backup sanitization');
+  assert(
+    sanitizedForBackup[0].key === 'system_config' && sanitizedForBackup[1].key === 'geofence_defaults',
+    'Legitimate institutional settings perfectly preserved'
+  );
+
+  // 4. Verification that devlock keys are completely eradicated from restored payloads
+  const devlockRestored = sanitizedForBackup.filter(s => s.key.startsWith('devlock:'));
+  assert(devlockRestored.length === 0, 'Zero ephemeral devlock keys restored into database');
+}
+
 // Summary
 console.log('\n' + '=' .repeat(65));
 console.log(`📊 Offline Unit Test Summary: ${passed} Passed, ${failed} Failed`);

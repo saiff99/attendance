@@ -84,8 +84,10 @@ export async function POST(request: NextRequest) {
     // Step A: Restore Academic Subjects
     const restoredSubjects = await batchUpsert('academic_subjects', subjects, 50, 'id');
 
-    // Step B: Restore System Settings (non-rate-limiting)
-    const validSettings = settings.filter((s: any) => s && s.key && !s.key.startsWith('rl_'));
+    // Step B: Restore System Settings (non-rate-limiting & non-ephemeral device-locks)
+    const validSettings = settings.filter(
+      (s: any) => s && s.key && !s.key.startsWith('rl_') && !s.key.startsWith('devlock:')
+    );
     const restoredSettings = await batchUpsert('settings', validSettings, 50, 'key');
 
     // Step C: Restore Students (Prerequisite for attendance foreign keys)
