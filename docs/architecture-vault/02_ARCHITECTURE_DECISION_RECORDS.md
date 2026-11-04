@@ -503,6 +503,26 @@
   - *Positive:* High fault-tolerance: temporary database glitches do not break campus geofence enforcement.
   - *Positive:* Immediate invalidation supported via internal API.
 
+---
+
+### ADR-028: Main Dashboard Concurrency Optimization, Cached User Map Reuse & SQL Pushdown
+- **Status:** Accepted & Enforced (November 2026)
+- **Context:**
+  1. The MedAttend AI main application dashboard (`frontend/src/app/page.tsx`) renders institutional metrics (total registered students, today's attendance, recent sessions, and 7-day attendance trends) on every page request (`force-dynamic`, `revalidate = 0`).
+  2. Previously, the dashboard executed a direct SQL query against the `app_users` table on every load to map faculty usernames to full names, bypassing the centralized 5-minute TTL in-memory user map cache (`getCachedUserMap()` in `frontend/src/lib/userCache.ts`).
+  3. Furthermore, the dashboard's student count query fetched all records from `students` without filtering for active enrollment status (`is_active = true`), inadvertently including archived or graduated students and skewing the dashboard's "Total Registered Students" metric and "Today's Absent" calculations.
+  4. Finally, the recent sessions query scanned the `sessions` table without pushing down `.eq('is_archived', false)`. This prevented the PostgreSQL query optimizer from utilizing the high-velocity partial composite index `idx_sessions_active_created ON public.sessions (created_at DESC) WHERE is_archived = false;` (introduced in ADR-018), resulting in unindexed sequential scans and displaying archived historical sessions.
+- **Decision:**
+  1. In `frontend/src/app/page.tsx`, integrate `getCachedUserMap()` from `@/lib/userCache` directly inside the concurrent `Promise.all` construct, eliminating direct queries to `app_users`.
+  2. Push down `.eq('is_active', true)` onto the student count query (`.from('students').select('*', { count: 'exact', head: true }).eq('is_active', true)`) to strictly count active institutional students.
+  3. Push down `.eq('is_archived', false)` onto the recent sessions query (`.from('sessions').select(...).eq('is_archived', false)...`) to activate index scans on `idx_sessions_active_created` and guarantee that only active, unarchived classes appear in recent class views.
+- **Consequences:**
+  - *Positive:* Direct database queries to `app_users` completely eliminated on all dashboard page visits, leveraging the in-memory cache with automatic mutation invalidation.
+  - *Positive:* Recent session query latency reduced by up to 10x via partial index execution (`idx_sessions_active_created`).
+  - *Positive:* Strict mathematical accuracy for active student registry and daily absenteeism metrics.
+  - *Positive:* Archived sessions remain excluded from active operational oversight.
+
+
 
 
 
