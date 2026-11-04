@@ -21,6 +21,9 @@ import {
   Info, 
   X, 
   ChevronRight,
+  ChevronLeft,
+  ChevronsLeft,
+  ChevronsRight,
   Download,
   FileSpreadsheet,
   CalendarDays,
@@ -28,6 +31,19 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import Link from "next/link";
+
+function getPageNumbers(current: number, total: number): (number | string)[] {
+  if (total <= 7) {
+    return Array.from({ length: total }, (_, i) => i + 1);
+  }
+  if (current <= 4) {
+    return [1, 2, 3, 4, 5, '...', total];
+  }
+  if (current >= total - 3) {
+    return [1, '...', total - 4, total - 3, total - 2, total - 1, total];
+  }
+  return [1, '...', current - 1, current, current + 1, '...', total];
+}
 
 interface AuditLogEntry {
   id: string;
@@ -159,6 +175,24 @@ export default function AuditLogsPage() {
       return true;
     });
   }, [logs, selectedActionFilter, selectedTargetFilter, searchTerm]);
+
+  // Client-Side Pagination States (Issue 16)
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(25);
+
+  // Reset to page 1 on search or filter change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, selectedActionFilter, selectedTargetFilter, activeDatePreset, startDate, endDate, pageSize]);
+
+  const totalPages = Math.ceil(filteredLogs.length / pageSize) || 1;
+  const safeCurrentPage = Math.min(Math.max(currentPage, 1), totalPages);
+  const startIndex = (safeCurrentPage - 1) * pageSize;
+  const endIndex = Math.min(startIndex + pageSize, filteredLogs.length);
+
+  const paginatedLogs = useMemo(() => {
+    return filteredLogs.slice(startIndex, startIndex + pageSize);
+  }, [filteredLogs, startIndex, pageSize]);
 
   // Analytics Metrics
   const metrics = useMemo(() => {
@@ -605,7 +639,7 @@ export default function AuditLogsPage() {
                   </td>
                 </tr>
               ) : (
-                filteredLogs.map((entry) => {
+                paginatedLogs.map((entry) => {
                   const badge = getActionBadge(entry.action);
                   const BadgeIcon = badge.icon;
                   const { dateStr, timeStr } = formatDate(entry.created_at);
@@ -693,6 +727,113 @@ export default function AuditLogsPage() {
             </tbody>
           </table>
         </div>
+
+        {/* Client-Side Pagination Controls (Issue 16) */}
+        {filteredLogs.length > 0 && (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3.5 px-4 sm:px-6 py-3.5 border-t border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/30">
+            {/* Left: Summary & Per-Page Selector */}
+            <div className="flex flex-wrap items-center justify-between sm:justify-start w-full sm:w-auto gap-3 text-xs sm:text-sm text-gray-500 dark:text-gray-400">
+              <span>
+                Showing <strong className="font-semibold text-gray-900 dark:text-gray-100">{filteredLogs.length === 0 ? 0 : startIndex + 1}</strong> to{" "}
+                <strong className="font-semibold text-gray-900 dark:text-gray-100">{endIndex}</strong> of{" "}
+                <strong className="font-semibold text-gray-900 dark:text-gray-100">{filteredLogs.length}</strong> audit events
+              </span>
+              <div className="flex items-center gap-1.5">
+                <label htmlFor="auditPageSizeSelect" className="text-xs text-gray-400 dark:text-gray-500">
+                  Per page:
+                </label>
+                <select
+                  id="auditPageSizeSelect"
+                  value={pageSize}
+                  onChange={(e) => setPageSize(Number(e.target.value))}
+                  className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-2 py-1 text-xs font-medium text-gray-700 dark:text-gray-200 shadow-2xs hover:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+                >
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Right: Page Buttons */}
+            {totalPages > 1 && (
+              <div className="flex items-center gap-1 self-center sm:self-auto">
+                {/* First Page */}
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage(1)}
+                  disabled={safeCurrentPage === 1}
+                  className="inline-flex items-center justify-center p-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  title="First Page"
+                >
+                  <ChevronsLeft className="w-4 h-4" />
+                </button>
+
+                {/* Previous Page */}
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
+                  disabled={safeCurrentPage === 1}
+                  className="inline-flex items-center justify-center p-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  title="Previous Page"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+
+                {/* Desktop Page Numbers */}
+                <div className="hidden sm:flex items-center gap-1 px-1">
+                  {getPageNumbers(safeCurrentPage, totalPages).map((pNum, pIdx) =>
+                    typeof pNum === "string" ? (
+                      <span key={`ellipsis-${pIdx}`} className="px-2 py-1 text-xs text-gray-400 dark:text-gray-500">
+                        …
+                      </span>
+                    ) : (
+                      <button
+                        key={`page-${pNum}`}
+                        type="button"
+                        onClick={() => setCurrentPage(pNum)}
+                        className={`min-w-7 h-7 px-2 flex items-center justify-center rounded-lg text-xs font-semibold transition-all ${
+                          safeCurrentPage === pNum
+                            ? "bg-indigo-600 text-white shadow-2xs shadow-indigo-500/30"
+                            : "border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-gray-100"
+                        }`}
+                      >
+                        {pNum}
+                      </button>
+                    )
+                  )}
+                </div>
+
+                {/* Mobile Active Page Indicator */}
+                <span className="sm:hidden text-xs font-medium text-gray-500 dark:text-gray-400 px-2">
+                  Page {safeCurrentPage} / {totalPages}
+                </span>
+
+                {/* Next Page */}
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
+                  disabled={safeCurrentPage === totalPages}
+                  className="inline-flex items-center justify-center p-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  title="Next Page"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+
+                {/* Last Page */}
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage(totalPages)}
+                  disabled={safeCurrentPage === totalPages}
+                  className="inline-flex items-center justify-center p-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  title="Last Page"
+                >
+                  <ChevronsRight className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Detailed Modal Drawer for Inspecting Raw Log Event */}

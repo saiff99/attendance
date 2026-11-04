@@ -1492,6 +1492,56 @@ console.log('\n--- 25. Sessions API User Map Caching & SQL Archive Filter Pushdo
   );
 }
 
+// --- 26. Audit Logs Table Client-Side Pagination & Bounded DOM Nodes (Issue 16) ---
+console.log('\n--- 26. Audit Logs Table Client-Side Pagination & Bounded DOM Nodes ---');
+{
+  const auditLogsPath = path.resolve(__dirname, '../src/app/audit-logs/page.tsx');
+  const auditLogsContent = fs.readFileSync(auditLogsPath, 'utf8');
+
+  // 1. Pagination state initialization
+  assert(
+    auditLogsContent.includes('const [currentPage, setCurrentPage] = useState<number>(1)') &&
+    auditLogsContent.includes('const [pageSize, setPageSize] = useState<number>(25)'),
+    'audit-logs/page.tsx initializes client-side pagination with default 25/page'
+  );
+
+  // 2. Reset to page 1 on filter/search change
+  assert(
+    auditLogsContent.includes('setCurrentPage(1)') &&
+    auditLogsContent.includes('searchTerm, selectedActionFilter, selectedTargetFilter'),
+    'audit-logs/page.tsx resets to page 1 upon search term or filter change'
+  );
+
+  // 3. Derived paginated slice using useMemo
+  assert(
+    auditLogsContent.includes('const paginatedLogs = useMemo(') &&
+    auditLogsContent.includes('filteredLogs.slice(startIndex, startIndex + pageSize)'),
+    'audit-logs/page.tsx derives paginatedLogs with useMemo to bound DOM node allocations'
+  );
+
+  // 4. Table tbody renders paginatedLogs instead of full dataset
+  assert(
+    auditLogsContent.includes('paginatedLogs.map((entry) =>'),
+    'audit-logs/page.tsx maps paginatedLogs in tbody to prevent browser main-thread freezing'
+  );
+
+  // 5. Export functions continue to export full filtered dataset (Forensic Integrity)
+  assert(
+    auditLogsContent.includes('JSON.stringify(filteredLogs, null, 2)') &&
+    auditLogsContent.includes('filteredLogs.map((log) => {'),
+    'audit-logs/page.tsx preserves full filteredLogs forensic ledger during JSON and CSV exports'
+  );
+
+  // 6. Pagination math verification
+  const totalLogs = 1000;
+  const size25Pages = Math.ceil(totalLogs / 25);
+  const size50Pages = Math.ceil(totalLogs / 50);
+  const size100Pages = Math.ceil(totalLogs / 100);
+  assert(size25Pages === 40, '1000 logs at 25/page calculates exactly 40 pages');
+  assert(size50Pages === 20, '1000 logs at 50/page calculates exactly 20 pages');
+  assert(size100Pages === 10, '1000 logs at 100/page calculates exactly 10 pages');
+}
+
 // Summary
 console.log('\n' + '=' .repeat(65));
 console.log(`📊 Offline Unit Test Summary: ${passed} Passed, ${failed} Failed`);

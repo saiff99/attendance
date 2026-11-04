@@ -38,3 +38,4 @@ export function invalidateUserMapCache() {
   cachedUserMap = null;
   userMapCachedAt = 0;
 }
+
