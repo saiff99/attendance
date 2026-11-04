@@ -31,3 +31,4 @@ CREATE INDEX IF NOT EXISTS idx_students_is_active ON public.students (is_active)
 COMMENT ON INDEX idx_sessions_active_created IS 'Partial index accelerating active unarchived session polling and ongoing monitor.';
 COMMENT ON INDEX idx_attendance_student_recorded IS 'Composite index enabling Index-Only scans for student attendance history.';
 COMMENT ON INDEX idx_students_active_biometric_cohort IS 'Partial index accelerating centralized biometric cache warming for active consented cohorts.';
+
