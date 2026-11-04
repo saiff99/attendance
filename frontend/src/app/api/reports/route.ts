@@ -2,6 +2,7 @@ import { NextResponse, NextRequest } from 'next/server';
 import { supabaseServer } from '@/lib/supabaseServer';
 import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/serverAuth';
 import { isCohortMatching } from '@/lib/cohort';
+import { getCachedAcademicSubjects } from '@/lib/subjectCache';
 
 export const dynamic = 'force-dynamic';
 
@@ -43,11 +44,15 @@ export async function GET(request: NextRequest) {
       sessQuery = sessQuery.lte('date', endDate);
     }
 
-    // 2. Build Students Query
-    const stuQuery = supabaseServer
+    // 2. Build Students Query (SQL pushdown: filter active students when archived are not requested)
+    let stuQuery = supabaseServer
       .from('students')
-      .select('id, student_roll, full_name, email, academic_year, is_active, archived_at')
-      .order('student_roll', { ascending: true });
+      .select('id, student_roll, full_name, email, academic_year, is_active, archived_at');
+
+    if (!includeArchived) {
+      stuQuery = stuQuery.eq('is_active', true);
+    }
+    stuQuery = stuQuery.order('student_roll', { ascending: true });
 
     // 3. Build Attendance Query (with date filtering)
     let attQuery = supabaseServer
@@ -63,17 +68,11 @@ export async function GET(request: NextRequest) {
       attQuery = attQuery.lte('recorded_at', endIso);
     }
 
-    // 4. Build Curriculum Subjects Query
-    const subQuery = supabaseServer
-      .from('academic_subjects')
-      .select('id, name, code, academic_year, department, is_active')
-      .order('name', { ascending: true });
-
-    // Execute Sessions, Students, and Subjects queries in parallel
-    const [sessRes, stuRes, subRes] = await Promise.all([
+    // Execute Sessions, Students, and cached Subjects queries in parallel
+    const [sessRes, stuRes, allSubjects] = await Promise.all([
       sessQuery,
       stuQuery,
-      subQuery,
+      getCachedAcademicSubjects(),
     ]);
 
     if (sessRes.error) throw sessRes.error;
@@ -113,12 +112,14 @@ export async function GET(request: NextRequest) {
       from += CHUNK_SIZE;
     }
 
+    const activeSubjects = (allSubjects || []).filter((s: any) => s.is_active !== false);
+
     return NextResponse.json({
       success: true,
       sessions: allSessions,
       students: students,
       attendance: attendance,
-      subjects: subRes.data || [],
+      subjects: activeSubjects,
       metadata: {
         total_sessions: allSessions.length,
         total_students: students.length,

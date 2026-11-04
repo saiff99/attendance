@@ -5,12 +5,26 @@ import { useRouter } from "next/navigation";
 import {
   Search, Download, Users, AlertTriangle, CheckCircle, XCircle, BarChart3,
   ChevronDown, ChevronUp, Shield, UserCheck, UserX, Filter, RefreshCw, FileBarChart,
-  GraduationCap, BookOpen, Sparkles, Calendar
+  GraduationCap, BookOpen, Sparkles, Calendar,
+  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight
 } from "lucide-react";
 // Academic Attendance Reports Component
 import { isCohortMatching } from "@/lib/cohort";
 import { DEFAULT_MBBS_SUBJECTS, getSubjectsForCohort } from "@/lib/academicSubjects";
 import { useAuth } from "@/lib/auth";
+
+function getPageNumbers(current: number, total: number): (number | string)[] {
+  if (total <= 7) {
+    return Array.from({ length: total }, (_, i) => i + 1);
+  }
+  if (current <= 4) {
+    return [1, 2, 3, 4, 5, '...', total];
+  }
+  if (current >= total - 3) {
+    return [1, '...', total - 4, total - 3, total - 2, total - 1, total];
+  }
+  return [1, '...', current - 1, current, current + 1, '...', total];
+}
 
 export interface SubjectBreakdown {
   subject: string;
@@ -88,6 +102,10 @@ export default function ReportsPage() {
   const [sessionHistory, setSessionHistory] = useState<Record<string, any[]>>({});
   const [loadingHistory, setLoadingHistory] = useState<string | null>(null);
   const [totalSessions, setTotalSessions] = useState(0);
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(25);
 
   // Date Range Filtering State
   const [startDate, setStartDate] = useState<string>("");
@@ -316,6 +334,20 @@ export default function ReportsPage() {
     });
     return list;
   }, [reports, cohortFilter, searchTerm, riskFilter, sortField, sortOrder]);
+
+  // Reset pagination to first page when filtering or sorting changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, cohortFilter, riskFilter, startDate, endDate, dateRangePreset, sortField, sortOrder, pageSize]);
+
+  const totalPages = Math.ceil(filtered.length / pageSize) || 1;
+  const safeCurrentPage = Math.min(Math.max(currentPage, 1), totalPages);
+  const startIndex = (safeCurrentPage - 1) * pageSize;
+  const endIndex = Math.min(startIndex + pageSize, filtered.length);
+
+  const paginatedReports = useMemo(() => {
+    return filtered.slice(startIndex, startIndex + pageSize);
+  }, [filtered, startIndex, pageSize]);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) setSortOrder(o => o === "asc" ? "desc" : "asc");
@@ -589,7 +621,7 @@ export default function ReportsPage() {
                       No students found. Adjust your search or filter.
                     </td>
                   </tr>
-                ) : filtered.map(student => {
+                ) : paginatedReports.map(student => {
                   const isExpanded = expandedId === student.id;
                   const hasSessions = student.total_sessions > 0;
                   const rateColor = !hasSessions
@@ -831,15 +863,118 @@ export default function ReportsPage() {
           </div>
 
           {!loading && filtered.length > 0 && (
-            <div className="px-4 py-3 border-t border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/30 flex items-center justify-between flex-wrap gap-2">
-              <p className="text-[11px] text-gray-400 dark:text-gray-500">
-                Showing <strong className="text-gray-700 dark:text-gray-300">{filtered.length}</strong> of <strong className="text-gray-700 dark:text-gray-300">{reports.length}</strong> students
-              </p>
+            <div className="px-4 py-3 border-t border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/30 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 flex-wrap">
+              {/* Left: Record summary and page size */}
+              <div className="flex items-center gap-3 flex-wrap">
+                <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                  Showing <strong className="text-gray-800 dark:text-gray-200">{filtered.length === 0 ? 0 : startIndex + 1}</strong>–<strong className="text-gray-800 dark:text-gray-200">{endIndex}</strong> of <strong className="text-gray-800 dark:text-gray-200">{filtered.length}</strong> students
+                  {filtered.length !== reports.length && (
+                    <span className="text-gray-400 dark:text-gray-500 ml-1">
+                      (filtered from {reports.length} total)
+                    </span>
+                  )}
+                </p>
+                <div className="flex items-center gap-1.5">
+                  <label htmlFor="reportPageSizeSelect" className="text-[11px] text-gray-400 dark:text-gray-500">
+                    Per page:
+                  </label>
+                  <select
+                    id="reportPageSizeSelect"
+                    value={pageSize}
+                    onChange={(e) => setPageSize(Number(e.target.value))}
+                    className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-2 py-0.5 text-xs font-medium text-gray-700 dark:text-gray-200 shadow-2xs hover:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+                  >
+                    <option value={25}>25</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Center/Right: Risk Badges Legend */}
               <div className="flex items-center gap-3 text-[10px] text-gray-400 flex-wrap">
                 <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" /> ≥75% Good</span>
                 <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500 inline-block" /> 50–74% Warning</span>
                 <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rose-500 inline-block" /> &lt;50% Critical</span>
               </div>
+
+              {/* Right: Pagination Controls */}
+              {totalPages > 1 && (
+                <div className="flex items-center gap-1 self-center sm:self-auto">
+                  {/* First Page */}
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage(1)}
+                    disabled={safeCurrentPage === 1}
+                    className="inline-flex items-center justify-center p-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    title="First Page"
+                  >
+                    <ChevronsLeft className="w-4 h-4" />
+                  </button>
+
+                  {/* Previous Page */}
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
+                    disabled={safeCurrentPage === 1}
+                    className="inline-flex items-center justify-center p-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    title="Previous Page"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+
+                  {/* Desktop Page Numbers */}
+                  <div className="hidden sm:flex items-center gap-1 px-1">
+                    {getPageNumbers(safeCurrentPage, totalPages).map((pNum, pIdx) =>
+                      typeof pNum === "string" ? (
+                        <span key={`ellipsis-${pIdx}`} className="px-1.5 py-0.5 text-xs text-gray-400 dark:text-gray-500">
+                          …
+                        </span>
+                      ) : (
+                        <button
+                          key={`page-${pNum}`}
+                          type="button"
+                          onClick={() => setCurrentPage(pNum)}
+                          className={`min-w-7 h-7 px-2 flex items-center justify-center rounded-lg text-xs font-semibold transition-all ${
+                            safeCurrentPage === pNum
+                              ? "bg-indigo-600 text-white shadow-2xs shadow-indigo-500/30"
+                              : "border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-gray-100"
+                          }`}
+                        >
+                          {pNum}
+                        </button>
+                      )
+                    )}
+                  </div>
+
+                  {/* Mobile Active Page Indicator */}
+                  <span className="sm:hidden text-xs font-medium text-gray-500 dark:text-gray-400 px-2">
+                    {safeCurrentPage} / {totalPages}
+                  </span>
+
+                  {/* Next Page */}
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
+                    disabled={safeCurrentPage === totalPages}
+                    className="inline-flex items-center justify-center p-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    title="Next Page"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+
+                  {/* Last Page */}
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage(totalPages)}
+                    disabled={safeCurrentPage === totalPages}
+                    className="inline-flex items-center justify-center p-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    title="Last Page"
+                  >
+                    <ChevronsRight className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>

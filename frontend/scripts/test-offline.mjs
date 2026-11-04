@@ -1631,6 +1631,71 @@ console.log('\n--- 28. Student Roster SQL Pushdown for Archival Status ---');
   assert(unarchivedRoster[0].student_roll === '26001' && unarchivedRoster[1].student_roll === '26002', 'Active student rolls preserved');
 }
 
+// --- 29. Reports Dashboard Client-Side Pagination & API SQL Pushdown (Issue 19) ---
+console.log('\n--- 29. Reports Dashboard Client-Side Pagination & API SQL Pushdown ---');
+{
+  const reportsRoutePath = path.resolve(__dirname, '../src/app/api/reports/route.ts');
+  const reportsRouteContent = fs.readFileSync(reportsRoutePath, 'utf8');
+
+  const reportsPagePath = path.resolve(__dirname, '../src/app/reports/page.tsx');
+  const reportsPageContent = fs.readFileSync(reportsPagePath, 'utf8');
+
+  // 1. api/reports/route.ts imports and uses getCachedAcademicSubjects
+  assert(
+    reportsRouteContent.includes("import { getCachedAcademicSubjects } from '@/lib/subjectCache'") &&
+    reportsRouteContent.includes('getCachedAcademicSubjects()'),
+    'api/reports/route.ts imports and calls getCachedAcademicSubjects to eliminate redundant subjects table queries'
+  );
+
+  // 2. api/reports/route.ts pushes down is_active = true on stuQuery when !includeArchived
+  assert(
+    reportsRouteContent.includes('if (!includeArchived)') &&
+    reportsRouteContent.includes("stuQuery = stuQuery.eq('is_active', true)"),
+    'api/reports/route.ts pushes down is_active = true on stuQuery when include_archived is false'
+  );
+
+  // 3. reports/page.tsx implements client-side pagination state (currentPage, pageSize)
+  assert(
+    reportsPageContent.includes('const [currentPage, setCurrentPage] = useState<number>(1)') &&
+    reportsPageContent.includes('const [pageSize, setPageSize] = useState<number>(25)'),
+    'reports/page.tsx declares currentPage and pageSize state with 25 items default'
+  );
+
+  // 4. reports/page.tsx memoizes paginatedReports based on currentPage and pageSize
+  assert(
+    reportsPageContent.includes('const paginatedReports = useMemo(') &&
+    reportsPageContent.includes('filtered.slice(startIndex, startIndex + pageSize)'),
+    'reports/page.tsx memoizes paginated slice from filtered student list'
+  );
+
+  // 5. reports/page.tsx renders paginatedReports in table body
+  assert(
+    reportsPageContent.includes(') : paginatedReports.map(student => {'),
+    'reports/page.tsx maps over bounded paginatedReports instead of entire filtered array in table body'
+  );
+
+  // 6. reports/page.tsx preserves full filtered array in exportCSV
+  assert(
+    reportsPageContent.includes('const rows = filtered.map(r => {') &&
+    reportsPageContent.includes('exportCSV'),
+    'reports/page.tsx preserves complete filtered cohort for CSV exports across all pages'
+  );
+
+  // 7. Test pagination math and page slice calculation
+  const mockStudents = Array.from({ length: 135 }, (_, i) => ({
+    id: `student-${i + 1}`,
+    student_roll: `ROLL-${i + 1}`,
+    full_name: `Student ${i + 1}`,
+  }));
+  const testPageSize = 25;
+  const testTotalPages = Math.ceil(mockStudents.length / testPageSize);
+  assert(testTotalPages === 6, 'Total pages calculated correctly (135 / 25 = 6 pages)');
+  const page1Slice = mockStudents.slice(0, 25);
+  const page6Slice = mockStudents.slice(125, 150);
+  assert(page1Slice.length === 25 && page1Slice[0].id === 'student-1', 'Page 1 has 25 items starting from student-1');
+  assert(page6Slice.length === 10 && page6Slice[9].id === 'student-135', 'Page 6 has remaining 10 items ending at student-135');
+}
+
 // Summary
 console.log('\n' + '=' .repeat(65));
 console.log(`📊 Offline Unit Test Summary: ${passed} Passed, ${failed} Failed`);
