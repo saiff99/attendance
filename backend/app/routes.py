@@ -115,30 +115,15 @@ def parse_iso_datetime(time_str: str) -> datetime:
 
 router = APIRouter()
 
+# Include Modular Domain Sub-Routers
+from app.routers.health import router as health_router
+from app.routers.streaming import router as streaming_router
+
+router.include_router(health_router)
+router.include_router(streaming_router)
+
 class ScanRequest(BaseModel):
     session_id: str
-
-@router.api_route("/", methods=["GET", "HEAD"])
-async def read_root():
-    return {"status": "Online", "message": "Smart Attendance API is running", "ai_enabled": AI_ENABLED}
-
-@router.api_route("/health", methods=["GET", "HEAD"])
-async def health_check():
-    return {"status": "ok", "ai_enabled": AI_ENABLED}
-
-@router.get("/health/performance")
-@router.get("/api/health/performance")
-async def health_performance():
-    """
-    Lightweight performance & diagnostic endpoint for all configured cameras,
-    AI inference duration, FPS metrics, queue status, and biometric cache telemetry.
-    """
-    from app.stream import get_performance_diagnostics
-    from app.biometric_cache import get_biometric_cache_stats
-    diag = get_performance_diagnostics()
-    if isinstance(diag, dict):
-        diag["biometric_cache"] = get_biometric_cache_stats()
-    return diag
 
 # =========================================================================
 # Secure Image Upload Validation & Anti-DoS File Processing
@@ -849,19 +834,6 @@ async def upload_photo(file: UploadFile = File(...)):
             "confidence": 0.98
         }
     }
-
-@router.get("/api/cameras")
-async def get_cameras():
-    cameras = get_camera_details(redact_credentials=True)
-    return {"count": len(cameras), "cameras": cameras}
-
-@router.get("/api/video-feed/{session_id}")
-async def video_feed(session_id: str, request: Request, camera_index: int = 0, grid: int = 1):
-    """Streams the live CCTV video with bounding boxes."""
-    return StreamingResponse(
-        generate_video_feed(session_id, request=request, camera_index=camera_index, camera_type="cctv", is_grid=bool(grid)),
-        media_type="multipart/x-mixed-replace; boundary=frame"
-    )
 
 
 

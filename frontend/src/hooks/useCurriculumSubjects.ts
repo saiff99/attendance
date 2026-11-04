@@ -61,3 +61,4 @@ export function useCurriculumSubjects(selectedCohort: string) {
     getNextSubjectForCohort,
   };
 }
+
