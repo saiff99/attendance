@@ -243,17 +243,20 @@ This document catalogs critical real-world edge cases, platform-specific quirks,
 
 ### Gotcha 13: Background Tab Polling Storms, Campus Wi-Fi NAT 429 Collisions & Instant Visibility Wakeup
 - **Symptom:**
-  Faculty and administrative users leaving MedAttend browser tabs open or minimized during the school day inadvertently triggered `HTTP 429 Too Many Requests` for all users on the same campus Wi-Fi network, while consuming hundreds of thousands of Vercel serverless function invocations per month.
+  Faculty and administrative users leaving MedAttend browser tabs open or minimized during the school day inadvertently triggered `HTTP 429 Too Many Requests` for all users on the same campus Wi-Fi network, while consuming hundreds of thousands of Vercel serverless function invocations per month. In CCTV Live Scan mode (`/live-scan`), unthrottled 2-second log polling generated 1,800 requests/hour per background tab.
 - **Root Cause:**
-  1. `Sidebar.tsx` and `ongoing/page.tsx` executed unthrottled `setInterval(..., 3000)` polling loops regardless of whether the browser tab was active, minimized, or occluded.
-  2. A single open tab made 20 requests per minute (~9,600/day). Two teachers on the same campus Wi-Fi NAT generated 40 requests/minute, breaching the 30-request/minute active-session IP rate limit.
-  3. Redundant SQL queries were executed against static tables (`app_users`) on every single poll.
+  1. `Sidebar.tsx`, `ongoing/page.tsx`, and `live-scan/page.tsx` executed unthrottled `setInterval` polling loops regardless of whether the browser tab was active, minimized, or occluded.
+  2. A single open tab made 20 to 30 requests per minute. Two teachers on the same campus Wi-Fi NAT generated 40-60 requests/minute, breaching active-session and log IP rate limits.
+  3. Redundant SQL queries were executed against static tables (`app_users`, and `sessions` metadata) on every single poll tick.
 - **Architectural Fix:**
-  1. **Page Visibility API Check:** In `Sidebar.tsx` and `ongoing/page.tsx`, suppress network fetches during interval ticks when `document.visibilityState !== 'visible'`.
+  1. **Page Visibility API Check:** In `Sidebar.tsx`, `ongoing/page.tsx`, and `live-scan/page.tsx`, suppress network fetches during interval ticks when `document.visibilityState !== 'visible'`.
   2. **Instant Wakeup Listener:** Register a `visibilitychange` listener on `document` that triggers an immediate fetch (`0ms` latency) the exact moment the tab becomes visible again, guaranteeing zero stale data.
-  3. **Relaxed Adaptive Intervals:** Extended background intervals to 12s on the persistent sidebar and 6s on the ongoing monitor.
-  4. **In-Memory TTL User Map Caching:** In `frontend/src/app/api/active-sessions/route.ts`, cached the `app_users` mapping in memory for 5 minutes (`getCachedUserMap()`), eliminating thousands of redundant SQL queries.
-- **Rule:** Background client intervals must always be visibility-aware. Never poll unthrottled when the tab is hidden; always use `document.visibilityState` guards combined with `visibilitychange` instant-wakeup listeners.
+  3. **Relaxed Adaptive Intervals:** Extended background intervals to 12s on the persistent sidebar, 6s on the ongoing monitor, and 4s on live-scan CCTV logs.
+  4. **In-Flight Concurrency Guard:** Use ref-based boolean guards (e.g. `isFetchingLogsRef`) to prevent stacking queries during network latency spikes.
+  5. **In-Memory TTL Caching:**
+     - In `frontend/src/app/api/active-sessions/route.ts`, cached the `app_users` mapping in memory for 5 minutes (`getCachedUserMap()`).
+     - In `frontend/src/app/api/attendance/session/[sessionId]/route.ts`, cached session metadata in memory for 60 seconds (`sessionInfoCache`), cutting per-poll database query volume by 50%.
+- **Rule:** Background client intervals must always be visibility-aware. Never poll unthrottled when the tab is hidden; always use `document.visibilityState` guards combined with `visibilitychange` instant-wakeup listeners and in-memory metadata caching.
 
 ---
 
