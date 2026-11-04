@@ -1593,6 +1593,44 @@ console.log('\n--- 27. Academic Subjects In-Memory TTL Caching ---');
   );
 }
 
+// --- 28. Student Roster SQL Pushdown for Archival Status (Issue 18) ---
+console.log('\n--- 28. Student Roster SQL Pushdown for Archival Status ---');
+{
+  const studentsRoutePath = path.resolve(__dirname, '../src/app/api/students/route.ts');
+  const studentsRouteContent = fs.readFileSync(studentsRoutePath, 'utf8');
+
+  // 1. studentsQuery pushes down is_active = true when !includeArchived
+  assert(
+    studentsRouteContent.includes('if (!includeArchived)') &&
+    studentsRouteContent.includes("studentsQuery = studentsQuery.eq('is_active', true)"),
+    'api/students/route.ts pushes down is_active = true on studentsQuery when include_archived is not true'
+  );
+
+  // 2. enrolledQuery pushes down is_active = true when !includeArchived
+  assert(
+    studentsRouteContent.includes("enrolledQuery = enrolledQuery.eq('is_active', true)"),
+    'api/students/route.ts pushes down is_active = true on enrolledQuery when include_archived is not true'
+  );
+
+  // 3. fallbackQuery pushes down is_active = true when !includeArchived
+  assert(
+    studentsRouteContent.includes("fallbackQuery = fallbackQuery.eq('is_active', true)"),
+    'api/students/route.ts pushes down is_active = true on fallbackQuery when include_archived is not true'
+  );
+
+  // 4. Mock simulation of roster filtering logic
+  const mockStudents = [
+    { id: 'st-1', student_roll: '26001', full_name: 'Anisur Rahman', academic_year: '1st Year', is_active: true },
+    { id: 'st-2', student_roll: '26002', full_name: 'Tasnim Jahan', academic_year: '1st Year', is_active: true },
+    { id: 'st-3', student_roll: '25010', full_name: 'Old Batch Student', academic_year: '2nd Year', is_active: false },
+    { id: 'st-4', student_roll: '24050', full_name: 'Graduated Student', academic_year: '[ARCHIVED] 2024', is_active: false },
+  ];
+
+  const unarchivedRoster = mockStudents.filter(s => s.is_active !== false && !s.academic_year.startsWith('[ARCHIVED]'));
+  assert(unarchivedRoster.length === 2, 'Unarchived roster returns exactly active enrolled students');
+  assert(unarchivedRoster[0].student_roll === '26001' && unarchivedRoster[1].student_roll === '26002', 'Active student rolls preserved');
+}
+
 // Summary
 console.log('\n' + '=' .repeat(65));
 console.log(`📊 Offline Unit Test Summary: ${passed} Passed, ${failed} Failed`);

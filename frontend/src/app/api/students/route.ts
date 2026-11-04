@@ -24,27 +24,42 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const cohort = searchParams.get('cohort');
+    const includeArchived = searchParams.get('include_archived') === 'true';
 
     // High-impact performance optimization:
     // Parallel fetch omitting raw 512D ArcFace float arrays (saves ~98% network payload, ~3MB -> ~35KB).
     // Queries only student profile metadata and an ID-only list of enrolled biometric templates.
+    // SQL pushdown: filter is_active = true directly in database when archived students are not requested.
+    let studentsQuery = supabaseServer
+      .from('students')
+      .select('id, student_roll, full_name, email, academic_year, is_active, archived_at, created_at, biometric_consent');
+
+    let enrolledQuery = supabaseServer
+      .from('students')
+      .select('id')
+      .not('face_encoding', 'is', null);
+
+    if (!includeArchived) {
+      studentsQuery = studentsQuery.eq('is_active', true);
+      enrolledQuery = enrolledQuery.eq('is_active', true);
+    }
+
+    studentsQuery = studentsQuery.order('student_roll', { ascending: true });
+
     const [studentsRes, enrolledRes] = await Promise.all([
-      supabaseServer
-        .from('students')
-        .select('id, student_roll, full_name, email, academic_year, is_active, archived_at, created_at, biometric_consent')
-        .order('student_roll', { ascending: true }),
-      supabaseServer
-        .from('students')
-        .select('id')
-        .not('face_encoding', 'is', null),
+      studentsQuery,
+      enrolledQuery,
     ]);
 
     let data: any[] | null = studentsRes.data;
     if (studentsRes.error && (studentsRes.error.code === '42703' || studentsRes.error.message?.includes('biometric_consent'))) {
-      const fallback = await supabaseServer
+      let fallbackQuery = supabaseServer
         .from('students')
-        .select('id, student_roll, full_name, email, academic_year, is_active, archived_at, created_at')
-        .order('student_roll', { ascending: true });
+        .select('id, student_roll, full_name, email, academic_year, is_active, archived_at, created_at');
+      if (!includeArchived) {
+        fallbackQuery = fallbackQuery.eq('is_active', true);
+      }
+      const fallback = await fallbackQuery.order('student_roll', { ascending: true });
       if (fallback.error) throw fallback.error;
       data = fallback.data;
     } else if (studentsRes.error) {
@@ -54,7 +69,6 @@ export async function GET(request: NextRequest) {
     const enrolledIds = new Set((enrolledRes.data || []).map((e: any) => e.id));
 
     let rawStudents = data || [];
-    const includeArchived = searchParams.get('include_archived') === 'true';
     if (!includeArchived) {
       rawStudents = rawStudents.filter((s: any) => s.is_active !== false && !String(s.academic_year || '').startsWith('[ARCHIVED]'));
     }
