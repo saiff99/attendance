@@ -154,6 +154,13 @@ CREATE INDEX IF NOT EXISTS idx_app_users_role ON public.app_users(role);
 CREATE INDEX IF NOT EXISTS idx_academic_subjects_year ON public.academic_subjects(academic_year);
 CREATE INDEX IF NOT EXISTS idx_academic_subjects_name ON public.academic_subjects(name);
 
+-- High-Velocity Partial & Composite Performance Indexes (Migration 20 / Issue 12)
+CREATE INDEX IF NOT EXISTS idx_sessions_is_archived ON public.sessions(is_archived);
+CREATE INDEX IF NOT EXISTS idx_students_is_active ON public.students(is_active);
+CREATE INDEX IF NOT EXISTS idx_sessions_active_created ON public.sessions(created_at DESC) WHERE is_archived = false;
+CREATE INDEX IF NOT EXISTS idx_attendance_student_recorded ON public.attendance(student_id, recorded_at DESC);
+CREATE INDEX IF NOT EXISTS idx_students_active_biometric_cohort ON public.students(academic_year) WHERE is_active = true AND biometric_consent = true AND face_encoding IS NOT NULL;
+
 -- ==============================================================================
 -- 10. Row Level Security (RLS) & Zero-Trust Production Policies
 -- All client interactions are mediated server-side via Next.js API routes & FastAPI

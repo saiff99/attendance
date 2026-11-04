@@ -1303,6 +1303,54 @@ console.log('\n--- 21. Student Registry Client-Side Pagination & Memoization ---
   assert(page5Slice.length === 10 && page5Slice[0].id === 's-101' && page5Slice[9].id === 's-110', 'Page 5 correctly contains remaining 10 items');
 }
 
+// --- 22. PostgreSQL High-Velocity Partial & Composite Performance Indexes (Issue 12) ---
+console.log('\n--- 22. PostgreSQL High-Velocity Partial & Composite Performance Indexes ---');
+{
+  const migration20Path = path.resolve(__dirname, '../../database/migrations/20_high_velocity_partial_composite_indexes.sql');
+  assert(fs.existsSync(migration20Path), 'Migration 20 (20_high_velocity_partial_composite_indexes.sql) exists on disk');
+
+  const migration20Content = fs.readFileSync(migration20Path, 'utf8');
+  const schemaPath = path.resolve(__dirname, '../../database/schema.sql');
+  const schemaContent = fs.readFileSync(schemaPath, 'utf8');
+
+  // 1. Partial index on sessions(created_at DESC) WHERE is_archived = false
+  assert(
+    migration20Content.includes('idx_sessions_active_created') &&
+    migration20Content.includes('(created_at DESC)') &&
+    migration20Content.includes('WHERE is_archived = false'),
+    'Migration 20 creates partial index idx_sessions_active_created on active sessions'
+  );
+  assert(
+    schemaContent.includes('idx_sessions_active_created') &&
+    schemaContent.includes('WHERE is_archived = false'),
+    'database/schema.sql includes partial index idx_sessions_active_created'
+  );
+
+  // 2. Composite index on attendance(student_id, recorded_at DESC)
+  assert(
+    migration20Content.includes('idx_attendance_student_recorded') &&
+    migration20Content.includes('(student_id, recorded_at DESC)'),
+    'Migration 20 creates composite index idx_attendance_student_recorded for student attendance history'
+  );
+  assert(
+    schemaContent.includes('idx_attendance_student_recorded') &&
+    schemaContent.includes('(student_id, recorded_at DESC)'),
+    'database/schema.sql includes composite index idx_attendance_student_recorded'
+  );
+
+  // 3. Partial index on students(academic_year) WHERE is_active = true AND biometric_consent = true
+  assert(
+    migration20Content.includes('idx_students_active_biometric_cohort') &&
+    migration20Content.includes('WHERE is_active = true AND biometric_consent = true AND face_encoding IS NOT NULL'),
+    'Migration 20 creates partial index idx_students_active_biometric_cohort for active consented cohorts'
+  );
+  assert(
+    schemaContent.includes('idx_students_active_biometric_cohort') &&
+    schemaContent.includes('WHERE is_active = true AND biometric_consent = true AND face_encoding IS NOT NULL'),
+    'database/schema.sql includes partial index idx_students_active_biometric_cohort'
+  );
+}
+
 // Summary
 console.log('\n' + '=' .repeat(65));
 console.log(`📊 Offline Unit Test Summary: ${passed} Passed, ${failed} Failed`);
