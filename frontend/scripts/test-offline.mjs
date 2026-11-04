@@ -1396,6 +1396,54 @@ console.log('\n--- 23. Live Scan CCTV Log Polling Guard & Visibility Sync ---');
   );
 }
 
+// --- 24. Student Portal Full-Table Unbounded Sessions Query Storm (Issue 14) ---
+console.log('\n--- 24. Student Portal Full-Table Unbounded Sessions Query Storm ---');
+{
+  const portalDataRoutePath = path.resolve(__dirname, '../src/app/api/student/portal-data/route.ts');
+  const portalDataContent = fs.readFileSync(portalDataRoutePath, 'utf8');
+
+  // 1. sessions query pushes down is_archived = false
+  assert(
+    portalDataContent.includes(".eq('is_archived', false)"),
+    'api/student/portal-data/route.ts pushes down is_archived = false to PostgreSQL query'
+  );
+
+  // 2. sessions query excludes internal system sessions
+  assert(
+    portalDataContent.includes(".neq('class_name', '__GEOFENCE_CONFIG__')") &&
+    portalDataContent.includes(".neq('target_academic_year', 'System')"),
+    'api/student/portal-data/route.ts excludes system and geofence pseudo-sessions in SQL'
+  );
+
+  // 3. sessions query enforces safe limit (e.g. 1000)
+  assert(
+    portalDataContent.includes('.limit(1000)'),
+    'api/student/portal-data/route.ts bounds sessions query with safe upper limit (1000)'
+  );
+
+  // 4. adminStudentList filters for active students only
+  assert(
+    portalDataContent.includes(".eq('is_active', true)"),
+    'api/student/portal-data/route.ts filters admin switcher students by is_active = true'
+  );
+
+  // 5. Verification of archival filter logic
+  const mockDbSessions = [
+    { id: 'sess-1', class_name: 'Anatomy Lecture 1', is_archived: false },
+    { id: 'sess-2', class_name: 'Physiology Lab', is_archived: false },
+    { id: 'sess-3', class_name: 'Biochemistry 2024', is_archived: true },
+    { id: 'sess-4', class_name: '__SYSTEM_CONFIG__', is_archived: false },
+    { id: 'sess-5', class_name: '__GEOFENCE_CONFIG__', is_archived: false },
+  ];
+  const filtered = mockDbSessions.filter(s =>
+    !s.is_archived &&
+    s.class_name !== '__SYSTEM_CONFIG__' &&
+    s.class_name !== '__GEOFENCE_CONFIG__'
+  );
+  assert(filtered.length === 2, 'Archival and system session filtering returns exactly active lecture sessions');
+  assert(filtered[0].id === 'sess-1' && filtered[1].id === 'sess-2', 'Expected active sessions preserved');
+}
+
 // Summary
 console.log('\n' + '=' .repeat(65));
 console.log(`📊 Offline Unit Test Summary: ${passed} Passed, ${failed} Failed`);

@@ -96,6 +96,7 @@ export async function GET(request: NextRequest) {
       const { data: stList } = await supabaseServer
         .from('students')
         .select('student_roll, full_name, academic_year')
+        .eq('is_active', true)
         .order('student_roll', { ascending: true });
       if (stList) {
         adminStudentList = stList.map(s => ({
@@ -108,13 +109,17 @@ export async function GET(request: NextRequest) {
 
     const studentYear = student.academic_year || '1st Year';
 
-    // 2. Fetch Sessions applicable to this cohort
+    // 2. Fetch Sessions applicable to this cohort (SQL pushdown: exclude archived & system rows, bounded at 1000)
     const { data: sessions, error: sessErr } = await supabaseServer
       .from('sessions')
       .select('id, class_name, date, start_time, end_time, instructor_name, target_academic_year, created_at')
+      .eq('is_archived', false)
       .neq('class_name', '__SYSTEM_CONFIG__')
+      .neq('class_name', '__GEOFENCE_CONFIG__')
+      .neq('target_academic_year', 'System')
       .order('date', { ascending: false })
-      .order('start_time', { ascending: false });
+      .order('start_time', { ascending: false })
+      .limit(1000);
 
     if (sessErr) {
       throw sessErr;
