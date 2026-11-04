@@ -20,3 +20,4 @@ async def video_feed(session_id: str, request: Request, camera_index: int = 0, g
         generate_video_feed(session_id, request=request, camera_index=camera_index, camera_type="cctv", is_grid=bool(grid)),
         media_type="multipart/x-mixed-replace; boundary=frame"
     )
+

@@ -628,6 +628,8 @@ console.log('\n--- 12. Check-In Capability Token & Public Lookup Protection ---'
   const authTsContent = fs.readFileSync(authTsPath, 'utf8');
   const backendRoutesPath = path.resolve(__dirname, '../../backend/app/routes.py');
   const backendRoutesContent = fs.readFileSync(backendRoutesPath, 'utf8');
+  const backendBiometricsPath = path.resolve(__dirname, '../../backend/app/routers/biometrics.py');
+  const backendBiometricsContent = fs.existsSync(backendBiometricsPath) ? fs.readFileSync(backendBiometricsPath, 'utf8') : '';
 
   const fallbackStr = 'medattend_default_secure_checkin_secret_2026';
   assert(!authTsContent.includes(fallbackStr), 'frontend/src/lib/attendanceAuth.ts has zero instances of hard-coded fallback secret');
@@ -809,6 +811,8 @@ console.log('\n--- 15. Shared Atomic Rate Limiting & Trusted IP Extraction ---')
   const rateLimiterContent = fs.readFileSync(rateLimiterTsPath, 'utf8');
   const backendRoutesPath = path.resolve(__dirname, '../../backend/app/routes.py');
   const backendRoutesContent = fs.readFileSync(backendRoutesPath, 'utf8');
+  const backendBiometricsPath = path.resolve(__dirname, '../../backend/app/routers/biometrics.py');
+  const backendBiometricsContent = fs.existsSync(backendBiometricsPath) ? fs.readFileSync(backendBiometricsPath, 'utf8') : '';
   const backendLimiterPath = path.resolve(__dirname, '../../backend/app/rate_limiter.py');
   const backendLimiterContent = fs.readFileSync(backendLimiterPath, 'utf8');
 
@@ -920,6 +924,8 @@ console.log('\n--- 16. Inactive / Archived Student Protection Across All Pathway
   const lookupContent = fs.readFileSync(lookupPath, 'utf8');
   const backendRoutesPath = path.resolve(__dirname, '../../backend/app/routes.py');
   const backendRoutesContent = fs.readFileSync(backendRoutesPath, 'utf8');
+  const backendBiometricsPath = path.resolve(__dirname, '../../backend/app/routers/biometrics.py');
+  const backendBiometricsContent = fs.existsSync(backendBiometricsPath) ? fs.readFileSync(backendBiometricsPath, 'utf8') : '';
 
   // 1. Student Login pathway
   assert(
@@ -963,8 +969,8 @@ console.log('\n--- 16. Inactive / Archived Student Protection Across All Pathway
 
   // 6. Backend routes pathways (enroll, burst, selfie, classroom process)
   assert(
-    backendRoutesContent.includes('student_info.get("is_active") is False') &&
-    backendRoutesContent.includes('Cannot register or modify facial biometrics for an archived or inactive student profile'),
+    (backendRoutesContent.includes('student_info.get("is_active") is False') || backendBiometricsContent.includes('student_info.get("is_active") is False')) &&
+    (backendRoutesContent.includes('Cannot register or modify facial biometrics for an archived or inactive student profile') || backendBiometricsContent.includes('Cannot register or modify facial biometrics for an archived or inactive student profile')),
     'Backend /api/enroll-face routes strictly block biometrics for archived/inactive students'
   );
   assert(
@@ -1122,6 +1128,8 @@ console.log('\n--- 19. Classroom Photo Attendance Authorization & Biometric Pres
   const liveScanContent = fs.readFileSync(liveScanPath, 'utf8');
   const backendRoutesPath = path.resolve(__dirname, '../../backend/app/routes.py');
   const backendRoutesContent = fs.readFileSync(backendRoutesPath, 'utf8');
+  const backendBiometricsPath = path.resolve(__dirname, '../../backend/app/routers/biometrics.py');
+  const backendBiometricsContent = fs.existsSync(backendBiometricsPath) ? fs.readFileSync(backendBiometricsPath, 'utf8') : '';
 
   // 1. Verify process-attendance route enforces session verification
   assert(
@@ -1853,6 +1861,8 @@ console.log('\n--- 33. Backend Server-Side Geofence In-Memory Caching & Route In
 
   const backendRoutesPath = path.resolve(__dirname, '../../backend/app/routes.py');
   const backendRoutesContent = fs.readFileSync(backendRoutesPath, 'utf8');
+  const backendBiometricsPath = path.resolve(__dirname, '../../backend/app/routers/biometrics.py');
+  const backendBiometricsContent = fs.existsSync(backendBiometricsPath) ? fs.readFileSync(backendBiometricsPath, 'utf8') : '';
 
   // 1. backend/app/config.py defines thread-safe caching and TTL
   assert(
@@ -1970,6 +1980,8 @@ console.log('\n--- 35. Backend Server-Side Session Metadata RAM Caching & Invali
 
   const backendRoutesPath = path.resolve(__dirname, '../../backend/app/routes.py');
   const backendRoutesContent = fs.readFileSync(backendRoutesPath, 'utf8');
+  const backendBiometricsPath = path.resolve(__dirname, '../../backend/app/routers/biometrics.py');
+  const backendBiometricsContent = fs.existsSync(backendBiometricsPath) ? fs.readFileSync(backendBiometricsPath, 'utf8') : '';
 
   // 1. backend/app/session_cache.py defines thread-safe caching, TTL, and invalidation
   assert(

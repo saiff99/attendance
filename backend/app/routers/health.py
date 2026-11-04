@@ -27,3 +27,4 @@ async def health_performance():
     if isinstance(diag, dict):
         diag["biometric_cache"] = get_biometric_cache_stats()
     return diag
+
