@@ -6,6 +6,7 @@ import { getStartOfTodayISO } from "@/lib/dateUtils";
 import { verifySessionToken, SESSION_COOKIE_NAME } from "@/lib/serverAuth";
 import { RecentClassSessionsTable } from "@/components/RecentClassSessionsTable";
 import { decodeSessionMetadata } from "@/lib/geofence";
+import { getCachedUserMap } from "@/lib/userCache";
 
 const AttendanceChart = nextDynamic(
   () => import("@/components/AttendanceChart").then((mod) => mod.AttendanceChart),
@@ -42,13 +43,14 @@ export default async function Dashboard() {
     todayTotalPresentRes,
     todayAttendanceRes,
     rawSessionsRes,
-    appUsersRes,
+    userMap,
     recentAttendanceRes,
   ] = await Promise.all([
-    // 1. Total Registered Students Count
+    // 1. Total Registered Active Students Count (Excludes archived/graduated students)
     supabaseServer
       .from('students')
-      .select('*', { count: 'exact', head: true }),
+      .select('*', { count: 'exact', head: true })
+      .eq('is_active', true),
 
     // 2. Today's Total Present Attendances (Cumulative sum of present records marked today)
     supabaseServer
@@ -64,19 +66,18 @@ export default async function Dashboard() {
       .eq('status', 'Present')
       .gte('recorded_at', startOfToday),
 
-    // 4. Recent Sessions (fetch up to 80 so faculty sees all their classes)
+    // 4. Recent Active Sessions (utilizes partial composite index idx_sessions_active_created)
     supabaseServer
       .from('sessions')
       .select('id, class_name, instructor_name, created_at, attendance(count)')
+      .eq('is_archived', false)
       .neq('class_name', '__SYSTEM_CONFIG__')
       .neq('class_name', '__GEOFENCE_CONFIG__')
       .order('created_at', { ascending: false })
       .limit(80),
 
-    // 5. Registered users to map usernames to full names
-    supabaseServer
-      .from('app_users')
-      .select('username, full_name'),
+    // 5. In-Memory Cached User Map (5-minute TTL, eliminates redundant DB query on every page load)
+    getCachedUserMap(),
 
     // 6. Last 7 days attendance records for the chart
     supabaseServer
@@ -89,25 +90,12 @@ export default async function Dashboard() {
   const todayTotalPresent = todayTotalPresentRes.count;
   const todayAttendanceRecords = todayAttendanceRes.data;
   const rawSessions = rawSessionsRes.data;
-  const appUsers = appUsersRes.data;
   const recentAttendance = recentAttendanceRes.data;
 
   const uniquePresentStudentIds = new Set((todayAttendanceRecords || []).map(r => r.student_id));
   const todayUniquePresent = uniquePresentStudentIds.size;
   const totalRegistered = totalStudents || 0;
   const todayUniqueAbsent = Math.max(0, totalRegistered - todayUniquePresent);
-
-  const userMap: Record<string, string> = {
-    admin: "System Administrator",
-    faculty: "Faculty Member",
-  };
-  if (appUsers) {
-    appUsers.forEach((u: any) => {
-      if (u.username && u.full_name) {
-        userMap[u.username.toLowerCase()] = u.full_name;
-      }
-    });
-  }
 
   const enrichedRawSessions = (rawSessions || []).map((s: any) => {
     const meta = decodeSessionMetadata(s.instructor_name || "");

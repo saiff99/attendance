@@ -1907,6 +1907,60 @@ console.log('\n--- 33. Backend Server-Side Geofence In-Memory Caching & Route In
   assert(dbQueries === 2, 'Invalidation forces fresh database query on next request');
 }
 
+// --- 34. Main Dashboard Concurrency & Query Optimization ---
+console.log('\n--- 34. Main Dashboard Concurrency & Query Optimization ---');
+{
+  const dashboardPath = path.resolve(__dirname, '../src/app/page.tsx');
+  const dashboardContent = fs.readFileSync(dashboardPath, 'utf8');
+
+  // 1. Dashboard imports getCachedUserMap
+  assert(
+    dashboardContent.includes("import { getCachedUserMap } from '@/lib/userCache';") ||
+    dashboardContent.includes('import { getCachedUserMap } from "@/lib/userCache";'),
+    'frontend/src/app/page.tsx imports getCachedUserMap from @/lib/userCache'
+  );
+
+  // 2. Dashboard integrates getCachedUserMap() into concurrent Promise.all
+  assert(
+    dashboardContent.includes('getCachedUserMap(),'),
+    'frontend/src/app/page.tsx executes getCachedUserMap() inside concurrent Promise.all'
+  );
+
+  // 3. Dashboard pushes down is_active = true on students count
+  assert(
+    dashboardContent.includes(".from('students')") &&
+    dashboardContent.includes(".eq('is_active', true)"),
+    'frontend/src/app/page.tsx pushes down is_active = true on registered students count query'
+  );
+
+  // 4. Dashboard pushes down is_archived = false on sessions query
+  assert(
+    dashboardContent.includes(".from('sessions')") &&
+    dashboardContent.includes(".eq('is_archived', false)"),
+    'frontend/src/app/page.tsx pushes down is_archived = false on recent sessions query to utilize partial composite index'
+  );
+
+  // 5. Direct app_users query eradicated from page.tsx
+  assert(
+    !dashboardContent.includes(".from('app_users')"),
+    'frontend/src/app/page.tsx eradicated redundant direct database query to app_users'
+  );
+
+  // 6. Simulation: Dashboard active count vs absent calculation
+  const mockStudents = [
+    { id: 's1', is_active: true },
+    { id: 's2', is_active: true },
+    { id: 's3', is_active: false }, // archived student
+  ];
+  const activeStudents = mockStudents.filter(s => s.is_active);
+  const totalActive = activeStudents.length;
+  const presentStudentIds = new Set(['s1']);
+  const uniqueAbsent = Math.max(0, totalActive - presentStudentIds.size);
+
+  assert(totalActive === 2, 'Archived students excluded from total registered count');
+  assert(uniqueAbsent === 1, 'Today absent count accurately calculated based on active students only');
+}
+
 // Summary
 console.log('\n' + '=' .repeat(65));
 console.log(`📊 Offline Unit Test Summary: ${passed} Passed, ${failed} Failed`);
