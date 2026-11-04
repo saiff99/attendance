@@ -3,6 +3,7 @@ import { supabaseServer } from '@/lib/supabaseServer';
 import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/serverAuth';
 import { DEFAULT_MBBS_SUBJECTS, AcademicSubject } from '@/lib/academicSubjects';
 import { logAuditEvent } from '@/lib/auditLog';
+import { getCachedAcademicSubjects, invalidateAcademicSubjectsCache } from '@/lib/subjectCache';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,30 +12,9 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const yearParam = searchParams.get('year');
 
-    const { data, error } = await supabaseServer
-      .from('academic_subjects')
-      .select('id, academic_year, name, code, department, is_active, created_at')
-      .order('academic_year', { ascending: true })
-      .order('name', { ascending: true });
+    const allSubjects = await getCachedAcademicSubjects();
 
-    if (error) {
-      // Table doesn't exist yet in Supabase
-      if (error.code === 'PGRST205' || error.message?.includes('does not exist')) {
-        let fallback = DEFAULT_MBBS_SUBJECTS;
-        if (yearParam && yearParam !== 'All') {
-          fallback = fallback.filter(s => s.academic_year === yearParam || yearParam.startsWith(s.academic_year));
-        }
-        return NextResponse.json({
-          success: true,
-          subjects: fallback,
-          tableReady: false,
-          message: 'The academic_subjects table is not yet created in Supabase. Using default MBBS curriculum.',
-        });
-      }
-      throw error;
-    }
-
-    let subjects: AcademicSubject[] = data || [];
+    let subjects: AcademicSubject[] = allSubjects;
     if (yearParam && yearParam !== 'All') {
       subjects = subjects.filter(s => s.academic_year === yearParam || yearParam.startsWith(s.academic_year));
     }
@@ -126,6 +106,8 @@ export async function POST(request: NextRequest) {
         actor_role: session.role,
       },
     });
+
+    invalidateAcademicSubjectsCache();
 
     return NextResponse.json({
       success: true,

@@ -1542,6 +1542,57 @@ console.log('\n--- 26. Audit Logs Table Client-Side Pagination & Bounded DOM Nod
   assert(size100Pages === 10, '1000 logs at 100/page calculates exactly 10 pages');
 }
 
+// --- 27. Academic Subjects In-Memory TTL Caching (Issue 17) ---
+console.log('\n--- 27. Academic Subjects In-Memory TTL Caching ---');
+{
+  const subjectCachePath = path.resolve(__dirname, '../src/lib/subjectCache.ts');
+  const subjectCacheContent = fs.readFileSync(subjectCachePath, 'utf8');
+
+  const subjectsRoutePath = path.resolve(__dirname, '../src/app/api/subjects/route.ts');
+  const subjectsRouteContent = fs.readFileSync(subjectsRoutePath, 'utf8');
+
+  const subjectIdRoutePath = path.resolve(__dirname, '../src/app/api/subjects/[id]/route.ts');
+  const subjectIdRouteContent = fs.readFileSync(subjectIdRoutePath, 'utf8');
+
+  const portalDataRoutePath = path.resolve(__dirname, '../src/app/api/student/portal-data/route.ts');
+  const portalDataContent = fs.readFileSync(portalDataRoutePath, 'utf8');
+
+  // 1. subjectCache exports cache getters, invalidators, and 10-minute TTL
+  assert(
+    subjectCacheContent.includes('export async function getCachedAcademicSubjects') &&
+    subjectCacheContent.includes('export function invalidateAcademicSubjectsCache') &&
+    subjectCacheContent.includes('SUBJECTS_TTL_MS = 10 * 60 * 1000'),
+    'lib/subjectCache.ts exports getCachedAcademicSubjects, invalidateAcademicSubjectsCache, and 10-min TTL'
+  );
+
+  // 2. api/subjects/route.ts uses cached subjects in GET
+  assert(
+    subjectsRouteContent.includes('getCachedAcademicSubjects') &&
+    subjectsRouteContent.includes('const allSubjects = await getCachedAcademicSubjects()'),
+    'api/subjects/route.ts retrieves curriculum subjects from in-memory cache'
+  );
+
+  // 3. api/subjects/route.ts invalidates cache on subject creation in POST
+  assert(
+    subjectsRouteContent.includes('invalidateAcademicSubjectsCache') &&
+    subjectsRouteContent.includes('invalidateAcademicSubjectsCache();'),
+    'api/subjects/route.ts invalidates cache upon new subject creation'
+  );
+
+  // 4. api/subjects/[id]/route.ts invalidates cache on PATCH and DELETE
+  assert(
+    subjectIdRouteContent.includes('invalidateAcademicSubjectsCache'),
+    'api/subjects/[id]/route.ts invalidates cache upon subject update or deletion'
+  );
+
+  // 5. api/student/portal-data/route.ts uses getCachedAcademicSubjects instead of direct SQL
+  assert(
+    portalDataContent.includes('getCachedAcademicSubjects') &&
+    portalDataContent.includes('const dbSubjects = await getCachedAcademicSubjects()'),
+    'api/student/portal-data/route.ts queries cached subjects to eliminate database queries on student logins'
+  );
+}
+
 // Summary
 console.log('\n' + '=' .repeat(65));
 console.log(`📊 Offline Unit Test Summary: ${passed} Passed, ${failed} Failed`);

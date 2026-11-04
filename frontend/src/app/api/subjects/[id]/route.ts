@@ -2,6 +2,7 @@ import { NextResponse, NextRequest } from 'next/server';
 import { supabaseServer } from '@/lib/supabaseServer';
 import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/serverAuth';
 import { logAuditEvent } from '@/lib/auditLog';
+import { invalidateAcademicSubjectsCache } from '@/lib/subjectCache';
 
 export const dynamic = 'force-dynamic';
 
@@ -59,6 +60,8 @@ export async function PATCH(
       },
     });
 
+    invalidateAcademicSubjectsCache();
+
     return NextResponse.json({
       success: true,
       subject: data,
@@ -110,6 +113,8 @@ export async function DELETE(
         actor_role: session.role,
       },
     });
+
+    invalidateAcademicSubjectsCache();
 
     return NextResponse.json({
       success: true,

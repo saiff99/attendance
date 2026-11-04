@@ -3,6 +3,7 @@ import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/serverAuth';
 import { supabaseServer } from '@/lib/supabaseServer';
 import { isCohortMatching } from '@/lib/cohort';
 import { DEFAULT_MBBS_SUBJECTS, getSubjectsForCohort } from '@/lib/academicSubjects';
+import { getCachedAcademicSubjects } from '@/lib/subjectCache';
 import { getParentPhone } from '@/lib/studentContact';
 import { decodeSessionMetadata } from '@/lib/geofence';
 
@@ -156,16 +157,12 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    // 4. Fetch Curriculum Subjects (from DB or default MBBS seed)
+    // 4. Fetch Curriculum Subjects (from shared in-memory cache with 10-min TTL)
     let cohortSubjects: { name: string; code?: string; department?: string }[] = [];
     try {
-      const { data: dbSubjects } = await supabaseServer
-        .from('academic_subjects')
-        .select('id, name, code, department, academic_year, is_active')
-        .eq('is_active', true);
-
+      const dbSubjects = await getCachedAcademicSubjects();
       if (dbSubjects && dbSubjects.length > 0) {
-        cohortSubjects = getSubjectsForCohort(dbSubjects, studentYear);
+        cohortSubjects = getSubjectsForCohort(dbSubjects.filter(s => s.is_active !== false), studentYear);
       } else {
         cohortSubjects = getSubjectsForCohort(DEFAULT_MBBS_SUBJECTS, studentYear);
       }
