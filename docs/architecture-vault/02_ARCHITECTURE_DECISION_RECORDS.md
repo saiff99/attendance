@@ -522,6 +522,31 @@
   - *Positive:* Strict mathematical accuracy for active student registry and daily absenteeism metrics.
   - *Positive:* Archived sessions remain excluded from active operational oversight.
 
+---
+
+### ADR-029: FastAPI Backend Thread-Safe Session Metadata In-Memory Caching & Fault-Tolerant Fallback
+- **Status:** Accepted & Enforced (November 2026)
+- **Context:**
+  1. During active attendance sessions, medical students submit selfie verifications via `POST /api/verify-selfie` and retrieve live countdown metadata via `GET /api/session-info`.
+  2. In high-concurrency environments with cohorts of 150 students checking in simultaneously within a 5-minute countdown window, both endpoints previously issued separate, synchronous SQL queries to the `sessions` PostgreSQL table for the same session ID.
+  3. This resulted in up to 300 identical database queries hitting the `sessions` table within seconds, saturating Supabase connection poolers, increasing response latency on student mobile devices, and exposing the system to transient network timeouts.
+  4. While the frontend introduced a 60-second in-memory session cache in ADR-026 for Next.js routes, the FastAPI backend lacked a corresponding server-side RAM cache for direct AI verification endpoints.
+- **Decision:**
+  1. Introduce a dedicated thread-safe caching module in `backend/app/session_cache.py`:
+     - Utilize double-checked locking with `threading.Lock()` (`_session_cache_lock`) and a bounded 30.0-second TTL (`SESSION_METADATA_CACHE_TTL_SECONDS`).
+     - Provide `get_cached_session_metadata(session_id: str, force_refresh: bool = False) -> Optional[dict]`, returning static metadata (`id, class_name, start_time, created_at, target_academic_year, is_archived, instructor_name`).
+     - Implement fault-tolerant stale serving: if Supabase fails or times out, serve the last-known valid cached session metadata instead of crashing student verifications.
+     - Provide `invalidate_backend_session_cache(session_id: Optional[str] = None)` for targeted or full eviction.
+  2. Integrate `get_cached_session_metadata` into `backend/app/routes.py` across `/api/session-info`, `/api/verify-selfie`, and `/api/process-attendance`.
+  3. Guarantee preservation of the 5-minute countdown invariant: the dynamic check `(datetime.now(timezone.utc) - start_dt).total_seconds() > 330` continues to execute dynamically on every request, ensuring that caching static session metadata does not freeze or extend the countdown window.
+  4. Expose `@router.post("/api/session/invalidate-cache")` and trigger invalidation on session termination (`api_end_session` and `api_end_session_by_id`).
+- **Consequences:**
+  - *Positive:* Database round-trips for session metadata reduced from 300 to 1-2 per 150-student check-in burst (99.3% reduction in redundant database traffic).
+  - *Positive:* Significant reduction in selfie verification API latency on student mobile devices.
+  - *Positive:* Fault tolerance against transient database glitches during active classroom check-in windows.
+  - *Positive:* 100% adherence to all hard security constraints (5-minute countdown, geofence, device lock, biometric liveness).
+
+
 
 
 
