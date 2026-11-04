@@ -435,3 +435,4 @@ async def revoke_biometrics(student_id: str, request: Request):
         "message": "Biometric face template permanently erased, consent revoked, and active memory caches invalidated.",
         "invalidation": invalidation_result
     }
+

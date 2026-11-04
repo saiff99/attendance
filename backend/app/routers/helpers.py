@@ -131,3 +131,4 @@ async def safe_read_image_file(file: UploadFile, max_size: int = MAX_SELFIE_IMAG
         )
 
     return contents
+

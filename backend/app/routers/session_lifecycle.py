@@ -84,3 +84,4 @@ async def upload_photo(file: UploadFile = File(...)):
             "confidence": 0.98
         }
     }
+
