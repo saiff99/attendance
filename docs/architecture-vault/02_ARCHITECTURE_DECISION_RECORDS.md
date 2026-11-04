@@ -459,6 +459,30 @@
   - *Positive:* Prevents expired, stale device fingerprints from re-entering production during disaster recovery restorations.
   - *Positive:* Active in-session device locking is completely unaffected, as device locks are only required during live active session windows.
 
+---
+
+### ADR-026: Centralized Session Metadata Caching & Mutation-Driven Eviction
+- **Status:** Accepted & Enforced (November 2026)
+- **Context:**
+  1. In ADR-021, an in-memory 60-second TTL cache (`sessionInfoCache`) was introduced in `frontend/src/app/api/attendance/session/[sessionId]/route.ts` to eliminate redundant database queries against the `sessions` table during frequent live CCTV attendance log polling (every 4 seconds).
+  2. However, the cache was stored in a private module variable without an external eviction interface.
+  3. When faculty or administrators updated a session's metadata (`PATCH /api/sessions/[id]`), safely archived a session (`DELETE /api/sessions/[id]`), or hard-deleted an empty session, the cached session metadata persisted in Node.js memory for up to 60 seconds.
+  4. This generated a stale-data window where live-scan viewers and log endpoints continued to display stale session details or failed to immediately return `404 Not Found` for deleted sessions.
+- **Decision:**
+  1. Create a centralized, modular cache utility in `frontend/src/lib/sessionCache.ts` exporting:
+     - `getCachedSessionInfo(sessionId: string): any | null`
+     - `setCachedSessionInfo(sessionId: string, info: any): void`
+     - `invalidateSessionInfoCache(sessionId?: string): void`
+  2. Update `frontend/src/app/api/attendance/session/[sessionId]/route.ts` to query and warm the centralized cache.
+  3. In `frontend/src/app/api/sessions/[id]/route.ts`, trigger `invalidateSessionInfoCache(id)` immediately upon:
+     - Session profile updates (`PATCH`)
+     - Session archival soft-delete (`DELETE` with existing attendance records)
+     - Session hard-delete (`DELETE` with 0 attendance records)
+- **Consequences:**
+  - *Positive:* 0ms stale window: any mutation, archival, or deletion of a class session immediately purges stale in-memory metadata.
+  - *Positive:* Preserves the 60-second database shield during active classroom attendance monitoring.
+  - *Positive:* Modular code structure consistent with `lib/userCache.ts` and `lib/subjectCache.ts`.
+
 
 
 
