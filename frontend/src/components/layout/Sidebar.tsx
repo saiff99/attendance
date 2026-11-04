@@ -80,6 +80,11 @@ export default function Sidebar() {
         const activeId = localStorage.getItem("medattend_active_session_id");
         setHasActiveLiveSession(!!activeId);
 
+        // Efficiency & Battery Shield: Do not poll when the tab/window is hidden or minimized
+        if (typeof document !== "undefined" && document.visibilityState !== "visible") {
+          return;
+        }
+
         try {
           const res = await fetch("/api/active-sessions", {
             headers: { "ngrok-skip-browser-warning": "69420" },
@@ -107,14 +112,28 @@ export default function Sidebar() {
       }
     };
 
+    // Initial check on mount
     checkActive();
+
+    // Instant Wakeup: when user returns or focuses back on this tab, refresh immediately
+    const handleVisibilityChange = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        checkActive();
+      }
+    };
+
     window.addEventListener("medattend-session-changed", checkActive);
     window.addEventListener("storage", checkActive);
-    const interval = setInterval(checkActive, 3000);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    // Optimized adaptive interval: 12 seconds instead of aggressive 3s
+    // (Session creation/destruction triggers immediate 0ms sync via events above)
+    const interval = setInterval(checkActive, 12000);
 
     return () => {
       window.removeEventListener("medattend-session-changed", checkActive);
       window.removeEventListener("storage", checkActive);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
       clearInterval(interval);
     };
   }, [user?.role, user?.username, user?.name]);

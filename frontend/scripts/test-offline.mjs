@@ -1165,6 +1165,67 @@ console.log('\n--- 19. Classroom Photo Attendance Authorization & Biometric Pres
   );
 }
 
+// --- 20. Active Session Polling Optimization & Background Tab Throttling (Issue 7) ---
+console.log('\n--- 20. Active Session Polling Optimization & Background Tab Throttling ---');
+{
+  const sidebarPath = path.resolve(__dirname, '../src/components/layout/Sidebar.tsx');
+  const sidebarContent = fs.readFileSync(sidebarPath, 'utf8');
+
+  const ongoingPath = path.resolve(__dirname, '../src/app/ongoing/page.tsx');
+  const ongoingContent = fs.readFileSync(ongoingPath, 'utf8');
+
+  const activeRoutePath = path.resolve(__dirname, '../src/app/api/active-sessions/route.ts');
+  const activeRouteContent = fs.readFileSync(activeRoutePath, 'utf8');
+
+  // 1. Sidebar Page Visibility API check
+  assert(
+    sidebarContent.includes('document.visibilityState !== "visible"') &&
+    sidebarContent.includes('return;'),
+    'Sidebar.tsx suppresses network polling when document.visibilityState is not visible'
+  );
+
+  // 2. Sidebar Instant Wakeup on focus
+  assert(
+    sidebarContent.includes('document.addEventListener("visibilitychange"') &&
+    sidebarContent.includes('document.visibilityState === "visible"'),
+    'Sidebar.tsx registers visibilitychange listener for instant 0ms active session sync upon focus'
+  );
+
+  // 3. Sidebar interval relaxed from 3s to >= 10s
+  assert(
+    sidebarContent.includes('12000') &&
+    !sidebarContent.includes('setInterval(checkActive, 3000)'),
+    'Sidebar.tsx relaxes background active session polling interval from 3s to 12s'
+  );
+
+  // 4. Ongoing Page Visibility API check
+  assert(
+    ongoingContent.includes('document.visibilityState !== "visible"'),
+    'ongoing/page.tsx suppresses polling when document.visibilityState is not visible'
+  );
+
+  // 5. Ongoing Page Instant Wakeup on focus
+  assert(
+    ongoingContent.includes('document.addEventListener("visibilitychange"') &&
+    ongoingContent.includes('fetchActiveSessions(true)'),
+    'ongoing/page.tsx registers visibilitychange listener for instant active session sync upon focus'
+  );
+
+  // 6. Ongoing Page interval relaxed from 3s to >= 5s
+  assert(
+    ongoingContent.includes('6000') &&
+    !ongoingContent.includes('setInterval(() => {\n      fetchActiveSessions(true);\n    }, 3000)'),
+    'ongoing/page.tsx relaxes active session polling interval from 3s to 6s'
+  );
+
+  // 7. Active sessions route in-memory TTL caching for app_users
+  assert(
+    activeRouteContent.includes('getCachedUserMap') &&
+    activeRouteContent.includes('USER_MAP_TTL_MS'),
+    'active-sessions/route.ts caches app_users mapping in memory (5-min TTL) to eliminate redundant SQL queries'
+  );
+}
+
 // Summary
 console.log('\n' + '=' .repeat(65));
 console.log(`📊 Offline Unit Test Summary: ${passed} Passed, ${failed} Failed`);

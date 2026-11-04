@@ -91,11 +91,27 @@ export default function OngoingSessionsPage() {
 
   useEffect(() => {
     fetchActiveSessions();
+
+    // Instant Wakeup: Refresh immediately when user returns or focuses back on the tab
+    const handleVisibilityChange = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        fetchActiveSessions(true);
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    // Optimized adaptive interval: 6 seconds while visible (instead of aggressive 3s)
+    // Skips background ticks when tab is minimized or hidden
     const pollInterval = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") {
+        return;
+      }
       fetchActiveSessions(true);
-    }, 3000);
+    }, 6000);
 
     return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
       clearInterval(pollInterval);
     };
   }, [fetchActiveSessions]);
