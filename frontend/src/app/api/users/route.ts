@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/serverAuth';
 import { supabaseServer } from '@/lib/supabaseServer';
 import { logAuditEvent } from '@/lib/auditLog';
+import { invalidateUserMapCache } from '@/lib/userCache';
 
 export async function GET(request: NextRequest) {
   try {
@@ -189,6 +190,8 @@ export async function POST(request: NextRequest) {
         department,
       },
     });
+
+    invalidateUserMapCache();
 
     return NextResponse.json({
       success: true,

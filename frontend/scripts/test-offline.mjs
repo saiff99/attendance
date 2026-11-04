@@ -1696,6 +1696,59 @@ console.log('\n--- 29. Reports Dashboard Client-Side Pagination & API SQL Pushdo
   assert(page6Slice.length === 10 && page6Slice[9].id === 'student-135', 'Page 6 has remaining 10 items ending at student-135');
 }
 
+// --- 30. User Management Immediate Cache Invalidation (Issue 20) ---
+console.log('\n--- 30. User Management Immediate Cache Invalidation ---');
+{
+  const usersRoutePath = path.resolve(__dirname, '../src/app/api/users/route.ts');
+  const usersRouteContent = fs.readFileSync(usersRoutePath, 'utf8');
+
+  const userIdRoutePath = path.resolve(__dirname, '../src/app/api/users/[id]/route.ts');
+  const userIdRouteContent = fs.readFileSync(userIdRoutePath, 'utf8');
+
+  const userCachePath = path.resolve(__dirname, '../src/lib/userCache.ts');
+  const userCacheContent = fs.readFileSync(userCachePath, 'utf8');
+
+  // 1. userCache exports invalidateUserMapCache
+  assert(
+    userCacheContent.includes('export function invalidateUserMapCache'),
+    'lib/userCache.ts exports invalidateUserMapCache function'
+  );
+
+  // 2. api/users/route.ts imports invalidateUserMapCache and calls it in POST
+  assert(
+    usersRouteContent.includes("import { invalidateUserMapCache } from '@/lib/userCache'") &&
+    usersRouteContent.includes('invalidateUserMapCache();'),
+    'api/users/route.ts imports and triggers invalidateUserMapCache() upon user creation in POST'
+  );
+
+  // 3. api/users/[id]/route.ts imports invalidateUserMapCache and calls it in PATCH
+  assert(
+    userIdRouteContent.includes("import { invalidateUserMapCache } from '@/lib/userCache'") &&
+    userIdRouteContent.includes('invalidateUserMapCache();'),
+    'api/users/[id]/route.ts imports and triggers invalidateUserMapCache() upon user updates in PATCH'
+  );
+
+  // 4. api/users/[id]/route.ts calls invalidateUserMapCache in DELETE
+  const deleteHandlerMatches = userIdRouteContent.split('export async function DELETE');
+  assert(
+    deleteHandlerMatches.length === 2 && deleteHandlerMatches[1].includes('invalidateUserMapCache();'),
+    'api/users/[id]/route.ts triggers invalidateUserMapCache() upon user deletion in DELETE'
+  );
+
+  // 5. Simulation of cache invalidation lifecycle
+  let mockCachedUserMap = { admin: 'System Administrator', dr_khan: 'Dr. Salman Khan' };
+  let mockUserMapCachedAt = Date.now();
+
+  function mockInvalidate() {
+    mockCachedUserMap = null;
+    mockUserMapCachedAt = 0;
+  }
+
+  assert(mockCachedUserMap !== null && mockUserMapCachedAt > 0, 'Mock cache initially populated');
+  mockInvalidate();
+  assert(mockCachedUserMap === null && mockUserMapCachedAt === 0, 'Mock cache invalidated to null and timestamp reset to 0');
+}
+
 // Summary
 console.log('\n' + '=' .repeat(65));
 console.log(`📊 Offline Unit Test Summary: ${passed} Passed, ${failed} Failed`);

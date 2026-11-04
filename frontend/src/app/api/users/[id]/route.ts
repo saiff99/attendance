@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/serverAuth';
 import { supabaseServer } from '@/lib/supabaseServer';
 import { logAuditEvent } from '@/lib/auditLog';
+import { invalidateUserMapCache } from '@/lib/userCache';
 
 export async function PATCH(
   request: NextRequest,
@@ -182,6 +183,8 @@ export async function PATCH(
       },
     });
 
+    invalidateUserMapCache();
+
     return NextResponse.json({
       success: true,
       user: updatedUser,
@@ -288,6 +291,8 @@ export async function DELETE(
       actorId: session.username,
       details: { deleted_username: targetUser?.username },
     });
+
+    invalidateUserMapCache();
 
     return NextResponse.json({
       success: true,
