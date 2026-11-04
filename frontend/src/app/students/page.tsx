@@ -22,6 +22,7 @@ const BulkImportModal = dynamic(
 
 import { getParentPhone, encodeStudentEmail, cleanPhoneNumber } from "@/lib/studentContact";
 import { useAuth } from "@/lib/auth";
+import { useStudentActions } from "@/hooks";
 
 // In-memory module cache for instant navigation between tabs without layout shift
 let memoryStudentsCache: Student[] | null = null;
@@ -81,20 +82,6 @@ export default function StudentDirectory() {
 
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
-
-  // Custom Centered Modal for PIN Reset
-  const [resetPinTarget, setResetPinTarget] = useState<{ id: string; name: string; roll: string } | null>(null);
-  const [isResettingPin, setIsResettingPin] = useState(false);
-  const [resetPinSuccess, setResetPinSuccess] = useState<string | null>(null);
-  const [resetPinError, setResetPinError] = useState<string | null>(null);
-  const [resetPinTempPin, setResetPinTempPin] = useState<string | null>(null);
-  const [pinCopied, setPinCopied] = useState(false);
-
-  // Custom Modal for DPDP Biometric Revocation / Face Template Erasure
-  const [revokeBiometricTarget, setRevokeBiometricTarget] = useState<{ id: string; name: string; roll: string } | null>(null);
-  const [isRevokingBiometric, setIsRevokingBiometric] = useState(false);
-  const [revokeBiometricSuccess, setRevokeBiometricSuccess] = useState<string | null>(null);
-  const [revokeBiometricError, setRevokeBiometricError] = useState<string | null>(null);
 
   // Sorting State - default ordered by Roll Number ascending
   type SortField = 'student_roll' | 'full_name' | 'academic_year';
@@ -204,6 +191,31 @@ export default function StudentDirectory() {
     };
   }, [fetchStudents]);
 
+  // Student PIN Reset & Biometric Revocation Actions Hook
+  const {
+    resetPinTarget,
+    setResetPinTarget,
+    isResettingPin,
+    resetPinSuccess,
+    setResetPinSuccess,
+    resetPinError,
+    setResetPinError,
+    resetPinTempPin,
+    setResetPinTempPin,
+    pinCopied,
+    setPinCopied,
+    confirmResetPin,
+
+    revokeBiometricTarget,
+    setRevokeBiometricTarget,
+    isRevokingBiometric,
+    revokeBiometricSuccess,
+    setRevokeBiometricSuccess,
+    revokeBiometricError,
+    setRevokeBiometricError,
+    confirmRevokeBiometric,
+  } = useStudentActions(fetchStudents);
+
   const handleSaveStudent = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
@@ -288,61 +300,6 @@ export default function StudentDirectory() {
       studentRoll: student.student_roll,
       error: null,
     });
-  };
-
-
-  const confirmResetPin = async () => {
-    if (!resetPinTarget) return;
-    setIsResettingPin(true);
-    setResetPinSuccess(null);
-    setResetPinError(null);
-    setResetPinTempPin(null);
-    setPinCopied(false);
-
-    try {
-      const res = await fetch(`/api/students/${resetPinTarget.id}/reset-pin`, { method: "POST" });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || "Failed to reset PIN.");
-      }
-      setResetPinTempPin(data.tempPin || null);
-      setResetPinSuccess(data.message || `Temporary activation PIN generated successfully.`);
-      fetchStudents();
-    } catch (err: unknown) {
-      console.error("Error resetting student PIN:", err);
-      const msg = err instanceof Error ? err.message : "Failed to reset PIN.";
-      setResetPinError(msg);
-    } finally {
-      setIsResettingPin(false);
-    }
-  };
-
-  const confirmRevokeBiometric = async () => {
-    if (!revokeBiometricTarget) return;
-    setIsRevokingBiometric(true);
-    setRevokeBiometricSuccess(null);
-    setRevokeBiometricError(null);
-
-    try {
-      const res = await fetch(`/api/students/${revokeBiometricTarget.id}/revoke-biometrics`, { method: "POST" });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || "Failed to revoke biometrics.");
-      }
-      setRevokeBiometricSuccess(`Facial biometric template erased and consent revoked.`);
-      fetchStudents();
-      setTimeout(() => {
-        setRevokeBiometricTarget(null);
-        setRevokeBiometricSuccess(null);
-        setRevokeBiometricError(null);
-      }, 1500);
-    } catch (err: unknown) {
-      console.error("Error revoking biometrics:", err);
-      const msg = err instanceof Error ? err.message : "Failed to revoke biometrics.";
-      setRevokeBiometricError(msg);
-    } finally {
-      setIsRevokingBiometric(false);
-    }
   };
 
   const promptBulkDelete = () => {

@@ -33,6 +33,7 @@ import {
 import { isCohortMatching } from "@/lib/cohort";
 import { AcademicSubject, getCachedSubjects, saveCachedSubjects, getSubjectsForCohort } from "@/lib/academicSubjects";
 import type { Session } from "@/types/database";
+import { useCctvAutoTour, useCurriculumSubjects, useGeofenceSync } from "@/hooks";
 
 interface CameraMeta {
   index: number;
@@ -102,67 +103,30 @@ export default function LiveScan() {
     sub_batch: "All"
   });
   const [customHallName, setCustomHallName] = useState("");
-  const [academicSubjects, setAcademicSubjects] = useState<AcademicSubject[]>(getCachedSubjects);
+  const {
+    academicSubjects,
+    availableCohortSubjects,
+    getNextSubjectForCohort,
+  } = useCurriculumSubjects(setupData.academic_year);
   const [isStartingSession, setIsStartingSession] = useState(false);
-
-  // Fetch dynamic curriculum subjects on mount & sync in real-time
-  useEffect(() => {
-    let isMounted = true;
-    const loadSubjects = async () => {
-      try {
-        const res = await fetch("/api/subjects");
-        const data = await res.json();
-        if (res.ok && data.subjects && Array.isArray(data.subjects) && data.subjects.length > 0 && isMounted) {
-          setAcademicSubjects(data.subjects);
-          saveCachedSubjects(data.subjects);
-        }
-      } catch (e) {
-        // Fallback to cached subjects
-      }
-    };
-    loadSubjects();
-
-    const handleSync = () => {
-      if (isMounted) {
-        setAcademicSubjects(getCachedSubjects());
-      }
-    };
-    window.addEventListener("medattend-subjects-changed", handleSync);
-    window.addEventListener("storage", handleSync);
-
-    return () => {
-      isMounted = false;
-      window.removeEventListener("medattend-subjects-changed", handleSync);
-      window.removeEventListener("storage", handleSync);
-    };
-  }, []);
-
-  const availableCohortSubjects = useMemo(() => {
-    return getSubjectsForCohort(academicSubjects, setupData.academic_year);
-  }, [academicSubjects, setupData.academic_year]);
 
   // Ensure current selected subject is always aligned with available cohort subjects
   useEffect(() => {
     if (availableCohortSubjects.length > 0) {
-      const isCurrentValid = availableCohortSubjects.some(s => s.name === setupData.subject);
+      const isCurrentValid = availableCohortSubjects.some((s) => s.name === setupData.subject);
       if (!isCurrentValid) {
-        setSetupData(prev => ({ ...prev, subject: availableCohortSubjects[0].name }));
+        setSetupData((prev) => ({ ...prev, subject: availableCohortSubjects[0].name }));
       }
     }
   }, [availableCohortSubjects, setupData.subject]);
 
   const handleCohortChange = (newCohort: string) => {
-    const cohortSubs = getSubjectsForCohort(academicSubjects, newCohort);
-    const isCurrentValid = cohortSubs.some(s => s.name === setupData.subject);
-    const nextSubject = isCurrentValid
-      ? setupData.subject
-      : (cohortSubs.length > 0 ? cohortSubs[0].name : "General");
-
-    setSetupData(prev => ({
+    const nextSubject = getNextSubjectForCohort(newCohort, setupData.subject);
+    setSetupData((prev) => ({
       ...prev,
       academic_year: newCohort,
       subject: nextSubject,
-      sub_batch: newCohort === "All" ? "All" : prev.sub_batch
+      sub_batch: newCohort === "All" ? "All" : prev.sub_batch,
     }));
   };
 
@@ -217,7 +181,12 @@ export default function LiveScan() {
   const [showQrModal, setShowQrModal] = useState(false);
   const [isQrFullscreen, setIsQrFullscreen] = useState(false);
   const [showGeofenceModal, setShowGeofenceModal] = useState(false);
-  const [sessionGeofence, setSessionGeofence] = useState<CampusGeofenceConfig>(() => getLocalGeofence());
+  const {
+    sessionGeofence,
+    setSessionGeofence,
+    activeGeofenceConfig,
+    handleGeofenceSaved,
+  } = useGeofenceSync(activeSession, setActiveSession);
   const [capturingSessionGPS, setCapturingSessionGPS] = useState(false);
   const [gpsCalibrateModal, setGpsCalibrateModal] = useState<{
     isOpen: boolean;
@@ -288,67 +257,19 @@ export default function LiveScan() {
   const [copiedLink, setCopiedLink] = useState(false);
 
   // Auto-Tour Camera Cycle State for Single Camera View
-  const [isAutoTourActive, setIsAutoTourActive] = useState(false);
-  const [tourIntervalSeconds, setTourIntervalSeconds] = useState(8);
-  const [tourCountdown, setTourCountdown] = useState(8);
-
-  // Auto-Tour Timer Effect
-  useEffect(() => {
-    if (!isAutoTourActive || activeTab !== "cctv") {
-      setTourCountdown(tourIntervalSeconds);
-      return;
-    }
-
-    const timer = setInterval(() => {
-      setTourCountdown((prev) => {
-        if (prev <= 1) {
-          setSelectedCctvIndex((curr) => (curr + 1) % cctvCameras.length);
-          return tourIntervalSeconds;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [isAutoTourActive, activeTab, tourIntervalSeconds, cctvCameras.length]);
-
-  // Compute currently active geofence config (from live session metadata or local default)
-  const activeGeofenceConfig = useMemo<CampusGeofenceConfig>(() => {
-    if (activeSession?.instructor_name) {
-      const decoded = decodeSessionMetadata(activeSession.instructor_name);
-      if (decoded.geofence) return decoded.geofence;
-    }
-    return sessionGeofence;
-  }, [activeSession, sessionGeofence]);
-
-  // Synchronize geofence changes immediately to active session in Supabase & local state
-  const handleGeofenceSaved = async (newConfig: CampusGeofenceConfig) => {
-    setSessionGeofence(newConfig);
-    saveLocalGeofence(newConfig);
-
-    if (activeSession) {
-      try {
-        const meta = decodeSessionMetadata(activeSession.instructor_name);
-        const updatedInstructor = encodeSessionMetadata(meta.topic, newConfig, meta.facultyUsername);
-
-        const res = await fetch(`/api/sessions/${activeSession.id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ instructor_name: updatedInstructor }),
-        });
-
-        if (res.ok) {
-          const json = await res.json();
-          const savedInstructor = json?.session?.instructor_name || updatedInstructor;
-          setActiveSession((prev: any) => prev ? { ...prev, instructor_name: savedInstructor } : null);
-        } else {
-          console.error("Failed to update active session geofence:", await res.text());
-        }
-      } catch (err) {
-        console.error("Error updating active session geofence:", err);
-      }
-    }
-  };
+  const {
+    isAutoTourActive,
+    setIsAutoTourActive,
+    tourIntervalSeconds,
+    setTourIntervalSeconds,
+    tourCountdown,
+    setTourCountdown,
+  } = useCctvAutoTour({
+    activeTab,
+    cameraCount: cctvCameras.length,
+    initialIntervalSeconds: 8,
+    onRotateCamera: setSelectedCctvIndex,
+  });
 
 
   // Session Duration Timer

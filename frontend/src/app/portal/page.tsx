@@ -9,6 +9,7 @@ import {
   Eye, EyeOff, Bell, WifiOff
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
+import { useOfflineStatus } from "@/hooks";
 import dynamic from "next/dynamic";
 
 const FaceRegistrationModal = dynamic(
@@ -139,46 +140,7 @@ export default function StudentPortalPage() {
   }, [isProfileMenuOpen]);
 
   // PWA Offline Status & Push Notification States
-  const [isOnline, setIsOnline] = useState<boolean>(() => (typeof window !== "undefined" ? navigator.onLine : true));
-  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | "unsupported">(() => {
-    if (typeof window !== "undefined") {
-      return "Notification" in window ? Notification.permission : "unsupported";
-    }
-    return "default";
-  });
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const handleOnline = () => setIsOnline(true);
-      const handleOffline = () => setIsOnline(false);
-
-      window.addEventListener("online", handleOnline);
-      window.addEventListener("offline", handleOffline);
-
-      return () => {
-        window.removeEventListener("online", handleOnline);
-        window.removeEventListener("offline", handleOffline);
-      };
-    }
-  }, []);
-
-  const requestNotificationAccess = async () => {
-    if (typeof window === "undefined" || !("Notification" in window)) return;
-    try {
-      const perm = await Notification.requestPermission();
-      setNotificationPermission(perm);
-      if (perm === "granted" && "serviceWorker" in navigator) {
-        const reg = await navigator.serviceWorker.ready;
-        reg.showNotification("MedAttend AI", {
-          body: "Attendance alerts enabled! You will receive live check-in notifications.",
-          icon: "/icons/icon-192x192.png",
-          badge: "/icons/icon-192x192.png",
-        });
-      }
-    } catch (e) {
-      console.warn("Notification permission error:", e);
-    }
-  };
+  const { isOnline, notificationPermission, requestNotificationAccess } = useOfflineStatus();
 
   const fetchPortalData = useCallback(async (rollQuery?: string, isSilent = false) => {
     // Only show full-screen loader on initial fetch when there is no data
