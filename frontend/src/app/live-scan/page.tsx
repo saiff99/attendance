@@ -353,17 +353,54 @@ export default function LiveScan() {
     return () => clearInterval(timer);
   }, [activeSession]);
 
-  // Log polling for CCTV / Grid mode
-  useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if ((activeTab === "grid" || activeTab === "cctv") && activeSession) {
-      fetchLogs();
-      interval = setInterval(() => {
-        fetchLogs();
-      }, 2000); // Poll logs every 2.0s
+  // In-flight guard to avoid stacking requests if network latency spikes
+  const isFetchingLogsRef = useRef(false);
+
+  const fetchLogs = useCallback(async () => {
+    if (!activeSession || isFetchingLogsRef.current) return;
+    try {
+      isFetchingLogsRef.current = true;
+      const res = await fetch(`/api/attendance/session/${activeSession.id}`);
+      const resData = await res.json();
+      if (!res.ok) throw new Error(resData.error || 'Failed to fetch logs');
+      setLogs(resData.logs || []);
+    } catch (error) {
+      console.error("Failed to fetch logs:", error);
+    } finally {
+      isFetchingLogsRef.current = false;
     }
-    return () => clearInterval(interval);
-  }, [activeTab, activeSession]);
+  }, [activeSession]);
+
+  // Log polling for CCTV / Grid mode with Page Visibility Guard (Issue 13)
+  useEffect(() => {
+    if ((activeTab !== "grid" && activeTab !== "cctv") || !activeSession) {
+      return;
+    }
+
+    // 1. Initial immediate fetch
+    fetchLogs();
+
+    // 2. Instant Wakeup on focus: fetch logs immediately the millisecond tab regains focus
+    const handleVisibilityChange = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        fetchLogs();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    // 3. Relaxed adaptive polling: 4s while visible, zero background requests when hidden
+    const interval = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") {
+        return;
+      }
+      fetchLogs();
+    }, 4000);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      clearInterval(interval);
+    };
+  }, [activeTab, activeSession, fetchLogs]);
 
   useEffect(() => {
     // Fetch available CCTV cameras & metadata from backend
@@ -446,19 +483,7 @@ export default function LiveScan() {
       fetchLogs();
       fetchEnrolledStudents();
     }
-  }, [activeSession, fetchEnrolledStudents]);
-
-  const fetchLogs = async () => {
-    if (!activeSession) return;
-    try {
-      const res = await fetch(`/api/attendance/session/${activeSession.id}`);
-      const resData = await res.json();
-      if (!res.ok) throw new Error(resData.error || 'Failed to fetch logs');
-      setLogs(resData.logs || []);
-    } catch (error) {
-      console.error("Failed to fetch logs:", error);
-    }
-  };
+  }, [activeSession, fetchLogs, fetchEnrolledStudents]);
 
   const handleStartSession = async (e: React.FormEvent) => {
     e.preventDefault();

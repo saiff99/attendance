@@ -1351,6 +1351,51 @@ console.log('\n--- 22. PostgreSQL High-Velocity Partial & Composite Performance 
   );
 }
 
+// --- 23. Live Scan CCTV Log Polling Guard & Visibility Sync (Issue 13) ---
+console.log('\n--- 23. Live Scan CCTV Log Polling Guard & Visibility Sync ---');
+{
+  const liveScanPath = path.resolve(__dirname, '../src/app/live-scan/page.tsx');
+  const liveScanContent = fs.readFileSync(liveScanPath, 'utf8');
+
+  const sessionLogRoutePath = path.resolve(__dirname, '../src/app/api/attendance/session/[sessionId]/route.ts');
+  const sessionLogRouteContent = fs.readFileSync(sessionLogRoutePath, 'utf8');
+
+  // 1. live-scan Page Visibility check in interval
+  assert(
+    liveScanContent.includes('document.visibilityState !== "visible"') &&
+    liveScanContent.includes('return;'),
+    'live-scan/page.tsx suppresses log polling when document.visibilityState is not visible'
+  );
+
+  // 2. live-scan instant wakeup on focus
+  assert(
+    liveScanContent.includes('document.addEventListener("visibilitychange"') &&
+    liveScanContent.includes('document.visibilityState === "visible"'),
+    'live-scan/page.tsx registers visibilitychange listener for instant 0ms log sync upon focus'
+  );
+
+  // 3. live-scan interval relaxed from 2s to >= 4s
+  assert(
+    liveScanContent.includes('4000') &&
+    !liveScanContent.includes('setInterval(() => {\n        fetchLogs();\n      }, 2000)'),
+    'live-scan/page.tsx relaxes active polling interval from 2s to 4s'
+  );
+
+  // 4. In-flight request stacking guard
+  assert(
+    liveScanContent.includes('isFetchingLogsRef.current') &&
+    liveScanContent.includes('isFetchingLogsRef = useRef(false)'),
+    'live-scan/page.tsx implements in-flight guard to prevent request stacking during high latency'
+  );
+
+  // 5. Server-side sessionInfo TTL cache
+  assert(
+    sessionLogRouteContent.includes('sessionInfoCache = new Map') &&
+    sessionLogRouteContent.includes('expiresAt > now'),
+    'api/attendance/session/[sessionId]/route.ts caches session metadata in memory (60s TTL) to cut SQL queries in half'
+  );
+}
+
 // Summary
 console.log('\n' + '=' .repeat(65));
 console.log(`📊 Offline Unit Test Summary: ${passed} Passed, ${failed} Failed`);

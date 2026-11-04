@@ -6,6 +6,9 @@ import { logAuditEvent } from '@/lib/auditLog';
 
 export const dynamic = 'force-dynamic';
 
+// In-memory 60s TTL cache for session existence & metadata to eliminate redundant SQL queries during polling (Issue 13)
+const sessionInfoCache = new Map<string, { info: any; expiresAt: number }>();
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ sessionId: string }> }
@@ -33,12 +36,24 @@ export async function GET(
       return NextResponse.json({ success: false, error: 'Invalid Session ID format. Valid UUID required.' }, { status: 400 });
     }
 
-    // 1. Fetch Session to verify existence and faculty authorization
-    const { data: sessionInfo } = await supabaseServer
-      .from('sessions')
-      .select('id, class_name, instructor_name, target_academic_year')
-      .eq('id', sessionId)
-      .maybeSingle();
+    // 1. Fetch Session to verify existence and faculty authorization (with 60s memory cache)
+    let sessionInfo: any = null;
+    const now = Date.now();
+    const cached = sessionInfoCache.get(sessionId);
+    if (cached && cached.expiresAt > now) {
+      sessionInfo = cached.info;
+    } else {
+      const { data } = await supabaseServer
+        .from('sessions')
+        .select('id, class_name, instructor_name, target_academic_year')
+        .eq('id', sessionId)
+        .maybeSingle();
+
+      if (data) {
+        sessionInfoCache.set(sessionId, { info: data, expiresAt: now + 60000 });
+        sessionInfo = data;
+      }
+    }
 
     if (!sessionInfo) {
       return NextResponse.json({ success: false, error: 'Session not found.' }, { status: 404 });
