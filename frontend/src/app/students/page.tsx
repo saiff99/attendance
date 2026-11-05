@@ -23,6 +23,7 @@ const BulkImportModal = dynamic(
 import { getParentPhone, encodeStudentEmail, cleanPhoneNumber } from "@/lib/studentContact";
 import { useAuth } from "@/lib/auth";
 import { useStudentActions } from "@/hooks";
+import { toast } from "@/components/Toast";
 
 // In-memory module cache for instant navigation between tabs without layout shift
 let memoryStudentsCache: Student[] | null = null;
@@ -148,7 +149,7 @@ export default function StudentDirectory() {
 
   const triggerFaceRegistration = (studentId: string, studentName: string) => {
     if (!isSuperAdmin) {
-      alert("Access Denied: Only Super Admin can register or modify student Face ID biometrics.");
+      toast.error("Access Denied: Only Super Admin can register or modify student Face ID biometrics.");
       return;
     }
     setFaceModalStudentId(studentId);
@@ -289,7 +290,7 @@ export default function StudentDirectory() {
 
   const promptDeleteSingle = (student: Student) => {
     if (!isSuperAdmin) {
-      alert("Access Denied: Only Super Admin can delete student records.");
+      toast.error("Access Denied: Only Super Admin can delete student records.");
       return;
     }
     setDeleteModalState({
@@ -304,7 +305,7 @@ export default function StudentDirectory() {
 
   const promptBulkDelete = () => {
     if (!isSuperAdmin) {
-      alert("Access Denied: Only Super Admin can delete student records.");
+      toast.error("Access Denied: Only Super Admin can delete student records.");
       return;
     }
     if (selectedIds.length === 0) return;
@@ -461,7 +462,7 @@ export default function StudentDirectory() {
       : (filteredStudents.length > 0 ? filteredStudents : students);
 
     if (listToExport.length === 0) {
-      alert("No students to export.");
+      toast.warning("No students to export.");
       return;
     }
     const headers = ["Roll Number", "Full Name", "Academic Year", "Face Data Status"];

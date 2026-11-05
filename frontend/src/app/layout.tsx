@@ -4,6 +4,8 @@ import { AppShell } from "@/components/layout/AppShell";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { AuthProvider } from "@/lib/auth";
 import { PwaInstallPrompt } from "@/components/PwaInstallPrompt";
+import { ToastContainer } from "@/components/Toast";
+import { ConfirmDialogProvider } from "@/components/ConfirmDialog";
 import "./globals.css";
 
 const inter = Inter({
@@ -141,6 +143,8 @@ export default function RootLayout({
           >
             <AppShell>{children}</AppShell>
             <PwaInstallPrompt />
+            <ToastContainer />
+            <ConfirmDialogProvider />
           </ThemeProvider>
         </AuthProvider>
       </body>

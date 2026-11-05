@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { 
   Radio, Clock, Users, MapPin, Camera, PlayCircle, StopCircle, 
   RefreshCw, CheckCircle2, AlertCircle, ArrowRight, Sparkles,
-  QrCode, ExternalLink, ShieldCheck, ChevronRight, Activity, Loader2
+  QrCode, ExternalLink, ShieldCheck, ChevronRight, Activity, Loader2, X
 } from "lucide-react";
 // Ongoing Sessions Component
 import { getBackendUrl } from "@/lib/api";
@@ -15,6 +15,8 @@ import { decodeSessionMetadata } from "@/lib/geofence";
 import { QRCodeSVG } from "qrcode.react";
 import { getTodayDateStr, getStartOfTodayISO } from "@/lib/dateUtils";
 import { useAuth } from "@/lib/auth";
+import { toast } from "@/components/Toast";
+import { confirmDialog } from "@/components/ConfirmDialog";
 
 interface ActiveSessionItem {
   id: string;
@@ -151,10 +153,14 @@ export default function OngoingSessionsPage() {
 
   // End Session Early
   const handleEndSessionEarly = async (sessionId: string) => {
-    const confirm = window.confirm(
-      "Are you sure you want to conclude this attendance session early?\n\nAll recorded attendances will remain saved."
-    );
-    if (!confirm) return;
+    const confirmed = await confirmDialog({
+      title: "End Attendance Session",
+      message:
+        "Are you sure you want to conclude this attendance session early?\n\nAll recorded attendances will remain saved.",
+      confirmText: "End Session",
+      variant: "danger",
+    });
+    if (!confirmed) return;
 
     try {
       if (typeof window !== "undefined") {
@@ -167,6 +173,7 @@ export default function OngoingSessionsPage() {
       }
       // Remove from local UI immediately
       setSessions((prev) => prev.filter((s) => s.id !== sessionId));
+      toast.success("Attendance session concluded early.");
 
       // Trigger Step 7 session memory cleanup on backend
       try {
@@ -193,6 +200,7 @@ export default function OngoingSessionsPage() {
     const url = `${baseUrl}/selfieattend?session_id=${sess.id}${tokenParam}`;
     navigator.clipboard.writeText(url);
     setCopiedId(sess.id);
+    toast.success("Selfie attendance link copied to clipboard!");
     setTimeout(() => setCopiedId(null), 2000);
   };
 
@@ -453,10 +461,12 @@ export default function OngoingSessionsPage() {
                   </span>
                 </div>
                 <button
+                  type="button"
                   onClick={() => setQrModalSession(null)}
-                  className="p-1 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors"
+                  className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                  aria-label="Close selfie QR modal"
                 >
-                  ✕
+                  <X className="w-4 h-4" />
                 </button>
               </div>
 

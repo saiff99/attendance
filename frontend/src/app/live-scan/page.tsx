@@ -33,6 +33,8 @@ import {
 import { isCohortMatching } from "@/lib/cohort";
 import { AcademicSubject, getCachedSubjects, saveCachedSubjects, getSubjectsForCohort } from "@/lib/academicSubjects";
 import type { Session } from "@/types/database";
+import { toast } from "@/components/Toast";
+import { confirmDialog } from "@/components/ConfirmDialog";
 import { useCctvAutoTour, useCurriculumSubjects, useGeofenceSync } from "@/hooks";
 
 interface CameraMeta {
@@ -375,7 +377,7 @@ export default function LiveScan() {
 
   const exportToCSV = () => {
     if (!logs || logs.length === 0) {
-      alert("No attendance logs to export.");
+      toast.warning("No attendance logs to export.");
       return;
     }
 
@@ -486,9 +488,10 @@ export default function LiveScan() {
       }
 
       setActiveSession(data);
+      toast.success("Live attendance session started.");
     } catch (error: any) {
       console.error("Failed to create session:", error);
-      alert(`Failed to start session: ${error.message || JSON.stringify(error)}`);
+      toast.error(`Failed to start session: ${error.message || JSON.stringify(error)}`);
     } finally {
       setIsStartingSession(false);
     }
@@ -502,9 +505,13 @@ export default function LiveScan() {
   };
 
   const handleEndSession = async () => {
-    const isConfirmed = window.confirm(
-      "Are you sure you want to end this live attendance session?\n\nAll attendance records taken during this lecture are safely stored in the database."
-    );
+    const isConfirmed = await confirmDialog({
+      title: "End Live Attendance Session",
+      message:
+        "Are you sure you want to end this live attendance session?\n\nAll attendance records taken during this lecture are safely stored in the database.",
+      confirmText: "End Session",
+      variant: "danger",
+    });
     if (!isConfirmed) return;
 
     const endingSessionId = activeSession?.id;
@@ -656,8 +663,9 @@ export default function LiveScan() {
       const resData = await res.json();
       if (!res.ok) throw new Error(resData.error || 'Failed to mark present');
       await fetchLogs();
+      toast.success("Student marked present.");
     } catch (err: any) {
-      alert("Failed to mark present: " + (err.message || "Unknown error"));
+      toast.error("Failed to mark present: " + (err.message || "Unknown error"));
     } finally {
       setMarkingStudentId(null);
     }
@@ -673,8 +681,9 @@ export default function LiveScan() {
       const resData = await res.json();
       if (!res.ok) throw new Error(resData.error || 'Failed to undo attendance');
       await fetchLogs();
+      toast.info("Attendance entry undone.");
     } catch (err: any) {
-      alert("Failed to undo attendance: " + (err.message || "Unknown error"));
+      toast.error("Failed to undo attendance: " + (err.message || "Unknown error"));
     } finally {
       setUndoingLogId(null);
     }

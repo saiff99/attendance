@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { DownloadCloud, Loader2 } from "lucide-react";
+import { toast } from "@/components/Toast";
 
 export default function DownloadReportButton({ sessionId, sessionName }: { sessionId: string, sessionName: string }) {
   const [isDownloading, setIsDownloading] = useState(false);
@@ -16,7 +17,7 @@ export default function DownloadReportButton({ sessionId, sessionName }: { sessi
       const data = resData.logs || [];
 
       if (!data || data.length === 0) {
-        alert("No attendance records found for this session.");
+        toast.warning("No attendance records found for this session.");
         setIsDownloading(false);
         return;
       }
@@ -57,10 +58,11 @@ export default function DownloadReportButton({ sessionId, sessionName }: { sessi
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+      toast.success("Attendance report downloaded successfully.");
       
     } catch (error) {
       console.error("Error downloading report:", error);
-      alert("Failed to download report.");
+      toast.error("Failed to download report.");
     } finally {
       setIsDownloading(false);
     }
@@ -70,7 +72,7 @@ export default function DownloadReportButton({ sessionId, sessionName }: { sessi
     <button
       onClick={handleDownload}
       disabled={isDownloading}
-      className="inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+      className="inline-flex items-center px-3 py-1.5 border border-gray-300 dark:border-slate-700 shadow-sm text-xs font-medium rounded-md text-gray-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
       title="Download CSV Report"
     >
       {isDownloading ? (
