@@ -24,6 +24,19 @@
 | **ADR-015** | Parallelized Reports Aggregation with Date-Range Windowing & Chunked Pagination Safeguard | **Accepted** | Nov 2026 | Analytics / Scalability |
 | **ADR-016** | Adaptive Visibility-Aware Polling and In-Memory User Map Caching | **Accepted** | Nov 2026 | Networking / Database Scalability |
 | **ADR-017** | Atomic Single-Roundtrip Batch Upsert for Classroom Photo Attendance | **Accepted** | Nov 2026 | Database Performance / Ingestion |
+| **ADR-018** | Periodic Rate-Limiter In-Memory Pruning & Ephemeral Settings DB Purging | **Accepted** | Nov 2026 | Database Hygiene / Memory Defense |
+| **ADR-019** | Centralized Biometric Retrieval & Unified In-Memory Cache for Stream and Photo Scan | **Accepted** | Nov 2026 | Biometrics / Cache Optimization |
+| **ADR-020** | High-Velocity Partial & Composite B-Tree Indexes for Active Sessions and Student Attendance | **Accepted** | Nov 2026 | Database Performance / Indexing |
+| **ADR-021** | Adaptive CCTV Log Polling & In-Memory Session Metadata Caching | **Accepted** | Nov 2026 | Client Optimization / Polling |
+| **ADR-022** | Student Portal SQL Archival Pushdown, Safe Query Bounding & Partial Index Scan | **Accepted** | Nov 2026 | Database Optimization / Archival |
+| **ADR-023** | Reports Dashboard Bounded Pagination, Client-Side Memoization & Backend SQL Pushdown | **Accepted** | Nov 2026 | Analytics / Scalability |
+| **ADR-024** | User Mutation-Driven Invalidation for In-Memory User Map Cache | **Accepted** | Nov 2026 | Cache Consistency / Mutations |
+| **ADR-025** | Ephemeral Device-Lock Sanitization from Institutional Database Backups | **Accepted** | Nov 2026 | Disaster Recovery / Clean Restore |
+| **ADR-026** | Centralized Session Metadata Caching & Mutation-Driven Eviction | **Accepted** | Nov 2026 | Serverless Optimization / Caching |
+| **ADR-027** | Server-Side Geofence In-Memory Caching & Fault-Tolerant Fallback | **Accepted** | Nov 2026 | Location & Campus Shield / Caching |
+| **ADR-028** | Main Dashboard Concurrency Optimization, Cached User Map Reuse & SQL Pushdown | **Accepted** | Nov 2026 | Dashboard Scalability / Query Pruning |
+| **ADR-029** | FastAPI Backend Thread-Safe Session Metadata In-Memory Caching & Fault-Tolerant Fallback | **Accepted** | Nov 2026 | Backend AI Engine / Latency Reduction |
+| **ADR-030** | Smart Dormant Circuit-Breaker & Exponential Backoff for Unstable/Dormant RTSP Camera Streams | **Accepted** | Nov 2026 | Reliability / Camera Streams & IoT |
 
 ---
 
@@ -545,6 +558,37 @@
   - *Positive:* Significant reduction in selfie verification API latency on student mobile devices.
   - *Positive:* Fault tolerance against transient database glitches during active classroom check-in windows.
   - *Positive:* 100% adherence to all hard security constraints (5-minute countdown, geofence, device lock, biometric liveness).
+
+---
+
+### ADR-030: Smart Dormant Circuit-Breaker & Exponential Backoff for Unstable/Dormant RTSP Camera Streams
+- **Status:** Accepted & Enforced (November 2026)
+- **Context:**
+  1. The 6 physical CCTV cameras deployed in lecture halls (`172.16.7.x`) were powered off / unmounted, with institutional operational focus shifted primarily to student mobile selfie check-in (`/selfieattend`).
+  2. Previously, whenever a class attendance session was active or whenever a dashboard viewer was detected, `backend/app/stream.py` repeatedly initiated socket connections to all 6 offline camera RTSP endpoints using `cv2.VideoCapture`.
+  3. Because the physical camera hardware was unreachable, each OpenCV/FFmpeg connection attempt blocked for standard TCP timeouts (several seconds each), causing thread contention, socket exhaustion, and wasting host CPU cycles during active mobile selfie check-in windows.
+  4. Furthermore, background pre-warming (`prewarm_all_cctv()`) initialized 6 capture threads on every server boot regardless of whether CCTV streaming was needed, degrading startup performance and flooding logs with reconnection errors.
+- **Decision:**
+  1. Introduce a production-grade `StreamCircuitBreaker` class in `backend/app/stream.py` with 3 formal states:
+     - `CLOSED`: Stream operates normally with low-latency frame acquisition and processing.
+     - `OPEN` (Dormant): Tripped when consecutive capture or connection failures reach `CIRCUIT_BREAKER_FAILURE_THRESHOLD` (default: 3). In this state, `allow_attempt()` returns `False`, suspending all `cv2.VideoCapture` calls and sleeping the thread for 2.0s per iteration.
+     - `HALF_OPEN`: Entered when the exponential backoff duration expires. Permits exactly one trial probe connection to verify if physical hardware has resumed operation.
+  2. Implement Exponential Backoff with configurable parameters:
+     - `CIRCUIT_BREAKER_INITIAL_BACKOFF = 15.0s`, `CIRCUIT_BREAKER_MAX_BACKOFF = 300.0s` (5 minutes), and `CIRCUIT_BREAKER_BACKOFF_MULTIPLIER = 2.0` (15s -> 30s -> 60s -> 120s -> 240s -> 300s).
+  3. Isolate Mobile Selfie Sessions from Camera Churn:
+     - In `CentralAICoordinator._ai_worker_loop`, skip cameras immediately if `stream.circuit_breaker.is_open() or not stream.connected`.
+     - Disable automatic background stream pre-warming on server boot by default (`CCTV_PREWARM_ENABLED=false`), converting CCTV streams to clean on-demand / lazy initialization.
+  4. Implement On-Demand Manual Recheck & Diagnostics API:
+     - Provide `stream.recheck()` and `camera_manager.recheck_all_cameras()` to force circuit breakers into `HALF_OPEN` trial state on demand.
+     - Expose `POST /api/cameras/recheck` in `backend/app/routers/streaming.py` for one-click reactivation from the faculty/admin UI without server reboot or code changes.
+     - Expose full circuit breaker telemetry (`circuit_breaker` state, failures, remaining backoff, dormancy) via `get_performance_diagnostics()`.
+     - Update MJPEG streaming (`generate_video_feed`) to render clear placeholder frames (`Camera X (Dormant - Retry in Ys)`) when dormant.
+- **Consequences:**
+  - *Positive:* 100% elimination of CPU thread blocking and socket timeout lockups when CCTV cameras are powered off or disconnected.
+  - *Positive:* Server CPU and network bandwidth fully dedicated to fast student mobile selfie verification (`/selfieattend`).
+  - *Positive:* Future-proof: zero code modification needed when physical cameras are re-installed or turned back on.
+  - *Positive:* 100% adherence to all hard security constraints (5-minute countdown, geofence, device lock, biometric liveness).
+
 
 
 

@@ -94,6 +94,16 @@ graph TD
 - **Row Level Security (RLS):** All sensitive tables (`students`, `attendance`, `audit_logs`, `app_users`) enforce granular RLS policies.
 - **Transaction Safety:** Rate-limiting functions execute with `pg_advisory_xact_lock` and strict `SET search_path = public, pg_temp` to prevent race conditions and search-path hijacking.
 
+### 2.5. Surveillance RTSP Stream Resilience & Dormant Circuit-Breaker (ADR-030)
+- **Engine:** `ThreadedRTSPStream` with `StreamCircuitBreaker` in `backend/app/stream.py`.
+- **States:**
+  - `CLOSED`: Stream operational, continuous live frame decoding at ~20-25 FPS.
+  - `OPEN` (Dormant): Automatically tripped after 3 consecutive connection/capture failures when physical cameras are unplugged, powered off, or experiencing network dropouts. Suspends all OpenCV `VideoCapture` calls, sleeps thread for 2.0s per iteration, and eliminates thread blocking and socket exhaustion.
+  - `HALF_OPEN`: Trial probe state triggered when exponential backoff timer expires ($15\text{s} \to 30\text{s} \to 60\text{s} \to 120\text{s} \to 240\text{s} \to 300\text{s}$). Exactly one probe connection is attempted.
+- **On-Demand Lazy Loading:** Automatic boot pre-warming is disabled by default (`CCTV_PREWARM_ENABLED=false`). Streams are initialized purely on-demand when requested by the dashboard.
+- **Session Decoupling:** `CentralAICoordinator` automatically skips dormant / disconnected cameras with zero latency, allocating 100% of host CPU and network bandwidth to high-velocity mobile selfie attendance.
+- **Instant Reactivation:** Exposes `POST /api/cameras/recheck` for one-click re-awakening of all camera circuit-breakers without system reboot or code modifications when hardware is restored.
+
 ---
 
 ## 3. End-to-End Data Flow Sequence: Student Self-Attendance
