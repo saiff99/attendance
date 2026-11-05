@@ -392,7 +392,8 @@ export default function UsersManagementPage() {
 
         {/* User Accounts Table */}
         <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm overflow-hidden transition-colors">
-          <div className="overflow-x-auto">
+          {/* Desktop Table View */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead className="bg-gray-50/75 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800 text-gray-500 uppercase tracking-wider font-semibold">
                 <tr>
@@ -511,6 +512,119 @@ export default function UsersManagementPage() {
                 )}
               </tbody>
             </table>
+          </div>
+
+          {/* Mobile Card View (Issue 3: Responsive Mobile Card View) */}
+          <div className="md:hidden divide-y divide-gray-100 dark:divide-gray-800">
+            {loading ? (
+              <div className="px-5 py-12 text-center text-gray-400">
+                <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2 text-indigo-500" />
+                Loading staff accounts...
+              </div>
+            ) : filteredUsers.length === 0 ? (
+              <div className="px-5 py-12 text-center text-gray-400 text-sm">
+                No staff accounts found matching your query.
+              </div>
+            ) : (
+              filteredUsers.map((u) => {
+                const isSelf = currentUser?.username === u.username;
+                return (
+                  <div
+                    key={u.id}
+                    className="p-4 space-y-3 hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors"
+                  >
+                    {/* Header: Avatar, Name, Handle, Role Badge */}
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-10 h-10 rounded-full bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200/60 dark:border-indigo-800/60 flex items-center justify-center font-bold text-indigo-600 dark:text-indigo-400 text-sm shrink-0 shadow-xs">
+                          {u.full_name?.charAt(0)?.toUpperCase() || u.username.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-semibold text-gray-900 dark:text-white text-sm truncate">
+                            {u.full_name}
+                          </p>
+                          <p className="text-xs text-gray-400 font-mono">@{u.username}</p>
+                        </div>
+                      </div>
+
+                      <span
+                        className={`shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          u.role === "Super Admin"
+                            ? "bg-purple-50 dark:bg-purple-950/50 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800"
+                            : u.role === "Admin"
+                            ? "bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800"
+                            : "bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
+                        }`}
+                      >
+                        {u.role}
+                      </span>
+                    </div>
+
+                    {/* Details Row: Department & Status */}
+                    <div className="flex items-center justify-between text-xs pt-1 border-t border-gray-100 dark:border-gray-800/60 text-gray-600 dark:text-gray-300">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-gray-400 dark:text-gray-500">Dept:</span>
+                        <span className="font-medium text-gray-700 dark:text-gray-200">{u.department || "—"}</span>
+                      </div>
+                      <div>
+                        <span
+                          className={`inline-flex items-center gap-1.5 text-xs font-medium ${
+                            u.is_active ? "text-emerald-600 dark:text-emerald-400" : "text-gray-400"
+                          }`}
+                        >
+                          <span className={`w-1.5 h-1.5 rounded-full ${u.is_active ? "bg-emerald-500" : "bg-gray-300"}`} />
+                          {u.is_active ? "Active" : "Inactive"}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Actions Row */}
+                    <div className="flex items-center justify-end gap-2 pt-1 border-t border-gray-100 dark:border-gray-800/60">
+                      <button
+                        onClick={() => handleOpenEditModal(u)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                        <span>Edit</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setSelectedUser(u);
+                          setResetPasswordValue(generateRandomPassword());
+                          setIsResetModalOpen(true);
+                        }}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                      >
+                        <KeyRound className="w-3.5 h-3.5" />
+                        <span>Reset Pass</span>
+                      </button>
+                      {!isSelf && !u.is_builtin && (
+                        <>
+                          <button
+                            onClick={() => handleToggleActive(u)}
+                            className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                              u.is_active
+                                ? "text-amber-600 bg-amber-50 dark:bg-amber-950/30 hover:bg-amber-100 dark:hover:bg-amber-950/50"
+                                : "text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 hover:bg-emerald-100 dark:hover:bg-emerald-950/50"
+                            }`}
+                          >
+                            <Power className="w-3.5 h-3.5" />
+                            <span>{u.is_active ? "Deactivate" : "Activate"}</span>
+                          </button>
+                          <button
+                            onClick={() => handleDeleteUser(u)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-rose-600 bg-rose-50 dark:bg-rose-950/30 hover:bg-rose-100 dark:hover:bg-rose-950/50 transition-colors"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Delete</span>
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
         </div>
 

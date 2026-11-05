@@ -640,7 +640,8 @@ export default function AuditLogsPage() {
 
       {/* Main Table */}
       <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200/80 dark:border-gray-800 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
+        {/* Desktop Table View */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/30 text-[11px] font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider">
@@ -749,6 +750,94 @@ export default function AuditLogsPage() {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile Card View (Issue 3: Responsive Mobile Card View) */}
+        <div className="md:hidden divide-y divide-gray-100 dark:divide-gray-800/60">
+          {filteredLogs.length === 0 ? (
+            <div className="py-12 px-4 text-center text-gray-400 dark:text-gray-500">
+              <Database className="w-8 h-8 mx-auto mb-2 opacity-40" />
+              <p className="text-sm font-medium">No audit events match your search/filter criteria.</p>
+              <span className="text-xs text-gray-400 block mt-1">Actions performed by admins will show up here automatically.</span>
+            </div>
+          ) : (
+            paginatedLogs.map((entry) => {
+              const badge = getActionBadge(entry.action);
+              const BadgeIcon = badge.icon;
+              const { dateStr, timeStr } = formatDate(entry.created_at);
+              const targetTitle = entry.details?.student_name
+                ? entry.details.student_name
+                : entry.details?.student_roll
+                ? `Roll: ${entry.details.student_roll}`
+                : entry.target_id
+                ? (entry.target_id.length > 18 ? `${entry.target_id.substring(0, 12)}...` : entry.target_id)
+                : "System";
+
+              return (
+                <div
+                  key={entry.id}
+                  className="p-4 space-y-3 hover:bg-gray-50/70 dark:hover:bg-gray-800/40 transition-colors"
+                >
+                  {/* Top: Action Badge & Timestamp */}
+                  <div className="flex items-start justify-between gap-2">
+                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${badge.bg}`}>
+                      <BadgeIcon className="w-3.5 h-3.5" />
+                      <span className="capitalize">{badge.label}</span>
+                    </span>
+
+                    <div className="flex items-center gap-1 text-[11px] text-gray-500 dark:text-gray-400 shrink-0">
+                      <Clock className="w-3 h-3 text-gray-400" />
+                      <span>{timeStr} • {dateStr}</span>
+                    </div>
+                  </div>
+
+                  {/* Target & Actor */}
+                  <div className="space-y-1.5 bg-gray-50/60 dark:bg-gray-800/30 rounded-xl p-3 border border-gray-100 dark:border-gray-800/60 text-xs">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-gray-500 dark:text-gray-400 text-[11px]">Target:</span>
+                      <div className="text-right">
+                        <span className="font-semibold text-gray-900 dark:text-gray-100 block">{targetTitle}</span>
+                        <span className="text-[10px] text-gray-400 font-mono uppercase">
+                          {entry.details?.student_roll && entry.details?.student_name ? `Roll: ${entry.details.student_roll} • ` : ""}{entry.target_type}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2 pt-1 border-t border-gray-200/50 dark:border-gray-700/50">
+                      <span className="text-gray-500 dark:text-gray-400 text-[11px]">Actor:</span>
+                      <span className="inline-flex items-center gap-1 text-xs text-gray-700 dark:text-gray-200 font-medium">
+                        <User className="w-3 h-3 text-indigo-500 shrink-0" />
+                        <span className="font-semibold text-gray-900 dark:text-white">{entry.actor_id}</span>
+                        {entry.details?.actor_role && (
+                          <span className="text-[10px] text-gray-400">({entry.details.actor_role})</span>
+                        )}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Details Summary */}
+                  {entry.details && (
+                    <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2 bg-white dark:bg-gray-900 px-2.5 py-1.5 rounded-lg border border-gray-100 dark:border-gray-800">
+                      {Object.entries(entry.details)
+                        .map(([k, v]) => `${k.replace(/_/g, " ")}: ${typeof v === "object" ? JSON.stringify(v) : v}`)
+                        .join(" • ")}
+                    </p>
+                  )}
+
+                  {/* Inspect Button */}
+                  <div className="flex justify-end pt-1">
+                    <button
+                      onClick={() => setSelectedLogForModal(entry)}
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 py-1.5 px-3 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/50 hover:bg-indigo-100 transition-colors cursor-pointer"
+                    >
+                      <span>Inspect Payload</span>
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          )}
         </div>
 
         {/* Client-Side Pagination Controls (Issue 16) */}

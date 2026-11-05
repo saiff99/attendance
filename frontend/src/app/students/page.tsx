@@ -734,7 +734,8 @@ export default function StudentDirectory() {
 
             {/* Data Table */}
             <div className="bg-white dark:bg-gray-900 rounded-b-xl border border-gray-200 dark:border-gray-800 shadow-sm transition-colors">
-              <div className="overflow-x-auto min-h-[280px]">
+              {/* Desktop Table View */}
+              <div className="hidden md:block overflow-x-auto min-h-[280px]">
                 <table className="min-w-[720px] w-full divide-y divide-gray-200 dark:divide-gray-800">
                   <thead className="bg-gray-50 dark:bg-gray-800/50">
                     <tr>
@@ -999,6 +1000,211 @@ export default function StudentDirectory() {
                     )}
                   </tbody>
                 </table>
+              </div>
+
+              {/* Mobile Card View (Issue 3: Responsive Mobile Card View) */}
+              <div className="md:hidden divide-y divide-gray-200 dark:divide-gray-800">
+                {loading ? (
+                  <div className="py-12 px-4 text-center text-sm text-gray-500 dark:text-gray-400">
+                    <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2 text-indigo-500" />
+                    Loading students...
+                  </div>
+                ) : filteredStudents.length === 0 ? (
+                  <div className="py-12 px-4 text-center text-sm text-gray-500 dark:text-gray-400">
+                    No students found. Enroll a new student to get started!
+                  </div>
+                ) : (
+                  paginatedStudents.map((student, idx) => {
+                    const isSelected = selectedIds.includes(student.id);
+                    return (
+                      <div
+                        key={student.id}
+                        onClick={(e) => {
+                          const target = e.target as HTMLElement;
+                          if (!target.closest('.actions-cell') && !target.closest('input[type="checkbox"]') && !target.closest('button')) {
+                            setSelectedProfileStudent(student);
+                            setIsProfileModalOpen(true);
+                          }
+                        }}
+                        className={`p-4 transition-colors cursor-pointer space-y-3 ${
+                          isSelected
+                            ? 'bg-indigo-50/70 dark:bg-indigo-950/40'
+                            : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'
+                        }`}
+                      >
+                        {/* Top: Checkbox, Avatar, Name & Roll */}
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div onClick={(e) => e.stopPropagation()}>
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => handleToggleSelect(student.id)}
+                                className="h-4 w-4 rounded border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-indigo-600 focus:ring-indigo-500 focus:ring-offset-gray-900 cursor-pointer transition-all"
+                                aria-label={`Select ${student.full_name}`}
+                              />
+                            </div>
+                            <div className="h-9 w-9 shrink-0 rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center text-indigo-700 dark:text-indigo-400 font-bold text-xs uppercase shadow-xs">
+                              {student.full_name?.substring(0, 2)}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="font-semibold text-gray-900 dark:text-gray-100 text-sm truncate">
+                                {student.full_name}
+                              </p>
+                              <p className="text-xs font-mono text-indigo-600 dark:text-indigo-400 font-semibold">
+                                #{student.student_roll}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Academic Year Badge */}
+                          <span className="shrink-0 inline-flex items-center rounded-md bg-blue-50 dark:bg-blue-900/30 px-2 py-0.5 text-[11px] font-medium text-blue-700 dark:text-blue-400 ring-1 ring-inset ring-blue-700/10 dark:ring-blue-400/20">
+                            {student.academic_year || 'N/A'}
+                          </span>
+                        </div>
+
+                        {/* Middle: Badges & Biometric Status */}
+                        <div className="flex items-center justify-between text-xs pt-1 border-t border-gray-100 dark:border-gray-800/60">
+                          <div className="flex items-center gap-2">
+                            <span className="text-gray-500 dark:text-gray-400 text-[11px]">Face Biometrics:</span>
+                            <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset ${
+                              student.face_encoding
+                                ? 'bg-indigo-50 text-indigo-700 ring-indigo-600/20 dark:bg-indigo-900/30 dark:text-indigo-400 dark:ring-indigo-400/20'
+                                : 'bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-900/30 dark:text-amber-400 dark:ring-amber-400/20'
+                            }`}>
+                              {student.face_encoding ? 'Active' : 'Missing'}
+                            </span>
+                          </div>
+
+                          <span className="text-[11px] text-gray-400 dark:text-gray-500">
+                            Tap card for profile
+                          </span>
+                        </div>
+
+                        {/* Bottom: Mobile Actions Toolbar */}
+                        <div className="flex items-center justify-between gap-2 pt-1 actions-cell" onClick={(e) => e.stopPropagation()}>
+                          <div>
+                            {isSuperAdmin ? (
+                              <button
+                                onClick={() => triggerFaceRegistration(student.id, student.full_name)}
+                                className="inline-flex items-center text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300 py-1 px-2.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200/50 dark:border-indigo-800/50 transition-colors"
+                              >
+                                <UploadCloud className="w-3.5 h-3.5 mr-1" />
+                                {student.face_encoding ? 'Update Face ID' : 'Setup Face ID'}
+                              </button>
+                            ) : (
+                              <span className="inline-flex items-center text-xs text-gray-400 dark:text-gray-500 gap-1 select-none">
+                                <Lock className="w-3 h-3 text-gray-400" />
+                                Admin Managed
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Mobile Dropdown Menu */}
+                          <div className="relative inline-block text-left">
+                            <button
+                              onClick={() => setOpenDropdownId(openDropdownId === student.id ? null : student.id)}
+                              className="text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 p-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 transition-colors focus:outline-none"
+                              aria-label="Student action options"
+                            >
+                              <MoreHorizontal className="h-4 w-4" />
+                            </button>
+
+                            {openDropdownId === student.id && (
+                              <>
+                                <div className="fixed inset-0 z-40" onClick={() => setOpenDropdownId(null)}></div>
+                                <div className={`absolute right-0 z-50 w-44 rounded-xl bg-white dark:bg-gray-800 shadow-2xl border border-gray-200 dark:border-gray-700 py-1.5 ring-1 ring-black/10 focus:outline-none ${
+                                  paginatedStudents.length > 3 && idx >= paginatedStudents.length - 2
+                                    ? 'bottom-full mb-2 origin-bottom-right'
+                                    : 'top-full mt-1.5 origin-top-right'
+                                }`}>
+                                  <button
+                                    onClick={() => {
+                                      setSelectedProfileStudent(student);
+                                      setIsProfileModalOpen(true);
+                                      setOpenDropdownId(null);
+                                    }}
+                                    className="text-gray-700 dark:text-gray-200 w-full text-left px-3.5 py-2 text-xs hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center transition-colors font-medium cursor-pointer"
+                                  >
+                                    <Users className="w-4 h-4 mr-2.5 text-indigo-500" />
+                                    View Profile
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      const rawYear = student.academic_year || '1st Year';
+                                      const matches = [...rawYear.matchAll(/\(((?:Group|Batch)\s*[^)]+)\)/gi)];
+                                      let parsedBatch = 'All';
+                                      if (matches.length > 0) {
+                                        const lastMatch = matches[matches.length - 1][1].trim();
+                                        parsedBatch = lastMatch.replace(/^Batch\s*/i, 'Group ');
+                                      }
+                                      const baseYear = rawYear.replace(/\s*\(((?:Group|Batch)\s*[^)]+)\)/gi, '').replace(/\s*\([^)]*\)/gi, '').trim() || '1st Year';
+
+                                      setNewStudent({
+                                        student_roll: student.student_roll || '',
+                                        full_name: student.full_name || '',
+                                        email: student.email || '',
+                                        academic_year: baseYear,
+                                        sub_batch: parsedBatch,
+                                        parent_phone: getParentPhone(student)
+                                      });
+                                      setEditingId(student.id);
+                                      setFormError(null);
+                                      setIsModalOpen(true);
+                                      setOpenDropdownId(null);
+                                    }}
+                                    className="text-gray-700 dark:text-gray-200 w-full text-left px-3.5 py-2 text-xs hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center transition-colors font-medium cursor-pointer"
+                                  >
+                                    <Edit2 className="w-4 h-4 mr-2.5 text-gray-400 dark:text-gray-500" />
+                                    Edit Details
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setResetPinTarget({ id: student.id, name: student.full_name, roll: student.student_roll });
+                                      setResetPinSuccess(null);
+                                      setResetPinError(null);
+                                      setOpenDropdownId(null);
+                                    }}
+                                    className="text-amber-600 dark:text-amber-400 w-full text-left px-3.5 py-2 text-xs hover:bg-amber-50 dark:hover:bg-amber-900/30 hover:text-amber-700 dark:hover:text-amber-300 flex items-center transition-colors font-medium cursor-pointer"
+                                  >
+                                    <KeyRound className="w-4 h-4 mr-2.5 text-amber-500" />
+                                    Reset PIN
+                                  </button>
+                                  {isSuperAdmin && student.face_encoding && (
+                                    <button
+                                      onClick={() => {
+                                        setRevokeBiometricTarget({ id: student.id, name: student.full_name, roll: student.student_roll });
+                                        setRevokeBiometricSuccess(null);
+                                        setRevokeBiometricError(null);
+                                        setOpenDropdownId(null);
+                                      }}
+                                      className="text-rose-600 dark:text-rose-400 w-full text-left px-3.5 py-2 text-xs hover:bg-rose-50 dark:hover:bg-rose-900/30 hover:text-rose-700 dark:hover:text-rose-300 flex items-center transition-colors font-medium cursor-pointer"
+                                    >
+                                      <UserX className="w-4 h-4 mr-2.5 text-rose-500" />
+                                      Remove Face ID
+                                    </button>
+                                  )}
+                                  {isSuperAdmin && (
+                                    <button
+                                      onClick={() => {
+                                        promptDeleteSingle(student);
+                                        setOpenDropdownId(null);
+                                      }}
+                                      className="text-red-600 dark:text-red-400 w-full text-left px-3.5 py-2 text-xs hover:bg-red-50 dark:hover:bg-red-900/30 flex items-center transition-colors font-medium cursor-pointer"
+                                    >
+                                      <Trash2 className="w-4 h-4 mr-2.5 text-red-500" />
+                                      Delete
+                                    </button>
+                                  )}
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
               </div>
 
               {/* Client-Side Pagination Controls (Issue 10) */}
