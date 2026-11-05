@@ -78,3 +78,4 @@ describe("useModalBehavior hook", () => {
     document.body.removeChild(container);
   });
 });
+
