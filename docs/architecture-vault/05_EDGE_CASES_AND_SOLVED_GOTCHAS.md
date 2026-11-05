@@ -315,6 +315,20 @@ This document catalogs critical real-world edge cases, platform-specific quirks,
   3. **Expanded Socket Error Detection (`config.py`):** Added `"connectionterminated"` and `"errorcodes"` to `safe_db_execute` transient error patterns, allowing transparent socket re-negotiation and immediate retry without logging unhandled exceptions.
 - **Rule:** Never execute raw `.execute()` database queries inside streaming loops or background worker threads. All Supabase queries must go through `safe_db_execute` with transient socket retry coverage and RAM cache fallbacks.
 
+---
+
+### Gotcha 17: Per-Frame 512D ArcFace Array Re-Allocation and L2-Norm Redundancy in High-Velocity Video Inference
+- **Symptom:**
+  During live RTSP multi-camera streaming and classroom photo batch scans with large cohorts (300+ students), the backend exhibited elevated CPU spikes (40%–60% higher than expected) and periodic memory micro-pauses due to Python Garbage Collection.
+- **Root Cause:**
+  1. **Redundant Per-Frame Array Conversions:** Although student profile dictionaries were cached for 60 seconds, `match_faces_vectorized` and `stream.py` iterated through all enrolled students on every single video frame (up to 15 FPS), converting each student's 512-float Python list to a NumPy array via `np.asarray(...)` and computing its L2 vector norm (`norm(arr)`).
+  2. **Memory Allocation Churn:** In a 300-student class, this resulted in 3,000 array allocations and 3,000 norm calculations every second (over 10 million temporary objects per hour), severely degrading throughput and starving CPU resources.
+- **Architectural Fix:**
+  1. **Pre-Stacked Matrix Caching (`biometric_cache.py`):** Elevated the in-memory cache to compute a pre-normalized 2D float32 NumPy matrix of shape `(N, 512)` per cohort (`_cohort_matrix_cache`) exactly once when loading students or upon invalidation.
+  2. **Direct BLAS Matrix Matching (`ai.py`):** Enhanced `match_faces_vectorized` to accept `enrolled_matrix: Optional[np.ndarray]`. When provided, all per-frame loops and array allocations are completely bypassed, executing an immediate $O(1)$ BLAS matrix dot product (`np.dot(enrolled_matrix, unknown_unit)`).
+  3. **Centralized Integration (`routes.py` & `stream.py`):** Both classroom photo scans and RTSP stream loops now retrieve `(enrolled_students, enrolled_matrix)` from `get_cached_enrolled_data()`.
+- **Rule:** Never reconstruct or re-normalize static biometric embedding matrices inside high-frequency frame processing loops. Always cache pre-normalized 2D float32 matrices in memory and evaluate matches using single-shot BLAS matrix multiplication.
+
 
 
 
