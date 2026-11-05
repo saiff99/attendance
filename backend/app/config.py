@@ -135,7 +135,7 @@ def safe_db_execute(query_builder, max_retries: int = 2):
         except Exception as exc:
             last_err = exc
             err_msg = str(exc).lower()
-            if any(s in err_msg for s in ["server disconnected", "remoteprotocolerror", "protocolerror", "connection reset", "broken pipe", "stream", "httpcore", "read_incoming_data"]) and attempt < max_retries:
+            if any(s in err_msg for s in ["server disconnected", "remoteprotocolerror", "protocolerror", "connection reset", "broken pipe", "stream", "httpcore", "read_incoming_data", "connectionterminated", "errorcodes"]) and attempt < max_retries:
                 import time
                 print(f"[safe_db_execute] Transient socket disconnect caught ('{exc}'), retrying execution ({attempt + 1}/{max_retries})...")
                 time.sleep(0.3)

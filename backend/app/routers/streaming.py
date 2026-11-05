@@ -17,8 +17,8 @@ async def get_cameras():
             stream = camera_manager.cctv_streams.get(idx)
             if stream:
                 cb_status = stream.circuit_breaker.get_status()
-                cam["is_connected"] = bool(stream.connected)
-                cam["is_dormant"] = bool(cb_status["is_dormant"])
+                cam["is_connected"] = stream.connected
+                cam["is_dormant"] = cb_status["is_dormant"]
                 cam["circuit_breaker_state"] = cb_status["state"]
             else:
                 cam["is_connected"] = False

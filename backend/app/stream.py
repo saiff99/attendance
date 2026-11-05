@@ -38,12 +38,22 @@ def get_enrolled_data(session_id: str):
     if session_id in session_enrolled_cache and (now - session_last_fetch.get(session_id, 0)) < 60:
         return session_enrolled_cache[session_id], session_matrix_cache.get(session_id)
 
+    target_year = "All"
     try:
-        session_res = supabase.table("sessions").select("target_academic_year").eq("id", session_id).execute()
-        target_year = "All"
-        if session_res.data and session_res.data[0].get("target_academic_year"):
+        from app.config import safe_db_execute
+        session_res = safe_db_execute(supabase.table("sessions").select("target_academic_year").eq("id", session_id))
+        if session_res and session_res.data and session_res.data[0].get("target_academic_year"):
             target_year = session_res.data[0]["target_academic_year"]
+    except Exception:
+        try:
+            from app.session_cache import get_cached_session_metadata
+            sess_meta = get_cached_session_metadata(session_id)
+            if sess_meta and sess_meta.get("target_academic_year"):
+                target_year = sess_meta["target_academic_year"]
+        except Exception:
+            pass
 
+    try:
         # Unified In-Memory Biometric Cache with DPDP Consent & Invalidation (Issue 11 / ADR-019)
         from app.biometric_cache import get_cached_enrolled_students
         enrolled = get_cached_enrolled_students(target_academic_year=target_year)
