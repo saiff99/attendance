@@ -97,7 +97,7 @@ def invalidate_student_biometrics(student_id: str) -> dict:
     Ensures zero-latency compliance with biometric consent revocation.
     """
     purged_sessions = []
-    student_id_str = str(student_id).strip()
+    student_id_str = student_id.strip()
     
     try:
         all_session_keys = set(session_enrolled_cache.keys()) | set(session_matrix_cache.keys())
@@ -154,7 +154,7 @@ def cleanup_session_state(session_id: Optional[str] = None) -> dict:
     
     try:
         if session_id:
-            targets = [str(session_id).strip()]
+            targets = [session_id.strip()]
         else:
             # Discover all sessions currently occupying memory
             all_cached = set(session_recognized_students.keys()) | \
@@ -422,11 +422,11 @@ class ThreadedRTSPStream:
     def __init__(self, url: str, name: str = "CCTV Camera", ai_url: Optional[str] = None):
         self.url = url
         self.name = name
-        self.source = int(url) if str(url).isdigit() else url
+        self.source = int(url) if url.isdigit() else url
         
         # Dedicated AI Sub-stream or Main Stream Fallback
-        self.ai_url = ai_url if (ai_url and str(ai_url).strip()) else url
-        self.ai_source = int(self.ai_url) if str(self.ai_url).isdigit() else self.ai_url
+        self.ai_url = ai_url if (ai_url and ai_url.strip()) else url
+        self.ai_source = int(self.ai_url) if self.ai_url.isdigit() else self.ai_url
         self.has_dedicated_ai_stream = (self.ai_url != self.url)
 
         # Production-Grade Circuit Breaker with Exponential Backoff
@@ -732,13 +732,19 @@ class ThreadedRTSPStream:
 
     def _process_ai(self, frame: np.ndarray, session_id: str):
         """Detects faces in the frame and matches against enrolled students with 60s cooldown & spatial tracking."""
+        if not AI_ENABLED or app_fa is None:
+            return
+
         t0 = time.perf_counter()
         insightface_ms = 0.0
         try:
             enrolled_students, enc_matrix = get_enrolled_data(session_id)
             
+            fa = app_fa
+            if fa is None:
+                return
             t_if_start = time.perf_counter()
-            faces = app_fa.get(frame)
+            faces = fa.get(frame)
             insightface_ms = (time.perf_counter() - t_if_start) * 1000.0
 
             current_faces = []
