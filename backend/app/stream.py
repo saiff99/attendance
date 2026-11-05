@@ -269,6 +269,138 @@ FACE_TRACK_CACHE_SECONDS = float(os.getenv("FACE_TRACK_CACHE_SECONDS", "60.0"))
 FACE_TRACK_DISTANCE_PX = float(os.getenv("FACE_TRACK_DISTANCE_PX", "80.0"))
 FACE_TRACK_REVERIFY_SECONDS = float(os.getenv("FACE_TRACK_REVERIFY_SECONDS", "8.0"))
 
+# Issue 6: Exponential Backoff & Circuit-Breaker Configurations for RTSP Streams
+CIRCUIT_BREAKER_FAILURE_THRESHOLD = int(os.getenv("CIRCUIT_BREAKER_FAILURE_THRESHOLD", "3"))
+CIRCUIT_BREAKER_INITIAL_BACKOFF = float(os.getenv("CIRCUIT_BREAKER_INITIAL_BACKOFF", "15.0"))
+CIRCUIT_BREAKER_MAX_BACKOFF = float(os.getenv("CIRCUIT_BREAKER_MAX_BACKOFF", "300.0"))
+CIRCUIT_BREAKER_BACKOFF_MULTIPLIER = float(os.getenv("CIRCUIT_BREAKER_BACKOFF_MULTIPLIER", "2.0"))
+
+
+class CircuitState:
+    CLOSED = "CLOSED"      # Healthy, connected, streaming normally
+    OPEN = "OPEN"          # Failed/Offline, circuit tripped, dormant/sleeping
+    HALF_OPEN = "HALF_OPEN"# Trial attempt after backoff timeout
+
+
+class StreamCircuitBreaker:
+    """
+    Production-Grade Circuit Breaker with Exponential Backoff for RTSP/Video Streams (Issue 6).
+    Prevents CPU thread lockups, socket exhaustion, and network flooding when cameras
+    are powered off, unplugged, dormant, or experiencing network degradation.
+
+    States:
+      - CLOSED: Stream is operating normally. All frame capture operations allowed.
+      - OPEN: Failures exceeded threshold. Capturing is dormant; cv2.VideoCapture calls
+              are suspended to protect host resources.
+      - HALF_OPEN: Backoff interval elapsed. Exactly one trial connection is permitted.
+    """
+    def __init__(
+        self,
+        name: str = "Stream",
+        failure_threshold: int = CIRCUIT_BREAKER_FAILURE_THRESHOLD,
+        initial_backoff: float = CIRCUIT_BREAKER_INITIAL_BACKOFF,
+        max_backoff: float = CIRCUIT_BREAKER_MAX_BACKOFF,
+        backoff_multiplier: float = CIRCUIT_BREAKER_BACKOFF_MULTIPLIER,
+    ):
+        self.name = name
+        self.failure_threshold = failure_threshold
+        self.initial_backoff = initial_backoff
+        self.max_backoff = max_backoff
+        self.backoff_multiplier = backoff_multiplier
+
+        self.state = CircuitState.CLOSED
+        self.consecutive_failures = 0
+        self.current_backoff = initial_backoff
+        self.next_probe_time = 0.0
+        self.last_state_change = time.time()
+        self.last_failure_reason = ""
+        self.lock = threading.Lock()
+
+    def allow_attempt(self) -> bool:
+        """Determines if a connection or capture attempt is permitted."""
+        with self.lock:
+            now = time.time()
+            if self.state == CircuitState.CLOSED:
+                return True
+            elif self.state == CircuitState.OPEN:
+                if now >= self.next_probe_time:
+                    self.state = CircuitState.HALF_OPEN
+                    self.last_state_change = now
+                    print(f"[CIRCUIT BREAKER] {self.name}: Backoff expired ({self.current_backoff:.1f}s) -> Entering HALF_OPEN trial probe.")
+                    return True
+                return False
+            elif self.state == CircuitState.HALF_OPEN:
+                return True
+            return True
+
+    def record_success(self):
+        """Records a successful connection / frame grab, transitioning state back to CLOSED."""
+        with self.lock:
+            if self.state != CircuitState.CLOSED:
+                print(f"[CIRCUIT BREAKER] {self.name}: Stream RECOVERED -> Circuit CLOSED.")
+            self.state = CircuitState.CLOSED
+            self.consecutive_failures = 0
+            self.current_backoff = self.initial_backoff
+            self.next_probe_time = 0.0
+            self.last_state_change = time.time()
+            self.last_failure_reason = ""
+
+    def record_failure(self, reason: str = ""):
+        """Records a capture or connection failure. Trips to OPEN with exponential backoff if threshold met."""
+        with self.lock:
+            now = time.time()
+            self.consecutive_failures += 1
+            self.last_failure_reason = reason
+
+            if self.state == CircuitState.HALF_OPEN:
+                # Trial attempt failed: Trip back to OPEN and double the backoff
+                self.state = CircuitState.OPEN
+                self.current_backoff = min(self.current_backoff * self.backoff_multiplier, self.max_backoff)
+                self.next_probe_time = now + self.current_backoff
+                self.last_state_change = now
+                print(f"[CIRCUIT BREAKER] {self.name}: HALF_OPEN trial failed ({reason}). State -> OPEN (Dormant). Next probe in {self.current_backoff:.1f}s.")
+            elif self.consecutive_failures >= self.failure_threshold:
+                if self.state != CircuitState.OPEN:
+                    self.state = CircuitState.OPEN
+                    self.current_backoff = self.initial_backoff
+                    self.next_probe_time = now + self.current_backoff
+                    self.last_state_change = now
+                    print(f"[CIRCUIT BREAKER] {self.name}: Reached {self.consecutive_failures} failures ({reason}). Tripped to OPEN (Dormant). Next probe in {self.current_backoff:.1f}s.")
+                else:
+                    self.current_backoff = min(self.current_backoff * self.backoff_multiplier, self.max_backoff)
+                    self.next_probe_time = now + self.current_backoff
+
+    def reset(self):
+        """Manually forces the circuit breaker into a HALF_OPEN trial probe immediately."""
+        with self.lock:
+            self.state = CircuitState.HALF_OPEN
+            self.next_probe_time = 0.0
+            self.consecutive_failures = 0
+            self.current_backoff = self.initial_backoff
+            self.last_state_change = time.time()
+            print(f"[CIRCUIT BREAKER] {self.name}: Manual reset requested -> Forced immediate HALF_OPEN trial.")
+
+    def is_open(self) -> bool:
+        """Returns True if the circuit is currently OPEN and within backoff period (dormant)."""
+        with self.lock:
+            return self.state == CircuitState.OPEN and time.time() < self.next_probe_time
+
+    def get_status(self) -> dict:
+        """Returns diagnostic payload for health and monitoring dashboards."""
+        with self.lock:
+            now = time.time()
+            is_dormant = self.state == CircuitState.OPEN and now < self.next_probe_time
+            remaining = max(0.0, round(self.next_probe_time - now, 1)) if is_dormant else 0.0
+            return {
+                "state": self.state,
+                "consecutive_failures": self.consecutive_failures,
+                "current_backoff_sec": self.current_backoff,
+                "next_probe_remaining_sec": remaining,
+                "is_dormant": is_dormant,
+                "last_failure_reason": self.last_failure_reason,
+            }
+
+
 class ThreadedRTSPStream:
     """
     High-Performance Zero-Latency RTSP Stream Grabber.
@@ -286,6 +418,9 @@ class ThreadedRTSPStream:
         self.ai_url = ai_url if (ai_url and str(ai_url).strip()) else url
         self.ai_source = int(self.ai_url) if str(self.ai_url).isdigit() else self.ai_url
         self.has_dedicated_ai_stream = (self.ai_url != self.url)
+
+        # Production-Grade Circuit Breaker with Exponential Backoff
+        self.circuit_breaker = StreamCircuitBreaker(name=self.name)
         
         self.cap: Optional[cv2.VideoCapture] = None
         self.ai_cap: Optional[cv2.VideoCapture] = None
@@ -337,12 +472,12 @@ class ThreadedRTSPStream:
 
     def _capture_loop(self):
         """
-        Energy-Efficient Zero-Latency RTSP Stream Grabber.
+        Energy-Efficient Zero-Latency RTSP Stream Grabber with Circuit Breaker Protection.
         Enters Eco-Power Idle Sleep when no session is active and no active browser preview.
-        Ramps up to full live 20-25 FPS instantaneously (<0.05s) upon view/session request.
+        Enters Dormant Sleep when physical camera is offline/unreachable (Circuit OPEN).
+        Ramps up to full live 20-25 FPS instantaneously upon view/session request when healthy.
         """
         self.consecutive_failures = 0
-        reconnect_delay = 1.0
 
         while self.running:
             try:
@@ -366,42 +501,60 @@ class ThreadedRTSPStream:
                         time.sleep(2.0)
                         continue
 
-                # 2. Open Stream if needed
+                # 2. Circuit Breaker Protection Check: If OPEN (Dormant), suspend connections and sleep
+                if not self.circuit_breaker.allow_attempt():
+                    time.sleep(2.0)
+                    continue
+
+                # 3. Open Stream if needed
                 if self.cap is None or not self.cap.isOpened():
                     self.connected = False
-                    if isinstance(self.source, str):
-                        self.cap = cv2.VideoCapture(self.source, cv2.CAP_FFMPEG)
-                    else:
-                        self.cap = cv2.VideoCapture(self.source)
-                    self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-                    if not self.cap.isOpened():
-                        time.sleep(reconnect_delay)
-                        reconnect_delay = min(reconnect_delay * 1.5, 8.0)
+                    try:
+                        if isinstance(self.source, str):
+                            self.cap = cv2.VideoCapture(self.source, cv2.CAP_FFMPEG)
+                        else:
+                            self.cap = cv2.VideoCapture(self.source)
+                        self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                    except Exception as open_err:
+                        self.connected = False
+                        self.circuit_breaker.record_failure(f"VideoCapture exception: {open_err}")
+                        time.sleep(1.0)
                         continue
+
+                    if not self.cap.isOpened():
+                        self.connected = False
+                        self.circuit_breaker.record_failure("Failed to open RTSP stream")
+                        if self.cap:
+                            self.cap.release()
+                        self.cap = None
+                        time.sleep(1.0)
+                        continue
+
                     self.connected = True
                     self.consecutive_failures = 0
-                    reconnect_delay = 1.0
 
-                # 3. Continuous live frame grab
+                # 4. Continuous live frame grab
                 success, frame = self.cap.read()
                 if not success or frame is None:
                     self.total_capture_failures += 1
                     self.consecutive_failures += 1
-                    if self.consecutive_failures > 25:
+                    if self.consecutive_failures > 5:
                         self.connected = False
                         if self.cap:
                             self.cap.release()
                         self.cap = None
                         self.consecutive_failures = 0
-                        time.sleep(reconnect_delay)
-                        reconnect_delay = min(reconnect_delay * 1.5, 8.0)
+                        self.circuit_breaker.record_failure("Consecutive frame read failures")
+                        time.sleep(1.0)
                     else:
                         time.sleep(0.05)
                     continue
 
+                # Healthy frame read: Record success on circuit breaker
                 self.consecutive_failures = 0
                 self.connected = True
-                reconnect_delay = 1.0
+                self.circuit_breaker.record_success()
+
                 h, w, _ = frame.shape
                 self.raw_w = w
                 self.raw_h = h
@@ -426,11 +579,11 @@ class ThreadedRTSPStream:
             except Exception as e:
                 self.connected = False
                 self.total_capture_failures += 1
+                self.circuit_breaker.record_failure(f"Stream loop exception: {e}")
                 if self.cap:
                     self.cap.release()
                 self.cap = None
-                time.sleep(reconnect_delay)
-                reconnect_delay = min(reconnect_delay * 1.5, 8.0)
+                time.sleep(1.0)
 
         if self.cap:
             self.cap.release()
@@ -438,7 +591,6 @@ class ThreadedRTSPStream:
 
     def _ai_capture_loop(self):
         """Dedicated capture loop for native AI sub-stream (active only during live sessions)."""
-        reconnect_delay = 1.0
         while self.running:
             try:
                 # Eco-Power: AI Sub-stream is ONLY active when an attendance session is running
@@ -447,19 +599,33 @@ class ThreadedRTSPStream:
                     time.sleep(0.5)
                     continue
 
+                # Circuit Breaker Protection: If primary camera circuit is OPEN, do not poll AI sub-stream
+                if self.circuit_breaker.is_open():
+                    time.sleep(2.0)
+                    continue
+
                 if self.ai_cap is None or not self.ai_cap.isOpened():
                     self.ai_connected = False
-                    if isinstance(self.ai_source, str):
-                        self.ai_cap = cv2.VideoCapture(self.ai_source, cv2.CAP_FFMPEG)
-                    else:
-                        self.ai_cap = cv2.VideoCapture(self.ai_source)
-                    self.ai_cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-                    if not self.ai_cap.isOpened():
-                        time.sleep(reconnect_delay)
-                        reconnect_delay = min(reconnect_delay * 1.5, 8.0)
+                    try:
+                        if isinstance(self.ai_source, str):
+                            self.ai_cap = cv2.VideoCapture(self.ai_source, cv2.CAP_FFMPEG)
+                        else:
+                            self.ai_cap = cv2.VideoCapture(self.ai_source)
+                        self.ai_cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                    except Exception:
+                        self.ai_connected = False
+                        time.sleep(1.0)
                         continue
+
+                    if not self.ai_cap.isOpened():
+                        self.ai_connected = False
+                        if self.ai_cap:
+                            self.ai_cap.release()
+                        self.ai_cap = None
+                        time.sleep(1.0)
+                        continue
+
                     self.ai_connected = True
-                    reconnect_delay = 1.0
 
                 success, frame = self.ai_cap.read()
                 if not success or frame is None:
@@ -483,12 +649,15 @@ class ThreadedRTSPStream:
                 if self.ai_cap:
                     self.ai_cap.release()
                 self.ai_cap = None
-                time.sleep(reconnect_delay)
-                reconnect_delay = min(reconnect_delay * 1.5, 8.0)
+                time.sleep(1.0)
 
         if self.ai_cap:
             self.ai_cap.release()
             self.ai_cap = None
+
+    def recheck(self):
+        """Forces the stream's circuit breaker to reset and probe connection immediately."""
+        self.circuit_breaker.reset()
 
     def get_frame_with_overlays(self, session_id: str, is_grid: bool = True) -> Optional[np.ndarray]:
         """Returns live frame with overlays instantly (<0.2ms). Optimized for ultra-lightweight grid preview."""
@@ -817,6 +986,18 @@ class CameraStreamManager:
                     s.last_faces_time = 0.0
                     s.spatial_cache = []
 
+    def recheck_all_cameras(self) -> dict:
+        """Manually resets circuit breakers across all cameras to trigger immediate connection trials."""
+        with self.lock:
+            results = {}
+            for idx, stream in self.cctv_streams.items():
+                stream.recheck()
+                results[f"cctv_{idx}"] = "Reset to HALF_OPEN probe"
+            for idx, stream in self.ptz_streams.items():
+                stream.recheck()
+                results[f"ptz_{idx}"] = "Reset to HALF_OPEN probe"
+            return results
+
 
 import asyncio
 
@@ -899,7 +1080,7 @@ class CentralAICoordinator:
 
                 now = time.time()
                 for stream in streams:
-                    if not stream.running:
+                    if not stream.running or stream.circuit_breaker.is_open() or not stream.connected:
                         continue
 
                     # 1. Explicit Timestamp Schedule Check: Skip immediately if not due yet
@@ -988,7 +1169,12 @@ async def generate_video_feed(
 
             frame = stream.get_frame_with_overlays(session_id, is_grid=is_grid)
             if frame is None:
-                placeholder_text = "Connecting..."
+                if stream.circuit_breaker.is_open():
+                    cb = stream.circuit_breaker.get_status()
+                    remaining = cb["next_probe_remaining_sec"]
+                    placeholder_text = f"{stream.name} (Dormant - Retry in {remaining:.0f}s)"
+                else:
+                    placeholder_text = "Connecting..."
                 frame = create_placeholder_frame(placeholder_text)
 
             # Ultra-fast JPEG encoding with tuned quality
@@ -1007,8 +1193,14 @@ async def generate_video_feed(
 
 
 
+CCTV_PREWARM_ENABLED = os.getenv("CCTV_PREWARM_ENABLED", "false").lower() in ("1", "true", "yes")
+
 def prewarm_all_cctv():
     """Background worker to gently initialize CCTV streams on boot without blocking."""
+    if not CCTV_PREWARM_ENABLED:
+        print("[STREAM] CCTV stream pre-warming is disabled (Dormant Mode active). Cameras will initialize on-demand.")
+        return
+
     time.sleep(2.0)
     try:
         camera_details = get_camera_details()
@@ -1045,6 +1237,7 @@ def get_performance_diagnostics() -> dict:
             avg_ai_ms = round(stream.total_ai_duration_ms / max(1, stream.ai_scan_count), 2) if stream.ai_scan_count > 0 else 0.0
 
             achieved_fps = round(stream.ai_scan_count / max(1.0, (now - (stream.first_ai_scan_timestamp or now))), 2) if stream.first_ai_scan_timestamp else 0.0
+            cb_status = stream.circuit_breaker.get_status()
 
             cameras_status.append({
                 "camera_id": cam_id,
@@ -1058,6 +1251,8 @@ def get_performance_diagnostics() -> dict:
                 "achieved_scan_fps": achieved_fps,
                 "connected": stream.connected,
                 "ai_connected": stream.ai_connected if stream.has_dedicated_ai_stream else stream.connected,
+                "circuit_breaker": cb_status,
+                "is_dormant": cb_status["is_dormant"],
                 "frame_age_seconds": frame_age,
                 "consecutive_failures": stream.consecutive_failures,
                 "total_capture_failures": stream.total_capture_failures,

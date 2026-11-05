@@ -26,7 +26,7 @@ describe('SelfieAttendClient Offline & Connectivity Indicator', () => {
         ok: true,
         json: () => Promise.resolve({ enabled: true, lat: 28.5, lng: 77.2, radius: 250 }),
       })
-    ) as any;
+    ) as unknown as typeof global.fetch;
   });
 
   const dummySession: ActiveSession = {
