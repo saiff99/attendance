@@ -23,3 +23,4 @@ if (typeof window !== 'undefined') {
     }),
   });
 }
+

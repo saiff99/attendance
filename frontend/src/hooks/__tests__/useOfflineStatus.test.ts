@@ -42,3 +42,4 @@ describe('useOfflineStatus hook', () => {
     expect(typeof result.current.requestNotificationAccess).toBe('function');
   });
 });
+

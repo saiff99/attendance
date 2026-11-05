@@ -9,10 +9,11 @@ import {
   UserCheck, ArrowRight, ArrowLeft, Clock, MapPin, BookOpen,
   Sparkles, Check, X, ShieldAlert, GraduationCap,
   Building2, HelpCircle, Lock, Timer, Hourglass, Navigation, Loader2,
-  Eye, EyeOff, Smile, Activity
+  Eye, EyeOff, Smile, Activity, Wifi, WifiOff
 } from "lucide-react";
 import Webcam from "react-webcam";
 import { getBackendUrl } from "@/lib/api";
+import { useOfflineStatus } from "@/hooks";
 // Biometric Attendance Client Component
 import {
   CampusGeofenceConfig,
@@ -183,6 +184,11 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
   const livenessCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const livenessHistoryRef = useRef<number[]>([]);
 
+  // Offline & Connectivity Resilience States (Issue 5)
+  const { isOnline } = useOfflineStatus();
+  const [retryAttempt, setRetryAttempt] = useState<number>(0);
+  const [retryStatus, setRetryStatus] = useState<string | null>(null);
+
   // Result States
   const [resultData, setResultData] = useState<{
     success: boolean;
@@ -193,6 +199,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
     confidence?: number;
     message?: string;
     recorded_at?: string;
+    is_network_error?: boolean;
   } | null>(null);
 
   // 3-Attempt Face Verification Failure Lockout Cooldown (Strictly capped at 60s max)
@@ -939,6 +946,16 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
       return;
     }
 
+    if (!isOnline) {
+      setResultData({
+        success: false,
+        message: "You appear to be offline. Please verify Wi-Fi or mobile data, then tap 'Retry Upload'.",
+        is_network_error: true,
+      });
+      setStep("result");
+      return;
+    }
+
     const targetYear = selectedSession.target_academic_year;
     const studentYear = student.academic_year && student.academic_year !== "Enrolled Student"
       ? student.academic_year
@@ -962,9 +979,11 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
     }
 
     setSubmittingAttendance(true);
+    setRetryStatus(null);
+    setRetryAttempt(0);
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000);
+    const maxRetries = 2; // total 3 attempts (attempt 0, 1, 2)
+    let lastNetworkErr: any = null;
 
     try {
       // Compress the image so mobile 4G upload takes <100ms and never exceeds Vercel limits
@@ -1009,133 +1028,153 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
         ...(checkinToken ? { "x-checkin-token": checkinToken } : {}),
       };
 
-      let response: Response | null = null;
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        // Enforce 5-minute session rule: Abort immediately if session expired during retry
+        if (isSelectedExpired) {
+          setResultData({
+            success: false,
+            message: "The 5-minute attendance window for this lecture has just ended. Attendance could not be recorded.",
+          });
+          setStep("result");
+          setSubmittingAttendance(false);
+          setRetryStatus(null);
+          return;
+        }
 
-      // 1. Direct Local Fast-Path: If backendUrl is active (e.g. localhost / LAN), connect direct in 1ms
-      if (backendUrl) {
-        response = await fetch(`${backendUrl}/api/selfie-attendance`, {
-          method: "POST",
-          headers: selfieHeaders,
-          body: formData,
-          signal: controller.signal,
-        }).catch(() => null);
-      }
+        if (attempt > 0) {
+          setRetryAttempt(attempt);
+          setRetryStatus(`Weak signal detected. Retrying upload (attempt ${attempt + 1} of ${maxRetries + 1})...`);
+          await new Promise((r) => setTimeout(r, attempt * 1200));
+        }
 
-      // 2. Next.js Proxy Path: For Vercel Cloud or fallback if direct connection failed
-      if (!response) {
-        const proxyRes = await fetch("/api/selfie-attendance", {
-          method: "POST",
-          headers: selfieHeaders,
-          body: formData,
-          signal: controller.signal,
-        }).catch(() => null);
-        if (proxyRes) response = proxyRes;
-      }
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 18000);
 
-      clearTimeout(timeoutId);
+        let response: Response | null = null;
+        let fetchErr: any = null;
 
-      if (!response) {
-        throw new Error("Backend server is unreachable. Please ensure the backend is running.");
-      }
-
-      let data: any = {};
-      try {
-        data = await response.json();
-      } catch {
-        data = { detail: `Server response code: ${response.status}` };
-      }
-
-      if (!response.ok) {
-        const errorDetail = (data?.detail || "").toLowerCase();
-        const isTransientErr =
-          response.status >= 500 && (
-            errorDetail.includes("server disconnected") ||
-            errorDetail.includes("reconnecting") ||
-            errorDetail.includes("busy") ||
-            response.status === 502 ||
-            response.status === 503 ||
-            response.status === 504
-          );
-
-        if (isTransientErr) {
-          console.warn("[Selfie Client Auto-Retry] Transient error detected, attempting silent retry...");
-          await new Promise((r) => setTimeout(r, 600));
-          const retryRes = await fetch("/api/selfie-attendance", {
+        // 1. Direct Local Fast-Path: If backendUrl is active (e.g. localhost / LAN), connect direct in 1ms
+        if (backendUrl) {
+          response = await fetch(`${backendUrl}/api/selfie-attendance`, {
             method: "POST",
-            headers: {
-              "ngrok-skip-browser-warning": "69420",
-            },
+            headers: selfieHeaders,
             body: formData,
-          }).catch(() => null);
-
-          if (retryRes && retryRes.ok) {
-            try {
-              const retryData = await retryRes.json();
-              setResultData({
-                success: true,
-                already_marked: retryData.already_marked,
-                student_name: retryData.student_name,
-                student_roll: retryData.student_roll,
-                academic_year: retryData.academic_year,
-                confidence: retryData.confidence,
-                message: retryData.message,
-                recorded_at: retryData.recorded_at,
-              });
-              setStep("result");
-              return;
-            } catch {
-              // Fallback to error throwing below
-            }
-          }
+            signal: controller.signal,
+          }).catch((err) => {
+            fetchErr = err;
+            return null;
+          });
         }
 
-        // Extract 3-attempt cooldown if active (Strictly capped at 60s max)
-        let cooldownWait: number | null = null;
-        const retryHeader = response.headers.get("retry-after");
-        if (retryHeader) {
-          const parsed = parseInt(retryHeader, 10);
-          if (!isNaN(parsed) && parsed > 0) {
-            cooldownWait = Math.min(60, parsed);
-          }
+        // 2. Next.js Proxy Path: For Vercel Cloud or fallback if direct connection failed
+        if (!response) {
+          const proxyRes = await fetch("/api/selfie-attendance", {
+            method: "POST",
+            headers: selfieHeaders,
+            body: formData,
+            signal: controller.signal,
+          }).catch((err) => {
+            fetchErr = err;
+            return null;
+          });
+          if (proxyRes) response = proxyRes;
         }
-        if (!cooldownWait) {
-          const detailStr = String(data?.detail || "");
-          const match = detailStr.match(/wait\s+(\d+)\s*s/i) || detailStr.match(/(\d+)\s*second/i);
-          if (match && match[1]) {
-            const parsed = parseInt(match[1], 10);
+
+        clearTimeout(timeoutId);
+
+        if (!response) {
+          lastNetworkErr = fetchErr || new Error("Failed to reach server");
+          if (attempt < maxRetries && !isSelectedExpired) {
+            continue;
+          }
+          throw new Error("Network unreachable. Please check your internet connection.");
+        }
+
+        let data: any = {};
+        try {
+          data = await response.json();
+        } catch {
+          data = { detail: `Server response code: ${response.status}` };
+        }
+
+        if (!response.ok) {
+          const errorDetail = (data?.detail || "").toLowerCase();
+          const isTransientErr =
+            response.status >= 500 && (
+              errorDetail.includes("server disconnected") ||
+              errorDetail.includes("reconnecting") ||
+              errorDetail.includes("busy") ||
+              response.status === 502 ||
+              response.status === 503 ||
+              response.status === 504
+            );
+
+          if (isTransientErr && attempt < maxRetries && !isSelectedExpired) {
+            console.warn(`[Selfie Client Auto-Retry] Transient error ${response.status}, retrying attempt ${attempt + 1}...`);
+            continue;
+          }
+
+          // Extract 3-attempt cooldown if active (Strictly capped at 60s max)
+          let cooldownWait: number | null = null;
+          const retryHeader = response.headers.get("retry-after");
+          if (retryHeader) {
+            const parsed = parseInt(retryHeader, 10);
             if (!isNaN(parsed) && parsed > 0) {
               cooldownWait = Math.min(60, parsed);
             }
           }
-        }
-        if (response.status === 429 && cooldownWait === null) {
-          cooldownWait = 60;
+          if (!cooldownWait) {
+            const detailStr = String(data?.detail || "");
+            const match = detailStr.match(/wait\s+(\d+)\s*s/i) || detailStr.match(/(\d+)\s*second/i);
+            if (match && match[1]) {
+              const parsed = parseInt(match[1], 10);
+              if (!isNaN(parsed) && parsed > 0) {
+                cooldownWait = Math.min(60, parsed);
+              }
+            }
+          }
+          if (response.status === 429 && cooldownWait === null) {
+            cooldownWait = 60;
+          }
+
+          if (cooldownWait !== null) {
+            setCooldownSeconds(cooldownWait);
+          }
+
+          throw new Error(data.detail || "Face verification failed.");
         }
 
-        if (cooldownWait !== null) {
-          setCooldownSeconds(cooldownWait);
-        }
-
-        throw new Error(data.detail || "Face verification failed.");
+        // Successfully marked attendance
+        setRetryStatus(null);
+        setRetryAttempt(0);
+        setResultData({
+          success: true,
+          already_marked: data.already_marked,
+          student_name: data.student_name,
+          student_roll: data.student_roll,
+          academic_year: data.academic_year,
+          confidence: data.confidence,
+          message: data.message,
+          recorded_at: data.recorded_at,
+        });
+        setStep("result");
+        return;
       }
-
-      setResultData({
-        success: true,
-        already_marked: data.already_marked,
-        student_name: data.student_name,
-        student_roll: data.student_roll,
-        academic_year: data.academic_year,
-        confidence: data.confidence,
-        message: data.message,
-        recorded_at: data.recorded_at,
-      });
-      setStep("result");
     } catch (err: any) {
-      clearTimeout(timeoutId);
       console.error("Selfie verification error:", err);
       let errorMsg = err.message || "Face matching failed. Please try again with proper lighting.";
-      if (err.name === "AbortError") {
-        errorMsg = "Verification timed out. Please check your internet connection or backend server and try again.";
+      let isNetError = false;
+
+      if (
+        err.name === "AbortError" ||
+        !navigator.onLine ||
+        err.message?.includes("connection") ||
+        err.message?.includes("Failed to reach") ||
+        err.message?.includes("Failed to fetch") ||
+        err.message?.includes("unreachable")
+      ) {
+        errorMsg = "Weak connection or network timeout. Your photo is safely saved! Tap 'Retry Upload' once connected.";
+        isNetError = true;
       }
 
       // Check errorMsg for cooldown if not already captured (Strictly capped at 60s max)
@@ -1153,10 +1192,13 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
       setResultData({
         success: false,
         message: errorMsg,
+        is_network_error: isNetError,
       });
       setStep("result");
     } finally {
       setSubmittingAttendance(false);
+      setRetryStatus(null);
+      setRetryAttempt(0);
     }
   };
 
@@ -1202,6 +1244,21 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
               <span className="text-[9px] sm:text-[10px] font-semibold uppercase bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-1.5 py-0.5 rounded shrink-0">
                 Selfie
               </span>
+              <div
+                className={`flex items-center gap-1 text-[9px] sm:text-[10px] font-semibold px-1.5 py-0.5 rounded-md border shrink-0 transition-colors ${
+                  isOnline
+                    ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-300"
+                    : "bg-rose-500/20 border-rose-500/40 text-rose-300 animate-pulse"
+                }`}
+                title={isOnline ? "Network: Online" : "Network: Offline (Check internet)"}
+              >
+                {isOnline ? (
+                  <Wifi className="w-2.5 h-2.5 text-emerald-400 shrink-0" />
+                ) : (
+                  <WifiOff className="w-2.5 h-2.5 text-rose-400 shrink-0" />
+                )}
+                <span>{isOnline ? "Online" : "Offline"}</span>
+              </div>
             </div>
             <p className="text-[10px] sm:text-[11px] text-slate-400 truncate">5-Min Live Face Verification</p>
           </div>
@@ -1921,6 +1978,23 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
               </div>
             ) : (
               <>
+                {/* Live Connectivity Banner (Issue 5) */}
+                {!isOnline && (
+                  <div className="w-full mb-2.5 py-2 px-3.5 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-center justify-between gap-2 shadow-sm animate-in fade-in duration-200">
+                    <div className="flex items-center gap-2">
+                      <WifiOff className="w-4 h-4 text-rose-400 shrink-0" />
+                      <span className="font-medium">No Internet Connection. Connect to Wi-Fi or mobile data to submit.</span>
+                    </div>
+                  </div>
+                )}
+
+                {retryStatus && (
+                  <div className="w-full mb-2.5 py-2 px-3.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs flex items-center gap-2 shadow-sm animate-in fade-in duration-200">
+                    <Loader2 className="w-4 h-4 text-amber-400 animate-spin shrink-0" />
+                    <span className="font-medium">{retryStatus}</span>
+                  </div>
+                )}
+
                 <div className="relative w-full aspect-[3/4] max-h-[55vh] bg-black rounded-3xl overflow-hidden border-2 border-slate-800 shadow-2xl flex items-center justify-center">
                   {!capturedImage ? (
                     <>
@@ -2051,13 +2125,18 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                       </button>
                       <button
                         onClick={handleSubmitSelfie}
-                        disabled={submittingAttendance}
-                        className="py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs transition-all shadow-lg shadow-emerald-600/25 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                        disabled={submittingAttendance || !isOnline}
+                        className="py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs transition-all shadow-lg shadow-emerald-600/25 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         {submittingAttendance ? (
                           <>
                             <div className="w-3.5 h-3.5 rounded-full border-2 border-white border-t-transparent animate-spin" />
-                            <span>Verifying...</span>
+                            <span>{retryStatus ? "Retrying..." : "Verifying..."}</span>
+                          </>
+                        ) : !isOnline ? (
+                          <>
+                            <WifiOff className="w-3.5 h-3.5 text-rose-300" />
+                            <span>Offline • Check Connection</span>
                           </>
                         ) : (
                           <>
@@ -2166,6 +2245,35 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                     <Check className="w-4 h-4 text-emerald-400" />
                     <span>Done • Return to Classes</span>
                   </button>
+                ) : resultData.is_network_error && capturedImage ? (
+                  <div className="flex flex-col gap-2.5 w-full">
+                    <button
+                      onClick={() => {
+                        setStep("capture_selfie");
+                        setTimeout(() => {
+                          void handleSubmitSelfie();
+                        }, 50);
+                      }}
+                      disabled={submittingAttendance || (cooldownSeconds !== null && cooldownSeconds > 0) || isSelectedExpired}
+                      className="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-sm transition-all shadow-lg shadow-emerald-600/25 cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+                    >
+                      <RefreshCw className="w-4 h-4" />
+                      <span>Retry Upload (Keep Saved Photo)</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setCooldownSeconds(null);
+                        setCapturedImage(null);
+                        setStep("capture_selfie");
+                      }}
+                      disabled={submittingAttendance}
+                      className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs transition-all border border-slate-700/80 flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <Camera className="w-3.5 h-3.5" />
+                      <span>Retake New Photo</span>
+                    </button>
+                  </div>
                 ) : (
                   <button
                     disabled={cooldownSeconds !== null && cooldownSeconds > 0}
