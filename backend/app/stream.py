@@ -1145,15 +1145,20 @@ ai_coordinator = CentralAICoordinator()
 
 
 def create_placeholder_frame(text: str, width: int = 640, height: int = 360) -> np.ndarray:
-    """Creates a sleek dark placeholder frame when a camera is connecting/offline."""
+    """Creates a sleek, modern dark placeholder frame when a camera is connecting/offline."""
     frame = np.zeros((height, width, 3), dtype=np.uint8)
-    frame[:] = (20, 24, 30)
-    cv2.rectangle(frame, (10, 10), (width - 10, height - 10), (45, 55, 72), 1)
+    frame[:] = (16, 20, 28)  # Deep dark slate (BGR)
     
-    text_size, _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
+    text_size, _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.55, 1)
     text_x = (width - text_size[0]) // 2
-    text_y = (height + text_size[1]) // 2
-    cv2.putText(frame, text, (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (160, 174, 192), 2)
+    text_y = (height + text_size[1]) // 2 - 8
+    cv2.putText(frame, text, (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (220, 226, 235), 1, cv2.LINE_AA)
+    
+    subtext = "MedAttend AI Vision Node • Power Saver Active"
+    sub_size, _ = cv2.getTextSize(subtext, cv2.FONT_HERSHEY_SIMPLEX, 0.38, 1)
+    sub_x = (width - sub_size[0]) // 2
+    sub_y = text_y + 26
+    cv2.putText(frame, subtext, (sub_x, sub_y), cv2.FONT_HERSHEY_SIMPLEX, 0.38, (100, 116, 139), 1, cv2.LINE_AA)
     return frame
 
 
@@ -1188,9 +1193,9 @@ async def generate_video_feed(
                 if stream.circuit_breaker.is_open():
                     cb = stream.circuit_breaker.get_status()
                     remaining = cb["next_probe_remaining_sec"]
-                    placeholder_text = f"{stream.name} (Dormant - Retry in {remaining:.0f}s)"
+                    placeholder_text = f"{stream.name} • Standby (Auto-probe in {remaining:.0f}s)"
                 else:
-                    placeholder_text = "Connecting..."
+                    placeholder_text = f"{stream.name} • Connecting Feed..."
                 frame = create_placeholder_frame(placeholder_text)
 
             # Ultra-fast JPEG encoding with tuned quality

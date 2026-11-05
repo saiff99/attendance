@@ -136,18 +136,18 @@ export function MjpegPlayer({
 
   if (error && !frameSrc) {
     return (
-      <div className={`flex flex-col items-center justify-center bg-slate-950 text-slate-400 p-4 select-none ${className}`}>
-        <div className="w-10 h-10 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center mb-2">
-          <Camera className="w-5 h-5 text-slate-500 opacity-60" />
+      <div className={`flex flex-col items-center justify-center bg-gradient-to-b from-slate-900/90 via-[#0B0F19] to-slate-950 text-slate-400 p-4 select-none relative ${className}`}>
+        <div className="w-11 h-11 rounded-2xl bg-slate-900/90 border border-slate-800/90 flex items-center justify-center mb-2 shadow-inner">
+          <Camera className="w-5 h-5 text-slate-500 opacity-80" />
         </div>
-        <span className="text-xs font-semibold text-slate-300">Camera Offline (Dormant)</span>
-        <div className="flex items-center gap-1.5 mt-1.5 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-[10px] text-amber-400 font-medium">
+        <span className="text-xs font-semibold text-slate-200 tracking-tight">Camera Feed Dormant</span>
+        <div className="flex items-center gap-1.5 mt-1.5 px-2.5 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-[10px] text-amber-400/90 font-medium">
           <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-          Standby Mode
+          <span>Standby Mode</span>
         </div>
         <button
           onClick={() => setReconnectKey(prev => prev + 1)}
-          className="mt-2 text-[10px] text-slate-500 hover:text-indigo-400 flex items-center gap-1 transition-colors"
+          className="mt-2.5 text-[10px] text-slate-400 hover:text-indigo-300 flex items-center gap-1 px-2.5 py-1 rounded-md bg-slate-900/80 border border-slate-800 transition-colors"
           title="Retry camera connection"
         >
           <RefreshCw className="w-2.5 h-2.5" /> Re-check Feed
@@ -158,9 +158,9 @@ export function MjpegPlayer({
 
   if (!frameSrc) {
     return (
-      <div className={`flex flex-col items-center justify-center bg-black text-gray-400 ${className}`}>
-        <div className="w-8 h-8 border-4 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin mb-4"></div>
-        <span className="text-sm font-medium animate-pulse">{fallbackText}</span>
+      <div className={`flex flex-col items-center justify-center bg-slate-950 text-slate-400 ${className}`}>
+        <div className="w-8 h-8 border-2 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin mb-3"></div>
+        <span className="text-xs font-medium text-slate-400 tracking-wide animate-pulse">{fallbackText}</span>
       </div>
     );
   }

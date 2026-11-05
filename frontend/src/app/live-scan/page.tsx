@@ -9,7 +9,7 @@ import {
   Grid, Maximize2, Minimize2, Eye, ShieldCheck, RefreshCw, X, Search,
   Clock, Sparkles, ChevronLeft as PrevIcon, ChevronRight as NextIcon,
   QrCode, Copy, Check, ExternalLink, Smartphone, Navigation,
-  UserCheck, UserX, RotateCcw, Radio, AlertCircle
+  UserCheck, UserX, RotateCcw, Radio, AlertCircle, VideoOff
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 // Live Scan Faculty Portal
@@ -722,6 +722,82 @@ export default function LiveScan() {
   const backRowCameras = cctvCameras.filter(c => c.row.includes("2nd") || c.name.includes("2nd") || c.index >= 3);
   const frontRowCameras = cctvCameras.filter(c => c.row.includes("1st") || c.name.includes("1st") || c.index < 3);
 
+  const renderCameraCard = (cam: CameraMeta) => {
+    const isConnected = !!cam.is_connected;
+    return (
+      <div
+        key={cam.id}
+        className={`group relative rounded-2xl overflow-hidden bg-gradient-to-b from-slate-900/95 via-[#0B0F19] to-slate-950 border ${
+          isConnected
+            ? "border-slate-800/90 hover:border-emerald-500/50 hover:shadow-lg hover:shadow-emerald-500/10"
+            : "border-slate-800/80 hover:border-indigo-500/40 hover:shadow-lg hover:shadow-indigo-500/10"
+        } shadow-md aspect-video flex flex-col cursor-pointer transition-all duration-300`}
+        onClick={() => setFocusedCamera(cam)}
+      >
+        {/* Subtle Ambient Radial Lighting */}
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-500/[0.04] via-transparent to-transparent pointer-events-none" />
+
+        {/* Top-Left Camera Label Badge */}
+        <div className="absolute top-2.5 left-2.5 z-10 flex items-center gap-2 bg-slate-950/80 backdrop-blur-md px-2.5 py-1 rounded-lg text-[10px] font-semibold text-slate-200 border border-slate-800/90 shadow-sm">
+          <span className={`w-1.5 h-1.5 rounded-full ${isConnected ? "bg-emerald-400 shadow-sm shadow-emerald-400/80 animate-pulse" : "bg-amber-400"}`} />
+          <span className="tracking-wide font-medium">{cam.name}</span>
+          <span className={`text-[9px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded ${
+            isConnected
+              ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+              : "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+          }`}>
+            {isConnected ? "Live 4K" : "Standby"}
+          </span>
+        </div>
+
+        {/* Top-Right Maximize / Studio Focus Action */}
+        <button
+          onClick={(e) => { e.stopPropagation(); setFocusedCamera(cam); }}
+          className="absolute top-2.5 right-2.5 z-10 p-1.5 rounded-lg bg-slate-950/70 backdrop-blur-md text-slate-400 hover:text-white hover:bg-slate-800/90 border border-slate-800/80 opacity-0 group-hover:opacity-100 transition-all duration-200 shadow-sm"
+          title="Focus Camera Studio"
+        >
+          <Maximize2 className="w-3.5 h-3.5" />
+        </button>
+
+        {/* Video Content or Sleek Native Dormant Card */}
+        {isConnected ? (
+          <div className="w-full h-full flex items-center justify-center bg-black">
+            <MjpegPlayer
+              url={`${getVideoBackendUrl(cam.index)}/api/video-feed/${activeSession?.id}?camera_index=${cam.index}&grid=1`}
+              className="w-full h-full object-contain"
+              fallbackText="Connecting..."
+              paused={focusedCamera !== null}
+            />
+          </div>
+        ) : (
+          <div className="w-full h-full flex flex-col items-center justify-center p-3 select-none relative">
+            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-slate-900/90 border border-slate-800/90 flex items-center justify-center shadow-inner group-hover:scale-105 group-hover:border-slate-700/80 transition-all duration-300 mb-2">
+              <VideoOff className="w-4 h-4 sm:w-5 sm:h-5 text-slate-500 group-hover:text-slate-400 transition-colors" />
+            </div>
+
+            <span className="text-[11px] sm:text-xs font-semibold text-slate-300 group-hover:text-white transition-colors tracking-tight">
+              {cam.name} Node Offline
+            </span>
+
+            <div className="flex items-center gap-1.5 mt-1 px-2.5 py-0.5 rounded-full bg-slate-900/80 border border-slate-800 text-[10px] text-slate-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400/80" />
+              <span className="text-amber-400/90 font-medium">Dormant</span>
+              <span className="text-slate-600">•</span>
+              <span className="text-slate-500 text-[9px]">Power Saver</span>
+            </div>
+
+            {/* Quick Hover Bottom Cue */}
+            <div className="absolute bottom-2 inset-x-0 flex justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
+              <span className="text-[9px] font-medium text-indigo-300 bg-indigo-950/80 px-2.5 py-0.5 rounded-md border border-indigo-800/50 backdrop-blur-sm flex items-center gap-1">
+                <Maximize2 className="w-2.5 h-2.5" /> Studio Focus
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const backendUrl = getBackendUrl();
 
   if (isLoadingSession) {
@@ -1194,89 +1270,37 @@ export default function LiveScan() {
 
                   {/* 2nd Row (Back of Hall) */}
                   <div>
-                    <div className="flex items-center justify-between mb-1 sm:mb-1.5">
-                      <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-blue-500 shadow-sm shadow-blue-500/50" /> Back Section (2nd Row Cameras)
-                      </span>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 shadow-sm shadow-indigo-500/80" />
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-300">
+                          Back Section • 2nd Row
+                        </span>
+                        <span className="text-[10px] text-slate-500 font-normal">
+                          (Cameras 2L, 2M, 2R)
+                        </span>
+                      </div>
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-2.5">
-                      {backRowCameras.map((cam) => (
-                        <div
-                          key={cam.id}
-                          className="group relative rounded-xl overflow-hidden bg-slate-950 border border-slate-800/90 shadow-lg aspect-video flex flex-col cursor-pointer transition-all hover:border-indigo-500/80 hover:shadow-indigo-500/10"
-                          onClick={() => setFocusedCamera(cam)}
-                        >
-                          {/* Top-Left Camera Label Badge */}
-                          <div className="absolute top-2 left-2 z-10 flex items-center gap-1.5 bg-black/75 backdrop-blur-md px-2 py-0.5 rounded-md text-[10px] font-semibold text-white border border-white/10 shadow-sm">
-                            <span className={`w-1.5 h-1.5 rounded-full ${cam.is_connected ? "bg-emerald-400 animate-pulse" : "bg-amber-400"}`} />
-                            <span>{cam.name}</span>
-                            <span className={`text-[9px] font-normal px-1 rounded ${cam.is_connected ? "bg-emerald-500/20 text-emerald-300" : "bg-amber-500/20 text-amber-300"}`}>
-                              {cam.is_connected ? "Live" : "Dormant"}
-                            </span>
-                          </div>
-
-                          {/* Top-Right Maximize Button (Always visible on touch/mobile) */}
-                          <button
-                            onClick={(e) => { e.stopPropagation(); setFocusedCamera(cam); }}
-                            className="absolute top-2 right-2 z-10 p-1.5 rounded-md bg-black/70 text-white/80 hover:text-white hover:bg-black/90 opacity-80 sm:opacity-0 group-hover:opacity-100 transition-all"
-                            title="Maximize Camera"
-                          >
-                            <Maximize2 className="w-3.5 h-3.5" />
-                          </button>
-
-                          <div className="w-full h-full flex items-center justify-center bg-black">
-                            <MjpegPlayer
-                              url={`${getVideoBackendUrl(cam.index)}/api/video-feed/${activeSession.id}?camera_index=${cam.index}&grid=1`}
-                              className="w-full h-full object-contain"
-                              fallbackText="Connecting..."
-                              paused={focusedCamera !== null}
-                            />
-                          </div>
-                        </div>
-                      ))}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-3">
+                      {backRowCameras.map((cam) => renderCameraCard(cam))}
                     </div>
                   </div>
 
                   {/* 1st Row (Front of Hall) */}
                   <div>
-                    <div className="flex items-center justify-between mb-1 sm:mb-1.5">
-                      <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-indigo-500 shadow-sm shadow-indigo-500/50" /> Front Section (1st Row Cameras)
-                      </span>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 shadow-sm shadow-cyan-500/80" />
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-300">
+                          Front Section • 1st Row
+                        </span>
+                        <span className="text-[10px] text-slate-500 font-normal">
+                          (Cameras 1L, 1M, 1R)
+                        </span>
+                      </div>
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-2.5">
-                      {frontRowCameras.map((cam) => (
-                        <div
-                          key={cam.id}
-                          className="group relative rounded-xl overflow-hidden bg-slate-950 border border-slate-800/90 shadow-lg aspect-video flex flex-col cursor-pointer transition-all hover:border-indigo-500/80 hover:shadow-indigo-500/10"
-                          onClick={() => setFocusedCamera(cam)}
-                        >
-                          <div className="absolute top-2 left-2 z-10 flex items-center gap-1.5 bg-black/75 backdrop-blur-md px-2 py-0.5 rounded-md text-[10px] font-semibold text-white border border-white/10 shadow-sm">
-                            <span className={`w-1.5 h-1.5 rounded-full ${cam.is_connected ? "bg-emerald-400 animate-pulse" : "bg-amber-400"}`} />
-                            <span>{cam.name}</span>
-                            <span className={`text-[9px] font-normal px-1 rounded ${cam.is_connected ? "bg-emerald-500/20 text-emerald-300" : "bg-amber-500/20 text-amber-300"}`}>
-                              {cam.is_connected ? "Live" : "Dormant"}
-                            </span>
-                          </div>
-
-                          <button
-                            onClick={(e) => { e.stopPropagation(); setFocusedCamera(cam); }}
-                            className="absolute top-2 right-2 z-10 p-1.5 rounded-md bg-black/70 text-white/80 hover:text-white hover:bg-black/90 opacity-80 sm:opacity-0 group-hover:opacity-100 transition-all"
-                            title="Maximize Camera"
-                          >
-                            <Maximize2 className="w-3.5 h-3.5" />
-                          </button>
-
-                          <div className="w-full h-full flex items-center justify-center bg-black">
-                            <MjpegPlayer
-                              url={`${getVideoBackendUrl(cam.index)}/api/video-feed/${activeSession.id}?camera_index=${cam.index}&grid=1`}
-                              className="w-full h-full object-contain"
-                              fallbackText="Connecting..."
-                              paused={focusedCamera !== null}
-                            />
-                          </div>
-                        </div>
-                      ))}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-3">
+                      {frontRowCameras.map((cam) => renderCameraCard(cam))}
                     </div>
                   </div>
                 </div>
@@ -1373,17 +1397,38 @@ export default function LiveScan() {
                     )}
                   </div>
 
-                  <div className="absolute inset-0 w-full h-full bg-black flex items-center justify-center">
-                    <MjpegPlayer
-                      key={selectedCctvIndex}
-                      url={`${getVideoBackendUrl(selectedCctvIndex)}/api/video-feed/${activeSession.id}?camera_index=${selectedCctvIndex}&grid=0`}
-                      className="w-full h-full object-contain"
-                    />
+                  <div className="absolute inset-0 w-full h-full bg-slate-950 flex items-center justify-center overflow-hidden">
+                    {cctvCameras[selectedCctvIndex]?.is_connected ? (
+                      <MjpegPlayer
+                        key={selectedCctvIndex}
+                        url={`${getVideoBackendUrl(selectedCctvIndex)}/api/video-feed/${activeSession.id}?camera_index=${selectedCctvIndex}&grid=0`}
+                        className="w-full h-full object-contain"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex flex-col items-center justify-center p-6 bg-gradient-to-b from-slate-900/90 via-[#0B0F19] to-slate-950 select-none text-center relative">
+                        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_40%,rgba(99,102,241,0.06),transparent_60%)]" />
+                        <div className="relative w-14 h-14 rounded-2xl bg-slate-900/90 border border-slate-800/90 flex items-center justify-center shadow-lg mb-3">
+                          <VideoOff className="w-6 h-6 text-slate-500" />
+                        </div>
+                        <h3 className="text-sm font-semibold text-slate-200">
+                          {cctvCameras[selectedCctvIndex]?.name || "Camera"} Node Standby
+                        </h3>
+                        <p className="text-xs text-slate-400 mt-1 max-w-sm">
+                          Hardware stream is currently offline or dormant. Mobile selfie check-in is active for attendance.
+                        </p>
+                        <div className="flex items-center gap-1.5 mt-2.5 px-3 py-1 rounded-full bg-slate-900/80 border border-slate-800 text-xs text-slate-400">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-400/80" />
+                          <span className="text-amber-400/90 font-medium">Dormant Standby</span>
+                          <span className="text-slate-600">•</span>
+                          <span className="text-slate-500 text-[10px]">Resource Saver</span>
+                        </div>
+                      </div>
+                    )}
 
-                    <div className="absolute top-3 right-3 sm:top-4 sm:right-4 bg-black/70 backdrop-blur-sm rounded-full px-2.5 sm:px-3 py-1 flex items-center shadow-lg border border-white/10">
-                      <div className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full mr-1.5 sm:mr-2 ${cctvCameras[selectedCctvIndex]?.is_connected ? "bg-red-500 animate-pulse" : "bg-amber-400"}`} />
-                      <span className="text-white text-[10px] sm:text-[11px] font-semibold tracking-wider">
-                        {cctvCameras[selectedCctvIndex]?.is_connected ? "LIVE 4K AI" : "DORMANT STANDBY"}
+                    <div className="absolute top-3 right-3 sm:top-4 sm:right-4 bg-slate-950/80 backdrop-blur-md rounded-full px-3 py-1 flex items-center shadow-lg border border-slate-800">
+                      <div className={`w-2 h-2 rounded-full mr-2 ${cctvCameras[selectedCctvIndex]?.is_connected ? "bg-emerald-400 shadow-sm shadow-emerald-400 animate-pulse" : "bg-amber-400"}`} />
+                      <span className="text-white text-[11px] font-semibold tracking-wider">
+                        {cctvCameras[selectedCctvIndex]?.is_connected ? "LIVE 4K AI" : "STANDBY"}
                       </span>
                     </div>
                   </div>
@@ -1785,15 +1830,34 @@ export default function LiveScan() {
               </div>
 
               {/* Video Player Container */}
-              <div className={`relative flex-1 min-h-0 bg-black flex items-center justify-center overflow-hidden w-full ${isModalFullscreen ? "h-full" : "aspect-video max-h-[78vh]"
+              <div className={`relative flex-1 min-h-0 bg-slate-950 flex items-center justify-center overflow-hidden w-full ${isModalFullscreen ? "h-full" : "aspect-video max-h-[78vh]"
                 }`}>
-                <MjpegPlayer
-                  key={focusedCamera.id}
-                  url={`${getVideoBackendUrl(focusedCamera.index)}/api/video-feed/${activeSession.id}?camera_index=${focusedCamera.index}&grid=0`}
-                  className="w-full h-full object-contain"
-                  fallbackText="Connecting to Camera Stream..."
-                  paused={false}
-                />
+                {focusedCamera.is_connected ? (
+                  <MjpegPlayer
+                    key={focusedCamera.id}
+                    url={`${getVideoBackendUrl(focusedCamera.index)}/api/video-feed/${activeSession.id}?camera_index=${focusedCamera.index}&grid=0`}
+                    className="w-full h-full object-contain"
+                    fallbackText="Connecting to Camera Stream..."
+                    paused={false}
+                  />
+                ) : (
+                  <div className="w-full h-full flex flex-col items-center justify-center p-6 bg-gradient-to-b from-slate-900/90 via-[#0B0F19] to-slate-950 select-none text-center relative">
+                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_40%,rgba(99,102,241,0.06),transparent_60%)]" />
+                    <div className="relative w-16 h-16 rounded-3xl bg-slate-900/90 border border-slate-800/90 flex items-center justify-center shadow-xl mb-3">
+                      <VideoOff className="w-7 h-7 text-slate-500" />
+                    </div>
+                    <h3 className="text-base font-semibold text-slate-200">
+                      {focusedCamera.name} Camera Node Standby
+                    </h3>
+                    <p className="text-xs text-slate-400 max-w-sm text-center mt-1">
+                      This CCTV hardware node is currently disconnected or dormant. Mobile selfie attendance is active for students.
+                    </p>
+                    <div className="flex items-center gap-2 mt-3 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-xs text-amber-400">
+                      <span className="w-2 h-2 rounded-full bg-amber-400" />
+                      <span>Dormant Standby Mode</span>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Modal Footer */}
