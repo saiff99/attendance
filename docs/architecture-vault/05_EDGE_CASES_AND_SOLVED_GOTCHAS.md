@@ -299,5 +299,22 @@ This document catalogs critical real-world edge cases, platform-specific quirks,
      - Updated top banner to display `CP PLUS Vision Hub (6 Nodes Standby / Dormant • Mobile Attendance Active)` with a one-click `[Recheck Nodes]` action.
 - **Rule:** Never attach custom, non-standard request headers to streaming media endpoints without explicit CORS allowlist matching. Streaming player components must never loop aggressively on offline hardware; they must display calm, informative dormant states and respect circuit-breaker backoffs.
 
+---
+
+### Gotcha 16: HTTP/2 Persistent Stream Expiry (`last_stream_id: 19999`) & Unshielded Database Queries in Live Stream Enrollment
+- **Symptom:**
+  During backend execution or when processing active classroom sessions (e.g. `session_id="test"`), the terminal logged:
+  `! Error fetching students for session test: <ConnectionTerminated error_code:ErrorCodes.NO_ERROR, last_stream_id:19999, additional_data:None>`.
+- **Root Cause:**
+  1. **HTTP/2 Stream ID Protocol Limit (RFC 7540):** Under the hood, `supabase-py` uses `httpx` with persistent connection pooling and HTTP/2 multiplexing. Cloudflare and Supabase PostgREST gateways enforce an upper limit of stream IDs per single TCP connection (stream ID 19,999). When this limit is reached, or when the edge proxy cleanly rotates long-lived idle connections, the server emits an HTTP/2 `GOAWAY` frame with `error_code: ErrorCodes.NO_ERROR` and `last_stream_id: 19999` to instruct the client to cleanly close the connection and open a fresh one.
+  2. **Unshielded Direct Query in `stream.py`:** While API routes utilized retry shields, `get_enrolled_data()` in `backend/app/stream.py` executed an unshielded `supabase.table("sessions").select("target_academic_year").eq("id", session_id).execute()` call. When the socket rotated, the unshielded call immediately threw the connection terminated error.
+  3. **Missing Error Code Patterns in `safe_db_execute`:** `backend/app/config.py` had retry patterns for `"remoteprotocolerror"` and `"broken pipe"`, but did not catch lowercase `"connectionterminated"` or `"errorcodes"`.
+- **Architectural Fix:**
+  1. **Shielded Query via `safe_db_execute` (`stream.py`):** Wrapped the `target_academic_year` lookup with `safe_db_execute()`.
+  2. **In-Memory Session Metadata Fallback:** Integrated with `session_cache.py` (`get_cached_session_metadata`) so that if the network query encounters a socket reset, the query seamlessly falls back to the in-memory cached session metadata without dropping frame processing.
+  3. **Expanded Socket Error Detection (`config.py`):** Added `"connectionterminated"` and `"errorcodes"` to `safe_db_execute` transient error patterns, allowing transparent socket re-negotiation and immediate retry without logging unhandled exceptions.
+- **Rule:** Never execute raw `.execute()` database queries inside streaming loops or background worker threads. All Supabase queries must go through `safe_db_execute` with transient socket retry coverage and RAM cache fallbacks.
+
+
 
 
