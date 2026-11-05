@@ -355,4 +355,49 @@ REVOKE EXECUTE ON FUNCTION public.atomic_check_rate_limit(TEXT, INT, NUMERIC, NU
 REVOKE EXECUTE ON FUNCTION public.atomic_check_rate_limit(TEXT, INT, NUMERIC, NUMERIC) FROM authenticated;
 GRANT EXECUTE ON FUNCTION public.atomic_check_rate_limit(TEXT, INT, NUMERIC, NUMERIC) TO service_role;
 
+-- ==============================================================================
+-- 15. Server-Side Attendance Aggregation RPC (Issue 2 / Performance)
+-- ==============================================================================
+CREATE OR REPLACE FUNCTION public.get_attendance_summary(
+    p_start_date TIMESTAMPTZ DEFAULT NULL,
+    p_end_date TIMESTAMPTZ DEFAULT NULL
+)
+RETURNS TABLE (
+    student_id UUID,
+    present BIGINT,
+    manual BIGINT,
+    attended_session_ids UUID[],
+    last_attended_at TIMESTAMPTZ
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+    SELECT 
+        a.student_id,
+        COUNT(*) FILTER (WHERE a.status = 'Present') AS present,
+        COUNT(*) FILTER (
+            WHERE a.status = 'Present' 
+            AND (a.capture_mode = 'Manual Upload' OR a.capture_mode = 'Manual Entry')
+        ) AS manual,
+        COALESCE(
+            ARRAY_AGG(DISTINCT a.session_id) FILTER (WHERE a.status = 'Present' AND a.session_id IS NOT NULL),
+            ARRAY[]::UUID[]
+        ) AS attended_session_ids,
+        MAX(a.recorded_at) FILTER (WHERE a.status = 'Present') AS last_attended_at
+    FROM public.attendance a
+    WHERE 
+        (p_start_date IS NULL OR a.recorded_at >= p_start_date)
+        AND (p_end_date IS NULL OR a.recorded_at <= p_end_date)
+    GROUP BY a.student_id;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.get_attendance_summary(TIMESTAMPTZ, TIMESTAMPTZ) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_attendance_summary(TIMESTAMPTZ, TIMESTAMPTZ) TO service_role;
+
+CREATE INDEX IF NOT EXISTS idx_attendance_recorded_status 
+ON public.attendance (recorded_at, status);
+
+
 

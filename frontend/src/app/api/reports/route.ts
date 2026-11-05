@@ -97,33 +97,72 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // 5. Fetch Attendance with Safe Chunked Pagination (prevents Supabase 1,000-row silent truncation)
-    const attendance: Array<{ id?: string; session_id?: string; student_id?: string; status?: string; recorded_at?: string }> = [];
-    const CHUNK_SIZE = 1000;
-    const MAX_ATTENDANCE_LIMIT = 50000;
-    let from = 0;
+    // 5. Fetch Attendance Summary (Fast Server-Side Aggregation RPC with Chunked Fallback)
+    interface AttendanceSummaryRow {
+      student_id: string;
+      present: number;
+      manual: number;
+      attended_session_ids: string[];
+      last_attended_at?: string | null;
+    }
 
-    while (from < MAX_ATTENDANCE_LIMIT) {
-      const { data, error } = await attQuery.range(from, from + CHUNK_SIZE - 1);
-      if (error) throw error;
-      if (!data || data.length === 0) break;
-      attendance.push(...data);
-      if (data.length < CHUNK_SIZE) break;
-      from += CHUNK_SIZE;
+    let attendanceSummary: AttendanceSummaryRow[] | null = null;
+
+    try {
+      const rpcParams: Record<string, string> = {};
+      if (startDate) rpcParams.p_start_date = startDate.includes('T') ? startDate : `${startDate}T00:00:00.000Z`;
+      if (endDate) rpcParams.p_end_date = endDate.includes('T') ? endDate : `${endDate}T23:59:59.999Z`;
+
+      const { data: rpcData, error: rpcError } = await supabaseServer.rpc('get_attendance_summary', rpcParams);
+      if (!rpcError && Array.isArray(rpcData)) {
+        attendanceSummary = rpcData.map((row: Record<string, unknown>) => ({
+          student_id: String(row.student_id || ''),
+          present: Number(row.present || 0),
+          manual: Number(row.manual || 0),
+          attended_session_ids: Array.isArray(row.attended_session_ids) ? row.attended_session_ids.map(String) : [],
+          last_attended_at: row.last_attended_at ? String(row.last_attended_at) : null,
+        }));
+      }
+    } catch (e) {
+      console.warn('Attendance summary RPC fallback to chunked fetch:', e);
+    }
+
+    const attendance: Array<{ id?: string; session_id?: string; student_id?: string; status?: string; recorded_at?: string }> = [];
+
+    // Fallback: If RPC is not available, execute safe chunked pagination
+    if (!attendanceSummary) {
+      const CHUNK_SIZE = 1000;
+      const MAX_ATTENDANCE_LIMIT = 50000;
+      let from = 0;
+
+      while (from < MAX_ATTENDANCE_LIMIT) {
+        const { data, error } = await attQuery.range(from, from + CHUNK_SIZE - 1);
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        attendance.push(...data);
+        if (data.length < CHUNK_SIZE) break;
+        from += CHUNK_SIZE;
+      }
     }
 
     const activeSubjects = (allSubjects || []).filter((s: { is_active?: boolean | null }) => s.is_active !== false);
+
+    const totalAttendanceCount = attendanceSummary
+      ? attendanceSummary.reduce((acc, curr) => acc + curr.present, 0)
+      : attendance.length;
 
     return NextResponse.json({
       success: true,
       sessions: allSessions,
       students: students,
       attendance: attendance,
+      attendance_summary: attendanceSummary,
       subjects: activeSubjects,
       metadata: {
         total_sessions: allSessions.length,
         total_students: students.length,
-        total_attendance_records: attendance.length,
+        total_attendance_records: totalAttendanceCount,
+        aggregated_server_side: attendanceSummary !== null,
         start_date: startDate || null,
         end_date: endDate || null,
         cohort: cohort || 'all',

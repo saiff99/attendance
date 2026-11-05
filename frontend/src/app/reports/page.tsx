@@ -24,6 +24,14 @@ interface SessionHistoryRecord {
   } | null;
 }
 
+interface AttendanceSummaryRow {
+  student_id: string;
+  present: number;
+  manual: number;
+  attended_session_ids: string[];
+  last_attended_at?: string | null;
+}
+
 function getPageNumbers(current: number, total: number): (number | string)[] {
   if (total <= 7) {
     return Array.from({ length: total }, (_, i) => i + 1);
@@ -173,25 +181,39 @@ export default function ReportsPage() {
 
       const students = data.students || [];
       const attendance = data.attendance || [];
+      const attendanceSummary: AttendanceSummaryRow[] | undefined = data.attendance_summary;
 
-      // Group attendance by student
+      // Group attendance by student (fast-path: server-side pre-aggregated summary)
       const attMap: Record<string, { present: number; manual: number; last?: string; attendedSessionIds: Set<string> }> = {};
-      (attendance || []).forEach((a: Attendance) => {
-        if (!attMap[a.student_id]) {
-          attMap[a.student_id] = { present: 0, manual: 0, attendedSessionIds: new Set() };
-        }
-        if (a.status === "Present") {
-          attMap[a.student_id].present++;
-          if (a.session_id) attMap[a.student_id].attendedSessionIds.add(a.session_id);
-          if (a.capture_mode === "Manual Upload" || a.capture_mode === "Manual Entry") {
-            attMap[a.student_id].manual++;
+
+      if (Array.isArray(attendanceSummary)) {
+        attendanceSummary.forEach((row: AttendanceSummaryRow) => {
+          attMap[row.student_id] = {
+            present: row.present || 0,
+            manual: row.manual || 0,
+            last: row.last_attended_at || undefined,
+            attendedSessionIds: new Set(row.attended_session_ids || []),
+          };
+        });
+      } else {
+        // Fallback: Client-side aggregation from raw attendance records if RPC is unavailable
+        (attendance || []).forEach((a: Attendance) => {
+          if (!attMap[a.student_id]) {
+            attMap[a.student_id] = { present: 0, manual: 0, attendedSessionIds: new Set() };
           }
-          const d = a.recorded_at;
-          if (!attMap[a.student_id].last || d > attMap[a.student_id].last!) {
-            attMap[a.student_id].last = d;
+          if (a.status === "Present") {
+            attMap[a.student_id].present++;
+            if (a.session_id) attMap[a.student_id].attendedSessionIds.add(a.session_id);
+            if (a.capture_mode === "Manual Upload" || a.capture_mode === "Manual Entry") {
+              attMap[a.student_id].manual++;
+            }
+            const d = a.recorded_at;
+            if (!attMap[a.student_id].last || d > attMap[a.student_id].last!) {
+              attMap[a.student_id].last = d;
+            }
           }
-        }
-      });
+        });
+      }
 
       // Fetch dynamic subjects if available
       let allCurriculumSubjects = DEFAULT_MBBS_SUBJECTS;

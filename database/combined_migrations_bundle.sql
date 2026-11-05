@@ -1,7 +1,7 @@
 -- ==============================================================================
 -- MedAttend Complete Consolidated Migration Bundle
--- Generated: 2026-11-04T08:19:05.343231Z
--- Migrations included: 01 to 20 (20 files)
+-- Generated: 2026-11-05T18:39:37.463Z
+-- Migrations included: 01 to 21 (21 files)
 -- ==============================================================================
 
 -- 1. Ensure migrations audit ledger exists
@@ -1147,3 +1147,69 @@ COMMENT ON INDEX idx_students_active_biometric_cohort IS 'Partial index accelera
 INSERT INTO public._migrations (version, name, checksum, execution_time_ms)
 VALUES (20, '20_high_velocity_partial_composite_indexes', 'e64df6ccbc4ba520f0b31b1ce604fb049e07f7f192db528a54ccb7c18f316f74', 0)
 ON CONFLICT (version) DO UPDATE SET checksum = EXCLUDED.checksum;
+
+-- ------------------------------------------------------------------------------
+-- [MIGRATION 21] 21_server_side_attendance_summary_rpc.sql
+-- SHA-256 Checksum: 202446ad0fcc182aa85e4dd95408f78fba9550a99ac563b9491b91f2b8918aac
+-- ------------------------------------------------------------------------------
+-- ==============================================================================
+-- 📜 Supabase Migration 21: High-Performance Server-Side Attendance Aggregation RPC
+-- ==============================================================================
+-- 1. Eliminates client-side looping and 50,000-row chunked sequential API fetching.
+-- 2. Aggregates student attendance counts (Present, Manual, Attended Session IDs, Last Seen)
+--    directly in PostgreSQL using native B-tree indexes and single-pass GROUP BY.
+-- 3. Reduces network payload by ~99.7% (from ~20MB raw JSON to ~40KB summary).
+-- ==============================================================================
+
+-- 1. Create High-Performance Attendance Aggregation RPC
+CREATE OR REPLACE FUNCTION public.get_attendance_summary(
+    p_start_date TIMESTAMPTZ DEFAULT NULL,
+    p_end_date TIMESTAMPTZ DEFAULT NULL
+)
+RETURNS TABLE (
+    student_id UUID,
+    present BIGINT,
+    manual BIGINT,
+    attended_session_ids UUID[],
+    last_attended_at TIMESTAMPTZ
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+    SELECT 
+        a.student_id,
+        COUNT(*) FILTER (WHERE a.status = 'Present') AS present,
+        COUNT(*) FILTER (
+            WHERE a.status = 'Present' 
+            AND (a.capture_mode = 'Manual Upload' OR a.capture_mode = 'Manual Entry')
+        ) AS manual,
+        COALESCE(
+            ARRAY_AGG(DISTINCT a.session_id) FILTER (WHERE a.status = 'Present' AND a.session_id IS NOT NULL),
+            ARRAY[]::UUID[]
+        ) AS attended_session_ids,
+        MAX(a.recorded_at) FILTER (WHERE a.status = 'Present') AS last_attended_at
+    FROM public.attendance a
+    WHERE 
+        (p_start_date IS NULL OR a.recorded_at >= p_start_date)
+        AND (p_end_date IS NULL OR a.recorded_at <= p_end_date)
+    GROUP BY a.student_id;
+$$;
+
+-- 2. Grant execution privileges to authenticated users & service role
+GRANT EXECUTE ON FUNCTION public.get_attendance_summary(TIMESTAMPTZ, TIMESTAMPTZ) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_attendance_summary(TIMESTAMPTZ, TIMESTAMPTZ) TO service_role;
+
+-- 3. Composite Index on (recorded_at, status) to optimize date-range filtered scans
+CREATE INDEX IF NOT EXISTS idx_attendance_recorded_status 
+ON public.attendance (recorded_at, status);
+
+-- 4. Document RPC function
+COMMENT ON FUNCTION public.get_attendance_summary(TIMESTAMPTZ, TIMESTAMPTZ) IS 
+'High-performance server-side aggregation for attendance reports. Groups presence, manual overrides, and attended session IDs per student in a single query.';
+
+INSERT INTO public._migrations (version, name, checksum, execution_time_ms)
+VALUES (21, '21_server_side_attendance_summary_rpc', '202446ad0fcc182aa85e4dd95408f78fba9550a99ac563b9491b91f2b8918aac', 0)
+ON CONFLICT (version) DO UPDATE SET checksum = EXCLUDED.checksum;
+

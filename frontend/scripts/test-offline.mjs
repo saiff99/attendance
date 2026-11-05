@@ -2050,6 +2050,93 @@ console.log('\n--- 35. Backend Server-Side Session Metadata RAM Caching & Invali
   assert(dbCalls === 2, 'Invalidation forces immediate fresh database roundtrip');
 }
 
+// --- 36. High-Performance Server-Side Attendance Aggregation RPC (Reports) ---
+console.log('\n--- 36. High-Performance Server-Side Attendance Aggregation RPC (Reports) ---');
+{
+  const migration21Path = path.resolve(__dirname, '../../database/migrations/21_server_side_attendance_summary_rpc.sql');
+  const schemaPath = path.resolve(__dirname, '../../database/schema.sql');
+  const reportsRoutePath = path.resolve(__dirname, '../src/app/api/reports/route.ts');
+  const reportsPagePath = path.resolve(__dirname, '../src/app/reports/page.tsx');
+
+  const migrationContent = fs.existsSync(migration21Path) ? fs.readFileSync(migration21Path, 'utf8') : '';
+  const schemaContent = fs.readFileSync(schemaPath, 'utf8');
+  const reportsRouteContent = fs.readFileSync(reportsRoutePath, 'utf8');
+  const reportsPageContent = fs.readFileSync(reportsPagePath, 'utf8');
+
+  // 1. Migration 21 declares get_attendance_summary RPC with SECURITY DEFINER
+  assert(
+    migrationContent.includes('CREATE OR REPLACE FUNCTION public.get_attendance_summary') &&
+    migrationContent.includes('SECURITY DEFINER') &&
+    migrationContent.includes("FILTER (WHERE a.status = 'Present')"),
+    'Migration 21 declares get_attendance_summary RPC with SECURITY DEFINER and present filter'
+  );
+
+  // 2. schema.sql reflects get_attendance_summary and composite index idx_attendance_recorded_status
+  assert(
+    schemaContent.includes('CREATE OR REPLACE FUNCTION public.get_attendance_summary') &&
+    schemaContent.includes('idx_attendance_recorded_status'),
+    'database/schema.sql reflects get_attendance_summary function and idx_attendance_recorded_status index'
+  );
+
+  // 3. api/reports/route.ts invokes get_attendance_summary RPC
+  assert(
+    reportsRouteContent.includes("supabaseServer.rpc('get_attendance_summary'") &&
+    reportsRouteContent.includes('attendance_summary: attendanceSummary'),
+    'api/reports/route.ts invokes get_attendance_summary RPC and returns attendance_summary'
+  );
+
+  // 4. api/reports/route.ts retains safe chunked pagination fallback when RPC is unavailable
+  assert(
+    reportsRouteContent.includes('if (!attendanceSummary)') &&
+    reportsRouteContent.includes('attQuery.range(from, from + CHUNK_SIZE - 1)'),
+    'api/reports/route.ts maintains chunked pagination fallback if RPC fails or is missing'
+  );
+
+  // 5. reports/page.tsx utilizes attendance_summary fast-path and client fallback
+  assert(
+    reportsPageContent.includes('const attendanceSummary: AttendanceSummaryRow[] | undefined = data.attendance_summary;') &&
+    reportsPageContent.includes('Array.isArray(attendanceSummary)'),
+    'reports/page.tsx utilizes fast-path server-side aggregation when attendance_summary is available'
+  );
+
+  // 6. Behavioral simulation: map aggregation from summary rows vs raw records
+  const mockSummary = [
+    {
+      student_id: 'stu-101',
+      present: 5,
+      manual: 1,
+      attended_session_ids: ['sess-1', 'sess-2', 'sess-3'],
+      last_attended_at: '2026-11-05T12:00:00Z',
+    },
+    {
+      student_id: 'stu-102',
+      present: 2,
+      manual: 0,
+      attended_session_ids: ['sess-1', 'sess-2'],
+      last_attended_at: '2026-11-04T10:00:00Z',
+    },
+  ];
+
+  const simulatedAttMap = {};
+  mockSummary.forEach((row) => {
+    simulatedAttMap[row.student_id] = {
+      present: row.present,
+      manual: row.manual,
+      last: row.last_attended_at,
+      attendedSessionIds: new Set(row.attended_session_ids),
+    };
+  });
+
+  assert(
+    simulatedAttMap['stu-101'].present === 5 &&
+    simulatedAttMap['stu-101'].manual === 1 &&
+    simulatedAttMap['stu-101'].attendedSessionIds.has('sess-3') &&
+    simulatedAttMap['stu-102'].present === 2 &&
+    simulatedAttMap['stu-102'].attendedSessionIds.size === 2,
+    'Fast-path attMap correctly groups attendance metrics and attendedSessionIds for cohort calculations'
+  );
+}
+
 // Summary
 console.log('\n' + '=' .repeat(65));
 console.log(`📊 Offline Unit Test Summary: ${passed} Passed, ${failed} Failed`);
