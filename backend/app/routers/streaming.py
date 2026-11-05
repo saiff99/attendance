@@ -8,8 +8,22 @@ router = APIRouter(tags=["Streaming"])
 
 @router.get("/api/cameras")
 async def get_cameras():
-    """Returns details of all configured surveillance cameras with credentials securely redacted."""
+    """Returns details of all configured surveillance cameras with credentials securely redacted and live connection states."""
+    from app.stream import camera_manager
     cameras = get_camera_details(redact_credentials=True)
+    with camera_manager.lock:
+        for cam in cameras:
+            idx = cam["index"]
+            stream = camera_manager.cctv_streams.get(idx)
+            if stream:
+                cb_status = stream.circuit_breaker.get_status()
+                cam["is_connected"] = bool(stream.connected)
+                cam["is_dormant"] = bool(cb_status["is_dormant"])
+                cam["circuit_breaker_state"] = cb_status["state"]
+            else:
+                cam["is_connected"] = False
+                cam["is_dormant"] = True
+                cam["circuit_breaker_state"] = "DORMANT"
     return {"count": len(cameras), "cameras": cameras}
 
 

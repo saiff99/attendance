@@ -31,9 +31,6 @@ export function MjpegPlayer({
       try {
         setError(false);
         const response = await fetch(url, {
-          headers: {
-            'ngrok-skip-browser-warning': 'true'
-          },
           signal: abortController.signal
         });
 
@@ -106,15 +103,14 @@ export function MjpegPlayer({
       } catch (err: unknown) {
         const errorObj = err as Error;
         if (errorObj?.name !== 'AbortError' && !isCancelled) {
-          console.warn("MJPEG Stream glitch, auto-reconnecting:", errorObj?.message);
           setError(true);
-          // Auto-reconnect after 2.5 seconds
+          // Quiet auto-reconnect backoff (15s instead of aggressive 2.5s spam) to protect browser resources
           if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
           reconnectTimerRef.current = setTimeout(() => {
             if (!isCancelled) {
               setReconnectKey(prev => prev + 1);
             }
-          }, 2500);
+          }, 15000);
         }
       }
     };
@@ -140,12 +136,22 @@ export function MjpegPlayer({
 
   if (error && !frameSrc) {
     return (
-      <div className={`flex flex-col items-center justify-center bg-gray-900 text-gray-400 ${className}`}>
-        <Camera className="w-10 h-10 mb-2 opacity-50" />
-        <span className="text-xs font-medium text-slate-400">Connecting Camera Feed...</span>
-        <span className="text-[10px] text-indigo-400/80 mt-1 flex items-center gap-1 animate-pulse">
-          <RefreshCw className="w-3 h-3 animate-spin" /> Auto-reconnecting
-        </span>
+      <div className={`flex flex-col items-center justify-center bg-slate-950 text-slate-400 p-4 select-none ${className}`}>
+        <div className="w-10 h-10 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center mb-2">
+          <Camera className="w-5 h-5 text-slate-500 opacity-60" />
+        </div>
+        <span className="text-xs font-semibold text-slate-300">Camera Offline (Dormant)</span>
+        <div className="flex items-center gap-1.5 mt-1.5 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-[10px] text-amber-400 font-medium">
+          <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+          Standby Mode
+        </div>
+        <button
+          onClick={() => setReconnectKey(prev => prev + 1)}
+          className="mt-2 text-[10px] text-slate-500 hover:text-indigo-400 flex items-center gap-1 transition-colors"
+          title="Retry camera connection"
+        >
+          <RefreshCw className="w-2.5 h-2.5" /> Re-check Feed
+        </button>
       </div>
     );
   }

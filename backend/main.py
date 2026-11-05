@@ -46,6 +46,7 @@ app.add_middleware(
         "X-Actor-Role",
         "Accept",
         "Origin",
+        "ngrok-skip-browser-warning",
     ],
     expose_headers=["Content-Length", "Retry-After"],
 )

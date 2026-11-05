@@ -43,15 +43,18 @@ interface CameraMeta {
   position: string;
   ip: string;
   url?: string;
+  is_connected?: boolean;
+  is_dormant?: boolean;
+  circuit_breaker_state?: string;
 }
 
 const DEFAULT_CAMERAS: CameraMeta[] = [
-  { index: 0, id: "cam-1", name: "1L", row: "1st Row (Front)", position: "Left", ip: "172.16.7.5" },
-  { index: 1, id: "cam-2", name: "1M", row: "1st Row (Front)", position: "Middle", ip: "172.16.7.3" },
-  { index: 2, id: "cam-3", name: "1R", row: "1st Row (Front)", position: "Right", ip: "172.16.7.17" },
-  { index: 3, id: "cam-4", name: "2L", row: "2nd Row (Back)", position: "Left", ip: "172.16.7.16" },
-  { index: 4, id: "cam-5", name: "2M", row: "2nd Row (Back)", position: "Middle", ip: "172.16.7.18" },
-  { index: 5, id: "cam-6", name: "2R", row: "2nd Row (Back)", position: "Right", ip: "172.16.7.9" },
+  { index: 0, id: "cam-1", name: "1L", row: "1st Row (Front)", position: "Left", ip: "172.16.7.5", is_connected: false, is_dormant: true, circuit_breaker_state: "DORMANT" },
+  { index: 1, id: "cam-2", name: "1M", row: "1st Row (Front)", position: "Middle", ip: "172.16.7.3", is_connected: false, is_dormant: true, circuit_breaker_state: "DORMANT" },
+  { index: 2, id: "cam-3", name: "1R", row: "1st Row (Front)", position: "Right", ip: "172.16.7.17", is_connected: false, is_dormant: true, circuit_breaker_state: "DORMANT" },
+  { index: 3, id: "cam-4", name: "2L", row: "2nd Row (Back)", position: "Left", ip: "172.16.7.16", is_connected: false, is_dormant: true, circuit_breaker_state: "DORMANT" },
+  { index: 4, id: "cam-5", name: "2M", row: "2nd Row (Back)", position: "Middle", ip: "172.16.7.18", is_connected: false, is_dormant: true, circuit_breaker_state: "DORMANT" },
+  { index: 5, id: "cam-6", name: "2R", row: "2nd Row (Back)", position: "Right", ip: "172.16.7.9", is_connected: false, is_dormant: true, circuit_breaker_state: "DORMANT" },
 ];
 
 interface AttendanceLogItem {
@@ -335,12 +338,11 @@ export default function LiveScan() {
     };
   }, [activeTab, activeSession, fetchLogs]);
 
-  useEffect(() => {
-    // Fetch available CCTV cameras & metadata from backend
+  const [isRecheckingCameras, setIsRecheckingCameras] = useState(false);
+
+  const fetchCameraStatus = useCallback(() => {
     const backendUrl = getBackendUrl();
-    fetch(`${backendUrl}/api/cameras`, {
-      headers: { "ngrok-skip-browser-warning": "69420" }
-    })
+    fetch(`${backendUrl}/api/cameras`)
       .then(res => res.json())
       .then(data => {
         if (data.cameras && data.cameras.length > 0) {
@@ -351,8 +353,25 @@ export default function LiveScan() {
         }
       })
       .catch(err => console.error("Failed to fetch camera count", err));
-
   }, []);
+
+  const handleRecheckCameras = async () => {
+    try {
+      setIsRecheckingCameras(true);
+      const backendUrl = getBackendUrl();
+      await fetch(`${backendUrl}/api/cameras/recheck`, { method: "POST" });
+      setTimeout(() => {
+        fetchCameraStatus();
+        setIsRecheckingCameras(false);
+      }, 1200);
+    } catch {
+      setIsRecheckingCameras(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchCameraStatus();
+  }, [fetchCameraStatus]);
 
   const exportToCSV = () => {
     if (!logs || logs.length === 0) {
@@ -1141,14 +1160,36 @@ export default function LiveScan() {
                 /* 6-CAMERA SPLIT SCREEN MATRIX */
                 <div className="flex-1 flex flex-col gap-3 sm:gap-4">
                   {/* Hall Orientation Banner */}
-                  <div className="flex items-center justify-between px-3 py-1.5 rounded-xl bg-slate-950/70 border border-slate-800/80 text-[11px] sm:text-xs font-medium text-slate-300">
-                    <span className="flex items-center gap-1.5 truncate">
-                      <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-                      CP PLUS Vision Hub (6 Nodes Synchronized • 4K AI Stream)
+                  <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-slate-950/70 border border-slate-800/80 text-[11px] sm:text-xs font-medium text-slate-300">
+                    <span className="flex items-center gap-2 truncate">
+                      {cctvCameras.some(c => c.is_connected) ? (
+                        <>
+                          <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+                          <span>CP PLUS Vision Hub (6 Nodes Synchronized • 4K AI Stream)</span>
+                        </>
+                      ) : (
+                        <>
+                          <Radio className="w-4 h-4 text-amber-400 shrink-0 animate-pulse" />
+                          <span className="text-amber-300 font-semibold">
+                            CP PLUS Vision Hub (6 Nodes Standby / Dormant • Mobile Attendance Active)
+                          </span>
+                        </>
+                      )}
                     </span>
-                    <span className="text-slate-500 text-[11px] hidden md:inline shrink-0">
-                      Click any feed to open fullscreen studio focus
-                    </span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        onClick={handleRecheckCameras}
+                        disabled={isRecheckingCameras}
+                        className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700/80 text-[10px] sm:text-xs text-slate-300 hover:text-white flex items-center gap-1.5 transition-all disabled:opacity-50"
+                        title="Probe camera connections"
+                      >
+                        <RefreshCw className={`w-3 h-3 ${isRecheckingCameras ? "animate-spin text-amber-400" : "text-slate-400"}`} />
+                        <span>{isRecheckingCameras ? "Probing..." : "Recheck Nodes"}</span>
+                      </button>
+                      <span className="text-slate-500 text-[11px] hidden md:inline">
+                        Click any feed to focus
+                      </span>
+                    </div>
                   </div>
 
                   {/* 2nd Row (Back of Hall) */}
@@ -1167,8 +1208,11 @@ export default function LiveScan() {
                         >
                           {/* Top-Left Camera Label Badge */}
                           <div className="absolute top-2 left-2 z-10 flex items-center gap-1.5 bg-black/75 backdrop-blur-md px-2 py-0.5 rounded-md text-[10px] font-semibold text-white border border-white/10 shadow-sm">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                            {cam.name}
+                            <span className={`w-1.5 h-1.5 rounded-full ${cam.is_connected ? "bg-emerald-400 animate-pulse" : "bg-amber-400"}`} />
+                            <span>{cam.name}</span>
+                            <span className={`text-[9px] font-normal px-1 rounded ${cam.is_connected ? "bg-emerald-500/20 text-emerald-300" : "bg-amber-500/20 text-amber-300"}`}>
+                              {cam.is_connected ? "Live" : "Dormant"}
+                            </span>
                           </div>
 
                           {/* Top-Right Maximize Button (Always visible on touch/mobile) */}
@@ -1208,8 +1252,11 @@ export default function LiveScan() {
                           onClick={() => setFocusedCamera(cam)}
                         >
                           <div className="absolute top-2 left-2 z-10 flex items-center gap-1.5 bg-black/75 backdrop-blur-md px-2 py-0.5 rounded-md text-[10px] font-semibold text-white border border-white/10 shadow-sm">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                            {cam.name}
+                            <span className={`w-1.5 h-1.5 rounded-full ${cam.is_connected ? "bg-emerald-400 animate-pulse" : "bg-amber-400"}`} />
+                            <span>{cam.name}</span>
+                            <span className={`text-[9px] font-normal px-1 rounded ${cam.is_connected ? "bg-emerald-500/20 text-emerald-300" : "bg-amber-500/20 text-amber-300"}`}>
+                              {cam.is_connected ? "Live" : "Dormant"}
+                            </span>
                           </div>
 
                           <button
@@ -1334,8 +1381,10 @@ export default function LiveScan() {
                     />
 
                     <div className="absolute top-3 right-3 sm:top-4 sm:right-4 bg-black/70 backdrop-blur-sm rounded-full px-2.5 sm:px-3 py-1 flex items-center shadow-lg border border-white/10">
-                      <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-red-500 animate-pulse mr-1.5 sm:mr-2" />
-                      <span className="text-white text-[10px] sm:text-[11px] font-semibold tracking-wider">LIVE 4K AI</span>
+                      <div className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full mr-1.5 sm:mr-2 ${cctvCameras[selectedCctvIndex]?.is_connected ? "bg-red-500 animate-pulse" : "bg-amber-400"}`} />
+                      <span className="text-white text-[10px] sm:text-[11px] font-semibold tracking-wider">
+                        {cctvCameras[selectedCctvIndex]?.is_connected ? "LIVE 4K AI" : "DORMANT STANDBY"}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -1751,8 +1800,10 @@ export default function LiveScan() {
               <div className="px-3 py-2 sm:px-5 sm:py-3 bg-slate-900/95 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400 shrink-0">
                 <div className="flex items-center gap-3">
                   <span className="flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
-                    <span className="truncate font-medium text-slate-300">RTSP Stream: 4K Ultra-HD (Zero-Lag Synchronized)</span>
+                    <span className={`w-2 h-2 rounded-full shrink-0 ${focusedCamera.is_connected ? "bg-emerald-400" : "bg-amber-400"}`} />
+                    <span className="truncate font-medium text-slate-300">
+                      {focusedCamera.is_connected ? "RTSP Stream: 4K Ultra-HD (Zero-Lag Synchronized)" : "Camera Node Dormant / Standby (Conserving Host Resources)"}
+                    </span>
                   </span>
                   <span className="hidden sm:inline text-slate-500 text-[11px]">
                     • Use <kbd className="px-1.5 py-0.5 bg-slate-800 rounded border border-slate-700 font-sans text-[10px]">←</kbd> <kbd className="px-1.5 py-0.5 bg-slate-800 rounded border border-slate-700 font-sans text-[10px]">→</kbd> to switch cameras • <kbd className="px-1.5 py-0.5 bg-slate-800 rounded border border-slate-700 font-sans text-[10px]">F</kbd> for fullscreen • <kbd className="px-1.5 py-0.5 bg-slate-800 rounded border border-slate-700 font-sans text-[10px]">Esc</kbd> to close
