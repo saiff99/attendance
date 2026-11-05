@@ -6,10 +6,10 @@ import {
   GraduationCap, BookOpen, CheckCircle2, AlertTriangle, XCircle,
   Calendar, Clock, Smartphone, LogOut, KeyRound,
   RefreshCw, ChevronDown, User, Sparkles, Check, ArrowUpRight, Camera, ShieldCheck,
-  Eye, EyeOff, Bell, WifiOff
+  Eye, EyeOff, Bell, WifiOff, X
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
-import { useOfflineStatus } from "@/hooks";
+import { useOfflineStatus, useModalBehavior } from "@/hooks";
 import dynamic from "next/dynamic";
 
 const FaceRegistrationModal = dynamic(
@@ -95,6 +95,25 @@ export default function StudentPortalPage() {
   const [showConfirmPin, setShowConfirmPin] = useState(false);
   const [pinLoading, setPinLoading] = useState(false);
   const [pinMessage, setPinMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const pinModalRef = useRef<HTMLDivElement>(null);
+
+  const closePinModal = useCallback(() => {
+    setIsPinModalOpen(false);
+    setOldPin("");
+    setNewPin("");
+    setConfirmPin("");
+    setShowOldPin(false);
+    setShowNewPin(false);
+    setShowConfirmPin(false);
+    setPinMessage(null);
+  }, []);
+
+  useModalBehavior({
+    isOpen: isPinModalOpen,
+    onClose: closePinModal,
+    modalRef: pinModalRef,
+    disableEscape: pinLoading,
+  });
 
   // Face ID Biometric Registration modal state
   const [isFaceModalOpen, setIsFaceModalOpen] = useState(false);
@@ -1033,14 +1052,39 @@ export default function StudentPortalPage() {
 
       {/* Security 6-Digit PIN Modal */}
       {isPinModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-sm w-full shadow-2xl relative animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="pin-modal-title"
+          className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !pinLoading) {
+              closePinModal();
+            }
+          }}
+        >
+          <div
+            ref={pinModalRef}
+            tabIndex={-1}
+            className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-sm w-full shadow-2xl relative animate-in fade-in zoom-in-95 duration-200 outline-none"
+          >
+            {/* Top-Right Dismiss Button */}
+            <button
+              type="button"
+              onClick={closePinModal}
+              disabled={pinLoading}
+              className="absolute top-4 right-4 p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+              aria-label="Close PIN modal"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="flex items-center gap-3 mb-4 pr-8">
+              <div className="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center shrink-0">
                 <KeyRound className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-white">Update 6-Digit PIN</h3>
+                <h3 id="pin-modal-title" className="text-base font-bold text-white">Update 6-Digit PIN</h3>
                 <p className="text-[11px] text-slate-400">Used for quick student portal login</p>
               </div>
             </div>
@@ -1077,6 +1121,7 @@ export default function StudentPortalPage() {
                     onClick={() => setShowOldPin(!showOldPin)}
                     className="absolute right-3 p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/80 transition-colors cursor-pointer"
                     title={showOldPin ? "Hide PIN" : "Show PIN"}
+                    aria-label={showOldPin ? "Hide current PIN" : "Show current PIN"}
                     tabIndex={-1}
                   >
                     {showOldPin ? <EyeOff className="w-4 h-4 text-indigo-400" /> : <Eye className="w-4 h-4" />}
@@ -1113,6 +1158,7 @@ export default function StudentPortalPage() {
                     onClick={() => setShowNewPin(!showNewPin)}
                     className="absolute right-3 p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/80 transition-colors cursor-pointer"
                     title={showNewPin ? "Hide PIN" : "Show PIN"}
+                    aria-label={showNewPin ? "Hide new PIN" : "Show new PIN"}
                     tabIndex={-1}
                   >
                     {showNewPin ? <EyeOff className="w-4 h-4 text-indigo-400" /> : <Eye className="w-4 h-4" />}
@@ -1141,6 +1187,7 @@ export default function StudentPortalPage() {
                     onClick={() => setShowConfirmPin(!showConfirmPin)}
                     className="absolute right-3 p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/80 transition-colors cursor-pointer"
                     title={showConfirmPin ? "Hide PIN" : "Show PIN"}
+                    aria-label={showConfirmPin ? "Hide confirmed PIN" : "Show confirmed PIN"}
                     tabIndex={-1}
                   >
                     {showConfirmPin ? <EyeOff className="w-4 h-4 text-indigo-400" /> : <Eye className="w-4 h-4" />}
@@ -1151,16 +1198,7 @@ export default function StudentPortalPage() {
               <div className="flex items-center gap-2 pt-2">
                 <button
                   type="button"
-                  onClick={() => {
-                    setIsPinModalOpen(false);
-                    setOldPin("");
-                    setNewPin("");
-                    setConfirmPin("");
-                    setShowOldPin(false);
-                    setShowNewPin(false);
-                    setShowConfirmPin(false);
-                    setPinMessage(null);
-                  }}
+                  onClick={closePinModal}
                   className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold cursor-pointer transition-all"
                 >
                   Cancel

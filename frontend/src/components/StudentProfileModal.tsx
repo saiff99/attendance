@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { X, Calendar as CalendarIcon, CheckCircle2, XCircle } from "lucide-react";
 import { Student } from "@/types/database";
+import { useModalBehavior } from "@/hooks";
 
 interface AttendanceRecord {
   id: string;
@@ -24,6 +25,13 @@ interface StudentProfileModalProps {
 export function StudentProfileModal({ student, isOpen, onClose }: StudentProfileModalProps) {
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const modalRef = useRef<HTMLDivElement>(null);
+
+  useModalBehavior({
+    isOpen: isOpen && !!student,
+    onClose,
+    modalRef,
+  });
 
   useEffect(() => {
     let isMounted = true;
@@ -55,15 +63,26 @@ export function StudentProfileModal({ student, isOpen, onClose }: StudentProfile
   const attendanceRate = totalSessions > 0 ? Math.round((presentCount / totalSessions) * 100) : 0;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-end overflow-hidden pointer-events-auto">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Student Profile"
+      className="fixed inset-0 z-[100] flex items-center justify-end overflow-hidden pointer-events-auto"
+    >
       <div className="fixed inset-0 bg-gray-900/40 dark:bg-gray-950/80 backdrop-blur-sm transition-opacity" onClick={onClose} />
       
-      <div className="relative w-full max-w-full sm:max-w-md h-full bg-white dark:bg-gray-900 shadow-2xl flex flex-col transform transition-transform duration-300 border-l border-gray-200 dark:border-gray-800">
+      <div
+        ref={modalRef}
+        tabIndex={-1}
+        className="relative w-full max-w-full sm:max-w-md h-full bg-white dark:bg-gray-900 shadow-2xl flex flex-col transform transition-transform duration-300 border-l border-gray-200 dark:border-gray-800 outline-none"
+      >
         <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-100 dark:border-gray-800">
           <h2 className="text-lg sm:text-xl font-bold tracking-tight text-gray-900 dark:text-white">Student Profile</h2>
           <button
+            type="button"
             onClick={onClose}
-            className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors"
+            className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors cursor-pointer"
+            aria-label="Close profile drawer"
           >
             <X className="w-5 h-5" />
           </button>

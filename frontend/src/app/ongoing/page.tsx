@@ -1,7 +1,7 @@
 /* eslint-disable */
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { 
@@ -17,6 +17,7 @@ import { getTodayDateStr, getStartOfTodayISO } from "@/lib/dateUtils";
 import { useAuth } from "@/lib/auth";
 import { toast } from "@/components/Toast";
 import { confirmDialog } from "@/components/ConfirmDialog";
+import { useModalBehavior } from "@/hooks";
 
 interface ActiveSessionItem {
   id: string;
@@ -42,6 +43,13 @@ export default function OngoingSessionsPage() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [qrModalSession, setQrModalSession] = useState<ActiveSessionItem | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const qrModalRef = useRef<HTMLDivElement>(null);
+
+  useModalBehavior({
+    isOpen: Boolean(qrModalSession),
+    onClose: () => setQrModalSession(null),
+    modalRef: qrModalRef,
+  });
 
   // Fetch active sessions from secure /api/active-sessions route
   const fetchActiveSessions = useCallback(async (silent = false) => {
@@ -451,8 +459,22 @@ export default function OngoingSessionsPage() {
 
         {/* Modal: Quick Selfie QR Viewer for ongoing session */}
         {qrModalSession && (
-          <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
-            <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl p-6 sm:p-8 max-w-sm w-full text-center shadow-2xl relative">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Live Selfie QR"
+            className="fixed inset-0 z-50 bg-black/70 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                setQrModalSession(null);
+              }
+            }}
+          >
+            <div
+              ref={qrModalRef}
+              tabIndex={-1}
+              className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl p-6 sm:p-8 max-w-sm w-full text-center shadow-2xl relative outline-none"
+            >
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />

@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import Webcam from 'react-webcam';
 import { X, CheckCircle2, AlertCircle, Camera, Loader2, ShieldAlert } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
+import { useModalBehavior } from '@/hooks';
 
 interface FaceRegistrationModalProps {
   isOpen: boolean;
@@ -96,6 +97,14 @@ export function FaceRegistrationModal({ isOpen, onClose, studentId, studentName,
   
   const webcamRef = useRef<Webcam>(null);
   const framesRef = useRef<string[]>([]);
+  const modalRef = useRef<HTMLDivElement>(null);
+
+  useModalBehavior({
+    isOpen,
+    onClose,
+    modalRef,
+    disableEscape: status === 'scanning' || status === 'processing',
+  });
 
   // Reset state when modal opens
   useEffect(() => {
@@ -236,15 +245,31 @@ export function FaceRegistrationModal({ isOpen, onClose, studentId, studentName,
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 dark:bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white dark:bg-gray-900 rounded-3xl w-full max-w-md overflow-hidden border border-gray-200 dark:border-gray-800 shadow-2xl relative transition-colors duration-300">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="face-setup-title"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 dark:bg-black/80 backdrop-blur-sm animate-in fade-in duration-200"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && status !== 'scanning' && status !== 'processing') {
+          onClose();
+        }
+      }}
+    >
+      <div
+        ref={modalRef}
+        tabIndex={-1}
+        className="bg-white dark:bg-gray-900 rounded-3xl w-full max-w-md overflow-hidden border border-gray-200 dark:border-gray-800 shadow-2xl relative transition-colors duration-300 outline-none"
+      >
         
         {/* Header */}
         <div className="flex items-center justify-between p-6 pb-2 border-b border-transparent">
-          <h2 className="text-xl font-bold text-gray-900 dark:text-white">Face ID Setup</h2>
+          <h2 id="face-setup-title" className="text-xl font-bold text-gray-900 dark:text-white">Face ID Setup</h2>
           <button 
+            type="button"
             onClick={onClose}
             className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 p-2 rounded-full cursor-pointer"
+            aria-label="Close Face ID setup"
           >
             <X className="w-5 h-5" />
           </button>

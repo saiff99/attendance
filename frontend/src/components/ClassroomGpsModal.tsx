@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useRef } from "react";
 import {
   Check,
   MapPin,
@@ -13,6 +13,7 @@ import {
   X,
   Compass,
 } from "lucide-react";
+import { useModalBehavior } from "@/hooks";
 
 export interface ClassroomGpsModalProps {
   isOpen: boolean;
@@ -42,19 +43,14 @@ export function ClassroomGpsModal({
   onRetry,
 }: ClassroomGpsModalProps) {
   const [copied, setCopied] = useState(false);
+  const modalRef = useRef<HTMLDivElement>(null);
 
-  // Close on Escape key press (unless actively calibrating)
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && status !== "calibrating") {
-        onClose();
-      }
-    };
-    if (isOpen) {
-      window.addEventListener("keydown", handleKeyDown);
-    }
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, status, onClose]);
+  useModalBehavior({
+    isOpen,
+    onClose,
+    modalRef,
+    disableEscape: status === "calibrating",
+  });
 
   if (!isOpen) return null;
 
@@ -83,7 +79,11 @@ export function ClassroomGpsModal({
         }
       }}
     >
-      <div className="relative w-full max-w-md bg-white dark:bg-[#0B111E] border border-gray-200 dark:border-slate-800 rounded-3xl shadow-2xl p-5 sm:p-7 overflow-hidden transition-all duration-300 animate-in zoom-in-95">
+      <div
+        ref={modalRef}
+        tabIndex={-1}
+        className="relative w-full max-w-md bg-white dark:bg-[#0B111E] border border-gray-200 dark:border-slate-800 rounded-3xl shadow-2xl p-5 sm:p-7 overflow-hidden transition-all duration-300 animate-in zoom-in-95 outline-none"
+      >
         {/* Subtle decorative background glow */}
         <div
           className={`absolute -top-24 -left-24 w-48 h-48 rounded-full blur-3xl pointer-events-none opacity-40 transition-colors ${

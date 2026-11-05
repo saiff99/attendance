@@ -5,6 +5,7 @@ import { X, UploadCloud, FileSpreadsheet, Download, CheckCircle2, AlertCircle, L
 import ExcelJS from "exceljs";
 // Bulk Import Modal Component
 import { cleanPhoneNumber } from "@/lib/studentContact";
+import { useModalBehavior } from "@/hooks";
 
 interface BulkImportModalProps {
   isOpen: boolean;
@@ -41,8 +42,7 @@ export function BulkImportModal({
   const [statusMessage, setStatusMessage] = useState("");
   const [filterStatus, setFilterStatus] = useState<"all" | "invalid">("all");
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  if (!isOpen) return null;
+  const modalRef = useRef<HTMLDivElement>(null);
 
   const resetState = () => {
     setFile(null);
@@ -60,6 +60,15 @@ export function BulkImportModal({
     resetState();
     onClose();
   };
+
+  useModalBehavior({
+    isOpen,
+    onClose: handleClose,
+    modalRef,
+    disableEscape: isImporting,
+  });
+
+  if (!isOpen) return null;
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const uploadedFile = e.target.files?.[0];
@@ -301,8 +310,22 @@ export function BulkImportModal({
     : parsedData;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col border border-gray-200 dark:border-gray-800 shadow-2xl overflow-hidden">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="bulk-import-title"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !isImporting) {
+          handleClose();
+        }
+      }}
+    >
+      <div
+        ref={modalRef}
+        tabIndex={-1}
+        className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col border border-gray-200 dark:border-gray-800 shadow-2xl overflow-hidden outline-none"
+      >
         
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/30">
@@ -311,7 +334,7 @@ export function BulkImportModal({
               <FileSpreadsheet className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
             <div>
-              <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white">
+              <h2 id="bulk-import-title" className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white">
                 Bulk Import Students
               </h2>
               <p className="text-xs text-gray-500 dark:text-gray-400">
@@ -320,8 +343,10 @@ export function BulkImportModal({
             </div>
           </div>
           <button
+            type="button"
             onClick={handleClose}
-            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer"
+            aria-label="Close bulk import modal"
           >
             <X className="w-5 h-5" />
           </button>

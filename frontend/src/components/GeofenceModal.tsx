@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { X, MapPin, ShieldCheck, ShieldAlert, Navigation, Loader2, Check, RotateCcw } from "lucide-react";
 import { 
   CampusGeofenceConfig, 
@@ -9,6 +9,7 @@ import {
   getLocalGeofence,
   saveLocalGeofence
 } from "@/lib/geofence";
+import { useModalBehavior } from "@/hooks";
 
 interface GeofenceModalProps {
   isOpen: boolean;
@@ -25,6 +26,14 @@ export function GeofenceModal({ isOpen, onClose, initialConfig, onConfigSaved }:
   const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null);
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const modalRef = useRef<HTMLDivElement>(null);
+
+  useModalBehavior({
+    isOpen,
+    onClose,
+    modalRef,
+    disableEscape: capturingGPS || saving,
+  });
 
   const fetchConfig = async () => {
     try {
@@ -119,8 +128,22 @@ export function GeofenceModal({ isOpen, onClose, initialConfig, onConfigSaved }:
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 dark:bg-black/75 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col transition-colors duration-300">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="geofence-modal-title"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 dark:bg-black/75 backdrop-blur-sm animate-in fade-in duration-200"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !capturingGPS && !saving) {
+          onClose();
+        }
+      }}
+    >
+      <div
+        ref={modalRef}
+        tabIndex={-1}
+        className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col transition-colors duration-300 outline-none"
+      >
         
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-slate-800/80 bg-gray-50/80 dark:bg-slate-950/50">
@@ -129,7 +152,7 @@ export function GeofenceModal({ isOpen, onClose, initialConfig, onConfigSaved }:
               <MapPin className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+              <h2 id="geofence-modal-title" className="text-base sm:text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
                 GPS Geofence Shield
                 {config.enabled ? (
                   <span className="text-[10px] bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/30 px-2 py-0.5 rounded-full font-semibold">Active</span>
@@ -143,8 +166,10 @@ export function GeofenceModal({ isOpen, onClose, initialConfig, onConfigSaved }:
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-700 dark:text-slate-400 dark:hover:text-white p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors"
+            className="text-gray-400 hover:text-gray-700 dark:text-slate-400 dark:hover:text-white p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+            aria-label="Close geofence modal"
           >
             <X className="w-5 h-5" />
           </button>
