@@ -753,27 +753,27 @@ export default function AuditLogsPage() {
 
         {/* Client-Side Pagination Controls (Issue 16) */}
         {filteredLogs.length > 0 && (
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3.5 px-4 sm:px-6 py-3.5 border-t border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/30">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3.5 px-4 sm:px-6 py-3.5 border-t border-gray-200 dark:border-gray-800 bg-gray-50/90 dark:bg-gray-900/95">
             {/* Left: Summary & Per-Page Selector */}
-            <div className="flex flex-wrap items-center justify-between sm:justify-start w-full sm:w-auto gap-3 text-xs sm:text-sm text-gray-500 dark:text-gray-400">
+            <div className="flex flex-wrap items-center justify-between sm:justify-start w-full sm:w-auto gap-3 text-xs sm:text-sm text-gray-600 dark:text-slate-400">
               <span>
-                Showing <strong className="font-semibold text-gray-900 dark:text-gray-100">{filteredLogs.length === 0 ? 0 : startIndex + 1}</strong> to{" "}
-                <strong className="font-semibold text-gray-900 dark:text-gray-100">{endIndex}</strong> of{" "}
-                <strong className="font-semibold text-gray-900 dark:text-gray-100">{filteredLogs.length}</strong> audit events
+                Showing <strong className="font-semibold text-gray-900 dark:text-slate-100">{filteredLogs.length === 0 ? 0 : startIndex + 1}</strong> to{" "}
+                <strong className="font-semibold text-gray-900 dark:text-slate-100">{endIndex}</strong> of{" "}
+                <strong className="font-semibold text-gray-900 dark:text-slate-100">{filteredLogs.length}</strong> audit events
               </span>
               <div className="flex items-center gap-1.5">
-                <label htmlFor="auditPageSizeSelect" className="text-xs text-gray-400 dark:text-gray-500">
+                <label htmlFor="auditPageSizeSelect" className="text-xs font-medium text-gray-500 dark:text-slate-400">
                   Per page:
                 </label>
                 <select
                   id="auditPageSizeSelect"
                   value={pageSize}
                   onChange={(e) => setPageSize(Number(e.target.value))}
-                  className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-2 py-1 text-xs font-medium text-gray-700 dark:text-gray-200 shadow-2xs hover:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+                  className="rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1 text-xs font-semibold text-gray-800 dark:text-slate-200 shadow-xs hover:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer transition-colors"
                 >
-                  <option value={25}>25</option>
-                  <option value={50}>50</option>
-                  <option value={100}>100</option>
+                  <option value={25} className="bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100">25</option>
+                  <option value={50} className="bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100">50</option>
+                  <option value={100} className="bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100">100</option>
                 </select>
               </div>
             </div>
@@ -786,7 +786,7 @@ export default function AuditLogsPage() {
                   type="button"
                   onClick={() => setCurrentPage(1)}
                   disabled={safeCurrentPage === 1}
-                  className="inline-flex items-center justify-center p-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  className="inline-flex items-center justify-center p-1.5 rounded-lg border border-gray-200 dark:border-slate-700/80 bg-white dark:bg-slate-800/80 text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700/80 hover:text-gray-900 dark:hover:text-white disabled:opacity-25 disabled:cursor-not-allowed transition-colors shadow-xs"
                   title="First Page"
                 >
                   <ChevronsLeft className="w-4 h-4" />
@@ -797,7 +797,7 @@ export default function AuditLogsPage() {
                   type="button"
                   onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
                   disabled={safeCurrentPage === 1}
-                  className="inline-flex items-center justify-center p-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  className="inline-flex items-center justify-center p-1.5 rounded-lg border border-gray-200 dark:border-slate-700/80 bg-white dark:bg-slate-800/80 text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700/80 hover:text-gray-900 dark:hover:text-white disabled:opacity-25 disabled:cursor-not-allowed transition-colors shadow-xs"
                   title="Previous Page"
                 >
                   <ChevronLeft className="w-4 h-4" />
@@ -807,7 +807,7 @@ export default function AuditLogsPage() {
                 <div className="hidden sm:flex items-center gap-1 px-1">
                   {getPageNumbers(safeCurrentPage, totalPages).map((pNum, pIdx) =>
                     typeof pNum === "string" ? (
-                      <span key={`ellipsis-${pIdx}`} className="px-2 py-1 text-xs text-gray-400 dark:text-gray-500">
+                      <span key={`ellipsis-${pIdx}`} className="px-1.5 py-0.5 text-xs font-bold text-gray-400 dark:text-slate-500 select-none">
                         …
                       </span>
                     ) : (
@@ -815,10 +815,10 @@ export default function AuditLogsPage() {
                         key={`page-${pNum}`}
                         type="button"
                         onClick={() => setCurrentPage(pNum)}
-                        className={`min-w-7 h-7 px-2 flex items-center justify-center rounded-lg text-xs font-semibold transition-all ${
+                        className={`min-w-[30px] h-7 px-2 flex items-center justify-center rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                           safeCurrentPage === pNum
-                            ? "bg-indigo-600 text-white shadow-2xs shadow-indigo-500/30"
-                            : "border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-gray-100"
+                            ? "bg-indigo-600 text-white border border-indigo-500 shadow-sm shadow-indigo-600/30"
+                            : "border border-gray-200 dark:border-slate-700/80 bg-white dark:bg-slate-800/80 text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700 hover:text-gray-900 dark:hover:text-white shadow-xs"
                         }`}
                       >
                         {pNum}
@@ -828,7 +828,7 @@ export default function AuditLogsPage() {
                 </div>
 
                 {/* Mobile Active Page Indicator */}
-                <span className="sm:hidden text-xs font-medium text-gray-500 dark:text-gray-400 px-2">
+                <span className="sm:hidden text-xs font-semibold text-gray-700 dark:text-slate-300 px-2">
                   Page {safeCurrentPage} / {totalPages}
                 </span>
 
@@ -837,7 +837,7 @@ export default function AuditLogsPage() {
                   type="button"
                   onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
                   disabled={safeCurrentPage === totalPages}
-                  className="inline-flex items-center justify-center p-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  className="inline-flex items-center justify-center p-1.5 rounded-lg border border-gray-200 dark:border-slate-700/80 bg-white dark:bg-slate-800/80 text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700/80 hover:text-gray-900 dark:hover:text-white disabled:opacity-25 disabled:cursor-not-allowed transition-colors shadow-xs"
                   title="Next Page"
                 >
                   <ChevronRight className="w-4 h-4" />
@@ -848,7 +848,7 @@ export default function AuditLogsPage() {
                   type="button"
                   onClick={() => setCurrentPage(totalPages)}
                   disabled={safeCurrentPage === totalPages}
-                  className="inline-flex items-center justify-center p-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  className="inline-flex items-center justify-center p-1.5 rounded-lg border border-gray-200 dark:border-slate-700/80 bg-white dark:bg-slate-800/80 text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700/80 hover:text-gray-900 dark:hover:text-white disabled:opacity-25 disabled:cursor-not-allowed transition-colors shadow-xs"
                   title="Last Page"
                 >
                   <ChevronsRight className="w-4 h-4" />
