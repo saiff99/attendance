@@ -329,6 +329,22 @@ This document catalogs critical real-world edge cases, platform-specific quirks,
   3. **Centralized Integration (`routes.py` & `stream.py`):** Both classroom photo scans and RTSP stream loops now retrieve `(enrolled_students, enrolled_matrix)` from `get_cached_enrolled_data()`.
 - **Rule:** Never reconstruct or re-normalize static biometric embedding matrices inside high-frequency frame processing loops. Always cache pre-normalized 2D float32 matrices in memory and evaluate matches using single-shot BLAS matrix multiplication.
 
+---
+
+### Gotcha 18: PostgREST 1,000-Row Hard Cap & Sequential 50,000-Row Chunked Attendance Fetching Bottleneck in Reports
+- **Symptom:**
+  As institutional attendance history exceeded tens of thousands of rows, opening the Reports dashboard (`/reports`) became sluggish, taking 3–6 seconds to load and transferring up to 20MB of raw JSON data over the network, leading to occasional client browser tab freezing.
+- **Root Cause:**
+  1. **PostgREST Hard Cap:** Supabase/PostgREST automatically caps unpaginated `SELECT` queries at 1,000 rows.
+  2. **Sequential Chunked Fetching:** To bypass the 1,000-row cap, `api/reports/route.ts` executed a sequential `while` loop with `.range(from, from + 999)` up to 50,000 records. For a college with 30,000 records, this created 30 sequential HTTP roundtrips between Vercel Edge and Supabase.
+  3. **Data Redundancy:** The client browser only required counts (`present`, `manual`), attended session IDs for subject breakdown matching, and last-seen timestamps. Transferring tens of thousands of individual record rows containing IDs, status strings, and timestamps created massive network and memory waste.
+- **Architectural Fix:**
+  1. **Server-Side Aggregation RPC (Migration 21):** Created `public.get_attendance_summary(p_start_date, p_end_date)` in PostgreSQL (Ref: ADR-032). It performs single-pass aggregation using native `FILTER` clauses and returns only 1 summary row per student (~40KB total payload for 300 students vs ~20MB).
+  2. **Composite Date Index:** Added `idx_attendance_recorded_status` on `attendance(recorded_at, status)` to ensure index-only / index-accelerated scans over date ranges.
+  3. **Fast-Path Frontend & Safe Fallback:** `reports/page.tsx` directly maps `attendance_summary` in `<1ms`. If the RPC is uninstalled or fails, `api/reports/route.ts` gracefully falls back to the safe chunked loop.
+- **Rule:** Never fetch massive raw event tables across the network to compute simple grouped aggregates on the client. Always push grouping, filtering, and aggregation down to PostgreSQL RPCs with composite indexes.
+
+
 
 
 

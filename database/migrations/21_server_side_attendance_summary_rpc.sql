@@ -54,3 +54,4 @@ ON public.attendance (recorded_at, status);
 -- 4. Document RPC function
 COMMENT ON FUNCTION public.get_attendance_summary(TIMESTAMPTZ, TIMESTAMPTZ) IS 
 'High-performance server-side aggregation for attendance reports. Groups presence, manual overrides, and attended session IDs per student in a single query.';
+
