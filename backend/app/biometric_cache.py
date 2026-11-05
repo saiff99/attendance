@@ -2,7 +2,10 @@ import os
 import time
 import logging
 import threading
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Tuple
+
+import numpy as np
+from numpy.linalg import norm
 
 from app.config import supabase, safe_db_execute, is_cohort_matching
 
@@ -13,7 +16,34 @@ BIOMETRIC_CACHE_TTL_SECONDS = float(os.getenv("BIOMETRIC_CACHE_TTL_SECONDS", "60
 
 _cache_lock = threading.Lock()
 _enrolled_students_cache: List[Dict[str, Any]] = []
+_cohort_matrix_cache: Dict[str, Tuple[List[Dict[str, Any]], Optional[np.ndarray]]] = {}
 _cache_last_fetched: float = 0.0
+
+
+def _build_normalized_matrix_for_students(
+    students: List[Dict[str, Any]]
+) -> Tuple[List[Dict[str, Any]], Optional[np.ndarray]]:
+    """
+    Pre-stacks enrolled students into a normalized 2D float32 NumPy matrix (N, 512).
+    Calculates unit L2-norm once in memory to enable O(1) BLAS matrix dot product matching.
+    """
+    valid_students = []
+    valid_encodings = []
+
+    for s in students:
+        enc = s.get("face_encoding")
+        if enc is not None:
+            if isinstance(enc, (list, np.ndarray)) and len(enc) == 512:
+                arr = np.asarray(enc, dtype=np.float32)
+                arr_norm = float(norm(arr))
+                if arr_norm > 1e-6:
+                    valid_encodings.append(arr / arr_norm)
+                    valid_students.append(s)
+
+    if valid_encodings:
+        matrix = np.vstack(valid_encodings)
+        return valid_students, matrix
+    return valid_students, None
 
 
 def _filter_students_for_cohort(students: List[Dict[str, Any]], target_cohort: Optional[str]) -> List[Dict[str, Any]]:
@@ -70,6 +100,7 @@ def get_cached_enrolled_students(
             ]
 
             _enrolled_students_cache = active_enrolled
+            _cohort_matrix_cache.clear()
             _cache_last_fetched = time.time()
             logger.info(f"[BiometricCache] Successfully cached {len(_enrolled_students_cache)} student face vectors.")
 
@@ -86,15 +117,42 @@ def get_cached_enrolled_students(
     return _filter_students_for_cohort(_enrolled_students_cache, target_academic_year)
 
 
+def get_cached_enrolled_data(
+    target_academic_year: Optional[str] = "All",
+    force_refresh: bool = False
+) -> Tuple[List[Dict[str, Any]], Optional[np.ndarray]]:
+    """
+    Returns tuple of (enrolled_students, pre_normalized_matrix) for the given cohort.
+    Served from high-speed in-memory matrix cache, eliminating repetitive array
+    conversions and L2-norm calculations during high-velocity camera frames.
+    """
+    cohort_key = target_academic_year or "All"
+
+    # Ensure base student cache is fresh
+    if force_refresh:
+        students = get_cached_enrolled_students(target_academic_year=cohort_key, force_refresh=True)
+    else:
+        students = get_cached_enrolled_students(target_academic_year=cohort_key)
+
+    with _cache_lock:
+        if not force_refresh and cohort_key in _cohort_matrix_cache:
+            return _cohort_matrix_cache[cohort_key]
+
+        valid_students, matrix = _build_normalized_matrix_for_students(students)
+        _cohort_matrix_cache[cohort_key] = (valid_students, matrix)
+        return valid_students, matrix
+
+
 def invalidate_biometric_cache(student_id: Optional[str] = None) -> Dict[str, Any]:
     """
     Invalidation Hook:
     Immediately purges cached biometric vectors so new enrollments or revocations
     take effect in real-time across both photo scan and CCTV streams.
     """
-    global _enrolled_students_cache, _cache_last_fetched
+    global _enrolled_students_cache, _cache_last_fetched, _cohort_matrix_cache
 
     with _cache_lock:
+        _cohort_matrix_cache.clear()
         if student_id:
             s_id_str = str(student_id).strip()
             prev_len = len(_enrolled_students_cache)
@@ -131,6 +189,7 @@ def get_biometric_cache_stats() -> Dict[str, Any]:
     now = time.time()
     return {
         "cached_students_count": len(_enrolled_students_cache),
+        "cached_matrix_cohorts": list(_cohort_matrix_cache.keys()),
         "cache_age_seconds": round(now - _cache_last_fetched, 2) if _cache_last_fetched > 0 else None,
         "ttl_seconds": BIOMETRIC_CACHE_TTL_SECONDS,
         "is_warm": len(_enrolled_students_cache) > 0 and (now - _cache_last_fetched) < BIOMETRIC_CACHE_TTL_SECONDS

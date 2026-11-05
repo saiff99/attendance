@@ -181,6 +181,35 @@ class TestVectorizedFaceMatching(unittest.TestCase):
         # Vectorized matching for 50 faces x 300 students must complete in under 50ms (typically <5ms)
         self.assertLess(t_vec, 0.050, f"Vectorized matching took too long: {t_vec*1000:.2f}ms")
 
+    def test_pre_stacked_enrolled_matrix_matching(self):
+        """Verify match_faces_vectorized produces identical matches when given a pre-stacked enrolled_matrix."""
+        # Pre-stack matrix
+        matrix = np.vstack([np.asarray(s["face_encoding"], dtype=np.float32) for s in self.students])
+        
+        probe = np.array(self.students[2]["face_encoding"], dtype=np.float32)
+        face = MockFace(embedding=probe, det_score=0.98)
+
+        # 1. Matching with pre-stacked matrix
+        res_prestacked = match_faces_vectorized(
+            [face],
+            self.students,
+            similarity_threshold=0.42,
+            enrolled_matrix=matrix
+        )
+
+        # 2. Matching with standard on-the-fly matrix construction
+        res_standard = match_faces_vectorized(
+            [face],
+            self.students,
+            similarity_threshold=0.42
+        )
+
+        self.assertEqual(len(res_prestacked), 1)
+        self.assertEqual(len(res_standard), 1)
+        self.assertEqual(res_prestacked[0]["id"], res_standard[0]["id"])
+        self.assertEqual(res_prestacked[0]["confidence"], res_standard[0]["confidence"])
+        self.assertEqual(res_prestacked[0]["id"], self.students[2]["id"])
+
 
 if __name__ == "__main__":
     unittest.main()

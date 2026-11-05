@@ -54,25 +54,9 @@ def get_enrolled_data(session_id: str):
             pass
 
     try:
-        # Unified In-Memory Biometric Cache with DPDP Consent & Invalidation (Issue 11 / ADR-019)
-        from app.biometric_cache import get_cached_enrolled_students
-        enrolled = get_cached_enrolled_students(target_academic_year=target_year)
-
-        matrix = None
-        if enrolled:
-            valid_encodings = []
-            valid_students = []
-            for s in enrolled:
-                enc = s.get("face_encoding")
-                if enc and isinstance(enc, list) and len(enc) == 512:
-                    arr = np.array(enc, dtype=np.float32)
-                    arr_norm = float(norm(arr))
-                    if arr_norm > 1e-6:
-                        valid_encodings.append(arr / arr_norm)
-                        valid_students.append(s)
-            if valid_encodings:
-                matrix = np.vstack(valid_encodings)
-                enrolled = valid_students
+        # Unified In-Memory Biometric Cache with Pre-Normalized Matrix (Issue 1 / ADR-019)
+        from app.biometric_cache import get_cached_enrolled_data
+        enrolled, matrix = get_cached_enrolled_data(target_academic_year=target_year)
 
         session_enrolled_cache[session_id] = enrolled
         session_matrix_cache[session_id] = matrix

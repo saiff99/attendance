@@ -1,5 +1,6 @@
 import os
 import numpy as np
+from typing import Optional
 from numpy.linalg import norm
 # Configurable InsightFace Detector Tuning for Large Classroom (300+ Students)
 AI_FRAME_WIDTH = int(os.getenv("AI_FRAME_WIDTH", "960"))
@@ -83,7 +84,8 @@ def match_faces_vectorized(
     faces: list,
     enrolled_students: list,
     similarity_threshold: float = 0.42,
-    det_score_threshold: float = 0.20
+    det_score_threshold: float = 0.20,
+    enrolled_matrix: Optional[np.ndarray] = None
 ) -> list:
     """
     Vectorized 2D Matrix Cosine Similarity matching for batch face recognition.
@@ -94,6 +96,7 @@ def match_faces_vectorized(
         enrolled_students: List of student dicts containing 'face_encoding' and 'id'
         similarity_threshold: Cosine similarity threshold (default 0.42 for ArcFace 512D)
         det_score_threshold: Minimum face detection confidence to consider (default 0.20)
+        enrolled_matrix: Optional pre-stacked normalized 2D matrix (N, 512) to bypass runtime allocation.
         
     Returns:
         List of matched student dicts with added 'confidence' score, deduplicated by student id.
@@ -101,26 +104,33 @@ def match_faces_vectorized(
     if not faces or not enrolled_students:
         return []
 
-    # 1. Stack enrolled students into a normalized 2D matrix for vectorized matching
-    valid_students = []
-    valid_encodings = []
-    legacy_students = []
+    # 1. Fast Path: Use pre-stacked normalized 2D matrix if supplied (Zero runtime allocation)
+    if enrolled_matrix is not None and isinstance(enrolled_matrix, np.ndarray) and enrolled_matrix.ndim == 2:
+        enc_matrix = enrolled_matrix
+        valid_students = enrolled_students
+        has_matrix = enc_matrix.shape[0] > 0
+        legacy_students = []
+    else:
+        # Fallback: Stack enrolled students into a normalized 2D matrix on-the-fly
+        valid_students = []
+        valid_encodings = []
+        legacy_students = []
 
-    for s in enrolled_students:
-        enc = s.get("face_encoding")
-        if enc is not None:
-            if isinstance(enc, (list, np.ndarray)) and len(enc) == 512:
-                arr = np.asarray(enc, dtype=np.float32)
-                arr_norm = float(norm(arr))
-                if arr_norm > 1e-6:
-                    valid_encodings.append(arr / arr_norm)
-                    valid_students.append(s)
-                    continue
-            # Legacy or non-standard dimension
-            legacy_students.append(s)
+        for s in enrolled_students:
+            enc = s.get("face_encoding")
+            if enc is not None:
+                if isinstance(enc, (list, np.ndarray)) and len(enc) == 512:
+                    arr = np.asarray(enc, dtype=np.float32)
+                    arr_norm = float(norm(arr))
+                    if arr_norm > 1e-6:
+                        valid_encodings.append(arr / arr_norm)
+                        valid_students.append(s)
+                        continue
+                # Legacy or non-standard dimension
+                legacy_students.append(s)
 
-    has_matrix = len(valid_encodings) > 0
-    enc_matrix = np.vstack(valid_encodings) if has_matrix else None
+        has_matrix = len(valid_encodings) > 0
+        enc_matrix = np.vstack(valid_encodings) if has_matrix else None
 
     recognized = []
 

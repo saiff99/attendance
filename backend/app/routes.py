@@ -129,9 +129,9 @@ async def process_attendance(request: Request, file: UploadFile = File(...), ses
         if sess_item.get("target_academic_year"):
             target_year = sess_item["target_academic_year"]
 
-    # 2. Fetch active enrolled students from high-speed in-memory biometric cache (0ms latency, 60s TTL)
-    from app.biometric_cache import get_cached_enrolled_students
-    all_enrolled = get_cached_enrolled_students(target_academic_year=target_year)
+    # 2. Fetch active enrolled students & pre-normalized matrix from in-memory cache (0ms latency, 60s TTL)
+    from app.biometric_cache import get_cached_enrolled_data
+    all_enrolled, all_matrix = get_cached_enrolled_data(target_academic_year=target_year)
     
     # Defense-in-depth: Exclude any inactive or archived students
     enrolled_students = [
@@ -139,6 +139,7 @@ async def process_attendance(request: Request, file: UploadFile = File(...), ses
         if s.get("is_active") is not False 
         and not str(s.get("academic_year", "")).startswith("[ARCHIVED]")
     ]
+    enrolled_matrix = all_matrix
     
     if not enrolled_students:
         raise HTTPException(status_code=400, detail="No students have enrolled face data yet.")
@@ -161,7 +162,12 @@ async def process_attendance(request: Request, file: UploadFile = File(...), ses
         faces = app_fa.get(image_bgr) or []
         
         # High-performance Vectorized 2D Matrix Cosine Matching (NumPy BLAS/AVX2 accelerated)
-        return match_faces_vectorized(faces, enrolled_students, similarity_threshold=0.42)
+        return match_faces_vectorized(
+            faces,
+            enrolled_students,
+            similarity_threshold=0.42,
+            enrolled_matrix=enrolled_matrix
+        )
 
     try:
         recognized_students = await asyncio.to_thread(_match_photo_faces)

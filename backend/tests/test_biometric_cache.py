@@ -266,6 +266,42 @@ class TestBiometricCache(unittest.TestCase):
                 # Still called only once due to stream session cache within 60s
                 self.assertEqual(mock_get_cached.call_count, 1)
 
+    def test_pre_stacked_normalized_matrix_caching(self):
+        """Verify get_cached_enrolled_data returns pre-stacked normalized 2D matrix and caches it."""
+        mock_query = MagicMock()
+        mock_response = MagicMock()
+        mock_response.data = self.mock_students_data
+        mock_query.execute.return_value = mock_response
+
+        with patch.object(bc, "supabase") as mock_sb:
+            mock_sb.table.return_value.select.return_value.not_.is_.return_value = mock_query
+
+            # First call: computes and caches 2D matrix
+            students, matrix = bc.get_cached_enrolled_data(target_academic_year="All")
+            self.assertEqual(len(students), 3)
+            self.assertIsNotNone(matrix)
+            self.assertEqual(matrix.shape, (3, 512))
+
+            # Verify each vector in matrix is pre-normalized (L2 norm == 1.0)
+            from numpy.linalg import norm
+            for i in range(matrix.shape[0]):
+                row_norm = float(norm(matrix[i]))
+                self.assertAlmostEqual(row_norm, 1.0, places=5)
+
+            # Second call: served from in-memory matrix cache
+            students2, matrix2 = bc.get_cached_enrolled_data(target_academic_year="All")
+            self.assertEqual(len(students2), 3)
+            self.assertIs(matrix2, matrix, "Matrix object must be cached identity in RAM")
+
+            # Check stats
+            stats = bc.get_biometric_cache_stats()
+            self.assertIn("All", stats["cached_matrix_cohorts"])
+
+            # Invalidate cache
+            bc.invalidate_biometric_cache()
+            stats_after = bc.get_biometric_cache_stats()
+            self.assertEqual(len(stats_after["cached_matrix_cohorts"]), 0)
+
 
 if __name__ == "__main__":
     unittest.main()
