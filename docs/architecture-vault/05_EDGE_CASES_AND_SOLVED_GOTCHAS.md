@@ -273,5 +273,31 @@ This document catalogs critical real-world edge cases, platform-specific quirks,
   2. Isolated `test_active_sessions_rate_limit_and_reset` with `unittest.mock.patch("app.rate_limiter.supabase", None)` so offline unit tests test memory sliding-window algorithms in microseconds without external network dependencies.
 - **Rule:** Never top-level import heavy, platform-compiled machine learning runtimes without a `try...except ImportError` fallback. Mathematical vector algorithms (`numpy`) must run cleanly in minimal headless environments without requiring runtime AI inference engines. Offline unit tests must strictly mock external database connections.
 
+---
+
+### Gotcha 15: MJPEG Video Stream CORS Preflight Rejection (`ngrok-skip-browser-warning`) & Infinite Auto-Reconnect Spinners on Offline Cameras
+- **Symptom:**
+  When loading the multi-camera Live Scan classroom dashboard (`/live-scan?session_id=...`), all 6 CCTV camera grid cards rendered broken video placeholders displaying a permanent spinning loader with:
+  `"Connecting Camera Feed..."`
+  `"Auto-reconnecting"`
+  simultaneously with deceptive green pulsing indicators (`2L`, `2M`, `2R`, `1L`, `1M`, `1R`). The browser console logged `HTTP 400 Bad Request (Disallowed CORS headers)` on all `GET /api/video-feed/...` endpoints every 2.5 seconds, while the physical cameras were powered off and dormant.
+- **Root Cause:**
+  1. **Legacy Header Forcing CORS Preflight:** In `frontend/src/components/MjpegPlayer.tsx`, the `fetchStream()` function sent `headers: { 'ngrok-skip-browser-warning': 'true' }`. Because this is a custom, non-CORS-safelisted request header, the browser was forced to execute an `OPTIONS` preflight request before initiating the stream.
+  2. **FastAPI CORSMiddleware Allowlist Rejection:** `backend/main.py` explicitly listed allowed CORS request headers (`Content-Type`, `Authorization`, `X-Internal-API-Key`, etc.) but omitted `ngrok-skip-browser-warning`. As a result, FastAPI's `CORSMiddleware` aborted the browser preflight with `HTTP 400 Bad Request: Disallowed CORS headers`, preventing the client from ever reading the stream response.
+  3. **Aggressive Frontend Reconnection Loop:** Upon catching the fetch error, `MjpegPlayer.tsx` entered a 2.5-second `setInterval` / `setTimeout` auto-reconnect loop. This spammed failing requests continuously, saturating browser network sockets and CPU cycles.
+  4. **Deceptive Hardcoded Green Badges:** In `frontend/src/app/live-scan/page.tsx`, camera labels unconditionally rendered `<span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />`, giving users the false impression that offline/unplugged cameras were active and online.
+- **Architectural Fix:**
+  1. **Eliminate Unnecessary Custom Headers (`MjpegPlayer.tsx`):** Removed `ngrok-skip-browser-warning` from client-side `fetchStream()` calls, converting the video feed into a standard CORS simple request that does not trigger preflight negotiation.
+  2. **Add Whitelist Fallback (`backend/main.py`):** Added `ngrok-skip-browser-warning` to `CORSMiddleware` `allow_headers` as a defensive measure for any legacy proxies or tunnels.
+  3. **Calm Dormant Fallback UI & Throttled Retry (`MjpegPlayer.tsx`):**
+     - Replaced the frantic "Auto-reconnecting" spinner with a clear, professional card: `Camera Offline (Dormant)` and `Standby Mode` with an amber indicator.
+     - Extended reconnection backoff from 2.5s to 15s to eliminate browser event loop thrashing.
+     - Added an interactive manual `Re-check Feed` button.
+  4. **Dynamic Connection State & Dormancy Badges (`live-scan/page.tsx` & `streaming.py`):**
+     - Enhanced `GET /api/cameras` to return live runtime circuit-breaker states (`is_connected`, `is_dormant`, `circuit_breaker_state`).
+     - Updated camera grid cards to render amber `Dormant` badges when offline, and emerald green `Live` pulsing dots only when actively streaming.
+     - Updated top banner to display `CP PLUS Vision Hub (6 Nodes Standby / Dormant • Mobile Attendance Active)` with a one-click `[Recheck Nodes]` action.
+- **Rule:** Never attach custom, non-standard request headers to streaming media endpoints without explicit CORS allowlist matching. Streaming player components must never loop aggressively on offline hardware; they must display calm, informative dormant states and respect circuit-breaker backoffs.
+
 
 
