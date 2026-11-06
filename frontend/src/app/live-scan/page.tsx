@@ -293,15 +293,53 @@ export default function LiveScan() {
 
   // In-flight guard to avoid stacking requests if network latency spikes
   const isFetchingLogsRef = useRef(false);
+  // Last recorded timestamp for high-performance incremental delta polling
+  const lastRecordedAtRef = useRef<string | null>(null);
+  const activeSessionIdRef = useRef<string | null>(null);
 
-  const fetchLogs = useCallback(async () => {
+  // Reset delta tracking when active session changes
+  useEffect(() => {
+    if (activeSession?.id !== activeSessionIdRef.current) {
+      activeSessionIdRef.current = activeSession?.id || null;
+      lastRecordedAtRef.current = null;
+      setLogs([]);
+    }
+  }, [activeSession?.id]);
+
+  const fetchLogs = useCallback(async (forceFullSync = false) => {
     if (!activeSession || isFetchingLogsRef.current) return;
     try {
       isFetchingLogsRef.current = true;
-      const res = await fetch(`/api/attendance/session/${activeSession.id}`);
+      const since = forceFullSync ? null : lastRecordedAtRef.current;
+      const url = since
+        ? `/api/attendance/session/${activeSession.id}?since=${encodeURIComponent(since)}`
+        : `/api/attendance/session/${activeSession.id}`;
+
+      const res = await fetch(url);
       const resData = await res.json();
       if (!res.ok) throw new Error(resData.error || 'Failed to fetch logs');
-      setLogs(resData.logs || []);
+
+      const incoming: AttendanceLogItem[] = resData.logs || [];
+
+      if (!since || forceFullSync) {
+        // Full Sync: replace entire array and record the latest timestamp
+        setLogs(incoming);
+        if (incoming.length > 0 && incoming[0].recorded_at) {
+          lastRecordedAtRef.current = incoming[0].recorded_at;
+        }
+      } else if (incoming.length > 0) {
+        // Delta Sync: only merge truly new records if any arrived
+        if (incoming[0].recorded_at) {
+          lastRecordedAtRef.current = incoming[0].recorded_at;
+        }
+        setLogs(prev => {
+          const existingIds = new Set(prev.map(p => p.id));
+          const trulyNew = incoming.filter(item => !existingIds.has(item.id));
+          if (trulyNew.length === 0) return prev;
+          return [...trulyNew, ...prev];
+        });
+      }
+      // If incoming.length === 0 in delta sync: ZERO state change, ZERO re-render!
     } catch (error) {
       console.error("Failed to fetch logs:", error);
     } finally {
@@ -309,29 +347,33 @@ export default function LiveScan() {
     }
   }, [activeSession]);
 
-  // Log polling for CCTV / Grid mode with Page Visibility Guard (Issue 13)
+  // Log polling for CCTV / Grid mode with Page Visibility Guard (Issue 13 & Issue 4 Delta Polling)
   useEffect(() => {
     if ((activeTab !== "grid" && activeTab !== "cctv") || !activeSession) {
       return;
     }
 
-    // 1. Initial immediate fetch
-    fetchLogs();
+    // 1. Initial immediate full fetch
+    fetchLogs(true);
 
-    // 2. Instant Wakeup on focus: fetch logs immediately the millisecond tab regains focus
+    // 2. Instant Wakeup on focus: perform a clean full sync when tab regains focus
     const handleVisibilityChange = () => {
       if (typeof document !== "undefined" && document.visibilityState === "visible") {
-        fetchLogs();
+        fetchLogs(true);
       }
     };
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
-    // 3. Relaxed adaptive polling: 4s while visible, zero background requests when hidden
+    // 3. Incremental Delta Polling: 4s while visible, zero background requests when hidden
+    let pollCount = 0;
     const interval = setInterval(() => {
       if (typeof document !== "undefined" && document.visibilityState !== "visible") {
         return;
       }
-      fetchLogs();
+      pollCount++;
+      // Periodic full reconciliation every ~60 seconds (15 ticks x 4s) to catch any manual changes
+      const isPeriodicFull = pollCount % 15 === 0;
+      fetchLogs(isPeriodicFull);
     }, 4000);
 
     return () => {

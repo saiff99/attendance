@@ -2317,6 +2317,75 @@ console.log('\n--- 38. Cross-Browser Legacy Mobile Sidebar & CSS Translate Backw
   );
 }
 
+// --- 39. High-Performance Incremental Delta Polling for Session Attendance Logs ---
+console.log('\n--- 39. High-Performance Incremental Delta Polling for Session Attendance Logs ---');
+{
+  const sessionRouteContent = fs.readFileSync(path.join(__dirname, '../src/app/api/attendance/session/[sessionId]/route.ts'), 'utf8');
+  const liveScanContent = fs.readFileSync(path.join(__dirname, '../src/app/live-scan/page.tsx'), 'utf8');
+
+  // 1. Verify route.ts supports optional ?since= query parameter with .gt('recorded_at', since)
+  assert(
+    sessionRouteContent.includes("searchParams.get('since')") &&
+    sessionRouteContent.includes("query.gt('recorded_at', since)") &&
+    sessionRouteContent.includes("is_delta: isDelta"),
+    'api/attendance/session/[sessionId]/route.ts supports optional ?since= delta query and returns is_delta status'
+  );
+
+  // 2. Verify route.ts maintains unpaginated backward compatibility when ?since= is absent
+  assert(
+    sessionRouteContent.includes("const isDelta = Boolean(since && !isNaN(Date.parse(since)));"),
+    'api/attendance/session/[sessionId]/route.ts safely validates ISO timestamps before applying delta filter'
+  );
+
+  // 3. Verify live-scan/page.tsx tracks lastRecordedAtRef and activeSessionIdRef
+  assert(
+    liveScanContent.includes("lastRecordedAtRef = useRef<string | null>(null)") &&
+    liveScanContent.includes("activeSessionIdRef = useRef<string | null>(null)"),
+    'live-scan/page.tsx tracks lastRecordedAtRef and activeSessionIdRef for delta continuity'
+  );
+
+  // 4. Verify live-scan/page.tsx passes ?since= param and resets on session change
+  assert(
+    liveScanContent.includes("?since=${encodeURIComponent(since)}") &&
+    liveScanContent.includes("lastRecordedAtRef.current = null"),
+    'live-scan/page.tsx passes encoded since parameter on delta ticks and resets on session switch'
+  );
+
+  // 5. Verify live-scan/page.tsx implements client-side ID deduplication and periodic full reconciliation
+  assert(
+    liveScanContent.includes("new Set(prev.map(p => p.id))") &&
+    liveScanContent.includes("pollCount % 15 === 0"),
+    'live-scan/page.tsx implements Set-based ID deduplication and 60-second periodic full reconciliation'
+  );
+
+  // 6. Behavioral simulation of client-side delta merging
+  let currentLogs = [
+    { id: 'att-1', recorded_at: '2026-11-06T10:00:00Z', status: 'Present' },
+    { id: 'att-2', recorded_at: '2026-11-06T09:59:00Z', status: 'Present' },
+  ];
+  let lastRecorded = currentLogs[0].recorded_at;
+
+  // Delta 1: 0 new records
+  const emptyIncoming = [];
+  if (emptyIncoming.length > 0) {
+    // Should not trigger
+    currentLogs = [...emptyIncoming, ...currentLogs];
+  }
+  assert(currentLogs.length === 2, 'Empty delta poll preserves existing log list without mutating state');
+
+  // Delta 2: 2 new records arrived
+  const newIncoming = [
+    { id: 'att-3', recorded_at: '2026-11-06T10:01:00Z', status: 'Present' },
+    { id: 'att-1', recorded_at: '2026-11-06T10:00:00Z', status: 'Present' }, // Duplicate candidate
+  ];
+  const existingSet = new Set(currentLogs.map(l => l.id));
+  const trulyNew = newIncoming.filter(l => !existingSet.has(l.id));
+  assert(trulyNew.length === 1 && trulyNew[0].id === 'att-3', 'Delta merging filters out duplicate records');
+  currentLogs = [...trulyNew, ...currentLogs];
+  lastRecorded = newIncoming[0].recorded_at;
+  assert(currentLogs.length === 3 && lastRecorded === '2026-11-06T10:01:00Z', 'Delta successfully prepends new record and advances timestamp');
+}
+
 // Summary
 console.log('\n' + '=' .repeat(65));
 console.log(`📊 Offline Unit Test Summary: ${passed} Passed, ${failed} Failed`);

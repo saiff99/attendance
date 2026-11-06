@@ -85,18 +85,28 @@ export async function GET(
       );
     }
 
-    // 3. Fetch logs for authorized session
-    const { data, error } = await supabaseServer
+    // 3. Fetch logs for authorized session (supports optional incremental ?since= timestamp delta)
+    const { searchParams } = request.nextUrl;
+    const since = searchParams.get('since');
+
+    let query = supabaseServer
       .from('attendance')
       .select('*, students(id, student_roll, full_name, email)')
-      .eq('session_id', sessionId)
-      .order('recorded_at', { ascending: false });
+      .eq('session_id', sessionId);
+
+    const isDelta = Boolean(since && !isNaN(Date.parse(since)));
+    if (isDelta && since) {
+      query = query.gt('recorded_at', since);
+    }
+
+    const { data, error } = await query.order('recorded_at', { ascending: false });
 
     if (error) throw error;
 
     return NextResponse.json({
       success: true,
       logs: data || [],
+      is_delta: isDelta,
     });
   } catch (err: unknown) {
     console.error('Error fetching session attendance logs:', err);
