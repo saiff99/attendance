@@ -66,8 +66,8 @@ def _init_session_attendance_from_db(clean_sess: str) -> None:
 
 
 def get_cached_session_attendance(
-    session_id: str,
-    student_id: str,
+    session_id: Optional[str],
+    student_id: Optional[str],
     allow_db_init: bool = True
 ) -> Optional[Dict[str, Any]]:
     """
@@ -79,8 +79,8 @@ def get_cached_session_attendance(
     if not session_id or not student_id:
         return None
 
-    clean_sess = str(session_id).strip()
-    clean_stu = str(student_id).strip()
+    clean_sess = session_id.strip()
+    clean_stu = student_id.strip()
     if not clean_sess or not clean_stu:
         return None
 
@@ -111,8 +111,8 @@ def get_cached_session_attendance(
 
 
 def record_cached_session_attendance(
-    session_id: str,
-    student_id: str,
+    session_id: Optional[str],
+    student_id: Optional[str],
     record: Dict[str, Any]
 ) -> None:
     """
@@ -122,8 +122,8 @@ def record_cached_session_attendance(
     if not session_id or not student_id:
         return
 
-    clean_sess = str(session_id).strip()
-    clean_stu = str(student_id).strip()
+    clean_sess = session_id.strip()
+    clean_stu = student_id.strip()
     if not clean_sess or not clean_stu:
         return
 
@@ -157,7 +157,7 @@ def invalidate_session_attendance_cache(session_id: Optional[str] = None) -> Non
     """
     with _attendance_cache_lock:
         if session_id:
-            clean_sess = str(session_id).strip()
+            clean_sess = session_id.strip()
             _session_attendance_cache.pop(clean_sess, None)
             _session_attendance_init_ts.pop(clean_sess, None)
         else:
@@ -173,3 +173,4 @@ def get_attendance_cache_stats() -> Dict[str, Any]:
             "cached_sessions": len(_session_attendance_cache),
             "total_cached_records": total_records,
         }
+
