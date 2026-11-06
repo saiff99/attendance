@@ -11,6 +11,21 @@ import { getCachedUserMap, USER_MAP_TTL_MS } from '@/lib/userCache';
 export { getCachedUserMap, USER_MAP_TTL_MS };
 export const dynamic = 'force-dynamic';
 
+const SESSION_CREATOR_CACHE_MAX = 500;
+const sessionCreatorCache = new Map<string, string>();
+
+export function getCachedSessionCreator(sessionId: string): string | undefined {
+  return sessionCreatorCache.get(sessionId);
+}
+
+export function setCachedSessionCreator(sessionId: string, creator: string): void {
+  if (sessionCreatorCache.size >= SESSION_CREATOR_CACHE_MAX) {
+    const firstKey = sessionCreatorCache.keys().next().value;
+    if (firstKey) sessionCreatorCache.delete(firstKey);
+  }
+  sessionCreatorCache.set(sessionId, creator);
+}
+
 export interface ActiveSessionItem {
   id: string;
   class_name: string;
@@ -68,33 +83,61 @@ async function processAndFilterSessions(
   const validSessions = rawSessions.filter((s) => !isInternalSession(s));
   if (validSessions.length === 0) return [];
 
-  const sessionIds = validSessions.map((s) => s.id).filter(Boolean);
+  const isStaffOrAdmin = Boolean(
+    authUser && ['Faculty', 'Admin', 'Super Admin'].includes(authUser.role)
+  );
 
-  // Batch query audit_logs for creators of sessions lacking [BY:...] tag
+  // Batch query audit_logs for creators of sessions lacking [BY:...] tag.
+  // CRITICAL SCALABILITY OPTIMIZATION: Student & public/unauthenticated callers never receive
+  // creator identity (sanitized to 'Faculty Member' / undefined). We strictly bypass audit_logs
+  // for all student and public callers to eliminate database query storms (150 -> 0 DB hits).
   const creatorMap: Record<string, string> = {};
-  if (sessionIds.length > 0) {
-    try {
-      const { data: auditData } = await supabaseServer
-        .from('audit_logs')
-        .select('target_id, actor_id, details')
-        .eq('action', 'START_SESSION')
-        .eq('target_type', 'session')
-        .in('target_id', sessionIds);
 
-      if (auditData) {
-        for (const row of auditData) {
-          if (row.target_id) {
-            const details = (row.details || {}) as Record<string, unknown>;
-            creatorMap[row.target_id] = row.actor_id || String(details.actor_name || details.instructor || '');
+  if (isStaffOrAdmin) {
+    // Only query audit_logs for sessions that lack the embedded [BY:...] tag AND are not cached in RAM
+    const missingSessionIds = validSessions
+      .filter((s) => {
+        const dec = decodeSessionMetadata(s.instructor_name || '');
+        if (dec.facultyUsername) return false;
+        const cached = sessionCreatorCache.get(s.id);
+        if (cached) {
+          creatorMap[s.id] = cached;
+          return false;
+        }
+        return true;
+      })
+      .map((s) => s.id)
+      .filter(Boolean);
+
+    if (missingSessionIds.length > 0) {
+      try {
+        const { data: auditData } = await supabaseServer
+          .from('audit_logs')
+          .select('target_id, actor_id, details')
+          .eq('action', 'START_SESSION')
+          .eq('target_type', 'session')
+          .in('target_id', missingSessionIds);
+
+        if (auditData) {
+          for (const row of auditData) {
+            if (row.target_id) {
+              const details = (row.details || {}) as Record<string, unknown>;
+              const creator = row.actor_id || String(details.actor_name || details.instructor || '');
+              if (creator) {
+                creatorMap[row.target_id] = creator;
+                setCachedSessionCreator(row.target_id, creator);
+              }
+            }
           }
         }
+      } catch {
+        // Non-blocking fallback
       }
-    } catch {
-      // Non-blocking fallback
     }
   }
 
-  const userMap = await getCachedUserMap();
+  // Load user map only when staff/admin caller requires human-readable creator names
+  const userMap = isStaffOrAdmin ? await getCachedUserMap() : {};
 
   // Enrich each session with creator info and check-in token
   const enriched: ActiveSessionItem[] = validSessions.map((s) => {
@@ -258,11 +301,17 @@ export async function GET(request: NextRequest) {
       return dateVal === todayStr || createdVal.startsWith(todayStr) || createdVal >= startOfTodayIso;
     });
 
-    // Query exact attendance records for all sessions today
+    // Query exact attendance records for all sessions today.
+    // OPTIMIZATION: Only fetch live headcounts for authenticated Staff/Admin.
+    // Students & public callers have attendance_count sanitized to undefined, so querying attendance is skipped.
     const sessionIds = todaySessions.map((s) => s.id);
     const attendanceMap: Record<string, number> = {};
 
-    if (sessionIds.length > 0) {
+    const isStaffOrAdminFallback = Boolean(
+      authUser && ['Faculty', 'Admin', 'Super Admin'].includes(authUser.role)
+    );
+
+    if (isStaffOrAdminFallback && sessionIds.length > 0) {
       const { data: attData } = await supabaseServer
         .from('attendance')
         .select('session_id')

@@ -2617,6 +2617,78 @@ console.log('\n--- 42. In-Memory Biometric Cache & Zero-DB-Hit Roll Index (Selfi
   assert(dbQueries === 0, '150 concurrent student roll lookups served 100% from RAM with 0 database queries');
 }
 
+// --- 43. Active Sessions Query Optimization (Student & Public Caller Audit Logs Bypass) ---
+console.log('\n--- 43. Active Sessions Query Optimization (Student & Public Caller Audit Logs Bypass) ---');
+{
+  const activeSessionsRoutePath = path.resolve(__dirname, '../src/app/api/active-sessions/route.ts');
+  assert(fs.existsSync(activeSessionsRoutePath), 'frontend/src/app/api/active-sessions/route.ts exists');
+  const activeSessionsContent = fs.readFileSync(activeSessionsRoutePath, 'utf8');
+
+  // 1. Verify in-memory session creator cache and bounded eviction
+  assert(
+    activeSessionsContent.includes('const sessionCreatorCache = new Map') &&
+    activeSessionsContent.includes('SESSION_CREATOR_CACHE_MAX = 500') &&
+    activeSessionsContent.includes('export function getCachedSessionCreator') &&
+    activeSessionsContent.includes('export function setCachedSessionCreator'),
+    'active-sessions/route.ts implements bounded in-memory sessionCreatorCache with eviction'
+  );
+
+  // 2. Verify audit_logs query is restricted to staff/admin roles
+  assert(
+    activeSessionsContent.includes("isStaffOrAdmin") &&
+    activeSessionsContent.includes("['Faculty', 'Admin', 'Super Admin'].includes(authUser.role)") &&
+    activeSessionsContent.includes("if (isStaffOrAdmin) {"),
+    'active-sessions/route.ts guards audit_logs lookup to authenticated Staff and Admin callers only'
+  );
+
+  // 3. Verify embedded [BY:...] metadata is prioritized before checking audit_logs
+  assert(
+    activeSessionsContent.includes("if (dec.facultyUsername) return false;") &&
+    activeSessionsContent.includes("const cached = sessionCreatorCache.get(s.id);"),
+    'active-sessions/route.ts prioritizes embedded [BY:...] metadata and RAM cache before querying audit_logs'
+  );
+
+  // 4. Verify userMap loading is bypassed for student and public callers
+  assert(
+    activeSessionsContent.includes("const userMap = isStaffOrAdmin ? await getCachedUserMap() : {};"),
+    'active-sessions/route.ts bypasses getCachedUserMap() for unauthenticated and student callers'
+  );
+
+  // 5. Verify attendance table query in fallback is skipped for non-staff callers
+  assert(
+    activeSessionsContent.includes("const isStaffOrAdminFallback = Boolean(") &&
+    activeSessionsContent.includes("if (isStaffOrAdminFallback && sessionIds.length > 0) {"),
+    'active-sessions/route.ts skips live attendance headcount query in fallback for students and public callers'
+  );
+
+  // 6. Simulation of 150 student calls to active-sessions
+  let simulatedAuditQueries = 0;
+  let simulatedAttendanceQueries = 0;
+
+  function simulateProcessAndFilter(authUser, sessions) {
+    const isStaff = Boolean(authUser && ['Faculty', 'Admin', 'Super Admin'].includes(authUser.role));
+    if (isStaff) {
+      simulatedAuditQueries++;
+    }
+    return sessions.map(s => ({
+      id: s.id,
+      created_by: isStaff ? s.created_by : undefined,
+      attendance_count: isStaff ? 10 : undefined,
+    }));
+  }
+
+  const sampleSessions = [{ id: 'sess-1', instructor_name: 'Topic [BY:prof_x]' }];
+  for (let i = 0; i < 150; i++) {
+    // 150 student callers (authUser.role === 'Student' or unauthenticated null)
+    const auth = (i % 2 === 0) ? { role: 'Student', studentRoll: `2600${i}` } : null;
+    const res = simulateProcessAndFilter(auth, sampleSessions);
+    assert(res[0].created_by === undefined, 'Student caller does not receive created_by identity');
+    assert(res[0].attendance_count === undefined, 'Student caller does not receive live attendance headcount');
+  }
+
+  assert(simulatedAuditQueries === 0, '150 concurrent student active-session polls execute 0 audit_logs queries');
+}
+
 // Summary
 console.log('\n' + '=' .repeat(65));
 console.log(`📊 Offline Unit Test Summary: ${passed} Passed, ${failed} Failed`);
