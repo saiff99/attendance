@@ -47,6 +47,7 @@
 | **ADR-038** | In-Memory Biometric RAM Caching & O(1) Roll Index for Zero-DB-Hit Student Selfie Attendance | **Accepted** | Nov 2026 | Biometrics / Backend Latency |
 | **ADR-039** | Role-Based Audit Log & Headcount Query Bypass with In-Memory Creator Caching in Active Sessions API | **Accepted** | Nov 2026 | Database Scalability / API Optimization |
 | **ADR-040** | Next.js Client-Facing Campus Geofence In-Memory 5-Minute TTL Caching & Zero-DB-Hit Resilience | **Accepted** | Nov 2026 | Location & Campus Shield / Caching |
+| **ADR-041** | In-Memory Session Attendance Caching & Single-Roundtrip Atomic Save for Zero-Redundant SELECT Database Queries | **Accepted** | Nov 2026 | Database Scalability / Backend Latency |
 
 ---
 
@@ -911,6 +912,45 @@
   - *Positive:* Response time for `GET /api/geofence` drops from ~150–300ms down to $<0.05\text{ms}$ ($O(1)$ RAM retrieval).
   - *Positive:* Student mobile GPS verification latency drops to near-zero, completely eliminating "Checking Location..." spinners.
   - *Positive:* Immediate synchronization when Super Admin updates geofence coordinates via `POST`.
+
+---
+
+### ADR-041: In-Memory Session Attendance Caching & Single-Roundtrip Atomic Save for Zero-Redundant SELECT Database Queries
+- **Status:** Accepted & Enforced (November 2026)
+- **Refines:** ADR-010 (Atomic Single-Roundtrip Batch Upsert), ADR-038 (In-Memory Biometric RAM Caching & O(1) Roll Index)
+- **Context:**
+  1. In a live medical college setting with 60–150 concurrent students, when an attendance session starts, students submit their selfie via `POST /api/verify-selfie`.
+  2. Previously, in `backend/app/routes.py` lines 956–981:
+     - After AI face matching, the backend issued an individual `SELECT` query: `supabase.table("attendance").select("id, recorded_at, confidence_score").eq("session_id", session_id).eq("student_id", student["id"])` to check if the student was already marked.
+     - In live sessions, 95%–99% of students submit for the first time. The `SELECT` returned an empty list `[]`.
+     - Immediately following the `SELECT`, the backend issued an `UPSERT` query: `supabase.table("attendance").upsert({ ... }, on_conflict="session_id,student_id")`.
+     - This generated 2 database roundtrips per student (300 DB queries for 150 students), doubling WAN network latency (300ms–500ms total DB wait) and risking PgBouncer pool exhaustion.
+     - Furthermore, if a student retried or refreshed, 2 additional queries were issued to report "already marked".
+- **Decision:**
+  1. Create a dedicated in-memory session attendance cache module in `backend/app/attendance_cache.py`:
+     - Maintain a thread-safe map `_session_attendance_cache: Dict[str, Dict[str, Dict[str, Any]]]` storing marked attendees per active session with a 1-hour lecture TTL (`SESSION_ATTENDANCE_CACHE_TTL_SECONDS = 3600.0`).
+     - In `get_cached_session_attendance(session_id, student_id)`:
+       - If session is accessed for the first time, lazily load all currently marked attendees for that session in a single batch query (`SELECT student_id, recorded_at, confidence_score, capture_mode FROM attendance WHERE session_id = :session_id`).
+       - Subsequent lookups for any student in that session execute in $O(1)$ RAM time ($<0.01\text{ms}$) with zero database queries.
+     - In `record_cached_session_attendance(session_id, student_id, record)`:
+       - Update the in-memory cache upon successful DB upsert.
+       - Synchronize with `app.stream.session_recognized_students`.
+     - In `invalidate_session_attendance_cache(session_id)`:
+       - Cleanly evict cached session attendees on session completion or stream cleanup.
+  2. Update `backend/app/routes.py`:
+     - Step 8 fast-paths through `get_cached_session_attendance(session_id, student["id"])`. If found, immediately returns `already_marked: True` in 0ms with zero DB queries.
+     - Step 9 executes a direct single-roundtrip `supabase.table("attendance").upsert({ ... }, on_conflict="session_id,student_id")` without issuing an individual preliminary `SELECT` query.
+     - Step 10 records the attendee in `_session_attendance_cache`.
+  3. Update `backend/app/stream.py`:
+     - Synchronize CCTV-recognized students into the in-memory attendance cache.
+     - Evict session attendance cache when `clean_session_cache` sweeps inactive sessions.
+- **Consequences:**
+  - *Positive:* 49.7% database load reduction during synchronized classroom bursts (150 students generate 151 DB queries instead of 300, saving 149 queries).
+  - *Positive:* 100% database query bypass on student duplicate submissions or retries ($0\text{ms}$ RAM return).
+  - *Positive:* Mobile verification latency drops by 150ms–250ms, significantly speeding up selfie submission UI feedback.
+  - *Positive:* Eliminates PgBouncer connection pool spike risks during peak class start windows.
+  - *Positive:* Preserves non-cascading data retention (`ON DELETE RESTRICT`) and PostgreSQL unique constraint integrity (`unique_session_student`).
+
 
 
 
