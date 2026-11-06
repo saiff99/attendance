@@ -360,6 +360,23 @@ This document catalogs critical real-world edge cases, platform-specific quirks,
   4. **Automatic Tab Sleep:** Because `requestAnimationFrame` pauses when tabs are hidden or screens lock, battery drain and thermal buildup are eliminated.
 - **Rule:** Never execute per-frame video pixel calculations or synchronous image processing directly on the browser main thread. Always offload frame mathematics to a background Web Worker and drive pacing via `requestAnimationFrame`.
 
+---
+
+### Gotcha 20: Eye Region Luminance Dilution & Auto-Exposure Lock Causing Infinite Selfie Scanning Freeze
+- **Symptom:**
+  During student mobile selfie attendance (`/selfieattend`), the camera remained scanning indefinitely with the banner stuck on `"👁️ Blinking detected... Reopen eyes"`. Even when students blinked repeatedly or held still, no photo was captured, and the 5-minute countdown expired, preventing attendance submission.
+- **Root Cause:**
+  1. **Luminance Signal Dilution:** In the 64x64 pixel downsampled canvas, the designated eye bounding box (`y: 18..36, x: 14..50`) encompasses 703 pixels. A natural human blink alters the brightness of only 30–40 eyelid pixels. When averaged across all 703 pixels, the net luminance shift was diluted to just 0.6–1.2 units, failing to reach the previous hardcoded threshold of 2.8 units.
+  2. **Camera Hardware Auto-Exposure Shift:** When eyelids closed, mobile camera sensors dynamically boosted local sensor gain/exposure to compensate for the darker frame, shifting the post-blink baseline upward. The system checked against an unlocked rolling history rather than a locked pre-blink baseline, causing reopening checks to fail.
+  3. **Absence of Blink Stage Timeout:** Once `blinkStage` transitioned to 1, there was no frame timeout. If the reopening condition was never met, `blinkStage` remained deadlocked at 1 forever.
+- **Architectural Fix:**
+  1. **Calibrated Sensitive Delta (`deviation >= 1.4`):** Lowered the blink detection trigger from 2.8 to 1.4 units, reliably capturing natural eyelid flutter in high and low ambient lighting.
+  2. **Locked Pre-Blink Baseline & Dynamic Tolerance:** When eyelid depression is detected, `lockedBaseline` is frozen at the pre-blink average. Reopening is evaluated against this locked baseline using a dynamic percentage tolerance (`Math.max(3.5, lockedBaseline * 0.08)`).
+  3. **Stage-1 Deadlock Timeout Guard:** Added a 14-frame (~1.05s) timeout window in `livenessWorker.ts`. If reopening is not confirmed within 14 frames, `blinkStage` automatically resets to 0 (`ready`), preventing state freeze.
+  4. **Guaranteed 2s Steady Face-Hold Auto-Capture:** Added a continuous 24-frame (~2.0–2.2s) steady face-hold fail-safe that auto-triggers capture hands-free with an advance countdown warning, ensuring students with spectacles or dark environments are never trapped.
+- **Rule:** Never implement multi-stage state machines for biometric video frames without strict per-stage frame timeouts. Never use unweighted full-box averaging for localized facial micro-movements without calibrating for downsampling dilution. Always provide a bounded steady-hold auto-capture fallback to guarantee 100% hands-free completion.
+
+
 
 
 

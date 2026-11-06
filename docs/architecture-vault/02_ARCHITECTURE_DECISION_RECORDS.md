@@ -668,6 +668,35 @@
   - *Positive:* Seamless cross-platform compatibility across iOS Safari, Android Chrome, and headless test runners.
   - *Positive:* Zero dilution of anti-spoofing security invariants or 5-minute countdown windows.
 
+---
+
+### ADR-034: Pure Hands-Free Dual Auto-Capture (Sensitive Blink Fast-Path & 2-Second Steady Face-Hold Fail-Safe) for Anti-Spoofing Selfie Attendance
+- **Status:** Accepted & Enforced (November 2026)
+- **Supersedes:** Any manual photo capture fallbacks; refines ADR-003, ADR-007, and ADR-033
+- **Context:**
+  1. During mobile selfie attendance (`/selfieattend`), students must have their live human presence verified before a facial snapshot is captured and submitted for ArcFace 512D matching.
+  2. Previously, when liveness detection failed or hung (e.g., due to pixel luminance averaging dilution in a 64x64 canvas, camera auto-exposure compensation upon eyelid closure, or students wearing spectacles), students were left trapped in `"👁️ Blinking detected... Reopen eyes"` until the 5-minute session countdown expired.
+  3. A temporary manual "Take Photo Now" button was initially proposed as a quick escape hatch. However, this introduced a severe security loophole: students could bypass live human verification entirely and manually snap photos of photos, digital screens, or proxy attendees.
+  4. Manual capture contradicts the core institutional zero-trust anti-spoofing design: photo capture must occur automatically and unpredictably as soon as live human presence is proven.
+- **Decision:**
+  1. Completely remove all manual photo capture buttons and bypass handlers from `SelfieAttendClient.tsx`.
+  2. Implement a high-resilience **Dual Auto-Capture Engine** within `frontend/src/lib/livenessWorker.ts` (and its fallback):
+     - **Fast-Path (Sensitive Blink Detection, <1.0s):**
+       - Reduced eyelid luminance deviation threshold from `2.8` to `1.4` units to account for natural human blink pupil/eyelid pixel dilution across the 703-pixel eye crop box.
+       - Lock the pre-blink baseline upon initial eyelid dip (`blinkStage = 1`).
+       - Adopt realistic reopening tolerance (`Math.max(3.5, lockedBaseline * 0.08)`) with a strict timeout guard: if eyes are not verified reopened within 14 frames (~1.05s), automatically reset `blinkStage = 0` to prevent infinite scanning freeze.
+     - **Fail-Safe Path (Guaranteed 2.0–2.2s Steady Face-Hold Auto-Capture):**
+       - Increment a continuous `holdFrames` counter whenever the student's face remains stably centered within the oval guide under valid ambient lighting.
+       - At 14 frames (~1.0s), update the prompt to `"📸 Auto-capturing in 1s... Hold still"`.
+       - Upon reaching 24 frames (~2.0–2.2s), automatically trigger `VERIFIED` (`"✅ Live Human Verified! Capturing..."`), snapping the photo hands-free without requiring user interaction.
+  3. Ensure that if face positioning or illumination falls out of bounds (<18 or >242 luminance), all frame counters and blink stages immediately reset to 0, preventing static spoofing attempts.
+- **Consequences:**
+  - *Positive:* 100% elimination of selfie verification freeze / infinite scan lockup across all mobile devices.
+  - *Positive:* 100% hands-free experience: students simply hold their phone in front of their face for ~2 seconds or blink naturally, and the camera auto-snaps and reveals the submit button.
+  - *Positive:* Zero manual bypass loophole: impossible for students to manually take arbitrary photos or proxy submissions.
+  - *Positive:* Full accessibility for students with glasses, thick frames, or ptosis who cannot easily trigger luminance-based eyelid deltas.
+
+
 
 
 

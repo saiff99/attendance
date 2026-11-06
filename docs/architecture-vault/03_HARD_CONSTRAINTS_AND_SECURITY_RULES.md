@@ -122,6 +122,18 @@ The rules documented in this specification are **Hard Constraints**. Under no ci
   - Ephemeral database keys (`rl_%`, `devlock:%`) in `settings` older than 24 hours are safely purged without touching persistent campus configuration rows.
 - **Violation Guard:** Never store unbounded dictionaries in module-level scope without TTL expiration or automated pruning mechanisms.
 
+### Rule 14: Pure Hands-Free Auto-Capture & Zero Manual Proxy Bypass in Selfie Attendance
+- **Constraint:** Student mobile selfie attendance (`/selfieattend`) must strictly enforce pure hands-free automated capture. Providing manual capture buttons, image upload pickers, or bypass mechanisms that allow students to snap photos on demand is strictly prohibited.
+- **Implementation:**
+  - Automated photo capture is orchestrated exclusively via active liveness verification in `frontend/src/lib/livenessWorker.ts` (Ref: ADR-034).
+  - Dual-trigger auto-capture:
+    1. Sensitive eye blink detection (<1.0s fast-path).
+    2. Guaranteed steady face-hold auto-capture (2.0–2.2s fail-safe path).
+  - All manual capture buttons (`handleManualCapture`, `[ Take Photo Now ]`) are eradicated from `SelfieAttendClient.tsx`.
+  - The submit attendance button is rendered only after the automated capture event fires and produces a verified camera snapshot.
+- **Violation Guard:** Never re-introduce manual snapshot buttons, camera click triggers, or file upload dialogs to the student selfie attendance flow.
+
+
 
 
 
