@@ -344,6 +344,23 @@ This document catalogs critical real-world edge cases, platform-specific quirks,
   3. **Fast-Path Frontend & Safe Fallback:** `reports/page.tsx` directly maps `attendance_summary` in `<1ms`. If the RPC is uninstalled or fails, `api/reports/route.ts` gracefully falls back to the safe chunked loop.
 - **Rule:** Never fetch massive raw event tables across the network to compute simple grouped aggregates on the client. Always push grouping, filtering, and aggregation down to PostgreSQL RPCs with composite indexes.
 
+---
+
+### Gotcha 19: Main-Thread `setInterval` Liveness Video Frame Stutter and GPU Readback Jank on Mobile
+- **Symptom:**
+  During student selfie check-in on budget Android and older iOS devices, the camera viewfinder exhibited visible micro-stutters (jank) and frame drops (~15–20 FPS instead of 60 FPS). The animated scanning bar occasionally lagged, and phone bodies heated up quickly during active camera sessions.
+- **Root Cause:**
+  1. **Main-Thread Pixel Loop:** `processLivenessFrame` was executed every 75ms via `setInterval` on the main UI thread. It drew the video frame to a 64x64 canvas, performed `ctx.getImageData()` (causing synchronous GPU-to-CPU pipeline stalls), and iterated over 4,096 pixels with floating-point luminance calculations.
+  2. **Unsynchronized Timer Drift:** `setInterval` operates without V-Sync awareness, firing asynchronously during layout calculations or CSS animation paint phases, degrading rendering performance.
+  3. **Lack of Backpressure Guard:** If frame processing took longer than 75ms on an overloaded device, timers could fire in rapid succession, compounding main-thread starvation.
+- **Architectural Fix:**
+  1. **Web Worker Offloading (`livenessWorker.ts`):** Moved all pixel iteration, luminance scoring, and blink delta computations to a dedicated background Web Worker (Ref: ADR-033).
+  2. **Zero-Copy ArrayBuffer Transfer:** The canvas pixel buffer is transferred via `postMessage({ ... }, [imgData.data.buffer])`, avoiding memory cloning.
+  3. **`requestAnimationFrame` Pacing & Backpressure Lock:** Replaced `setInterval` with a `requestAnimationFrame` loop throttled to 75ms with an `isProcessing` lock that drops trailing frames rather than queuing them if the device is busy.
+  4. **Automatic Tab Sleep:** Because `requestAnimationFrame` pauses when tabs are hidden or screens lock, battery drain and thermal buildup are eliminated.
+- **Rule:** Never execute per-frame video pixel calculations or synchronous image processing directly on the browser main thread. Always offload frame mathematics to a background Web Worker and drive pacing via `requestAnimationFrame`.
+
+
 
 
 
