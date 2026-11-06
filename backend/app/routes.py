@@ -35,6 +35,7 @@ from app.session_cache import (
     get_cached_session_metadata,
     invalidate_backend_session_cache,
 )
+from app.biometric_cache import get_cached_student_by_roll
 from app.ai import (
     app_fa,
     AI_ENABLED,
@@ -577,26 +578,17 @@ async def student_lookup(
             pass
 
     try:
-        # Query student profile and face template status (raw biometric vectors are evaluated server-side and omitted from API response)
-        res = safe_db_execute(supabase.table("students").select(
-            "id, student_roll, full_name, academic_year, is_active, biometric_consent, face_encoding"
-        ).ilike("student_roll", clean_roll))
-        
-        if not res.data:
-            res = safe_db_execute(supabase.table("students").select(
-                "id, student_roll, full_name, academic_year, is_active, biometric_consent, face_encoding"
-            ).eq("student_roll", clean_roll))
-            
-        if not res.data:
+        # Query student profile from High-Speed In-Memory Biometric Cache (0ms) with targeted DB fallback
+        student = get_cached_student_by_roll(clean_roll)
+        if not student:
             raise HTTPException(status_code=404, detail=f"No student found with Roll Number '{clean_roll}'. Please check and try again.")
             
-        student = res.data[0]
         if student.get("is_active") is False or str(student.get("academic_year", "")).startswith("[ARCHIVED]"):
             raise HTTPException(
                 status_code=403,
                 detail="This student record has been archived and is not eligible for attendance check-in."
             )
-        has_face = bool(student.get("biometric_consent")) and has_valid_face_encoding(student.get("face_encoding"))
+        has_face = bool(student.get("biometric_consent", True)) and has_valid_face_encoding(student.get("face_encoding"))
         
         # Check target cohort
         target_academic_year = sess_obj.get("target_academic_year")
@@ -827,20 +819,10 @@ async def selfie_attendance(
 
     contents = await safe_read_image_file(file, MAX_SELFIE_IMAGE_SIZE)
 
-    # 5. Fetch Student from DB
-    res = safe_db_execute(supabase.table("students").select(
-        "id, student_roll, full_name, academic_year, is_active, face_encoding"
-    ).ilike("student_roll", clean_roll))
-    
-    if not res.data:
-        res = safe_db_execute(supabase.table("students").select(
-            "id, student_roll, full_name, academic_year, is_active, face_encoding"
-        ).eq("student_roll", clean_roll))
-        
-    if not res.data:
+    # 5. Fetch Student from High-Speed In-Memory Biometric RAM Cache (0ms) with targeted DB fallback
+    student = get_cached_student_by_roll(clean_roll)
+    if not student:
         raise HTTPException(status_code=404, detail=f"Student with Roll '{clean_roll}' not found.")
-        
-    student = res.data[0]
 
     # Check Active / Non-archived status
     student_year = student.get("academic_year") or ""

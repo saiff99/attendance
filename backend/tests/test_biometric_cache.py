@@ -23,6 +23,7 @@ class TestBiometricCache(unittest.TestCase):
         self.mock_students_data = [
             {
                 "id": "student-1",
+                "student_roll": "ROLL-101",
                 "full_name": "Rahim Ahmed",
                 "academic_year": "1st Year MBBS",
                 "is_active": True,
@@ -30,6 +31,7 @@ class TestBiometricCache(unittest.TestCase):
             },
             {
                 "id": "student-2",
+                "student_roll": "ROLL-102",
                 "full_name": "Karim Hossain",
                 "academic_year": "2nd Year MBBS",
                 "is_active": True,
@@ -37,6 +39,7 @@ class TestBiometricCache(unittest.TestCase):
             },
             {
                 "id": "student-3",
+                "student_roll": "ROLL-103",
                 "full_name": "Fatima Begum",
                 "academic_year": "1st Year MBBS (Group B)",
                 "is_active": True,
@@ -44,6 +47,7 @@ class TestBiometricCache(unittest.TestCase):
             },
             {
                 "id": "student-archived",
+                "student_roll": "ROLL-999",
                 "full_name": "Archived Student",
                 "academic_year": "[ARCHIVED] 2023",
                 "is_active": False,
@@ -301,6 +305,52 @@ class TestBiometricCache(unittest.TestCase):
             bc.invalidate_biometric_cache()
             stats_after = bc.get_biometric_cache_stats()
             self.assertEqual(len(stats_after["cached_matrix_cohorts"]), 0)
+
+    def test_get_cached_student_by_roll_hit(self):
+        """Verify get_cached_student_by_roll serves from in-memory roll index with 0ms and zero DB calls."""
+        mock_query = MagicMock()
+        mock_response = MagicMock()
+        mock_response.data = self.mock_students_data
+        mock_query.execute.return_value = mock_response
+
+        with patch.object(bc, "supabase") as mock_sb:
+            mock_sb.table.return_value.select.return_value.not_.is_.return_value = mock_query
+
+            # First warm the cache
+            bc.get_cached_enrolled_students()
+            self.assertEqual(mock_query.execute.call_count, 1)
+
+            # Query student by roll
+            t0 = time.perf_counter()
+            student = bc.get_cached_student_by_roll("ROLL-101")
+            duration = time.perf_counter() - t0
+
+            self.assertIsNotNone(student)
+            self.assertEqual(student["id"], "student-1")
+            self.assertEqual(student["full_name"], "Rahim Ahmed")
+            # Must not hit DB again
+            self.assertEqual(mock_query.execute.call_count, 1)
+            self.assertLess(duration, 0.002, "RAM roll lookup must take < 2ms")
+
+            # Case insensitivity & whitespace trimming
+            student_case = bc.get_cached_student_by_roll("  roll-102  ")
+            self.assertIsNotNone(student_case)
+            self.assertEqual(student_case["id"], "student-2")
+            self.assertEqual(mock_query.execute.call_count, 1)
+
+    def test_get_cached_student_by_roll_not_found(self):
+        """Verify non-existent roll returns None safely."""
+        mock_query = MagicMock()
+        mock_response = MagicMock()
+        mock_response.data = self.mock_students_data
+        mock_query.execute.return_value = mock_response
+
+        with patch.object(bc, "supabase") as mock_sb:
+            mock_sb.table.return_value.select.return_value.not_.is_.return_value = mock_query
+            mock_sb.table.return_value.select.return_value.eq.return_value.execute.return_value = MagicMock(data=[])
+
+            student = bc.get_cached_student_by_roll("NONEXISTENT-999")
+            self.assertIsNone(student)
 
 
 if __name__ == "__main__":

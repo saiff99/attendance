@@ -16,6 +16,7 @@ BIOMETRIC_CACHE_TTL_SECONDS = float(os.getenv("BIOMETRIC_CACHE_TTL_SECONDS", "60
 
 _cache_lock = threading.Lock()
 _enrolled_students_cache: List[Dict[str, Any]] = []
+_student_by_roll_cache: Dict[str, Dict[str, Any]] = {}
 _cohort_matrix_cache: Dict[str, Tuple[List[Dict[str, Any]], Optional[np.ndarray]]] = {}
 _cache_last_fetched: float = 0.0
 
@@ -66,7 +67,7 @@ def get_cached_enrolled_students(
     Serves from high-speed in-memory cache if within TTL, eliminating repeated 300ms-800ms
     Supabase network downloads on every classroom photo scan and RTSP camera stream frame.
     """
-    global _enrolled_students_cache, _cache_last_fetched
+    global _enrolled_students_cache, _student_by_roll_cache, _cache_last_fetched
 
     now = time.time()
     is_fresh = (now - _cache_last_fetched) < BIOMETRIC_CACHE_TTL_SECONDS and len(_enrolled_students_cache) > 0
@@ -100,6 +101,11 @@ def get_cached_enrolled_students(
             ]
 
             _enrolled_students_cache = active_enrolled
+            _student_by_roll_cache = {
+                str(s.get("student_roll", "")).strip().upper(): s
+                for s in active_enrolled
+                if s.get("student_roll")
+            }
             _cohort_matrix_cache.clear()
             _cache_last_fetched = time.time()
             logger.info(f"[BiometricCache] Successfully cached {len(_enrolled_students_cache)} student face vectors.")
@@ -149,7 +155,7 @@ def invalidate_biometric_cache(student_id: Optional[str] = None) -> Dict[str, An
     Immediately purges cached biometric vectors so new enrollments or revocations
     take effect in real-time across both photo scan and CCTV streams.
     """
-    global _enrolled_students_cache, _cache_last_fetched, _cohort_matrix_cache
+    global _enrolled_students_cache, _student_by_roll_cache, _cache_last_fetched, _cohort_matrix_cache
 
     with _cache_lock:
         _cohort_matrix_cache.clear()
@@ -157,12 +163,18 @@ def invalidate_biometric_cache(student_id: Optional[str] = None) -> Dict[str, An
             s_id_str = str(student_id).strip()
             prev_len = len(_enrolled_students_cache)
             _enrolled_students_cache = [s for s in _enrolled_students_cache if str(s.get("id")) != s_id_str]
+            _student_by_roll_cache = {
+                str(s.get("student_roll", "")).strip().upper(): s
+                for s in _enrolled_students_cache
+                if s.get("student_roll")
+            }
             purged = prev_len - len(_enrolled_students_cache)
             # If student was in cache, invalidate timestamp to force next fetch to pick up new state
             if purged > 0:
                 _cache_last_fetched = 0.0
         else:
             _enrolled_students_cache = []
+            _student_by_roll_cache = {}
             _cache_last_fetched = 0.0
 
     # Also invalidate in-memory stream caches in app.stream if available
@@ -194,4 +206,76 @@ def get_biometric_cache_stats() -> Dict[str, Any]:
         "ttl_seconds": BIOMETRIC_CACHE_TTL_SECONDS,
         "is_warm": len(_enrolled_students_cache) > 0 and (now - _cache_last_fetched) < BIOMETRIC_CACHE_TTL_SECONDS
     }
+
+
+def get_cached_student_by_roll(
+    student_roll: str,
+    force_refresh: bool = False
+) -> Optional[Dict[str, Any]]:
+    """
+    Looks up an enrolled student by roll number from high-speed in-memory RAM cache (0ms).
+    Eliminates redundant Supabase network roundtrips and connection pool exhaustion
+    during 100+ student concurrent selfie check-in bursts.
+    Falls back to single-roundtrip authoritative DB query if student is missing from cache.
+    """
+    clean_roll = student_roll.strip().upper()
+    if not clean_roll:
+        return None
+
+    global _enrolled_students_cache, _student_by_roll_cache, _cache_last_fetched
+    now = time.time()
+    is_fresh = (now - _cache_last_fetched) < BIOMETRIC_CACHE_TTL_SECONDS and len(_student_by_roll_cache) > 0
+
+    if not force_refresh and is_fresh:
+        with _cache_lock:
+            cached_stu = _student_by_roll_cache.get(clean_roll)
+            if cached_stu:
+                return cached_stu.copy()
+
+    # If cache is cold or expired, refresh enrolled students from DB
+    if force_refresh or not is_fresh:
+        get_cached_enrolled_students(target_academic_year="All", force_refresh=force_refresh)
+        with _cache_lock:
+            cached_stu = _student_by_roll_cache.get(clean_roll)
+            if cached_stu:
+                return cached_stu.copy()
+
+    # Targeted Fail-Safe DB Fallback:
+    # If student is still not in memory cache (e.g. freshly registered in last few seconds or deactivated),
+    # perform exactly 1 direct query to Supabase.
+    if supabase:
+        try:
+            res = safe_db_execute(
+                supabase.table("students").select(
+                    "id, full_name, student_roll, face_encoding, academic_year, is_active, biometric_consent"
+                ).eq("student_roll", student_roll.strip())
+            )
+            # Case-insensitive fallback if exact match wasn't found
+            if not res or not res.data:
+                try:
+                    res = safe_db_execute(
+                        supabase.table("students").select(
+                            "id, full_name, student_roll, face_encoding, academic_year, is_active, biometric_consent"
+                        ).ilike("student_roll", student_roll.strip())
+                    )
+                except Exception:
+                    pass
+
+            if res and res.data and len(res.data) > 0:
+                stu = res.data[0]
+                # If student is active and consented with face vector, dynamically index into memory
+                if (
+                    stu.get("is_active") is not False
+                    and stu.get("biometric_consent", True) is not False
+                    and not str(stu.get("academic_year", "")).startswith("[ARCHIVED]")
+                    and stu.get("face_encoding") is not None
+                ):
+                    with _cache_lock:
+                        _enrolled_students_cache.append(stu)
+                        _student_by_roll_cache[clean_roll] = stu
+                return stu.copy()
+        except Exception as err:
+            logger.warning(f"[BiometricCache] Fallback DB lookup error for roll {clean_roll}: {err}")
+
+    return None
 
