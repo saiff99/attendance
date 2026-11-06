@@ -376,6 +376,28 @@ This document catalogs critical real-world edge cases, platform-specific quirks,
   4. **Guaranteed 2s Steady Face-Hold Auto-Capture:** Added a continuous 24-frame (~2.0–2.2s) steady face-hold fail-safe that auto-triggers capture hands-free with an advance countdown warning, ensuring students with spectacles or dark environments are never trapped.
 - **Rule:** Never implement multi-stage state machines for biometric video frames without strict per-stage frame timeouts. Never use unweighted full-box averaging for localized facial micro-movements without calibrating for downsampling dilution. Always provide a bounded steady-hold auto-capture fallback to guarantee 100% hands-free completion.
 
+---
+
+### Gotcha 21: Tailwind CSS v4 Standalone CSS `translate` Property Unsupported on Legacy Android Chromium / WebView (Chrome < 104) Causing Pinned Mobile Sidebar
+- **Symptom:**
+  When logging in to the admin/faculty dashboard from legacy Android mobile devices (e.g., Realme 2, ColorOS / Android 8.1 / 9.0, or devices running Chrome < 104 in both browser and PWA modes), the slide-out navigation sidebar was permanently pinned to the screen upon page load, obscuring 70% of the dashboard. Tapping the close button (`✕`) or backdrop had no effect, and the sidebar never slid off-screen, while modern devices (e.g., iPhone 12, modern Android) operated normally.
+- **Root Cause:**
+  1. **Tailwind CSS v4 Modern Property Shift:** Tailwind CSS v4 compiles transform utility classes like `-translate-x-full` and `translate-x-0` into modern CSS individual transform properties:
+     `.-translate-x-full { --tw-translate-x: -100%; translate: var(--tw-translate-x) var(--tw-translate-y); }`
+  2. **Browser Engine Incompatibility:** The standalone CSS `translate` property was only introduced to Chromium and Android System WebView in **Chrome 104 (August 2022)**. On older Android engines (Chrome 68–103), `translate` is an unrecognized property and is discarded by the CSS parser.
+  3. **Pinned Left-0 Position:** Since `#medattend-sidebar` has `fixed inset-y-0 left-0 z-50`, the absence of a recognized translation rule caused the sidebar to render at `left: 0` immediately upon initial paint. Furthermore, React loaded in its initial closed state (`isOpen: false`, backdrop hidden with `opacity-0 pointer-events-none`), meaning the sidebar was physically visible on screen purely due to CSS parser rejection.
+- **Architectural Fix:**
+  1. **Universal Feature Query Fallback (`globals.css`):** Added `@supports not (translate: 0px 0px)` targeting pre-Chrome 104 engines. It maps utility translation classes (`.-translate-x-full`, `.translate-x-0`, `.translate-x-full`, `.-translate-x-1\/2`, etc.) to universally supported `transform: translateX(...) !important;`.
+  2. **Scoped Legacy Mobile Sidebar Transform Engine:**
+     - On screens `< 1024px`, `#medattend-sidebar` defaults to `transform: translateX(-100%);`, guaranteeing that legacy engines paint the sidebar off-screen by default.
+     - When `.translate-x-0` or `[data-open="true"]` is applied, `transform: translateX(0) !important;` smoothly slides it in.
+     - On desktop (`min-width: 1024px`), `transform: translateX(0) !important;` ensures the desktop sidebar remains permanently docked.
+  3. **Zero-Latency Pre-Hydration & Safe Microtask Fallback:**
+     - Updated `frontend/src/app/layout.tsx` pre-hydration script to manage `sb.setAttribute('data-open', ...)` and `sb.style.transform` directly, delivering instant response prior to React hydration.
+     - Polyfilled `queueMicrotask` in `frontend/src/components/layout/Sidebar.tsx` with a `setTimeout(..., 0)` fallback for legacy engines (< Chrome 71).
+- **Rule:** Never rely solely on modern CSS individual transform properties (`translate`, `rotate`, `scale`) for critical off-screen navigation drawers without providing an `@supports not (translate: 0px 0px)` fallback to standard `transform: translateX(...)` for institutional cross-device compatibility.
+
+
 
 
 
