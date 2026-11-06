@@ -430,6 +430,43 @@ High-performance PostgreSQL stored procedure and composite index replacing seque
 ```
 - **Audit Logging:** Emits `CLASSROOM_PHOTO_ATTENDANCE_PROCESSED` audit event to `audit_logs` ledger detailing session ID, recognized student count, and faculty actor.
 
+---
+
+### 2.8. `GET /api/attendance/session/{sessionId}` (Live Attendance Logs & Incremental Delta Polling)
+- **Caller:** Live Scan Dashboard (`/live-scan` grid & CCTV monitoring) & Report Generator (`DownloadReportButton`).
+- **Authorization:** `Super Admin`, `Admin`, or session-owning `Faculty` (enforced via `isFacultyAuthorizedForSession`). Unauthorized faculty access triggers `403 Forbidden` and emits `UNAUTHORIZED_SESSION_ACCESS_REJECTED` audit log.
+- **Query Parameters:**
+  - `since` *(optional, ISO 8601 string)*: When provided, filters logs via PostgreSQL `.gt('recorded_at', since)`. Used by client polling loops to retrieve only delta records.
+- **Client Polling Contract (`ADR-035`):**
+  - Polling interval throttled to 4 seconds while document is visible; pauses completely when tab is hidden or minimized.
+  - Client maintains `lastRecordedAtRef`. Idle ticks return empty logs array (`logs: []`), completely bypassing client DOM re-renders.
+  - Full sync triggered on mount, session switch, tab refocus (`visibilitychange`), and periodically every 60 seconds (15 ticks).
+- **Response Payload (`200 OK`):**
+```json
+{
+  "success": true,
+  "logs": [
+    {
+      "id": "c1d2e3f4-5678-90ab-cdef-1234567890ab",
+      "student_id": "a1b2c3d4-0000-0000-0000-111122223333",
+      "session_id": "e4b6c31a-9f5e-4c7b-b841-8e8f8d9b1234",
+      "status": "Present",
+      "capture_mode": "Selfie Scan",
+      "recorded_at": "2026-11-06T10:01:00.000Z",
+      "confidence_score": 0.94,
+      "students": {
+        "id": "a1b2c3d4-0000-0000-0000-111122223333",
+        "student_roll": "26002",
+        "full_name": "SK SAIFUDDIN",
+        "email": "saif@example.com"
+      }
+    }
+  ],
+  "is_delta": true
+}
+```
+
+
 
 
 
