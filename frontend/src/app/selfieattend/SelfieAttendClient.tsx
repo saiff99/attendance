@@ -28,6 +28,12 @@ import {
 import { isCohortMatching } from "@/lib/cohort";
 import { getTodayDateStr, getStartOfTodayISO } from "@/lib/dateUtils";
 import { useAuth } from "@/lib/auth";
+import {
+  createLivenessWorker,
+  processLivenessFallback,
+  LivenessPhase,
+  LivenessWorkerResponse
+} from "@/lib/livenessWorker";
 
 export interface ActiveSession {
   id: string;
@@ -750,7 +756,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
     setStep("capture_selfie");
   };
 
-  // Real-time Active Liveness & Blink Detection Engine
+  // Real-time Active Liveness & Blink Detection Engine (Web Worker + requestAnimationFrame Pacing)
   useEffect(() => {
     if (step !== "capture_selfie" || capturedImage || cameraError) {
       setLivenessPhase("positioning");
@@ -759,121 +765,138 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
       return;
     }
 
-    let intervalId: any = null;
-    let stableFrames = 0;
-    let blinkStage = 0; // 0 = waiting for blink, 1 = eye dip detected, 2 = eye reopened (completed)
+    const worker = createLivenessWorker();
+    const workerRef = { current: worker };
 
-    const processLivenessFrame = () => {
-      if (!webcamRef.current) return;
-      const video = webcamRef.current.video;
-      if (!video || video.readyState < 2 || video.videoWidth === 0 || video.videoHeight === 0) return;
+    let animationFrameId: number | null = null;
+    let lastProcessTime = 0;
+    const THROTTLE_INTERVAL_MS = 75; // ~13.3 FPS
+    let isProcessing = false;
+    let isDestroyed = false;
+    let isVerified = false;
 
-      if (!livenessCanvasRef.current) {
-        livenessCanvasRef.current = document.createElement("canvas");
-        livenessCanvasRef.current.width = 64;
-        livenessCanvasRef.current.height = 64;
-      }
-      const canvas = livenessCanvasRef.current;
-      const ctx = canvas.getContext("2d", { willReadFrequently: true });
-      if (!ctx) return;
+    // Resilient in-thread state (used if Web Worker is unsupported or fails)
+    let fallbackStableFrames = 0;
+    let fallbackBlinkStage = 0;
+    const fallbackHistory: number[] = [];
 
-      const vw = video.videoWidth;
-      const vh = video.videoHeight;
-      const cropX = Math.round(vw * 0.20);
-      const cropY = Math.round(vh * 0.15);
-      const cropW = Math.round(vw * 0.60);
-      const cropH = Math.round(vh * 0.70);
+    const handleVerified = () => {
+      isVerified = true;
+      setLivenessPhase("verified");
+      setBlinkDetected(true);
+      setLivenessPrompt("✅ Live Human Verified! Capturing...");
 
-      ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, 64, 64);
-      const imgData = ctx.getImageData(0, 0, 64, 64);
-      const data = imgData.data;
+      try {
+        if (typeof window !== "undefined" && window.navigator && window.navigator.vibrate) {
+          window.navigator.vibrate([40, 30, 80]);
+        }
+      } catch (e) { }
 
-      let totalLum = 0;
-      let eyeLum = 0;
-      let eyeCount = 0;
-      let faceCount = 0;
+      // Automatically capture high-res frame 180ms after blink
+      setTimeout(() => {
+        if (!isDestroyed && webcamRef.current) {
+          const shot = webcamRef.current.getScreenshot();
+          if (shot) {
+            setCapturedImage(shot);
+          }
+        }
+      }, 180);
+    };
 
-      for (let y = 0; y < 64; y++) {
-        for (let x = 0; x < 64; x++) {
-          const idx = (y * 64 + x) * 4;
-          const r = data[idx];
-          const g = data[idx + 1];
-          const b = data[idx + 2];
-          const lum = 0.299 * r + 0.587 * g + 0.114 * b;
-          totalLum += lum;
-          faceCount++;
+    if (worker) {
+      worker.onmessage = (e: MessageEvent<LivenessWorkerResponse>) => {
+        isProcessing = false;
+        if (isDestroyed || isVerified) return;
+        const { action, phase, prompt } = e.data;
+        if (phase) setLivenessPhase(phase);
+        if (prompt) setLivenessPrompt(prompt);
+        if (action === "VERIFIED") {
+          handleVerified();
+        }
+      };
 
-          if (y >= 18 && y <= 36 && x >= 14 && x <= 50) {
-            eyeLum += lum;
-            eyeCount++;
+      worker.onerror = (err) => {
+        isProcessing = false;
+        console.warn("[LivenessWorker] Error encountered:", err);
+      };
+    }
+
+    const loop = (timestamp: number) => {
+      if (isDestroyed || isVerified) return;
+
+      if (timestamp - lastProcessTime >= THROTTLE_INTERVAL_MS && !isProcessing) {
+        lastProcessTime = timestamp;
+
+        if (webcamRef.current) {
+          const video = webcamRef.current.video;
+          if (video && video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
+            if (!livenessCanvasRef.current) {
+              livenessCanvasRef.current = document.createElement("canvas");
+              livenessCanvasRef.current.width = 64;
+              livenessCanvasRef.current.height = 64;
+            }
+            const canvas = livenessCanvasRef.current;
+            const ctx = canvas.getContext("2d", { willReadFrequently: true });
+            if (ctx) {
+              const vw = video.videoWidth;
+              const vh = video.videoHeight;
+              const cropX = Math.round(vw * 0.20);
+              const cropY = Math.round(vh * 0.15);
+              const cropW = Math.round(vw * 0.60);
+              const cropH = Math.round(vh * 0.70);
+
+              ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, 64, 64);
+              const imgData = ctx.getImageData(0, 0, 64, 64);
+
+              if (workerRef.current) {
+                isProcessing = true;
+                // Zero-copy transfer of underlying ArrayBuffer to background worker thread
+                workerRef.current.postMessage(
+                  {
+                    type: "PROCESS_FRAME",
+                    buffer: imgData.data.buffer,
+                    width: 64,
+                    height: 64,
+                  },
+                  [imgData.data.buffer]
+                );
+              } else {
+                // Synchronous in-thread fallback for headless/test environments
+                const res = processLivenessFallback(
+                  imgData.data,
+                  64,
+                  64,
+                  fallbackHistory,
+                  fallbackStableFrames,
+                  fallbackBlinkStage
+                );
+                fallbackStableFrames = res.stableFrames;
+                fallbackBlinkStage = res.blinkStage;
+                setLivenessPhase(res.phase);
+                setLivenessPrompt(res.prompt);
+                if (res.action === "VERIFIED") {
+                  handleVerified();
+                }
+              }
+            }
           }
         }
       }
 
-      const avgFaceLum = totalLum / faceCount;
-      const avgEyeLum = eyeLum / (eyeCount || 1);
-
-      // Check brightness bounds
-      if (avgFaceLum < 18 || avgFaceLum > 242) {
-        setLivenessPrompt("Center face in good lighting");
-        setLivenessPhase("positioning");
-        return;
-      }
-
-      const history = livenessHistoryRef.current;
-      history.push(avgEyeLum);
-      if (history.length > 25) history.shift();
-
-      if (history.length < 5) {
-        setLivenessPrompt("Hold steady in frame...");
-        setLivenessPhase("positioning");
-        return;
-      }
-
-      if (stableFrames < 4) {
-        stableFrames++;
-        setLivenessPrompt("👁️ Please Blink Your Eyes Naturally");
-        setLivenessPhase("ready");
-        return;
-      }
-
-      const baseline = history.slice(0, 5).reduce((a, b) => a + b, 0) / 5;
-      const curr = history[history.length - 1];
-      const deviation = Math.abs(curr - baseline);
-
-      // Blink dynamic: eyelid closure creates a temporary luminance dip/shift of 3.0 to 35.0
-      if (deviation >= 3.0 && deviation <= 38.0 && blinkStage === 0) {
-        blinkStage = 1;
-        setLivenessPhase("blinking");
-        setLivenessPrompt("Blinking detected... Reopen eyes");
-      } else if (blinkStage === 1 && Math.abs(curr - baseline) < 2.5) {
-        // Blink verified!
-        blinkStage = 2;
-        setLivenessPhase("verified");
-        setBlinkDetected(true);
-        setLivenessPrompt("✅ Live Human Verified! Capturing...");
-
-        try {
-          if (typeof window !== "undefined" && window.navigator && window.navigator.vibrate) {
-            window.navigator.vibrate([40, 30, 80]);
-          }
-        } catch (e) { }
-
-        // Automatically capture high-res frame 150ms after blink
-        setTimeout(() => {
-          if (webcamRef.current) {
-            const shot = webcamRef.current.getScreenshot();
-            if (shot) {
-              setCapturedImage(shot);
-            }
-          }
-        }, 180);
-      }
+      animationFrameId = requestAnimationFrame(loop);
     };
 
-    intervalId = setInterval(processLivenessFrame, 75);
+    animationFrameId = requestAnimationFrame(loop);
+
     return () => {
-      if (intervalId) clearInterval(intervalId);
+      isDestroyed = true;
+      if (animationFrameId !== null) {
+        cancelAnimationFrame(animationFrameId);
+      }
+      if (workerRef.current) {
+        workerRef.current.terminate();
+        workerRef.current = null;
+      }
     };
   }, [step, capturedImage, cameraError]);
 

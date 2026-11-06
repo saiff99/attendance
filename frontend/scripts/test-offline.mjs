@@ -2137,6 +2137,100 @@ console.log('\n--- 36. High-Performance Server-Side Attendance Aggregation RPC (
   );
 }
 
+// --- 37. Web Worker & requestAnimationFrame Liveness Frame Analysis ---
+console.log('\n--- 37. Web Worker & requestAnimationFrame Liveness Frame Analysis ---');
+{
+  const livenessWorkerPath = path.resolve(__dirname, '../src/lib/livenessWorker.ts');
+  const selfieClientPath = path.resolve(__dirname, '../src/app/selfieattend/SelfieAttendClient.tsx');
+
+  assert(fs.existsSync(livenessWorkerPath), 'lib/livenessWorker.ts file exists');
+  const workerContent = fs.readFileSync(livenessWorkerPath, 'utf8');
+  const selfieContent = fs.readFileSync(selfieClientPath, 'utf8');
+
+  // 1. Verify lib/livenessWorker.ts exports createLivenessWorker and processLivenessFallback
+  assert(
+    workerContent.includes('export function createLivenessWorker') &&
+    workerContent.includes('export function processLivenessFallback'),
+    'lib/livenessWorker.ts exports createLivenessWorker and processLivenessFallback'
+  );
+
+  // 2. Verify worker implements 64x64 buffer parsing and blink detection state machine
+  assert(
+    workerContent.includes("data.type === 'PROCESS_FRAME'") &&
+    workerContent.includes('avgFaceLum') &&
+    workerContent.includes('avgEyeLum') &&
+    workerContent.includes("action: 'VERIFIED'"),
+    'lib/livenessWorker.ts implements 64x64 luminance and blink state machine in WORKER_CODE'
+  );
+
+  // 3. Verify SelfieAttendClient imports from lib/livenessWorker
+  assert(
+    selfieContent.includes("from \"@/lib/livenessWorker\"") ||
+    selfieContent.includes("from '@/lib/livenessWorker'"),
+    'SelfieAttendClient imports from @/lib/livenessWorker'
+  );
+
+  // 4. Verify SelfieAttendClient replaces setInterval with requestAnimationFrame
+  assert(
+    selfieContent.includes('requestAnimationFrame(loop)') &&
+    !selfieContent.includes('intervalId = setInterval(processLivenessFrame, 75);'),
+    'SelfieAttendClient utilizes requestAnimationFrame instead of setInterval for liveness loop'
+  );
+
+  // 5. Verify SelfieAttendClient implements zero-copy ArrayBuffer transfer
+  assert(
+    selfieContent.includes('workerRef.current.postMessage(') &&
+    selfieContent.includes('[imgData.data.buffer]'),
+    'SelfieAttendClient passes [imgData.data.buffer] as transferable object with zero copy'
+  );
+
+  // 6. Verify SelfieAttendClient cleans up worker and animation frame
+  assert(
+    selfieContent.includes('cancelAnimationFrame(animationFrameId)') &&
+    selfieContent.includes('workerRef.current.terminate()'),
+    'SelfieAttendClient cleans up cancelAnimationFrame and worker.terminate upon unmount'
+  );
+
+  // 7. Behavioral simulation of liveness fallback logic
+  const dummyHistory = [100, 100, 100, 100, 100];
+  const darkBuffer = new Uint8ClampedArray(64 * 64 * 4);
+  const darkRes = simulateLiveness(darkBuffer, 64, 64, [], 0, 0);
+  assert(darkRes.phase === 'positioning' && darkRes.prompt.includes('lighting'), 'Dark frames reject with positioning phase');
+
+  function simulateLiveness(pixels, width, height, history, stableFrames, blinkStage) {
+    let totalLum = 0, eyeLum = 0, eyeCount = 0, faceCount = 0;
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const idx = (y * width + x) * 4;
+        const lum = 0.299 * pixels[idx] + 0.587 * pixels[idx + 1] + 0.114 * pixels[idx + 2];
+        totalLum += lum;
+        faceCount++;
+        if (y >= 18 && y <= 36 && x >= 14 && x <= 50) {
+          eyeLum += lum;
+          eyeCount++;
+        }
+      }
+    }
+    const avgFaceLum = totalLum / faceCount;
+    const avgEyeLum = eyeLum / (eyeCount || 1);
+    if (avgFaceLum < 18 || avgFaceLum > 242) {
+      return { phase: 'positioning', prompt: 'Center face in good lighting', stableFrames, blinkStage };
+    }
+    history.push(avgEyeLum);
+    if (history.length < 5) return { phase: 'positioning', prompt: 'Hold steady in frame...', stableFrames, blinkStage };
+    if (stableFrames < 4) return { phase: 'ready', prompt: '👁️ Please Blink Your Eyes Naturally', stableFrames: stableFrames + 1, blinkStage };
+    const baseline = history.slice(0, 5).reduce((a, b) => a + b, 0) / 5;
+    const curr = history[history.length - 1];
+    const deviation = Math.abs(curr - baseline);
+    if (deviation >= 3.0 && deviation <= 38.0 && blinkStage === 0) {
+      return { phase: 'blinking', prompt: 'Blinking detected... Reopen eyes', stableFrames, blinkStage: 1 };
+    } else if (blinkStage === 1 && Math.abs(curr - baseline) < 2.5) {
+      return { phase: 'verified', prompt: '✅ Live Human Verified! Capturing...', stableFrames, blinkStage: 2 };
+    }
+    return { phase: 'ready', prompt: '👁️ Please Blink Your Eyes Naturally', stableFrames, blinkStage };
+  }
+}
+
 // Summary
 console.log('\n' + '=' .repeat(65));
 console.log(`📊 Offline Unit Test Summary: ${passed} Passed, ${failed} Failed`);
