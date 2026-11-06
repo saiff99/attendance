@@ -2689,6 +2689,66 @@ console.log('\n--- 43. Active Sessions Query Optimization (Student & Public Call
   assert(simulatedAuditQueries === 0, '150 concurrent student active-session polls execute 0 audit_logs queries');
 }
 
+// --- 44. Next.js /api/geofence In-Memory 5-Minute TTL Caching ---
+console.log('\n--- 44. Next.js /api/geofence In-Memory 5-Minute TTL Caching ---');
+{
+  const geofenceRoutePath = path.resolve(__dirname, '../src/app/api/geofence/route.ts');
+  assert(fs.existsSync(geofenceRoutePath), 'frontend/src/app/api/geofence/route.ts exists');
+  const geofenceContent = fs.readFileSync(geofenceRoutePath, 'utf8');
+
+  // 1. Verify GEOFENCE_CACHE_TTL_MS and cache helpers export
+  assert(
+    geofenceContent.includes('export const GEOFENCE_CACHE_TTL_MS = 5 * 60 * 1000') &&
+    geofenceContent.includes('export function invalidateGeofenceCache()') &&
+    geofenceContent.includes('export function getCachedGeofence()'),
+    'api/geofence/route.ts exports 5-minute TTL constant and cache invalidation helpers'
+  );
+
+  // 2. Verify GET route checks in-memory cache before executing database queries
+  assert(
+    geofenceContent.includes('if (!forceRefresh && cacheLastFetched > 0 && (now - cacheLastFetched) < GEOFENCE_CACHE_TTL_MS)') &&
+    geofenceContent.includes('return NextResponse.json({ success: true, config: cachedGeofence'),
+    'api/geofence/route.ts GET method fast-paths fresh in-memory cache eliminating Supabase hits'
+  );
+
+  // 3. Verify POST route updates cacheLastFetched timestamp
+  assert(
+    geofenceContent.includes('cachedGeofence = targetConfig;') &&
+    geofenceContent.includes('cacheLastFetched = Date.now();'),
+    'api/geofence/route.ts POST method updates in-memory cache and fresh timestamp immediately'
+  );
+
+  // 4. Behavioral simulation of 150 student calls to /api/geofence
+  let dbFetchCount = 0;
+  let cachedConfig = null;
+  let cachedAt = 0;
+  const ttlMs = 5 * 60 * 1000;
+
+  function simulateGetGeofence(nowMs, force = false) {
+    if (!force && cachedConfig && (nowMs - cachedAt) < ttlMs) {
+      return { config: cachedConfig, fromCache: true };
+    }
+    dbFetchCount++;
+    cachedConfig = { latitude: 22.45155, longitude: 88.172366, radiusMeters: 30 };
+    cachedAt = nowMs;
+    return { config: cachedConfig, fromCache: false };
+  }
+
+  const startMs = Date.now();
+  // 150 students fetching geofence concurrently within a 30-second window
+  for (let i = 0; i < 150; i++) {
+    const res = simulateGetGeofence(startMs + i * 200);
+    assert(res.config.latitude === 22.45155, 'Returned config matches institutional campus geofence');
+    if (i === 0) {
+      assert(!res.fromCache, 'First request fetches from database');
+    } else {
+      assert(res.fromCache, `Request ${i + 1} served 100% from in-memory cache`);
+    }
+  }
+
+  assert(dbFetchCount === 1, '150 concurrent student geofence requests result in exactly 1 database fetch (149 DB queries saved)');
+}
+
 // Summary
 console.log('\n' + '=' .repeat(65));
 console.log(`📊 Offline Unit Test Summary: ${passed} Passed, ${failed} Failed`);

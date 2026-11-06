@@ -5,8 +5,18 @@ import { requireRoles } from '@/lib/serverAuth';
 
 export const dynamic = 'force-dynamic';
 
-// In-memory cache for fast geofence responses
+// In-memory cache for fast geofence responses with 5-minute TTL
+export const GEOFENCE_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 let cachedGeofence: CampusGeofenceConfig = { ...DEFAULT_GEOFENCE_CONFIG };
+let cacheLastFetched = 0;
+
+export function invalidateGeofenceCache(): void {
+  cacheLastFetched = 0;
+}
+
+export function getCachedGeofence(): CampusGeofenceConfig {
+  return { ...cachedGeofence };
+}
 
 export function validateGeofenceInput(
   body: unknown,
@@ -111,9 +121,27 @@ export function validateGeofenceInput(
   };
 }
 
-export async function GET() {
+export async function GET(request?: Request) {
   try {
-    // 1. Try reading from Supabase settings if table exists
+    const now = Date.now();
+
+    // Check optional cache-busting query parameter (?force=true or fresh=1)
+    let forceRefresh = false;
+    if (request) {
+      try {
+        const url = new URL(request.url);
+        forceRefresh = url.searchParams.get('force') === 'true' || url.searchParams.get('fresh') === '1';
+      } catch {
+        // Fallback for mock or custom requests without full url
+      }
+    }
+
+    // 1. Fast-Path: Serve from in-memory cache if within 5-minute TTL window
+    if (!forceRefresh && cacheLastFetched > 0 && (now - cacheLastFetched) < GEOFENCE_CACHE_TTL_MS) {
+      return NextResponse.json({ success: true, config: cachedGeofence, cached: true });
+    }
+
+    // 2. Try reading from Supabase settings if table exists
     try {
       const { data, error } = await supabaseServer
         .from('settings')
@@ -135,6 +163,7 @@ export async function GET() {
             radiusMeters: v.radiusMeters,
             campusName: String(v.campusName || DEFAULT_GEOFENCE_CONFIG.campusName),
           };
+          cacheLastFetched = Date.now();
           return NextResponse.json({ success: true, config: cachedGeofence });
         }
       }
@@ -142,7 +171,7 @@ export async function GET() {
       // Continue to fallback
     }
 
-    // 2. Fallback to sessions table system row (00000000-0000-0000-0000-000000000001)
+    // 3. Fallback to sessions table system row (00000000-0000-0000-0000-000000000001)
     try {
       const { data: sessData, error: sessErr } = await supabaseServer
         .from('sessions')
@@ -165,6 +194,7 @@ export async function GET() {
               radiusMeters: parsed.radiusMeters,
               campusName: String(parsed.campusName || DEFAULT_GEOFENCE_CONFIG.campusName),
             };
+            cacheLastFetched = Date.now();
             return NextResponse.json({ success: true, config: cachedGeofence });
           }
         } catch {
@@ -175,6 +205,8 @@ export async function GET() {
       // Continue
     }
 
+    // Mark cache fresh even with default fallback to protect database under outages
+    cacheLastFetched = Date.now();
     return NextResponse.json({ success: true, config: cachedGeofence });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Failed to retrieve geofence configuration';
@@ -273,6 +305,7 @@ export async function POST(request: Request) {
 
     // Update in-memory cache only AFTER persistent state is guaranteed
     cachedGeofence = targetConfig;
+    cacheLastFetched = Date.now();
 
     return NextResponse.json({ success: true, config: cachedGeofence });
   } catch (err: unknown) {
