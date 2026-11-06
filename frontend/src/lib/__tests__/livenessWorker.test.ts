@@ -110,5 +110,23 @@ describe('Liveness Worker & Fallback Engine', () => {
     expect(timeoutRes.blinkStage).toBe(0);
     expect(timeoutRes.prompt).toContain('Blink');
   });
+
+  it('automatically triggers verification after steady face hold without requiring any manual button', () => {
+    const normalPixels = new Uint8ClampedArray(64 * 64 * 4);
+    normalPixels.fill(120);
+    const history = [120, 120, 120, 120, 120];
+    const stableFrames = 3;
+
+    // Approaching threshold (frame 22)
+    const holdRes1 = processLivenessFallback(normalPixels, 64, 64, history, stableFrames, 0, 0, 0, 22);
+    expect(holdRes1.phase).toBe('ready');
+    expect(holdRes1.prompt).toContain('Auto-capturing');
+
+    // Reaching 24 frames (~2s hold) -> Automatically VERIFIED!
+    const holdRes2 = processLivenessFallback(normalPixels, 64, 64, history, stableFrames, 0, 0, 0, 23);
+    expect(holdRes2.action).toBe('VERIFIED');
+    expect(holdRes2.phase).toBe('verified');
+    expect(holdRes2.prompt).toContain('Live Human Verified');
+  });
 });
 

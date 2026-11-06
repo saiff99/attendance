@@ -22,14 +22,16 @@ export interface FallbackResult {
   blinkStage: number;
   lockedBaseline: number;
   blinkFramesInStage: number;
+  holdFrames: number;
 }
 
 const WORKER_CODE = `
 let history = [];
 let stableFrames = 0;
-let blinkStage = 0; // 0 = waiting for blink, 1 = eye dip detected, 2 = eye reopened (completed)
+let blinkStage = 0; // 0 = ready/monitoring, 1 = blink dip detected, 2 = eye reopened
 let lockedBaseline = 0;
 let blinkFramesInStage = 0;
+let holdFrames = 0;
 
 self.onmessage = function(e) {
   const data = e.data;
@@ -41,6 +43,7 @@ self.onmessage = function(e) {
     blinkStage = 0;
     lockedBaseline = 0;
     blinkFramesInStage = 0;
+    holdFrames = 0;
     return;
   }
 
@@ -78,6 +81,9 @@ self.onmessage = function(e) {
 
     // Check brightness bounds
     if (avgFaceLum < 18 || avgFaceLum > 242) {
+      holdFrames = 0;
+      stableFrames = 0;
+      blinkStage = 0;
       self.postMessage({
         action: 'UPDATE_STATUS',
         phase: 'positioning',
@@ -89,7 +95,8 @@ self.onmessage = function(e) {
     history.push(avgEyeLum);
     if (history.length > 25) history.shift();
 
-    if (history.length < 5) {
+    if (history.length < 4) {
+      holdFrames = 0;
       self.postMessage({
         action: 'UPDATE_STATUS',
         phase: 'positioning',
@@ -98,26 +105,28 @@ self.onmessage = function(e) {
       return;
     }
 
-    if (stableFrames < 4) {
+    if (stableFrames < 3) {
       stableFrames++;
+      holdFrames = 0;
       self.postMessage({
         action: 'UPDATE_STATUS',
         phase: 'ready',
-        prompt: '👁️ Please Blink Your Eyes Naturally',
+        prompt: '👁️ Blink or hold steady (2s)...',
       });
       return;
     }
 
+    holdFrames++;
     const curr = history[history.length - 1];
 
+    // Trigger 1 (Fast Path): Sensitive Eye Blink Detection (<1.0s)
     if (blinkStage === 0) {
-      // Rolling pre-blink baseline from the 5 preceding frames
       const preceding = history.slice(-6, -1);
       const baseline = preceding.reduce((a, b) => a + b, 0) / Math.max(1, preceding.length);
       const deviation = Math.abs(curr - baseline);
 
-      // Eyelid closure causes temporary luminance dip (deviation >= 2.8 units)
-      if (deviation >= 2.8 && deviation <= 45.0) {
+      // Natural eyelid closure causes sensitive luminance shift (>= 1.4 units)
+      if (deviation >= 1.4 && deviation <= 45.0) {
         blinkStage = 1;
         lockedBaseline = baseline;
         blinkFramesInStage = 0;
@@ -126,13 +135,12 @@ self.onmessage = function(e) {
           phase: 'blinking',
           prompt: 'Blinking detected... Reopen eyes',
         });
+        return;
       }
     } else if (blinkStage === 1) {
       blinkFramesInStage++;
-
-      // Eyelid reopening check: luminance returns near locked pre-blink baseline
       const diffFromBaseline = Math.abs(curr - lockedBaseline);
-      const tolerance = Math.max(4.5, lockedBaseline * 0.08);
+      const tolerance = Math.max(3.5, lockedBaseline * 0.08);
 
       if (diffFromBaseline <= tolerance && blinkFramesInStage >= 1) {
         blinkStage = 2;
@@ -141,18 +149,33 @@ self.onmessage = function(e) {
           phase: 'verified',
           prompt: '✅ Live Human Verified! Capturing...',
         });
+        return;
       } else if (blinkFramesInStage > 14) {
-        // TIMEOUT SAFEGUARD: If eyes are not verified within ~1s (14 frames @ 75ms),
-        // gracefully reset back to ready so the user never gets stuck!
+        // Reset blink stage back to ready
         blinkStage = 0;
         blinkFramesInStage = 0;
-        self.postMessage({
-          action: 'UPDATE_STATUS',
-          phase: 'ready',
-          prompt: '👁️ Please Blink Your Eyes Naturally',
-        });
       }
     }
+
+    // Trigger 2 (Guaranteed Path): 2.0-2.2s Steady Face-Hold Auto-Capture
+    if (holdFrames >= 24) {
+      self.postMessage({
+        action: 'VERIFIED',
+        phase: 'verified',
+        prompt: '✅ Live Human Verified! Capturing...',
+      });
+      return;
+    }
+
+    const holdPrompt = holdFrames >= 14
+      ? '📸 Auto-capturing in 1s... Hold still'
+      : '👁️ Blink or hold steady (2s)...';
+
+    self.postMessage({
+      action: 'UPDATE_STATUS',
+      phase: blinkStage === 1 ? 'blinking' : 'ready',
+      prompt: blinkStage === 1 ? 'Blinking detected... Reopen eyes' : holdPrompt,
+    });
   }
 };
 `;
@@ -188,7 +211,8 @@ export function processLivenessFallback(
   stableFrames: number,
   blinkStage: number,
   lockedBaseline: number = 0,
-  blinkFramesInStage: number = 0
+  blinkFramesInStage: number = 0,
+  holdFrames: number = 0
 ): FallbackResult {
   let totalLum = 0;
   let eyeLum = 0;
@@ -220,48 +244,53 @@ export function processLivenessFallback(
       action: 'UPDATE_STATUS',
       phase: 'positioning',
       prompt: 'Center face in good lighting',
-      stableFrames,
-      blinkStage,
-      lockedBaseline,
-      blinkFramesInStage,
+      stableFrames: 0,
+      blinkStage: 0,
+      lockedBaseline: 0,
+      blinkFramesInStage: 0,
+      holdFrames: 0,
     };
   }
 
   history.push(avgEyeLum);
   if (history.length > 25) history.shift();
 
-  if (history.length < 5) {
+  if (history.length < 4) {
     return {
       action: 'UPDATE_STATUS',
       phase: 'positioning',
       prompt: 'Hold steady in frame...',
-      stableFrames,
-      blinkStage,
-      lockedBaseline,
-      blinkFramesInStage,
+      stableFrames: 0,
+      blinkStage: 0,
+      lockedBaseline: 0,
+      blinkFramesInStage: 0,
+      holdFrames: 0,
     };
   }
 
-  if (stableFrames < 4) {
+  if (stableFrames < 3) {
     return {
       action: 'UPDATE_STATUS',
       phase: 'ready',
-      prompt: '👁️ Please Blink Your Eyes Naturally',
+      prompt: '👁️ Blink or hold steady (2s)...',
       stableFrames: stableFrames + 1,
-      blinkStage,
-      lockedBaseline,
-      blinkFramesInStage,
+      blinkStage: 0,
+      lockedBaseline: 0,
+      blinkFramesInStage: 0,
+      holdFrames: 0,
     };
   }
 
+  const nextHoldFrames = holdFrames + 1;
   const curr = history[history.length - 1];
 
+  // Trigger 1: Blink Detection
   if (blinkStage === 0) {
     const preceding = history.slice(-6, -1);
     const baseline = preceding.reduce((a, b) => a + b, 0) / Math.max(1, preceding.length);
     const deviation = Math.abs(curr - baseline);
 
-    if (deviation >= 2.8 && deviation <= 45.0) {
+    if (deviation >= 1.4 && deviation <= 45.0) {
       return {
         action: 'UPDATE_STATUS',
         phase: 'blinking',
@@ -270,12 +299,13 @@ export function processLivenessFallback(
         blinkStage: 1,
         lockedBaseline: baseline,
         blinkFramesInStage: 0,
+        holdFrames: nextHoldFrames,
       };
     }
   } else if (blinkStage === 1) {
     const nextFrames = blinkFramesInStage + 1;
     const diffFromBaseline = Math.abs(curr - lockedBaseline);
-    const tolerance = Math.max(4.5, lockedBaseline * 0.08);
+    const tolerance = Math.max(3.5, lockedBaseline * 0.08);
 
     if (diffFromBaseline <= tolerance && nextFrames >= 1) {
       return {
@@ -286,39 +316,40 @@ export function processLivenessFallback(
         blinkStage: 2,
         lockedBaseline,
         blinkFramesInStage: nextFrames,
+        holdFrames: nextHoldFrames,
       };
     } else if (nextFrames > 14) {
-      // Timeout reset to ready
-      return {
-        action: 'UPDATE_STATUS',
-        phase: 'ready',
-        prompt: '👁️ Please Blink Your Eyes Naturally',
-        stableFrames,
-        blinkStage: 0,
-        lockedBaseline: 0,
-        blinkFramesInStage: 0,
-      };
-    } else {
-      return {
-        action: 'UPDATE_STATUS',
-        phase: 'blinking',
-        prompt: 'Blinking detected... Reopen eyes',
-        stableFrames,
-        blinkStage: 1,
-        lockedBaseline,
-        blinkFramesInStage: nextFrames,
-      };
+      blinkStage = 0;
     }
   }
 
+  // Trigger 2: 2.0-2.2s Steady Face-Hold Auto-Capture
+  if (nextHoldFrames >= 24) {
+    return {
+      action: 'VERIFIED',
+      phase: 'verified',
+      prompt: '✅ Live Human Verified! Capturing...',
+      stableFrames,
+      blinkStage: 2,
+      lockedBaseline,
+      blinkFramesInStage,
+      holdFrames: nextHoldFrames,
+    };
+  }
+
+  const holdPrompt = nextHoldFrames >= 14
+    ? '📸 Auto-capturing in 1s... Hold still'
+    : '👁️ Blink or hold steady (2s)...';
+
   return {
     action: 'UPDATE_STATUS',
-    phase: 'ready',
-    prompt: '👁️ Please Blink Your Eyes Naturally',
+    phase: blinkStage === 1 ? 'blinking' : 'ready',
+    prompt: blinkStage === 1 ? 'Blinking detected... Reopen eyes' : holdPrompt,
     stableFrames,
-    blinkStage: 0,
+    blinkStage,
     lockedBaseline,
     blinkFramesInStage,
+    holdFrames: nextHoldFrames,
   };
 }
 

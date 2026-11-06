@@ -2191,33 +2191,33 @@ console.log('\n--- 37. Web Worker & requestAnimationFrame Liveness Frame Analysi
     'SelfieAttendClient cleans up cancelAnimationFrame and worker.terminate upon unmount'
   );
 
-  // 7. Verify SelfieAttendClient provides manual photo capture fallback button
+  // 7. Verify SelfieAttendClient enforces hands-free auto-capture (no manual capture button bypass)
   assert(
-    selfieContent.includes('handleManualCapture') &&
-    selfieContent.includes('Take Photo Now'),
-    'SelfieAttendClient provides manual capture fallback button so student is never stuck'
+    !selfieContent.includes('handleManualCapture') &&
+    !selfieContent.includes('Take Photo Now'),
+    'SelfieAttendClient enforces pure hands-free auto-capture preventing manual proxy bypass'
   );
 
-  // 8. Verify livenessWorker.ts implements blink timeout safeguard resetting to ready
+  // 8. Verify livenessWorker.ts implements dual auto-capture (sensitive blink + 2s face hold)
   assert(
-    workerContent.includes('blinkFramesInStage > 14') &&
-    workerContent.includes('blinkStage = 0'),
-    'lib/livenessWorker.ts includes timeout safeguard resetting blinkStage = 0 after 14 frames'
+    workerContent.includes('holdFrames >= 24') &&
+    workerContent.includes('deviation >= 1.4'),
+    'lib/livenessWorker.ts implements dual auto-capture (sensitive blink + 2s face hold)'
   );
 
-  // 9. Behavioral simulation of liveness fallback logic with timeout safeguard
+  // 9. Behavioral simulation of dual liveness auto-capture
   const dummyHistory = [100, 100, 100, 100, 100];
   const darkBuffer = new Uint8ClampedArray(64 * 64 * 4);
-  const darkRes = simulateLiveness(darkBuffer, 64, 64, [], 0, 0, 0, 0);
+  const darkRes = simulateLiveness(darkBuffer, 64, 64, [], 0, 0, 0, 0, 0);
   assert(darkRes.phase === 'positioning' && darkRes.prompt.includes('lighting'), 'Dark frames reject with positioning phase');
 
-  // Verify timeout resets stuck blinkStage back to ready
-  const stuckBuffer = new Uint8ClampedArray(64 * 64 * 4);
-  stuckBuffer.fill(70); // stays closed/dim
-  const timeoutRes = simulateLiveness(stuckBuffer, 64, 64, [100, 100, 100, 100, 100], 4, 1, 100, 14);
-  assert(timeoutRes.phase === 'ready' && timeoutRes.blinkStage === 0, 'Blink timeout resets blinkStage = 0 preventing infinite scan freeze');
+  // Verify steady face-hold auto-captures automatically at frame 24
+  const normalBuffer = new Uint8ClampedArray(64 * 64 * 4);
+  normalBuffer.fill(120);
+  const holdRes = simulateLiveness(normalBuffer, 64, 64, [120, 120, 120, 120, 120], 3, 0, 0, 0, 23);
+  assert(holdRes.action === 'VERIFIED' && holdRes.phase === 'verified', 'Steady face hold automatically triggers verification in 2s');
 
-  function simulateLiveness(pixels, width, height, history, stableFrames, blinkStage, lockedBaseline, blinkFramesInStage) {
+  function simulateLiveness(pixels, width, height, history, stableFrames, blinkStage, lockedBaseline, blinkFramesInStage, holdFrames = 0) {
     let totalLum = 0, eyeLum = 0, eyeCount = 0, faceCount = 0;
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
@@ -2234,31 +2234,34 @@ console.log('\n--- 37. Web Worker & requestAnimationFrame Liveness Frame Analysi
     const avgFaceLum = totalLum / faceCount;
     const avgEyeLum = eyeLum / (eyeCount || 1);
     if (avgFaceLum < 18 || avgFaceLum > 242) {
-      return { phase: 'positioning', prompt: 'Center face in good lighting', stableFrames, blinkStage, lockedBaseline, blinkFramesInStage };
+      return { phase: 'positioning', prompt: 'Center face in good lighting', stableFrames: 0, blinkStage: 0, lockedBaseline: 0, blinkFramesInStage: 0, holdFrames: 0 };
     }
     history.push(avgEyeLum);
-    if (history.length < 5) return { phase: 'positioning', prompt: 'Hold steady in frame...', stableFrames, blinkStage, lockedBaseline, blinkFramesInStage };
-    if (stableFrames < 4) return { phase: 'ready', prompt: '👁️ Please Blink Your Eyes Naturally', stableFrames: stableFrames + 1, blinkStage, lockedBaseline, blinkFramesInStage };
+    if (history.length < 4) return { phase: 'positioning', prompt: 'Hold steady in frame...', stableFrames: 0, blinkStage: 0, lockedBaseline: 0, blinkFramesInStage: 0, holdFrames: 0 };
+    if (stableFrames < 3) return { phase: 'ready', prompt: '👁️ Blink or hold steady (2s)...', stableFrames: stableFrames + 1, blinkStage: 0, lockedBaseline: 0, blinkFramesInStage: 0, holdFrames: 0 };
+    const nextHold = holdFrames + 1;
     const curr = history[history.length - 1];
     if (blinkStage === 0) {
       const preceding = history.slice(-6, -1);
       const baseline = preceding.reduce((a, b) => a + b, 0) / Math.max(1, preceding.length);
       const deviation = Math.abs(curr - baseline);
-      if (deviation >= 2.8 && deviation <= 45.0) {
-        return { phase: 'blinking', prompt: 'Blinking detected... Reopen eyes', stableFrames, blinkStage: 1, lockedBaseline: baseline, blinkFramesInStage: 0 };
+      if (deviation >= 1.4 && deviation <= 45.0) {
+        return { phase: 'blinking', prompt: 'Blinking detected... Reopen eyes', stableFrames, blinkStage: 1, lockedBaseline: baseline, blinkFramesInStage: 0, holdFrames: nextHold };
       }
     } else if (blinkStage === 1) {
       const nextFrames = blinkFramesInStage + 1;
       const diffFromBaseline = Math.abs(curr - lockedBaseline);
-      const tolerance = Math.max(4.5, lockedBaseline * 0.08);
+      const tolerance = Math.max(3.5, lockedBaseline * 0.08);
       if (diffFromBaseline <= tolerance && nextFrames >= 1) {
-        return { phase: 'verified', prompt: '✅ Live Human Verified! Capturing...', stableFrames, blinkStage: 2, lockedBaseline, blinkFramesInStage: nextFrames };
-      } else if (nextFrames > 14) {
-        return { phase: 'ready', prompt: '👁️ Please Blink Your Eyes Naturally', stableFrames, blinkStage: 0, lockedBaseline: 0, blinkFramesInStage: 0 };
+        return { action: 'VERIFIED', phase: 'verified', prompt: '✅ Live Blink Verified! Capturing...', stableFrames, blinkStage: 2, lockedBaseline, blinkFramesInStage: nextFrames, holdFrames: nextHold };
+      } else if (nextFrames > 12) {
+        blinkStage = 0;
       }
-      return { phase: 'blinking', prompt: 'Blinking detected... Reopen eyes', stableFrames, blinkStage: 1, lockedBaseline, blinkFramesInStage: nextFrames };
     }
-    return { phase: 'ready', prompt: '👁️ Please Blink Your Eyes Naturally', stableFrames, blinkStage: 0, lockedBaseline, blinkFramesInStage };
+    if (nextHold >= 24) {
+      return { action: 'VERIFIED', phase: 'verified', prompt: '✅ Live Human Verified! Capturing...', stableFrames, blinkStage: 2, lockedBaseline, blinkFramesInStage, holdFrames: nextHold };
+    }
+    return { phase: 'ready', prompt: '👁️ Blink or hold steady (2s)...', stableFrames, blinkStage, lockedBaseline, blinkFramesInStage, holdFrames: nextHold };
   }
 }
 
