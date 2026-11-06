@@ -88,6 +88,8 @@ export default function RootLayout({
     if (willOpen) {
       sb.classList.remove('-translate-x-full');
       sb.classList.add('translate-x-0');
+      sb.setAttribute('data-open', 'true');
+      sb.style.transform = 'translateX(0)';
       if (bd) {
         bd.classList.remove('hidden', 'pointer-events-none', 'opacity-0');
         bd.classList.add('opacity-100', 'pointer-events-auto');
@@ -97,6 +99,8 @@ export default function RootLayout({
     } else {
       sb.classList.add('-translate-x-full');
       sb.classList.remove('translate-x-0');
+      sb.setAttribute('data-open', 'false');
+      sb.style.transform = '';
       if (bd) {
         bd.classList.add('opacity-0', 'pointer-events-none');
         bd.classList.remove('opacity-100', 'pointer-events-auto');

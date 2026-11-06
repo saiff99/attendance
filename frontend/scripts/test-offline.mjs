@@ -2265,6 +2265,58 @@ console.log('\n--- 37. Web Worker & requestAnimationFrame Liveness Frame Analysi
   }
 }
 
+// --- 38. Cross-Browser Legacy Mobile Sidebar & CSS Translate Backward Compatibility ---
+console.log('\n--- 38. Cross-Browser Legacy Mobile Sidebar & CSS Translate Backward Compatibility ---');
+{
+  const globalsCss = fs.readFileSync(path.join(__dirname, '../src/app/globals.css'), 'utf8');
+  const sidebarContent = fs.readFileSync(path.join(__dirname, '../src/components/layout/Sidebar.tsx'), 'utf8');
+  const layoutContent = fs.readFileSync(path.join(__dirname, '../src/app/layout.tsx'), 'utf8');
+
+  // 1. Verify globals.css implements @supports not (translate: 0px 0px) fallback for Chrome < 104
+  assert(
+    globalsCss.includes('@supports not (translate: 0px 0px)') &&
+    globalsCss.includes('transform: translateX(-100%) !important;') &&
+    globalsCss.includes('transform: translateX(0px) !important;'),
+    'globals.css defines @supports not (translate: 0px 0px) fallback for legacy mobile browsers'
+  );
+
+  // 2. Verify globals.css scopes mobile sidebar off-screen by default under 1024px
+  assert(
+    globalsCss.includes('@media (max-width: 1023px)') &&
+    globalsCss.includes('#medattend-sidebar') &&
+    globalsCss.includes('transform: translateX(-100%);') &&
+    globalsCss.includes('[data-open="true"]'),
+    'globals.css scopes mobile #medattend-sidebar off-screen by default with [data-open="true"] support'
+  );
+
+  // 3. Verify globals.css enforces desktop sidebar visibility on min-width 1024px
+  assert(
+    globalsCss.includes('@media (min-width: 1024px)') &&
+    globalsCss.includes('transform: translateX(0) !important;'),
+    'globals.css guarantees desktop sidebar visibility on min-width 1024px'
+  );
+
+  // 4. Verify Sidebar.tsx sets data-open attribute on #medattend-sidebar
+  assert(
+    sidebarContent.includes('data-open={isOpen ? "true" : "false"}'),
+    'Sidebar.tsx binds dynamic data-open attribute to #medattend-sidebar'
+  );
+
+  // 5. Verify Sidebar.tsx polyfills queueMicrotask safely for older JS engines (< Chrome 71)
+  assert(
+    sidebarContent.includes('typeof queueMicrotask === "function"'),
+    'Sidebar.tsx guards queueMicrotask with setTimeout fallback for legacy JavaScript engines'
+  );
+
+  // 6. Verify layout.tsx pre-hydration controller manages data-open and style.transform directly
+  assert(
+    layoutContent.includes("sb.setAttribute('data-open', 'true')") &&
+    layoutContent.includes("sb.style.transform = 'translateX(0)'") &&
+    layoutContent.includes("sb.setAttribute('data-open', 'false')"),
+    'layout.tsx pre-hydration script controls data-open and inline style.transform for instant legacy responsiveness'
+  );
+}
+
 // Summary
 console.log('\n' + '=' .repeat(65));
 console.log(`📊 Offline Unit Test Summary: ${passed} Passed, ${failed} Failed`);

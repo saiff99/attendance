@@ -69,8 +69,9 @@ export default function Sidebar() {
   // Synchronize React state with native pre-hydration sidebar triggers
   useEffect(() => {
     const sb = document.getElementById("medattend-sidebar");
-    if (sb && sb.classList.contains("translate-x-0")) {
-      queueMicrotask(() => setIsOpen(true));
+    if (sb && (sb.classList.contains("translate-x-0") || sb.getAttribute("data-open") === "true")) {
+      const schedule = typeof queueMicrotask === "function" ? queueMicrotask : (fn: () => void) => setTimeout(fn, 0);
+      schedule(() => setIsOpen(true));
     }
 
     const handleSync = (e: Event) => {
@@ -201,6 +202,7 @@ export default function Sidebar() {
       {/* Sidebar (Desktop: Always visible. Mobile: Hidden on student portal, slides in via isOpen on admin pages) */}
       <div 
         id="medattend-sidebar"
+        data-open={isOpen ? "true" : "false"}
         className={classNames(
           "h-full w-64 sm:w-72 lg:w-64 flex-col bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 shadow-xl lg:shadow-sm fixed inset-y-0 left-0 z-50 transition-transform duration-300 ease-in-out",
           isStudentPortal ? "hidden lg:flex" : "flex",

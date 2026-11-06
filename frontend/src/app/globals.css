@@ -42,6 +42,47 @@ a {
   }
 }
 
+/* Universal Backward-Compatibility for Transforms & Translations
+   Ensures legacy mobile engines (Chrome < 104, Android WebView < 104, ColorOS/Realme 2, etc.)
+   correctly slide elements off-screen using standard transform translateX. */
+@supports not (translate: 0px 0px) {
+  .-translate-x-full {
+    transform: translateX(-100%) !important;
+  }
+  .translate-x-full {
+    transform: translateX(100%) !important;
+  }
+  .translate-x-0 {
+    transform: translateX(0px) !important;
+  }
+  .-translate-x-1\/2 {
+    transform: translateX(-50%) !important;
+  }
+  .-translate-y-1\/2 {
+    transform: translateY(-50%) !important;
+  }
+  .-translate-x-1\/2.-translate-y-1\/2 {
+    transform: translate(-50%, -50%) !important;
+  }
+}
+
+/* Scoped Mobile Sidebar Slide In/Out Engine for Legacy WebViews */
+@media (max-width: 1023px) {
+  #medattend-sidebar {
+    transform: translateX(-100%);
+  }
+  #medattend-sidebar.translate-x-0,
+  #medattend-sidebar[data-open="true"] {
+    transform: translateX(0) !important;
+  }
+}
+
+@media (min-width: 1024px) {
+  #medattend-sidebar {
+    transform: translateX(0) !important;
+  }
+}
+
 /* Suppress browser focus outlines and selection boxes on Recharts charts */
 .recharts-responsive-container,
 .recharts-wrapper,
