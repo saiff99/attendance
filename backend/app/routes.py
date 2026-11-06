@@ -35,6 +35,10 @@ from app.session_cache import (
     get_cached_session_metadata,
     invalidate_backend_session_cache,
 )
+from app.attendance_cache import (
+    get_cached_session_attendance,
+    record_cached_session_attendance,
+)
 from app.biometric_cache import get_cached_student_by_roll
 from app.ai import (
     app_fa,
@@ -952,10 +956,10 @@ async def selfie_attendance(
         print("Error in selfie face matching:", e)
         raise HTTPException(status_code=500, detail="AI face analysis failed. Please try again.")
 
-    # 8. Check if already marked present in this session (Verified strictly AFTER authentic biometric face match)
-    existing_att = safe_db_execute(supabase.table("attendance").select("id, recorded_at, confidence_score").eq("session_id", session_id).eq("student_id", student["id"]))
-    if existing_att.data:
-        rec_time = existing_att.data[0].get("recorded_at", "Earlier Today")
+    # 8. Check if already marked present in this session (Fast-Path via In-Memory Attendance Cache, verified strictly AFTER authentic biometric face match)
+    cached_att = get_cached_session_attendance(session_id, student["id"])
+    if cached_att:
+        rec_time = cached_att.get("recorded_at", "Earlier Today")
         # Ensure device lock is registered even if already present (Shared & Persistent)
         if device_id and device_id.strip():
             record_device_lock(session_id, device_id, clean_roll)
@@ -967,10 +971,11 @@ async def selfie_attendance(
             "student_roll": student["student_roll"],
             "academic_year": student.get("academic_year") or "MBBS",
             "recorded_at": rec_time,
-            "confidence": existing_att.data[0].get("confidence_score", confidence_score)
+            "confidence": cached_att.get("confidence", confidence_score)
         }
 
-    # 9. Record Attendance in Supabase
+    # 9. Record Attendance in Supabase (Single-roundtrip atomic upsert, zero redundant individual SELECT queries)
+    now_str = time.strftime("%Y-%m-%d %H:%M:%S")
     try:
         safe_db_execute(supabase.table("attendance").upsert({
             "session_id": session_id,
@@ -980,17 +985,17 @@ async def selfie_attendance(
             "confidence_score": confidence_score
         }, on_conflict="session_id,student_id"))
         
-        # 10. Lock Device for this Student & Session (Shared & Persistent)
+        # 10. Update In-Memory Attendance Cache for zero-DB hits on subsequent checks
+        record_cached_session_attendance(session_id, student["id"], {
+            "recorded_at": now_str,
+            "confidence": confidence_score,
+            "capture_mode": "Live Scan",
+            "student_roll": clean_roll
+        })
+
+        # 11. Lock Device for this Student & Session (Shared & Persistent)
         if device_id and device_id.strip():
             record_device_lock(session_id, device_id, clean_roll)
-
-        # Sync memory cache if stream is currently active
-        try:
-            from app.stream import session_recognized_students
-            if session_id in session_recognized_students:
-                session_recognized_students[session_id].add(student["id"])
-        except Exception:
-            pass
             
         return {
             "success": True,
@@ -1000,13 +1005,20 @@ async def selfie_attendance(
             "student_roll": student["student_roll"],
             "academic_year": student.get("academic_year") or "MBBS",
             "confidence": confidence_score,
-            "recorded_at": time.strftime("%Y-%m-%d %H:%M:%S")
+            "recorded_at": now_str
         }
     except Exception as e:
         print("Database insert error:", e)
         # Check if inserted concurrently
         existing = safe_db_execute(supabase.table("attendance").select("id, recorded_at, confidence_score").eq("session_id", session_id).eq("student_id", student["id"]))
         if existing.data:
+            rec_row = existing.data[0]
+            record_cached_session_attendance(session_id, student["id"], {
+                "recorded_at": rec_row.get("recorded_at", "Just now"),
+                "confidence": rec_row.get("confidence_score", confidence_score),
+                "capture_mode": "Live Scan",
+                "student_roll": clean_roll
+            })
             if device_id and device_id.strip():
                 record_device_lock(session_id, device_id, clean_roll)
             return {
@@ -1016,8 +1028,8 @@ async def selfie_attendance(
                 "student_name": student["full_name"],
                 "student_roll": student["student_roll"],
                 "academic_year": student.get("academic_year") or "MBBS",
-                "confidence": existing.data[0].get("confidence_score", confidence_score),
-                "recorded_at": existing.data[0].get("recorded_at", "Just now")
+                "confidence": rec_row.get("confidence_score", confidence_score),
+                "recorded_at": rec_row.get("recorded_at", "Just now")
             }
         raise HTTPException(status_code=500, detail="Failed to save attendance record.")
 

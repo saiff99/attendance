@@ -163,6 +163,13 @@ def cleanup_session_state(session_id: Optional[str] = None) -> dict:
                 
             # 4. Reset last-fetch timestamp
             session_last_fetch.pop(s_id, None)
+
+            # 5. Invalidate in-memory attendance record cache
+            try:
+                from app.attendance_cache import invalidate_session_attendance_cache
+                invalidate_session_attendance_cache(s_id)
+            except Exception:
+                pass
             
             cleaned_sessions.append(s_id)
 
@@ -922,6 +929,15 @@ def _db_attendance_worker_loop():
                     "confidence_score": conf_score
                 }, on_conflict="session_id,student_id").execute()
                 print(f"[ATTENDANCE] Recorded {student_name} from {camera_name} ({conf_score * 100:.0f}%)")
+                try:
+                    from app.attendance_cache import record_cached_session_attendance
+                    record_cached_session_attendance(session_id, student_id, {
+                        "recorded_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+                        "confidence": conf_score,
+                        "capture_mode": "Live Scan"
+                    })
+                except Exception:
+                    pass
             except Exception as insert_err:
                 err_str = str(insert_err).lower()
                 if "duplicate" in err_str or "unique" in err_str or "23505" in err_str:

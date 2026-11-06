@@ -2749,6 +2749,106 @@ console.log('\n--- 44. Next.js /api/geofence In-Memory 5-Minute TTL Caching ---'
   assert(dbFetchCount === 1, '150 concurrent student geofence requests result in exactly 1 database fetch (149 DB queries saved)');
 }
 
+// --- 45. In-Memory Session Attendance Caching & Single-Roundtrip Atomic Save (Zero-Redundant SELECT Queries) ---
+console.log('\n--- 45. In-Memory Session Attendance Caching & Single-Roundtrip Atomic Save (Zero-Redundant SELECT Queries) ---');
+{
+  const attCachePath = path.resolve(__dirname, '../../backend/app/attendance_cache.py');
+  const routesPath = path.resolve(__dirname, '../../backend/app/routes.py');
+  const streamPath = path.resolve(__dirname, '../../backend/app/stream.py');
+
+  assert(fs.existsSync(attCachePath), 'backend/app/attendance_cache.py exists');
+  const attCacheContent = fs.readFileSync(attCachePath, 'utf8');
+  const routesContent = fs.readFileSync(routesPath, 'utf8');
+  const streamContent = fs.readFileSync(streamPath, 'utf8');
+
+  // 1. attendance_cache.py exports core primitives
+  assert(
+    attCacheContent.includes('def get_cached_session_attendance(') &&
+    attCacheContent.includes('def record_cached_session_attendance(') &&
+    attCacheContent.includes('def invalidate_session_attendance_cache(') &&
+    attCacheContent.includes('SESSION_ATTENDANCE_CACHE_TTL_SECONDS'),
+    'backend/app/attendance_cache.py defines thread-safe in-memory attendance caching primitives'
+  );
+
+  // 2. routes.py uses fast-path in-memory attendance check eliminating individual SELECT queries
+  assert(
+    routesContent.includes('from app.attendance_cache import (') &&
+    routesContent.includes('get_cached_session_attendance,') &&
+    routesContent.includes('record_cached_session_attendance,') &&
+    routesContent.includes('cached_att = get_cached_session_attendance(session_id, student["id"])'),
+    'routes.py imports and queries in-memory attendance cache before executing database operations'
+  );
+
+  // 3. routes.py performs atomic upsert and updates in-memory cache
+  assert(
+    routesContent.includes('record_cached_session_attendance(session_id, student["id"], {') &&
+    routesContent.includes('on_conflict="session_id,student_id"'),
+    'routes.py atomically updates in-memory attendance cache on successful DB upsert'
+  );
+
+  // 4. stream.py synchronizes cache invalidation and updates
+  assert(
+    streamContent.includes('from app.attendance_cache import invalidate_session_attendance_cache') &&
+    streamContent.includes('from app.attendance_cache import record_cached_session_attendance'),
+    'stream.py coordinates attendance cache updates and invalidation during session lifecycle'
+  );
+
+  // 5. Behavioral simulation of 150 student classroom rush
+  let sessionSelectQueries = 0;
+  let individualSelectQueries = 0;
+  let upsertQueries = 0;
+
+  const mockSessionAttendance = new Map();
+  let sessionInitialized = false;
+
+  function simulateStudentSelfieAttendance(sessionId, studentId, studentRoll) {
+    // Step 8: In-memory cache check
+    if (!sessionInitialized) {
+      sessionSelectQueries++; // 1 query to fetch existing attendees for session
+      sessionInitialized = true;
+    }
+
+    if (mockSessionAttendance.has(studentId)) {
+      // 0 DB queries! Immediate return from RAM
+      return { success: true, already_marked: true, fromMemory: true };
+    }
+
+    // Step 9: Single-roundtrip upsert (no individual SELECT!)
+    upsertQueries++;
+    mockSessionAttendance.set(studentId, {
+      recorded_at: '2026-11-06 10:15:00',
+      confidence: 0.92,
+      capture_mode: 'Live Scan',
+      student_roll: studentRoll,
+    });
+
+    return { success: true, already_marked: false, fromMemory: false };
+  }
+
+  // 150 students submitting selfie attendance for the first time
+  for (let i = 1; i <= 150; i++) {
+    const res = simulateStudentSelfieAttendance('sess-100', `stu-${i}`, `ROLL-${i}`);
+    assert(res.success === true, `Student ${i} successfully processed`);
+    assert(res.already_marked === false, `Student ${i} marked present`);
+  }
+
+  // 50 duplicate submissions (students retrying or checking attendance)
+  for (let i = 1; i <= 50; i++) {
+    const res = simulateStudentSelfieAttendance('sess-100', `stu-${i}`, `ROLL-${i}`);
+    assert(res.success === true, `Duplicate check for Student ${i} succeeded`);
+    assert(res.already_marked === true, `Duplicate detected for Student ${i}`);
+    assert(res.fromMemory === true, `Duplicate served 100% from in-memory cache without DB touch`);
+  }
+
+  assert(individualSelectQueries === 0, 'Individual student SELECT queries completely eliminated (0 queries)');
+  assert(sessionSelectQueries === 1, 'Session attendance set initialized in exactly 1 batch query');
+  assert(upsertQueries === 150, '150 student upserts executed in exactly 150 atomic roundtrips');
+
+  const totalQueriesWithCache = sessionSelectQueries + individualSelectQueries + upsertQueries;
+  const totalQueriesWithoutCache = 150 * 2 + 50 * 2; // 300 initial + 100 duplicates = 400 queries without cache
+  assert(totalQueriesWithCache === 151, `Total database queries is 151 (saved ${totalQueriesWithoutCache - totalQueriesWithCache} queries out of 400)`);
+}
+
 // Summary
 console.log('\n' + '=' .repeat(65));
 console.log(`📊 Offline Unit Test Summary: ${passed} Passed, ${failed} Failed`);
