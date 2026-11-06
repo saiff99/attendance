@@ -133,6 +133,18 @@ The rules documented in this specification are **Hard Constraints**. Under no ci
   - The submit attendance button is rendered only after the automated capture event fires and produces a verified camera snapshot.
 - **Violation Guard:** Never re-introduce manual snapshot buttons, camera click triggers, or file upload dialogs to the student selfie attendance flow.
 
+### Rule 15: Silent In-Class Verbal Trigger & Prohibition of Broadcast Session Notifications
+- **Constraint:** The system strictly prohibits broadcasting automated push notifications, background SMS, or cohort-wide messaging alerts upon the activation of a live attendance session (`/api/create-session` or `/api/start-session`). Session initiation must remain an in-person, silent event triggered verbally by the instructor physically present in the lecture hall.
+- **Security Rationales:**
+  1. **Anti-Proxy Coordination Prevention:** Broadcasting push notifications alerts absent students (in dormitories, hostels, or off-campus) that a 5-minute countdown window is active. This incentivizes remote proxy coordination (e.g., messaging peers in class, requesting credentials, or attempting photo-of-photo spoofing).
+  2. **Attack Surface & Traffic Minimization:** Eliminating broadcast push notifications prevents absent students from initiating out-of-range GPS spoofing attacks, mock-location fuzzing, or flood-testing biometric verification routes, thereby safeguarding server capacity and eliminating unnecessary lockout entries.
+  3. **Zero-Trust Classroom Presence:** Attendance awareness must be gated strictly by the faculty member's verbal announcement in the physical classroom. Absent students remain unaware of session commencement, and the 5-minute window expires naturally before any coordinated evasion can be orchestrated.
+- **Implementation:**
+  - Automated web push notifications, background service worker push listeners (`self.addEventListener('push')`), and student portal push alert permissions are eradicated from the codebase.
+  - The Service Worker (`frontend/public/sw.js`) is restricted strictly to offline asset caching, shell rendering, and PWA installation.
+- **Violation Guard:** Never introduce cohort-wide automated push notification dispatchers or background alerts on session creation. Session attendance must remain an in-person verbal trigger.
+
+
 
 
 
