@@ -1,4 +1,6 @@
 import os
+import asyncio
+import threading
 import numpy as np
 from typing import Optional
 from numpy.linalg import norm
@@ -183,4 +185,44 @@ def match_faces_vectorized(
                 })
 
     return recognized
+
+
+# ==============================================================================
+# AI Inference Concurrency Limiter (Thundering Herd & Resource Exhaustion Shield)
+# Enforces a strict upper bound on parallel neural inferences to prevent CPU thread thrashing
+# and memory spikes when 100+ students submit selfies simultaneously during classroom spikes.
+# ==============================================================================
+_ai_semaphore: Optional[asyncio.Semaphore] = None
+_semaphore_loop: Optional[asyncio.AbstractEventLoop] = None
+_semaphore_lock = threading.Lock()
+
+
+def get_ai_semaphore() -> asyncio.Semaphore:
+    """
+    Lazily initializes and returns the asyncio.Semaphore bound to the active event loop.
+    Enforces a strict upper bound on concurrent AI neural inferences (default 4) to eliminate
+    CPU thread thrashing and memory exhaustion during 100+ student attendance bursts.
+    """
+    global _ai_semaphore, _semaphore_loop
+    try:
+        current_loop = asyncio.get_running_loop()
+    except RuntimeError:
+        current_loop = None
+
+    if _ai_semaphore is None or _semaphore_loop != current_loop:
+        with _semaphore_lock:
+            if _ai_semaphore is None or _semaphore_loop != current_loop:
+                limit = int(os.getenv("AI_CONCURRENCY_LIMIT", "4"))
+                limit = max(1, min(16, limit))
+                _ai_semaphore = asyncio.Semaphore(limit)
+                _semaphore_loop = current_loop
+    return _ai_semaphore
+
+
+def reset_ai_semaphore() -> None:
+    """Resets the in-memory AI semaphore (used in tests and reconfiguration)."""
+    global _ai_semaphore, _semaphore_loop
+    with _semaphore_lock:
+        _ai_semaphore = None
+        _semaphore_loop = None
 

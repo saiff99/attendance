@@ -35,7 +35,13 @@ from app.session_cache import (
     get_cached_session_metadata,
     invalidate_backend_session_cache,
 )
-from app.ai import app_fa, AI_ENABLED, calculate_confidence_score, match_faces_vectorized
+from app.ai import (
+    app_fa,
+    AI_ENABLED,
+    calculate_confidence_score,
+    match_faces_vectorized,
+    get_ai_semaphore,
+)
 from app.antispoof import verify_face_liveness
 from app.stream import generate_video_feed
 import cv2  # type: ignore
@@ -170,7 +176,9 @@ async def process_attendance(request: Request, file: UploadFile = File(...), ses
         )
 
     try:
-        recognized_students = await asyncio.to_thread(_match_photo_faces)
+        # Concurrency Limiter: Guard neural inference under asyncio semaphore to prevent CPU/memory exhaustion
+        async with get_ai_semaphore():
+            recognized_students = await asyncio.to_thread(_match_photo_faces)
     except Exception as e:
         print("Error matching faces:", str(e))
         raise HTTPException(status_code=500, detail="Failed to run AI face matching.")
@@ -953,7 +961,9 @@ async def selfie_attendance(
         return calculate_confidence_score(sim)
 
     try:
-        confidence_score = await asyncio.to_thread(_verify_selfie)
+        # Concurrency Limiter: Guard neural inference under asyncio semaphore to prevent CPU thrashing & OOM during spikes
+        async with get_ai_semaphore():
+            confidence_score = await asyncio.to_thread(_verify_selfie)
     except HTTPException:
         raise
     except Exception as e:

@@ -10,7 +10,7 @@ from PIL import Image, ImageOps
 from fastapi import APIRouter, Request, HTTPException, UploadFile, File, Form
 
 from app.config import supabase
-from app.ai import app_fa, AI_ENABLED
+from app.ai import app_fa, AI_ENABLED, get_ai_semaphore
 from app.security import INTERNAL_API_KEY
 from app.biometric_cache import invalidate_biometric_cache
 from app.routers.helpers import get_real_client_ip, safe_read_image_file, MAX_SELFIE_IMAGE_SIZE
@@ -128,7 +128,8 @@ async def enroll_face(
         return faces[0].embedding.tolist()
 
     try:
-        encoding = await asyncio.to_thread(_extract_single_face)
+        async with get_ai_semaphore():
+            encoding = await asyncio.to_thread(_extract_single_face)
     except HTTPException:
         raise
     except Exception as e:
@@ -289,7 +290,8 @@ async def enroll_face_burst(
         return avg_encoding.tolist(), len(encs)
 
     try:
-        encoding_list, valid_count = await asyncio.to_thread(_extract_burst_encodings)
+        async with get_ai_semaphore():
+            encoding_list, valid_count = await asyncio.to_thread(_extract_burst_encodings)
     except HTTPException:
         raise
     except Exception as e:

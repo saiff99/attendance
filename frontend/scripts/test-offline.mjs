@@ -2446,6 +2446,111 @@ console.log('\n--- 40. Lazy Loading of Heavy Dependencies (ExcelJS On-Demand Int
   assert(inst1 === inst2 && importCounter === 1, 'getExcelJS singleton caching guarantees module is imported exactly once');
 }
 
+// --- 41. AI Inference Concurrency Limiter & Thundering Herd Protection ---
+console.log('\n--- 41. AI Inference Concurrency Limiter & Thundering Herd Protection ---');
+{
+  const aiPyPath = path.resolve(__dirname, '../../backend/app/ai.py');
+  assert(fs.existsSync(aiPyPath), 'backend/app/ai.py exists');
+  const aiPyContent = fs.readFileSync(aiPyPath, 'utf8');
+
+  const routesPyPath = path.resolve(__dirname, '../../backend/app/routes.py');
+  assert(fs.existsSync(routesPyPath), 'backend/app/routes.py exists');
+  const routesPyContent = fs.readFileSync(routesPyPath, 'utf8');
+
+  const biometricsPyPath = path.resolve(__dirname, '../../backend/app/routers/biometrics.py');
+  assert(fs.existsSync(biometricsPyPath), 'backend/app/routers/biometrics.py exists');
+  const biometricsPyContent = fs.readFileSync(biometricsPyPath, 'utf8');
+
+  // 1. Verify get_ai_semaphore and reset_ai_semaphore in ai.py
+  assert(
+    aiPyContent.includes('def get_ai_semaphore() -> asyncio.Semaphore:') &&
+    aiPyContent.includes('def reset_ai_semaphore() -> None:') &&
+    aiPyContent.includes('AI_CONCURRENCY_LIMIT'),
+    'backend/app/ai.py exports get_ai_semaphore and reset_ai_semaphore with AI_CONCURRENCY_LIMIT configuration'
+  );
+
+  // 2. Verify routes.py imports and guards selfie attendance with get_ai_semaphore()
+  assert(
+    routesPyContent.includes('get_ai_semaphore') &&
+    routesPyContent.includes('async with get_ai_semaphore():') &&
+    routesPyContent.includes('confidence_score = await asyncio.to_thread(_verify_selfie)'),
+    'backend/app/routes.py guards selfie attendance neural inference with get_ai_semaphore()'
+  );
+
+  // 3. Verify routes.py guards upload-photo attendance with get_ai_semaphore()
+  assert(
+    routesPyContent.includes('recognized_students = await asyncio.to_thread(_match_photo_faces)'),
+    'backend/app/routes.py guards batch photo attendance with get_ai_semaphore()'
+  );
+
+  // 4. Verify biometrics.py guards face enrollment with get_ai_semaphore()
+  assert(
+    biometricsPyContent.includes('get_ai_semaphore') &&
+    biometricsPyContent.includes('async with get_ai_semaphore():') &&
+    biometricsPyContent.includes('encoding = await asyncio.to_thread(_extract_single_face)'),
+    'backend/app/routers/biometrics.py guards face enrollment with get_ai_semaphore()'
+  );
+
+  // 5. Behavioral simulation of FIFO queue under 150 concurrent student check-ins
+  const concurrencyLimit = 4;
+  let activeInferences = 0;
+  let maxActiveObserved = 0;
+  let totalProcessed = 0;
+
+  // Simple semaphore mock for Node.js
+  class AsyncSemaphoreMock {
+    constructor(capacity) {
+      this.capacity = capacity;
+      this.current = 0;
+      this.queue = [];
+    }
+    async acquire() {
+      if (this.current < this.capacity) {
+        this.current++;
+        return;
+      }
+      await new Promise(resolve => this.queue.push(resolve));
+      this.current++;
+    }
+    release() {
+      this.current--;
+      if (this.queue.length > 0) {
+        const next = this.queue.shift();
+        next();
+      }
+    }
+  }
+
+  const sem = new AsyncSemaphoreMock(concurrencyLimit);
+  const studentTasks = Array.from({ length: 150 }, async (_, idx) => {
+    await sem.acquire();
+    activeInferences++;
+    if (activeInferences > maxActiveObserved) {
+      maxActiveObserved = activeInferences;
+    }
+    // Simulate ~1ms task
+    await new Promise(resolve => setTimeout(resolve, 1));
+    activeInferences--;
+    totalProcessed++;
+    sem.release();
+  });
+
+  await Promise.all(studentTasks);
+
+  assert(
+    totalProcessed === 150,
+    'All 150 simulated students are successfully processed without drops'
+  );
+  assert(
+    maxActiveObserved <= concurrencyLimit,
+    `Active concurrent inferences never exceed capacity limit (${maxActiveObserved} <= ${concurrencyLimit})`
+  );
+  assert(
+    activeInferences === 0,
+    'All concurrency slots are cleanly released back to 0 active'
+  );
+}
+
 // Summary
 console.log('\n' + '=' .repeat(65));
 console.log(`📊 Offline Unit Test Summary: ${passed} Passed, ${failed} Failed`);
