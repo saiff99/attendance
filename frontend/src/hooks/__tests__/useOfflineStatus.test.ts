@@ -36,10 +36,5 @@ describe('useOfflineStatus hook', () => {
     });
     expect(result.current.isOnline).toBe(true);
   });
-
-  it('provides requestNotificationAccess function', () => {
-    const { result } = renderHook(() => useOfflineStatus());
-    expect(typeof result.current.requestNotificationAccess).toBe('function');
-  });
 });
 

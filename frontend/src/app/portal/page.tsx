@@ -6,7 +6,7 @@ import {
   GraduationCap, BookOpen, CheckCircle2, AlertTriangle, XCircle,
   Calendar, Clock, Smartphone, LogOut, KeyRound,
   RefreshCw, ChevronDown, User, Sparkles, Check, ArrowUpRight, Camera, ShieldCheck,
-  Eye, EyeOff, Bell, WifiOff, X
+  Eye, EyeOff, WifiOff, X
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { useOfflineStatus, useModalBehavior } from "@/hooks";
@@ -158,8 +158,8 @@ export default function StudentPortalPage() {
     };
   }, [isProfileMenuOpen]);
 
-  // PWA Offline Status & Push Notification States
-  const { isOnline, notificationPermission, requestNotificationAccess } = useOfflineStatus();
+  // PWA Offline Status State
+  const { isOnline } = useOfflineStatus();
 
   const fetchPortalData = useCallback(async (rollQuery?: string, isSilent = false) => {
     // Only show full-screen loader on initial fetch when there is no data
@@ -531,40 +531,6 @@ export default function StudentPortalPage() {
                       <span className="block text-[10px] text-slate-400">Update your 6-digit access PIN</span>
                     </div>
                   </button>
-
-                  {/* Attendance Push Alerts Button */}
-                  {notificationPermission !== "unsupported" && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        requestNotificationAccess();
-                      }}
-                      className="group w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-800 active:scale-[0.98] transition-all duration-150 text-left cursor-pointer"
-                    >
-                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 group-hover:scale-105 transition-all duration-150 ${
-                        notificationPermission === "granted"
-                          ? "bg-emerald-500/15 text-emerald-400 group-hover:bg-emerald-500/25"
-                          : "bg-amber-500/15 text-amber-400 group-hover:bg-amber-500/25"
-                      }`}>
-                        <Bell className="w-3.5 h-3.5" />
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between">
-                          <span className="block font-semibold">Push Alerts</span>
-                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
-                            notificationPermission === "granted"
-                              ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                              : "bg-slate-800 text-slate-400 border border-slate-700"
-                          }`}>
-                            {notificationPermission === "granted" ? "Active" : "Enable"}
-                          </span>
-                        </div>
-                        <span className="block text-[10px] text-slate-400">
-                          {notificationPermission === "granted" ? "Live check-in alerts on" : "Click to allow class alerts"}
-                        </span>
-                      </div>
-                    </button>
-                  )}
                 </div>
 
                 {/* Divider */}
