@@ -2,10 +2,20 @@
 
 import { useState, useRef } from "react";
 import { X, UploadCloud, FileSpreadsheet, Download, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
-import ExcelJS from "exceljs";
+import type ExcelJS from "exceljs";
 // Bulk Import Modal Component
 import { cleanPhoneNumber } from "@/lib/studentContact";
 import { useModalBehavior } from "@/hooks";
+
+let cachedExcelJS: typeof ExcelJS | null = null;
+
+async function getExcelJS(): Promise<typeof ExcelJS> {
+  if (!cachedExcelJS) {
+    const mod = await import("exceljs");
+    cachedExcelJS = ((mod as unknown as { default?: typeof ExcelJS }).default || mod) as typeof ExcelJS;
+  }
+  return cachedExcelJS;
+}
 
 interface BulkImportModalProps {
   isOpen: boolean;
@@ -98,6 +108,7 @@ export function BulkImportModal({
           }
         }
       } else {
+        const ExcelJS = await getExcelJS();
         const workbook = new ExcelJS.Workbook();
         await workbook.xlsx.load(buffer);
         const worksheet = workbook.worksheets[0];
@@ -211,48 +222,55 @@ export function BulkImportModal({
   };
 
   const downloadSampleTemplate = async () => {
-    const sampleData = [
-      {
-        roll: "26001",
-        name: "MORSALIM MONDAL",
-        year: selectedYear || "1st Year",
-        group: "Group A",
-      },
-      {
-        roll: "26101",
-        name: "SK SAIFUDDIN",
-        year: selectedYear || "1st Year",
-        group: "Group B",
-      },
-      {
-        roll: "26201",
-        name: "RAHUL ROY",
-        year: selectedYear || "1st Year",
-        group: "Group C",
-      },
-    ];
+    try {
+      const sampleData = [
+        {
+          roll: "26001",
+          name: "MORSALIM MONDAL",
+          year: selectedYear || "1st Year",
+          group: "Group A",
+        },
+        {
+          roll: "26101",
+          name: "SK SAIFUDDIN",
+          year: selectedYear || "1st Year",
+          group: "Group B",
+        },
+        {
+          roll: "26201",
+          name: "RAHUL ROY",
+          year: selectedYear || "1st Year",
+          group: "Group C",
+        },
+      ];
 
-    const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet("Students");
-    worksheet.columns = [
-      { header: "Roll Number", key: "roll", width: 15 },
-      { header: "Full Name", key: "name", width: 25 },
-      { header: "Academic Year", key: "year", width: 18 },
-      { header: "Group", key: "group", width: 15 },
-    ];
+      const ExcelJS = await getExcelJS();
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet("Students");
+      worksheet.columns = [
+        { header: "Roll Number", key: "roll", width: 15 },
+        { header: "Full Name", key: "name", width: 25 },
+        { header: "Academic Year", key: "year", width: 18 },
+        { header: "Group", key: "group", width: 15 },
+      ];
 
-    sampleData.forEach((row) => worksheet.addRow(row));
+      sampleData.forEach((row) => worksheet.addRow(row));
 
-    const buffer = await workbook.xlsx.writeBuffer();
-    const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "student_import_template.xlsx";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "student_import_template.xlsx";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err: unknown) {
+      console.error("Error generating sample template:", err);
+      setImportStatus("error");
+      setStatusMessage("Failed to generate sample template. Please try again.");
+    }
   };
 
   const handleImportSubmit = async () => {

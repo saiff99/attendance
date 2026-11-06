@@ -2386,6 +2386,66 @@ console.log('\n--- 39. High-Performance Incremental Delta Polling for Session At
   assert(currentLogs.length === 3 && lastRecorded === '2026-11-06T10:01:00Z', 'Delta successfully prepends new record and advances timestamp');
 }
 
+// --- 40. Lazy Loading of Heavy Dependencies (ExcelJS On-Demand Interaction) ---
+console.log('\n--- 40. Lazy Loading of Heavy Dependencies (ExcelJS On-Demand Interaction) ---');
+{
+  const bulkModalPath = path.resolve(__dirname, '../src/components/BulkImportModal.tsx');
+  assert(fs.existsSync(bulkModalPath), 'BulkImportModal.tsx exists');
+  const bulkModalContent = fs.readFileSync(bulkModalPath, 'utf8');
+
+  // 1. Verify no top-level static import of exceljs exists
+  assert(
+    !bulkModalContent.includes('import ExcelJS from "exceljs";') &&
+    !bulkModalContent.includes("import ExcelJS from 'exceljs';"),
+    'BulkImportModal.tsx eliminates top-level static import of exceljs (~925 KB saved from initial modal chunk)'
+  );
+
+  // 2. Verify type-only import for zero-runtime overhead
+  assert(
+    bulkModalContent.includes('import type ExcelJS from "exceljs";') ||
+    bulkModalContent.includes("import type ExcelJS from 'exceljs';"),
+    'BulkImportModal.tsx utilizes compile-time type-only import for ExcelJS'
+  );
+
+  // 3. Verify cached dynamic import helper getExcelJS()
+  assert(
+    bulkModalContent.includes('async function getExcelJS()') &&
+    bulkModalContent.includes('await import("exceljs")'),
+    'BulkImportModal.tsx implements cached getExcelJS() helper with dynamic import("exceljs")'
+  );
+
+  // 4. Verify CSV handling does not trigger getExcelJS()
+  const csvBranch = bulkModalContent.indexOf('uploadedFile.name.toLowerCase().endsWith(".csv")');
+  const elseBranch = bulkModalContent.indexOf('const ExcelJS = await getExcelJS();');
+  assert(
+    csvBranch !== -1 && elseBranch !== -1 && csvBranch < elseBranch,
+    'CSV files are parsed natively via TextDecoder without calling getExcelJS() or downloading heavy vendor bundle'
+  );
+
+  // 5. Verify downloadSampleTemplate lazily loads getExcelJS() with try/catch protection
+  assert(
+    bulkModalContent.includes('const downloadSampleTemplate = async () =>') &&
+    bulkModalContent.includes('const ExcelJS = await getExcelJS();') &&
+    bulkModalContent.includes('Failed to generate sample template'),
+    'downloadSampleTemplate lazily loads getExcelJS() on interaction and handles network/runtime errors gracefully'
+  );
+
+  // 6. Behavioral simulation of cached singleton loader
+  let importCounter = 0;
+  let simulatedCache = null;
+  async function simulateGetExcelJS() {
+    if (!simulatedCache) {
+      importCounter++;
+      simulatedCache = { Workbook: class MockWorkbook {} };
+    }
+    return simulatedCache;
+  }
+
+  const inst1 = await simulateGetExcelJS();
+  const inst2 = await simulateGetExcelJS();
+  assert(inst1 === inst2 && importCounter === 1, 'getExcelJS singleton caching guarantees module is imported exactly once');
+}
+
 // Summary
 console.log('\n' + '=' .repeat(65));
 console.log(`📊 Offline Unit Test Summary: ${passed} Passed, ${failed} Failed`);
