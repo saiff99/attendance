@@ -80,15 +80,35 @@ describe('Liveness Worker & Fallback Engine', () => {
     expect(blinkRes.phase).toBe('blinking');
     expect(blinkRes.blinkStage).toBe(1);
 
-    // Now eyes reopen: eye luminance returns to 100 (deviation from baseline 100 is < 2.5)
+    // Now eyes reopen: eye luminance returns to 100
     const openPixels = new Uint8ClampedArray(64 * 64 * 4);
     openPixels.fill(100);
 
-    const verifiedRes = processLivenessFallback(openPixels, 64, 64, history, stableFrames, 1);
+    const verifiedRes = processLivenessFallback(openPixels, 64, 64, history, stableFrames, 1, blinkRes.lockedBaseline, 1);
     expect(verifiedRes.action).toBe('VERIFIED');
     expect(verifiedRes.phase).toBe('verified');
     expect(verifiedRes.blinkStage).toBe(2);
     expect(verifiedRes.prompt).toContain('Live Human Verified');
+  });
+
+  it('gracefully resets back to ready if eyes are not verified within timeout window', () => {
+    const history = [100, 100, 100, 100, 100];
+    const stableFrames = 4;
+    const lockedBaseline = 100;
+    const stuckPixels = new Uint8ClampedArray(64 * 64 * 4);
+    stuckPixels.fill(80); // Stays at 80 (diff = 20 > tolerance)
+
+    // Stage 1 at frame 13 -> still waiting in blinking phase
+    const waitingRes = processLivenessFallback(stuckPixels, 64, 64, history, stableFrames, 1, lockedBaseline, 13);
+    expect(waitingRes.phase).toBe('blinking');
+    expect(waitingRes.blinkStage).toBe(1);
+
+    // Stage 1 exceeding frame 14 -> TIMEOUT triggers reset to ready so student never gets stuck
+    const timeoutRes = processLivenessFallback(stuckPixels, 64, 64, history, stableFrames, 1, lockedBaseline, 14);
+    expect(timeoutRes.action).toBe('UPDATE_STATUS');
+    expect(timeoutRes.phase).toBe('ready');
+    expect(timeoutRes.blinkStage).toBe(0);
+    expect(timeoutRes.prompt).toContain('Blink');
   });
 });
 

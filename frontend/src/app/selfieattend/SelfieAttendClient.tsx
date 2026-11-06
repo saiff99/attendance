@@ -778,6 +778,8 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
     // Resilient in-thread state (used if Web Worker is unsupported or fails)
     let fallbackStableFrames = 0;
     let fallbackBlinkStage = 0;
+    let fallbackLockedBaseline = 0;
+    let fallbackBlinkFramesInStage = 0;
     const fallbackHistory: number[] = [];
 
     const handleVerified = () => {
@@ -868,10 +870,14 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                   64,
                   fallbackHistory,
                   fallbackStableFrames,
-                  fallbackBlinkStage
+                  fallbackBlinkStage,
+                  fallbackLockedBaseline,
+                  fallbackBlinkFramesInStage
                 );
                 fallbackStableFrames = res.stableFrames;
                 fallbackBlinkStage = res.blinkStage;
+                fallbackLockedBaseline = res.lockedBaseline;
+                fallbackBlinkFramesInStage = res.blinkFramesInStage;
                 setLivenessPhase(res.phase);
                 setLivenessPrompt(res.prompt);
                 if (res.action === "VERIFIED") {
@@ -899,6 +905,23 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
       }
     };
   }, [step, capturedImage, cameraError]);
+
+  // Manual photo capture fallback (guarantees student can always take attendance within 5-min window)
+  const handleManualCapture = () => {
+    if (webcamRef.current) {
+      const shot = webcamRef.current.getScreenshot();
+      if (shot) {
+        setCapturedImage(shot);
+        setBlinkDetected(true);
+        setLivenessPhase("verified");
+        try {
+          if (typeof window !== "undefined" && window.navigator && window.navigator.vibrate) {
+            window.navigator.vibrate([40, 30, 80]);
+          }
+        } catch { }
+      }
+    }
+  };
 
 
   // Resize and compress base64 data URL to optimized Blob (Crisp 960px @ 0.88 quality, ~60-80KB)
@@ -2123,14 +2146,25 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
 
                 <div className="flex flex-col gap-2.5 mt-2">
                   {!capturedImage ? (
-                    <div className="py-3 px-4 rounded-2xl bg-slate-900/70 border border-slate-800 backdrop-blur-md flex flex-col items-center justify-center gap-1 shadow-lg">
-                      <div className="flex items-center gap-2 text-xs font-semibold text-indigo-300">
-                        <Sparkles className="w-3.5 h-3.5 text-indigo-400 animate-pulse shrink-0" />
-                        <span>AI Biometric Auto-Capture Active</span>
+                    <div className="flex flex-col gap-2">
+                      <div className="py-2.5 px-4 rounded-2xl bg-slate-900/70 border border-slate-800 backdrop-blur-md flex flex-col items-center justify-center gap-1 shadow-lg">
+                        <div className="flex items-center gap-2 text-xs font-semibold text-indigo-300">
+                          <Sparkles className="w-3.5 h-3.5 text-indigo-400 animate-pulse shrink-0" />
+                          <span>AI Biometric Auto-Capture Active</span>
+                        </div>
+                        <p className="text-[11px] text-center text-slate-400">
+                          Position face inside the oval and <span className="text-amber-300 font-semibold">blink your eyes naturally</span>.
+                        </p>
                       </div>
-                      <p className="text-[11px] text-center text-slate-400">
-                        Position face inside the oval and <span className="text-amber-300 font-semibold">blink your eyes naturally</span>.
-                      </p>
+
+                      <button
+                        type="button"
+                        onClick={handleManualCapture}
+                        className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-bold text-xs transition-all shadow-lg shadow-indigo-600/25 flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98]"
+                      >
+                        <Camera className="w-4 h-4 text-white shrink-0" />
+                        <span>Take Photo Now</span>
+                      </button>
                     </div>
                   ) : (
                     <div className="grid grid-cols-2 gap-2.5">
