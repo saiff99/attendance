@@ -356,6 +356,14 @@ interface QueuedPhotoItem {
   previewUrl: string;
   timestamp: number;
   label: string;
+  optimizedFile?: File;
+  compressionStatus?: "compressing" | "ready" | "error";
+  compressionStats?: {
+    originalSize: number;
+    compressedSize: number;
+    width: number;
+    height: number;
+  };
 }
 
 export default function LiveScan() {
@@ -866,23 +874,73 @@ export default function LiveScan() {
     };
   }, []);
 
-  // Queue classroom photos for batch attendance
+  // Queue classroom photos for batch attendance with Eager Background Compression (Issue 1)
   const handleQueuePhotoFiles = (files: FileList | File[] | null) => {
     if (!files || files.length === 0) return;
     const fileArray = Array.from(files);
+    const newItems: QueuedPhotoItem[] = [];
+
     setQueuedPhotos((prev) => {
       const startIdx = prev.length;
-      const newItems: QueuedPhotoItem[] = fileArray.map((f, idx) => ({
-        id: `photo-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 6)}`,
-        file: f,
-        previewUrl: URL.createObjectURL(f),
-        timestamp: Date.now(),
-        label: `Photo ${startIdx + idx + 1}`,
-      }));
+      fileArray.forEach((f, idx) => {
+        newItems.push({
+          id: `photo-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 6)}`,
+          file: f,
+          previewUrl: URL.createObjectURL(f),
+          timestamp: Date.now(),
+          label: `Photo ${startIdx + idx + 1}`,
+          compressionStatus: "compressing",
+        });
+      });
       return [...prev, ...newItems];
     });
+
     if (fileInputRef.current) fileInputRef.current.value = "";
     if (cameraInputRef.current) cameraInputRef.current.value = "";
+
+    // Eagerly trigger background compression immediately on capture (Pipeline Overlap)
+    newItems.forEach((item) => {
+      optimizeClassroomPhoto(item.file, 2560, 0.88)
+        .then((result) => {
+          setQueuedPhotos((curr) =>
+            curr.map((p) =>
+              p.id === item.id
+                ? {
+                    ...p,
+                    optimizedFile: result.file,
+                    compressionStatus: "ready",
+                    compressionStats: {
+                      originalSize: result.originalSize,
+                      compressedSize: result.compressedSize,
+                      width: result.width,
+                      height: result.height,
+                    },
+                  }
+                : p
+            )
+          );
+          if (result.wasCompressed) {
+            console.log(
+              `[Eager Background Optimizer] Pre-compressed ${item.label}: ${(result.originalSize / (1024 * 1024)).toFixed(1)}MB -> ${(result.compressedSize / 1024).toFixed(0)}KB (${result.width}x${result.height}) in background`
+            );
+          }
+        })
+        .catch((err) => {
+          console.warn(`[Eager Background Optimizer] Fallback for ${item.label}:`, err);
+          // Graceful fallback to original file if client canvas fails
+          setQueuedPhotos((curr) =>
+            curr.map((p) =>
+              p.id === item.id
+                ? {
+                    ...p,
+                    optimizedFile: item.file,
+                    compressionStatus: "ready",
+                  }
+                : p
+            )
+          );
+        });
+    });
   };
 
   const handleRemoveQueuedPhoto = (id: string) => {
@@ -908,14 +966,14 @@ export default function LiveScan() {
     if (cameraInputRef.current) cameraInputRef.current.value = "";
   };
 
-  // Process all staged classroom photos sequentially with live progress and aggregate unique students
+  // Process all staged classroom photos with zero-wait pre-compressed stream & live progress
   const handleProcessBatchAttendance = async () => {
     if (queuedPhotos.length === 0 || !activeSession) return;
 
     setIsProcessing(true);
     const total = queuedPhotos.length;
     setBatchProgress({ current: 0, total });
-    setProcessingStatusText(`Preparing ${total} classroom photo${total > 1 ? "s" : ""}...`);
+    setProcessingStatusText(`Starting AI attendance for ${total} classroom photo${total > 1 ? "s" : ""}...`);
 
     const allRecognizedMap = new Map<string, { name: string; confidence?: number }>();
     const photoBreakdown: Array<{ label: string; count: number }> = [];
@@ -924,22 +982,19 @@ export default function LiveScan() {
       for (let i = 0; i < queuedPhotos.length; i++) {
         const item = queuedPhotos[i];
         setBatchProgress({ current: i + 1, total });
-        setProcessingStatusText(`Optimizing & scanning ${item.label} (${i + 1}/${total}) with AI...`);
+        setProcessingStatusText(`Uploading & scanning ${item.label} (${i + 1}/${total}) with AI...`);
 
-        // 1. Client-side Smart Canvas Downscale & Compression
-        // Scales 12MP/48MP raw photos down to ~2560px & ~500-800KB without quality loss
-        const { file: optimizedFile, originalSize, compressedSize, width, height, wasCompressed } =
-          await optimizeClassroomPhoto(item.file, 2560, 0.88);
-
-        if (wasCompressed) {
-          console.log(
-            `[Smart Photo Optimizer] Downscaled ${item.label}: ${(originalSize / (1024 * 1024)).toFixed(1)}MB -> ${(compressedSize / 1024).toFixed(0)}KB (${width}x${height})`
-          );
+        // Zero-Wait Pre-Compression: Grab pre-compressed file or wait if still optimizing
+        let fileToUpload = item.optimizedFile;
+        if (!fileToUpload) {
+          setProcessingStatusText(`Finalizing ${item.label} (${i + 1}/${total})...`);
+          const optResult = await optimizeClassroomPhoto(item.file, 2560, 0.88);
+          fileToUpload = optResult.file;
         }
 
-        // 2. Upload to /api/process-attendance
+        // Upload to /api/process-attendance
         const formData = new FormData();
-        formData.append("file", optimizedFile);
+        formData.append("file", fileToUpload);
         formData.append("session_id", activeSession.id);
 
         const response = await fetch('/api/process-attendance', {
@@ -1821,6 +1876,19 @@ export default function LiveScan() {
                           <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded-md bg-indigo-600/90 text-white font-bold text-[10px] shadow">
                             {item.label}
                           </div>
+
+                          {/* Eager Background Optimization Status Indicator */}
+                          {item.compressionStatus === "compressing" ? (
+                            <div className="absolute bottom-2 right-2 px-1.5 py-0.5 rounded-md bg-amber-500/80 backdrop-blur-sm text-white font-semibold text-[9px] shadow flex items-center gap-1">
+                              <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                              <span>Optimizing</span>
+                            </div>
+                          ) : item.compressionStatus === "ready" ? (
+                            <div className="absolute bottom-2 right-2 px-1.5 py-0.5 rounded-md bg-emerald-600/85 backdrop-blur-sm text-white font-semibold text-[9px] shadow flex items-center gap-1">
+                              <Check className="w-2.5 h-2.5" />
+                              <span>Ready</span>
+                            </div>
+                          ) : null}
 
                           {/* Delete Button */}
                           {!isProcessing && (

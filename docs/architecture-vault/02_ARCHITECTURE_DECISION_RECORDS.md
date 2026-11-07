@@ -1068,9 +1068,10 @@
      - Introduce a non-blocking in-memory staging tray state (`queuedPhotos: QueuedPhotoItem[]`) with thumbnail previews created via `URL.createObjectURL(file)`.
      - Enable immediate successive snapping via rear camera (`capture="environment"`) or batch gallery selection (`multiple={true}`).
      - Automatically index staged shots dynamically (`Photo 1`, `Photo 2`, `Photo 3`...) without rigid row constraints, providing per-photo delete actions to discard accidental or blurry captures.
-  2. **1-Tap Batch AI Processing Pipeline (`handleProcessBatchAttendance`):**
-     - Execute client-side smart canvas downscaling and compression (`optimizeClassroomPhoto`, 2560px, 0.88 quality) sequentially for each staged photo.
-     - Transmit each photo to `/api/process-attendance` with real-time UI progress feedback (`"Optimizing & scanning Photo X of Y with AI..."`).
+  2. **Zero-Wait Eager Background Compression & 1-Tap Batch AI Pipeline (`handleProcessBatchAttendance`):**
+     - Execute client-side smart canvas downscaling and compression (`optimizeClassroomPhoto`, 2560px, 0.88 quality) eagerly and asynchronously in the background the moment each photo is captured (`handleQueuePhotoFiles`), achieving complete pipeline overlap while faculty walks between rows.
+     - Store pre-compressed blobs directly in `QueuedPhotoItem` (`compressionStatus: 'ready'`), eliminating all upfront downscaling latency when tapping "Process All Photos" ($0\text{ms}$ compression lag).
+     - Transmit pre-compressed photos directly to `/api/process-attendance` with real-time UI progress feedback (`"Uploading & scanning Photo X of Y with AI..."`).
      - PostgREST atomic batch upsert with `on_conflict="session_id,student_id"` guarantees complete idempotency: students appearing across overlapping photos or multiple camera angles are deduplicated seamlessly without database constraint errors or duplicate records.
   3. **Photo-by-Photo Result Breakdown:**
      - Enhance `uploadResultModal` to display aggregate unique attendees, individual photo detection badges (`Photo 1: 52 present`, `Photo 2: 68 present`...), and real-time live sidebar synchronization.
