@@ -9,7 +9,8 @@ import {
   Grid, Maximize2, Minimize2, Eye, ShieldCheck, RefreshCw, X, Search,
   Clock, Sparkles, ChevronLeft as PrevIcon, ChevronRight as NextIcon,
   Copy, Check, ExternalLink, Smartphone, Navigation,
-  UserCheck, UserX, RotateCcw, Radio, AlertCircle, VideoOff
+  UserCheck, UserX, RotateCcw, Radio, AlertCircle, VideoOff,
+  Plus, Trash2
 } from "lucide-react";
 // Live Scan Faculty Portal
 import { getBackendUrl, getVideoBackendUrl } from "@/lib/api";
@@ -349,6 +350,14 @@ const CameraCard = memo(function CameraCard({
   );
 });
 
+interface QueuedPhotoItem {
+  id: string;
+  file: File;
+  previewUrl: string;
+  timestamp: number;
+  label: string;
+}
+
 export default function LiveScan() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<"grid" | "cctv" | "photo" | "manual">("grid");
@@ -362,10 +371,14 @@ export default function LiveScan() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingStatusText, setProcessingStatusText] = useState("Analyzing image...");
+  const [queuedPhotos, setQueuedPhotos] = useState<QueuedPhotoItem[]>([]);
+  const [batchProgress, setBatchProgress] = useState<{ current: number; total: number } | null>(null);
   const [uploadResultModal, setUploadResultModal] = useState<{
     isOpen: boolean;
     count: number;
     recognized: Array<{ name: string; confidence?: number }>;
+    totalPhotos?: number;
+    rowBreakdown?: Array<{ label: string; count: number }>;
     isError?: boolean;
     errorMessage?: string;
   } | null>(null);
@@ -844,60 +857,144 @@ export default function LiveScan() {
     setActiveSession(null);
   };
 
-  const handleProcessAttendance = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const rawFile = e.target.files?.[0];
-    if (!rawFile || !activeSession) return;
+  // Cleanup object URLs on unmount to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      queuedPhotos.forEach((p) => {
+        try { URL.revokeObjectURL(p.previewUrl); } catch {}
+      });
+    };
+  }, []);
+
+  // Queue row photos for batch attendance
+  const handleQueuePhotoFiles = (files: FileList | File[] | null) => {
+    if (!files || files.length === 0) return;
+    const fileArray = Array.from(files);
+    setQueuedPhotos((prev) => {
+      const startIdx = prev.length;
+      const newItems: QueuedPhotoItem[] = fileArray.map((f, idx) => ({
+        id: `photo-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 6)}`,
+        file: f,
+        previewUrl: URL.createObjectURL(f),
+        timestamp: Date.now(),
+        label: `Row ${startIdx + idx + 1}`,
+      }));
+      return [...prev, ...newItems];
+    });
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    if (cameraInputRef.current) cameraInputRef.current.value = "";
+  };
+
+  const handleRemoveQueuedPhoto = (id: string) => {
+    setQueuedPhotos((prev) => {
+      const target = prev.find((p) => p.id === id);
+      if (target) {
+        try { URL.revokeObjectURL(target.previewUrl); } catch {}
+      }
+      const remaining = prev.filter((p) => p.id !== id);
+      return remaining.map((p, idx) => ({
+        ...p,
+        label: `Row ${idx + 1}`,
+      }));
+    });
+  };
+
+  const handleClearQueuedPhotos = () => {
+    queuedPhotos.forEach((p) => {
+      try { URL.revokeObjectURL(p.previewUrl); } catch {}
+    });
+    setQueuedPhotos([]);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    if (cameraInputRef.current) cameraInputRef.current.value = "";
+  };
+
+  // Process all staged row photos sequentially with live progress and aggregate unique students
+  const handleProcessBatchAttendance = async () => {
+    if (queuedPhotos.length === 0 || !activeSession) return;
 
     setIsProcessing(true);
-    setProcessingStatusText("Optimizing high-resolution photo...");
+    const total = queuedPhotos.length;
+    setBatchProgress({ current: 0, total });
+    setProcessingStatusText(`Preparing ${total} row photo${total > 1 ? "s" : ""}...`);
+
+    const allRecognizedMap = new Map<string, { name: string; confidence?: number }>();
+    const rowBreakdown: Array<{ label: string; count: number }> = [];
+
     try {
-      // 1. Client-side Smart Canvas Downscale & Compression
-      // Scales 12MP/48MP raw photos down to ~2560px & ~500-800KB without quality loss
-      const { file: optimizedFile, originalSize, compressedSize, width, height, wasCompressed } =
-        await optimizeClassroomPhoto(rawFile, 2560, 0.88);
+      for (let i = 0; i < queuedPhotos.length; i++) {
+        const item = queuedPhotos[i];
+        setBatchProgress({ current: i + 1, total });
+        setProcessingStatusText(`Optimizing & scanning ${item.label} (${i + 1}/${total}) with AI...`);
 
-      if (wasCompressed) {
-        console.log(
-          `[Smart Photo Optimizer] Downscaled ${(originalSize / (1024 * 1024)).toFixed(1)}MB -> ${(compressedSize / 1024).toFixed(0)}KB (${width}x${height})`
-        );
+        // 1. Client-side Smart Canvas Downscale & Compression
+        // Scales 12MP/48MP raw photos down to ~2560px & ~500-800KB without quality loss
+        const { file: optimizedFile, originalSize, compressedSize, width, height, wasCompressed } =
+          await optimizeClassroomPhoto(item.file, 2560, 0.88);
+
+        if (wasCompressed) {
+          console.log(
+            `[Smart Photo Optimizer] Downscaled ${item.label}: ${(originalSize / (1024 * 1024)).toFixed(1)}MB -> ${(compressedSize / 1024).toFixed(0)}KB (${width}x${height})`
+          );
+        }
+
+        // 2. Upload to /api/process-attendance
+        const formData = new FormData();
+        formData.append("file", optimizedFile);
+        formData.append("session_id", activeSession.id);
+
+        const response = await fetch('/api/process-attendance', {
+          method: "POST",
+          body: formData,
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.detail || errorData.error || `Failed to process ${item.label}`);
+        }
+
+        const result = await response.json();
+        const recognizedList: Array<{ name: string; confidence?: number }> = result.recognized || [];
+        rowBreakdown.push({ label: item.label, count: recognizedList.length });
+
+        // Aggregate unique recognized students across all row photos
+        recognizedList.forEach((rec) => {
+          if (!allRecognizedMap.has(rec.name)) {
+            allRecognizedMap.set(rec.name, rec);
+          }
+        });
       }
 
-      setProcessingStatusText("Scanning faces with InsightFace AI...");
-
-      const formData = new FormData();
-      formData.append('file', optimizedFile);
-      formData.append('session_id', activeSession.id);
-
-      const response = await fetch('/api/process-attendance', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || errorData.error || 'Failed to process attendance');
-      }
-
-      const result = await response.json();
+      // 3. Refresh live logs in the sidebar
       await fetchLogs();
-      const recognizedList = result.recognized || [];
+
+      // 4. Clean up previews and tray
+      queuedPhotos.forEach((p) => {
+        try { URL.revokeObjectURL(p.previewUrl); } catch {}
+      });
+      setQueuedPhotos([]);
+
+      const finalRecognized = Array.from(allRecognizedMap.values());
       setUploadResultModal({
         isOpen: true,
-        count: recognizedList.length,
-        recognized: recognizedList,
-        isError: false
+        count: finalRecognized.length,
+        recognized: finalRecognized,
+        totalPhotos: total,
+        rowBreakdown,
+        isError: false,
       });
     } catch (error: any) {
-      console.error("Processing failed", error);
+      console.error("Batch processing failed", error);
       setUploadResultModal({
         isOpen: true,
         count: 0,
         recognized: [],
+        totalPhotos: total,
         isError: true,
-        errorMessage: error.message || "Failed to process photo."
+        errorMessage: error.message || "Failed to process row photos.",
       });
     } finally {
       setIsProcessing(false);
+      setBatchProgress(null);
       setProcessingStatusText("Analyzing image...");
       if (fileInputRef.current) fileInputRef.current.value = "";
       if (cameraInputRef.current) cameraInputRef.current.value = "";
@@ -1312,9 +1409,10 @@ export default function LiveScan() {
         <input
           type="file"
           accept="image/*"
+          multiple
           className="hidden"
           ref={fileInputRef}
-          onChange={handleProcessAttendance}
+          onChange={(e) => handleQueuePhotoFiles(e.target.files)}
         />
         <input
           type="file"
@@ -1322,7 +1420,7 @@ export default function LiveScan() {
           capture="environment"
           className="hidden"
           ref={cameraInputRef}
-          onChange={handleProcessAttendance}
+          onChange={(e) => handleQueuePhotoFiles(e.target.files)}
         />
 
         {/* Top Header Command Bar */}
@@ -1443,7 +1541,7 @@ export default function LiveScan() {
                   }`}
               >
                 <Camera className="w-3.5 h-3.5 mr-1 shrink-0" />
-                <span>Take Photo</span>
+                <span>Row Photos{queuedPhotos.length > 0 ? ` (${queuedPhotos.length})` : ""}</span>
               </button>
               <button
                 onClick={() => setActiveTab("manual")}
@@ -1453,7 +1551,7 @@ export default function LiveScan() {
                   }`}
               >
                 <Upload className="w-3.5 h-3.5 mr-1 shrink-0" />
-                <span>Upload<span className="hidden sm:inline"> Photo</span></span>
+                <span>Upload{queuedPhotos.length > 0 && activeTab === "manual" ? ` (${queuedPhotos.length})` : ""}</span>
               </button>
             </div>
 
@@ -1676,67 +1774,187 @@ export default function LiveScan() {
                     </div>
                   </div>
                 </div>
+              ) : queuedPhotos.length > 0 ? (
+                /* MULTI-ROW PHOTO STAGING TRAY */
+                <div className="w-full max-w-full min-w-0 flex-1 flex flex-col bg-slate-950/90 rounded-2xl border border-slate-800 p-3 sm:p-5 box-border">
+                  {/* Tray Header Bar */}
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-800/80 gap-2 flex-wrap">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-600 text-white flex items-center justify-center font-bold text-xs shadow-md shadow-indigo-600/30">
+                        {queuedPhotos.length}
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                          <span>{queuedPhotos.length} Row Photo{queuedPhotos.length > 1 ? "s" : ""} Staged</span>
+                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                            Ready
+                          </span>
+                        </h4>
+                        <p className="text-[11px] text-slate-400">
+                          Review photos or snap additional rows before running AI attendance
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        disabled={isProcessing}
+                        onClick={() => cameraInputRef.current?.click()}
+                        className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-1.5 shadow-md shadow-indigo-600/20 transition-all cursor-pointer disabled:opacity-50"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Snap Next Row</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={isProcessing}
+                        onClick={() => fileInputRef.current?.click()}
+                        className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold flex items-center gap-1 border border-slate-700 transition-all cursor-pointer disabled:opacity-50"
+                        title="Add more photos from phone gallery"
+                      >
+                        <Upload className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">Gallery</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={isProcessing}
+                        onClick={handleClearQueuedPhotos}
+                        className="p-1.5 rounded-xl bg-slate-800/80 hover:bg-rose-950/40 text-slate-400 hover:text-rose-400 border border-slate-700/60 transition-all cursor-pointer disabled:opacity-50"
+                        title="Clear all staged photos"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Thumbnail Carousel / Grid */}
+                  <div className="flex-1 overflow-y-auto py-3 min-h-[160px] sm:min-h-[220px]">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                      {queuedPhotos.map((item) => (
+                        <div
+                          key={item.id}
+                          className="group relative rounded-xl border border-slate-800 bg-slate-900/90 overflow-hidden shadow-md flex flex-col aspect-[4/3]"
+                        >
+                          <img
+                            src={item.previewUrl}
+                            alt={item.label}
+                            className="w-full h-full object-cover"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/30 pointer-events-none" />
+
+                          {/* Row Label Badge */}
+                          <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded-md bg-indigo-600/90 text-white font-bold text-[10px] shadow">
+                            {item.label}
+                          </div>
+
+                          {/* Delete Button */}
+                          {!isProcessing && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveQueuedPhoto(item.id)}
+                              className="absolute top-1.5 right-1.5 p-1 rounded-full bg-black/70 hover:bg-rose-600 text-white transition-all cursor-pointer shadow"
+                              title="Delete this row photo"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Processing Status Banner & Progress */}
+                  {isProcessing && (
+                    <div className="pt-2 pb-1">
+                      <div className="flex items-center justify-between text-xs text-indigo-300 mb-1.5 font-medium">
+                        <div className="flex items-center gap-1.5">
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>{processingStatusText}</span>
+                        </div>
+                        {batchProgress && (
+                          <span className="font-mono text-[11px] font-bold">
+                            {batchProgress.current} / {batchProgress.total}
+                          </span>
+                        )}
+                      </div>
+                      {batchProgress && (
+                        <div className="w-full bg-slate-900 rounded-full h-1.5 overflow-hidden border border-slate-800">
+                          <div
+                            className="bg-gradient-to-r from-emerald-500 to-teal-400 h-full transition-all duration-300"
+                            style={{ width: `${Math.round((batchProgress.current / batchProgress.total) * 100)}%` }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               ) : activeTab === "photo" ? (
-                /* TAKE PHOTO VIEWPORT */
+                /* TAKE PHOTO VIEWPORT (EMPTY STATE) */
                 <div
-                  onClick={() => !isProcessing && activeSession && cameraInputRef.current?.click()}
-                  className={`w-full max-w-full min-w-0 flex-1 flex flex-col items-center justify-center bg-gradient-to-b from-slate-900/90 via-slate-950 to-slate-950 rounded-2xl relative overflow-hidden group min-h-[220px] sm:min-h-[300px] lg:min-h-[380px] border border-slate-800 hover:border-indigo-500/50 p-4 sm:p-6 lg:p-8 box-border transition-all ${!isProcessing && activeSession ? 'cursor-pointer' : ''}`}
+                  className="w-full max-w-full min-w-0 flex-1 flex flex-col items-center justify-center bg-gradient-to-b from-slate-900/90 via-slate-950 to-slate-950 rounded-2xl relative overflow-hidden group min-h-[240px] sm:min-h-[320px] lg:min-h-[400px] border border-slate-800 hover:border-indigo-500/40 p-4 sm:p-6 lg:p-8 box-border transition-all"
                 >
                   {/* Ambient Glows */}
                   <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
                   <div className="absolute bottom-10 right-10 w-48 h-48 bg-teal-500/10 rounded-full blur-3xl pointer-events-none" />
 
-                  {isProcessing ? (
-                    <div className="flex flex-col items-center justify-center text-center z-10 max-w-sm px-2 box-border">
-                      <div className="relative mb-4">
-                        <div className="w-14 h-14 sm:w-20 sm:h-20 rounded-2xl bg-indigo-500/20 border border-indigo-500/40 text-indigo-400 flex items-center justify-center shadow-xl shadow-indigo-500/20">
-                          <Loader2 className="w-7 h-7 sm:w-10 sm:h-10 animate-spin" />
-                        </div>
-                        <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-emerald-500 border-2 border-slate-900 flex items-center justify-center text-white">
-                          <Sparkles className="w-3.5 h-3.5 animate-pulse" />
-                        </div>
+                  <div className="flex flex-col items-center justify-center text-center z-10 max-w-md w-full min-w-0 px-1 box-border">
+                    <div className="relative mb-3 group-hover:scale-105 transition-transform duration-300">
+                      <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-3xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-teal-400 text-white flex items-center justify-center shadow-2xl shadow-indigo-500/30">
+                        <Camera className="w-8 h-8 sm:w-10 sm:h-10" />
                       </div>
-                      <h4 className="text-sm sm:text-base font-bold text-white mb-1">{processingStatusText}</h4>
-                      <p className="text-xs text-slate-400 leading-relaxed">
-                        Detecting all student faces &amp; matching against cohort roster...
+                      <div className="absolute -bottom-1 -right-1 px-1.5 sm:px-2 py-0.5 rounded-full bg-emerald-500 text-white text-[9px] font-bold shadow-md uppercase tracking-wider">
+                        Row AI
+                      </div>
+                    </div>
+
+                    <h3 className="text-base sm:text-xl font-bold text-white mb-1 px-1">
+                      Classroom Row Multi-Photo Attendance
+                    </h3>
+                    <p className="text-xs sm:text-sm text-slate-400 max-w-md mb-4 leading-relaxed">
+                      Snap row-by-row photos (4–8 shots) walking the aisles to cover all 200–300 students. InsightFace AI will detect and mark everyone present at once.
+                    </p>
+
+                    <div className="flex flex-col sm:flex-row items-center gap-2.5 w-full max-w-sm">
+                      <button
+                        type="button"
+                        disabled={!activeSession || isProcessing}
+                        onClick={() => cameraInputRef.current?.click()}
+                        className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 disabled:opacity-50 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/25 transition-all cursor-pointer"
+                      >
+                        <Camera className="w-4 h-4" />
+                        <span>Take Row 1 Photo</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={!activeSession || isProcessing}
+                        onClick={() => fileInputRef.current?.click()}
+                        className="w-full py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-200 border border-slate-700 font-semibold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
+                      >
+                        <Upload className="w-4 h-4" />
+                        <span>Choose from Gallery</span>
+                      </button>
+                    </div>
+
+                    {!activeSession && (
+                      <p className="text-[11px] text-amber-400 mt-3 font-medium px-1">
+                        Please start an active lecture session first before taking attendance photos.
                       </p>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-center justify-center text-center z-10 max-w-md w-full min-w-0 px-1 box-border">
-                      <div className="relative mb-3 group-hover:scale-105 transition-transform duration-300">
-                        <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-3xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-teal-400 text-white flex items-center justify-center shadow-2xl shadow-indigo-500/30">
-                          <Camera className="w-8 h-8 sm:w-10 sm:h-10" />
-                        </div>
-                        <div className="absolute -bottom-1 -right-1 px-1.5 sm:px-2 py-0.5 rounded-full bg-emerald-500 text-white text-[9px] font-bold shadow-md uppercase tracking-wider">
-                          HD AI
-                        </div>
-                      </div>
-
-                      <h3 className="text-base sm:text-xl font-bold text-white mb-1 px-1">
-                        Take Classroom Group Photo
-                      </h3>
-
-                      {!activeSession && (
-                        <p className="text-[11px] text-amber-400 mt-2 font-medium px-1">
-                          Please start a lecture session first before taking attendance photo.
-                        </p>
-                      )}
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
               ) : (
-                /* PHOTO UPLOAD */
+                /* PHOTO UPLOAD (EMPTY STATE) */
                 <div
                   onClick={() => !isProcessing && fileInputRef.current?.click()}
                   className={`w-full max-w-full min-w-0 flex-1 flex flex-col items-center justify-center border-2 border-dashed border-slate-800 rounded-2xl bg-slate-950/60 hover:bg-slate-950 hover:border-indigo-500/50 transition-all min-h-[220px] sm:min-h-[340px] lg:min-h-[420px] p-3.5 sm:p-6 box-border text-center ${!isProcessing ? 'cursor-pointer' : 'opacity-70 cursor-not-allowed'}`}
                 >
-                  {isProcessing ? (
-                    <Loader2 className="w-8 h-8 sm:w-12 sm:h-12 text-indigo-400 mb-3 animate-spin" />
-                  ) : (
-                    <Upload className="w-8 h-8 sm:w-12 sm:h-12 text-slate-600 mb-3" />
-                  )}
-                  <p className="text-slate-300 font-medium text-xs sm:text-sm text-center px-2">{isProcessing ? processingStatusText : "Click or drag classroom photo to upload"}</p>
-                  <p className="text-slate-500 text-[10px] sm:text-xs mt-1 text-center px-2">Supports JPG, PNG (Auto-compressed client-side for smooth processing)</p>
+                  <Upload className="w-8 h-8 sm:w-12 sm:h-12 text-slate-600 mb-3" />
+                  <p className="text-slate-300 font-medium text-xs sm:text-sm text-center px-2">Click or drag classroom row photos to upload</p>
+                  <p className="text-slate-500 text-[10px] sm:text-xs mt-1 text-center px-2">Select multiple photos from gallery (Auto-compressed client-side for smooth processing)</p>
                 </div>
               )}
 
@@ -1747,30 +1965,36 @@ export default function LiveScan() {
                   <span className="truncate">AI Engine: InsightFace 512D ArcFace Active</span>
                 </div>
 
-                {activeTab === "photo" ? (
-                  <button
-                    disabled={isProcessing || !activeSession}
-                    onClick={() => cameraInputRef.current?.click()}
-                    className="w-full sm:w-auto flex items-center justify-center px-4 py-2 sm:py-1.5 rounded-xl font-semibold text-xs text-white bg-indigo-600 hover:bg-indigo-500 shadow-md transition-all disabled:opacity-50 cursor-pointer"
-                  >
-                    {isProcessing ? (
-                      <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Processing...</>
-                    ) : (
-                      <><Camera className="w-3.5 h-3.5 mr-1.5" /> Take Photo</>
-                    )}
-                  </button>
-                ) : activeTab === "manual" ? (
-                  <button
-                    disabled={isProcessing || !activeSession}
-                    onClick={() => fileInputRef.current?.click()}
-                    className="w-full sm:w-auto flex items-center justify-center px-4 py-2 sm:py-1.5 rounded-xl font-semibold text-xs text-white bg-indigo-600 hover:bg-indigo-500 shadow-md transition-all disabled:opacity-50 cursor-pointer"
-                  >
-                    {isProcessing ? (
-                      <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Scanning...</>
-                    ) : (
-                      <><Upload className="w-3.5 h-3.5 mr-1.5" /> Select Photo</>
-                    )}
-                  </button>
+                {activeTab === "photo" || activeTab === "manual" ? (
+                  queuedPhotos.length > 0 ? (
+                    <button
+                      disabled={isProcessing || !activeSession}
+                      onClick={handleProcessBatchAttendance}
+                      className="w-full sm:w-auto flex items-center justify-center px-5 py-2 sm:py-1.5 rounded-xl font-bold text-xs text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 shadow-md transition-all disabled:opacity-50 cursor-pointer"
+                    >
+                      {isProcessing ? (
+                        <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> {processingStatusText}</>
+                      ) : (
+                        <><CheckCircle2 className="w-3.5 h-3.5 mr-1.5" /> Process All {queuedPhotos.length} Row Photo{queuedPhotos.length > 1 ? "s" : ""}</>
+                      )}
+                    </button>
+                  ) : activeTab === "photo" ? (
+                    <button
+                      disabled={isProcessing || !activeSession}
+                      onClick={() => cameraInputRef.current?.click()}
+                      className="w-full sm:w-auto flex items-center justify-center px-4 py-2 sm:py-1.5 rounded-xl font-semibold text-xs text-white bg-indigo-600 hover:bg-indigo-500 shadow-md transition-all disabled:opacity-50 cursor-pointer"
+                    >
+                      <Camera className="w-3.5 h-3.5 mr-1.5" /> Take Row 1 Photo
+                    </button>
+                  ) : (
+                    <button
+                      disabled={isProcessing || !activeSession}
+                      onClick={() => fileInputRef.current?.click()}
+                      className="w-full sm:w-auto flex items-center justify-center px-4 py-2 sm:py-1.5 rounded-xl font-semibold text-xs text-white bg-indigo-600 hover:bg-indigo-500 shadow-md transition-all disabled:opacity-50 cursor-pointer"
+                    >
+                      <Upload className="w-3.5 h-3.5 mr-1.5" /> Select Photos
+                    </button>
+                  )
                 ) : (
                   <span className="text-[10px] sm:text-[11px] font-semibold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20">
                     Continuous AI Stream Monitoring
@@ -2127,13 +2351,32 @@ export default function LiveScan() {
                         <p className="text-xs font-bold text-emerald-800 dark:text-emerald-300">
                           {uploadResultModal.count === 1 ? '1 Student Identified' : `${uploadResultModal.count} Students Identified`}
                         </p>
-                        <p className="text-[11px] text-emerald-600 dark:text-emerald-400">Marked present in this session</p>
+                        <p className="text-[11px] text-emerald-600 dark:text-emerald-400">
+                          {uploadResultModal.totalPhotos && uploadResultModal.totalPhotos > 1
+                            ? `Recognized across ${uploadResultModal.totalPhotos} row photos`
+                            : "Marked present in this session"}
+                        </p>
                       </div>
                     </div>
                     <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500 text-white uppercase tracking-wider">
                       Verified
                     </span>
                   </div>
+
+                  {/* Row Breakdown Pills */}
+                  {uploadResultModal.rowBreakdown && uploadResultModal.rowBreakdown.length > 1 && (
+                    <div className="w-full flex flex-wrap gap-1.5 justify-center mb-3">
+                      {uploadResultModal.rowBreakdown.map((rb, idx) => (
+                        <span
+                          key={idx}
+                          className="px-2.5 py-1 rounded-lg bg-emerald-100/80 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-800/80 text-[11px] font-semibold text-emerald-800 dark:text-emerald-300 flex items-center gap-1"
+                        >
+                          <span className="font-bold">{rb.label}:</span>
+                          <span>{rb.count} detected</span>
+                        </span>
+                      ))}
+                    </div>
+                  )}
 
                   {/* List of recognized students */}
                   {uploadResultModal.recognized.length > 0 && (
@@ -2163,7 +2406,7 @@ export default function LiveScan() {
                       title={activeTab === "photo" ? "Take another group photo" : "Upload another classroom photo"}
                     >
                       {activeTab === "photo" ? <Camera className="w-3.5 h-3.5" /> : <Upload className="w-3.5 h-3.5" />}
-                      {activeTab === "photo" ? "Snap More" : "Upload More"}
+                      {activeTab === "photo" ? "Snap More Rows" : "Upload More Rows"}
                     </button>
                     <button
                       onClick={() => setUploadResultModal(null)}

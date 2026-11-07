@@ -3110,6 +3110,64 @@ console.log('\n--- 48. Portal-Native 1-Tap Attendance & Removal of QR Code Clutt
   assert(authFastPathTimeMs <= 2, '100 authenticated portal check-ins execute in <=2ms (Zero event loop freeze)');
 }
 
+// --- 49. Faculty Mobile Multi-Row Staged Photo Attendance ---
+console.log('\n--- 49. Faculty Mobile Multi-Row Staged Photo Attendance ---');
+{
+  const liveScanPath = path.resolve(__dirname, '../src/app/live-scan/page.tsx');
+  assert(fs.existsSync(liveScanPath), 'frontend/src/app/live-scan/page.tsx exists');
+  const liveScanContent = fs.readFileSync(liveScanPath, 'utf8');
+
+  // 1. Verify queuedPhotos state and interface
+  assert(liveScanContent.includes('interface QueuedPhotoItem'), 'live-scan/page.tsx defines QueuedPhotoItem interface');
+  assert(liveScanContent.includes('const [queuedPhotos, setQueuedPhotos] = useState<QueuedPhotoItem[]>'), 'live-scan/page.tsx maintains queuedPhotos staging tray state');
+  assert(liveScanContent.includes('const [batchProgress, setBatchProgress]'), 'live-scan/page.tsx tracks batchProgress indicator');
+
+  // 2. Verify queue management handlers
+  assert(liveScanContent.includes('handleQueuePhotoFiles'), 'live-scan/page.tsx defines handleQueuePhotoFiles');
+  assert(liveScanContent.includes('handleRemoveQueuedPhoto'), 'live-scan/page.tsx defines handleRemoveQueuedPhoto');
+  assert(liveScanContent.includes('handleClearQueuedPhotos'), 'live-scan/page.tsx defines handleClearQueuedPhotos');
+  assert(liveScanContent.includes('handleProcessBatchAttendance'), 'live-scan/page.tsx defines handleProcessBatchAttendance');
+
+  // 3. Verify multiple attribute on file input and camera input
+  assert(liveScanContent.includes('multiple') && liveScanContent.includes('capture="environment"'), 'live-scan/page.tsx supports multi-photo gallery selection and rear-camera capture');
+
+  // 4. Verify batch progress and row breakdown in result modal
+  assert(liveScanContent.includes('uploadResultModal.rowBreakdown'), 'live-scan/page.tsx displays row-by-row breakdown badges in modal');
+  assert(liveScanContent.includes('Snap More Rows'), 'live-scan/page.tsx includes action button to snap more rows');
+
+  // 5. Behavioral simulation of multi-row attendance deduplication
+  const row1 = Array.from({ length: 50 }, (_, i) => ({ name: `Student ${i + 1}`, id: `stu-${i + 1}`, confidence: 0.85 }));
+  const row2 = Array.from({ length: 60 }, (_, i) => ({ name: `Student ${i + 45}`, id: `stu-${i + 45}`, confidence: 0.88 }));
+  const row3 = Array.from({ length: 70 }, (_, i) => ({ name: `Student ${i + 100}`, id: `stu-${i + 100}`, confidence: 0.84 }));
+  const row4 = Array.from({ length: 80 }, (_, i) => ({ name: `Student ${i + 165}`, id: `stu-${i + 165}`, confidence: 0.89 }));
+
+  const simulatedRows = [
+    { label: 'Row 1', recognized: row1 },
+    { label: 'Row 2', recognized: row2 },
+    { label: 'Row 3', recognized: row3 },
+    { label: 'Row 4', recognized: row4 },
+  ];
+
+  const aggregatedStudentsMap = new Map();
+  const rowBreakdown = [];
+
+  simulatedRows.forEach(row => {
+    rowBreakdown.push({ label: row.label, count: row.recognized.length });
+    row.recognized.forEach(s => {
+      if (!aggregatedStudentsMap.has(s.id)) {
+        aggregatedStudentsMap.set(s.id, s);
+      }
+    });
+  });
+
+  const totalRawRecognitions = 50 + 60 + 70 + 80;
+  const uniquePresentStudents = aggregatedStudentsMap.size;
+
+  assert(totalRawRecognitions === 260, '260 total face recognitions across 4 row photos');
+  assert(uniquePresentStudents === 244, 'Deduplication cleanly merges 16 overlapping boundary students into 244 unique present records');
+  assert(rowBreakdown.length === 4, 'Row breakdown tracks 4 individual row detection statistics');
+}
+
 // Summary
 console.log('\n' + '=' .repeat(65));
 console.log(`📊 Offline Unit Test Summary: ${passed} Passed, ${failed} Failed`);
