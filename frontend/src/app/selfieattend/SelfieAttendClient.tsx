@@ -717,6 +717,21 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
     }
   };
 
+  // Auto-verify student profile when session is selected for logged-in students (Zero extra input required)
+  useEffect(() => {
+    if (
+      isStudentUser &&
+      user?.studentRoll &&
+      selectedSession &&
+      step === "enter_roll" &&
+      !student &&
+      !lookingUpStudent &&
+      !lookupError
+    ) {
+      handleVerifyRoll(undefined, user.studentRoll, selectedSession);
+    }
+  }, [isStudentUser, user?.studentRoll, selectedSession, step, student, lookingUpStudent, lookupError]);
+
   // Proceed to selfie capture with Geofence and Cohort checks
   const handleProceedToSelfie = async () => {
     if (isSelectedExpired) {
@@ -1581,89 +1596,67 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                 </button>
               </div>
             ) : (
-              /* Roll Verification Form */
               <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl">
-                <div className="flex items-center justify-between mb-1">
-                  <h2 className="text-base font-bold text-white">Enter Your Roll Number</h2>
+                {/* Roll Verification Form / Authenticated Student Badge */}
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className="text-base font-bold text-white">Student Identification</h2>
                   {isStudentUser && user?.studentRoll && (
                     <span className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                      Logged in: {user.studentRoll}
+                      Roll: {user.studentRoll}
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-slate-400 mb-4">Please enter your college roll number to verify your profile:</p>
 
-                <form onSubmit={handleVerifyRoll} className="flex flex-col gap-3">
-                  <div className="relative">
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      placeholder="e.g. 26001"
-                      value={rollInput}
-                      onChange={(e) => {
-                        setRollInput(e.target.value);
-                        setLookupError(null);
-                        setStudent(null);
-                      }}
-                      autoFocus
-                      className="w-full bg-slate-950 border border-slate-700 focus:border-indigo-500 rounded-xl px-4 py-3 text-base text-white font-mono tracking-wider placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all"
-                    />
-                  </div>
-
-                  {checkinToken && (
-                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/25 text-emerald-300 text-xs font-medium">
-                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                      <span>Classroom QR Verified — Active Lecture Session</span>
+                {isStudentUser ? (
+                  <div className="flex items-center justify-between p-3.5 rounded-xl bg-slate-950/80 border border-slate-800">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center text-white font-bold text-sm shrink-0 shadow-md shadow-indigo-500/25">
+                        {user?.name ? user.name.substring(0, 2).toUpperCase() : <UserCheck className="w-5 h-5" />}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-sm font-bold text-white truncate">{user?.name || "Student"}</h4>
+                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shrink-0">
+                            Verified
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-400 font-mono mt-0.5 truncate">
+                          Roll: <span className="text-indigo-300 font-semibold">{user?.studentRoll}</span> • {user?.academicYear || "Enrolled"}
+                        </p>
+                      </div>
                     </div>
-                  )}
 
-                  {!isStudentUser && (
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-[11px] font-semibold text-slate-300 flex items-center justify-between">
-                        <span>Student Portal PIN (Identity Verification)</span>
-                        <span className="text-[10px] text-indigo-400">4-6 digit secret PIN</span>
-                      </label>
-                      <input
-                        type="password"
-                        inputMode="numeric"
-                        pattern="[0-9]*"
-                        maxLength={6}
-                        placeholder="Enter your 4-6 digit Student PIN"
-                        value={pinInput}
-                        onChange={(e) => {
-                          setPinInput(e.target.value.replace(/\D/g, ""));
-                          setLookupError(null);
-                        }}
-                        className="w-full bg-slate-950 border border-slate-700 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-white font-mono placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all"
-                      />
-                    </div>
-                  )}
-
-                  {lookupError && (
-                    <div className="p-2.5 rounded-lg bg-red-950/50 border border-red-500/30 text-xs text-red-300 flex items-center gap-2">
-                      <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
-                      <span>{lookupError}</span>
-                    </div>
-                  )}
-
-                  <button
-                    type="submit"
-                    disabled={lookingUpStudent || !rollInput.trim()}
-                    className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-semibold text-sm transition-all shadow-lg shadow-indigo-600/25 flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    {lookingUpStudent ? (
-                      <>
-                        <div className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
-                        <span>Checking Profile...</span>
-                      </>
-                    ) : (
-                      <>
-                        <UserCheck className="w-4 h-4" />
-                        <span>Find My Profile</span>
-                      </>
+                    {lookingUpStudent && (
+                      <div className="flex items-center gap-1.5 text-xs text-indigo-400 shrink-0 animate-pulse">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span className="hidden sm:inline">Checking...</span>
+                      </div>
                     )}
-                  </button>
-                </form>
+                  </div>
+                ) : (
+                  <div className="text-center p-5 rounded-xl bg-slate-950/80 border border-slate-800 flex flex-col items-center">
+                    <div className="w-11 h-11 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-indigo-400 mb-2.5 shadow-inner">
+                      <Lock className="w-5 h-5" />
+                    </div>
+                    <h3 className="text-sm font-bold text-white mb-1">Student Portal Sign-In Required</h3>
+                    <p className="text-xs text-slate-400 max-w-sm mb-4 leading-relaxed">
+                      To prevent proxy attendance and verify identity securely, please sign in to your Student Portal with your Roll Number &amp; PIN.
+                    </p>
+                    <Link
+                      href={`/login?redirect=${encodeURIComponent(typeof window !== "undefined" ? window.location.pathname + window.location.search : "/selfieattend")}`}
+                      className="w-full py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 font-semibold text-xs text-white shadow-md shadow-indigo-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      <UserCheck className="w-4 h-4" /> Sign In to Portal
+                    </Link>
+                  </div>
+                )}
+
+                {lookupError && (
+                  <div className="mt-3 p-2.5 rounded-lg bg-red-950/50 border border-red-500/30 text-xs text-red-300 flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
+                    <span>{lookupError}</span>
+                  </div>
+                )}
 
                 {/* Verified Student Profile Preview */}
                 {student && (() => {
@@ -1869,16 +1862,29 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                             <ShieldAlert className="w-4 h-4 text-rose-400" />
                             <span>Submission Blocked • {selectedSession.target_academic_year} Only</span>
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setStudent(null);
-                              setRollInput("");
-                            }}
-                            className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
-                          >
-                            <RefreshCw className="w-3.5 h-3.5" /> Enter Different Roll Number
-                          </button>
+                          {isStudentUser ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedSession(null);
+                                setStep("select_session");
+                              }}
+                              className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                            >
+                              <ArrowLeft className="w-3.5 h-3.5" /> Return to Session List
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setStudent(null);
+                                setRollInput("");
+                              }}
+                              className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                            >
+                              <RefreshCw className="w-3.5 h-3.5" /> Enter Different Roll Number
+                            </button>
+                          )}
                         </div>
                       ) : !student.has_face_enrolled ? (
                         <div className="p-2.5 rounded-lg bg-amber-950/50 border border-amber-500/30 text-xs text-amber-300 flex items-center gap-2">

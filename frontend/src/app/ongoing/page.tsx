@@ -7,17 +7,15 @@ import { useRouter } from "next/navigation";
 import { 
   Radio, Clock, Users, MapPin, Camera, PlayCircle, StopCircle, 
   RefreshCw, CheckCircle2, AlertCircle, ArrowRight, Sparkles,
-  QrCode, ExternalLink, ShieldCheck, ChevronRight, Activity, Loader2, X
+  Copy, ExternalLink, ShieldCheck, ChevronRight, Activity, Loader2
 } from "lucide-react";
 // Ongoing Sessions Component
 import { getBackendUrl } from "@/lib/api";
 import { decodeSessionMetadata } from "@/lib/geofence";
-import { QRCodeSVG } from "qrcode.react";
 import { getTodayDateStr, getStartOfTodayISO } from "@/lib/dateUtils";
 import { useAuth } from "@/lib/auth";
 import { toast } from "@/components/Toast";
 import { confirmDialog } from "@/components/ConfirmDialog";
-import { useModalBehavior } from "@/hooks";
 
 interface ActiveSessionItem {
   id: string;
@@ -41,15 +39,7 @@ export default function OngoingSessionsPage() {
   const [sessions, setSessions] = useState<ActiveSessionItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [qrModalSession, setQrModalSession] = useState<ActiveSessionItem | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const qrModalRef = useRef<HTMLDivElement>(null);
-
-  useModalBehavior({
-    isOpen: Boolean(qrModalSession),
-    onClose: () => setQrModalSession(null),
-    modalRef: qrModalRef,
-  });
 
   // Fetch active sessions from secure /api/active-sessions route
   const fetchActiveSessions = useCallback(async (silent = false) => {
@@ -435,11 +425,12 @@ export default function OngoingSessionsPage() {
 
                     <div className="grid grid-cols-2 gap-2">
                       <button
-                        onClick={() => setQrModalSession(session)}
+                        onClick={() => copySelfieLink(session)}
                         className="py-1.5 px-2.5 rounded-lg bg-gray-100 hover:bg-gray-200 dark:bg-slate-800/80 dark:hover:bg-slate-700/80 text-[11px] font-semibold text-gray-700 dark:text-slate-300 flex items-center justify-center gap-1.5 border border-gray-200 dark:border-slate-700/60 transition-all cursor-pointer"
+                        title="Copy direct selfie attendance link for students"
                       >
-                        <QrCode className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-                        <span>Selfie QR</span>
+                        <Copy className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                        <span>{copiedId === session.id ? "Copied!" : "Copy Link"}</span>
                       </button>
 
                       <button
@@ -454,85 +445,6 @@ export default function OngoingSessionsPage() {
                 </div>
               );
             })}
-          </div>
-        )}
-
-        {/* Modal: Quick Selfie QR Viewer for ongoing session */}
-        {qrModalSession && (
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label="Live Selfie QR"
-            className="fixed inset-0 z-50 bg-black/70 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200"
-            onClick={(e) => {
-              if (e.target === e.currentTarget) {
-                setQrModalSession(null);
-              }
-            }}
-          >
-            <div
-              ref={qrModalRef}
-              tabIndex={-1}
-              className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl p-6 sm:p-8 max-w-sm w-full text-center shadow-2xl relative outline-none"
-            >
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-                  <span className="text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-slate-300">
-                    Live Selfie QR
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setQrModalSession(null)}
-                  className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-                  aria-label="Close selfie QR modal"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              <div className="bg-white p-4 rounded-2xl shadow-inner border border-gray-200 inline-block mb-4">
-                <QRCodeSVG
-                  value={(() => {
-                    if (typeof window === "undefined") return "";
-                    const tokenParam = (qrModalSession as any)?.checkin_token ? `&token=${encodeURIComponent((qrModalSession as any).checkin_token)}` : "";
-                    return `${window.location.origin}/selfieattend?session_id=${qrModalSession.id}${tokenParam}`;
-                  })()}
-                  size={200}
-                  level="H"
-                  includeMargin={true}
-                />
-              </div>
-
-              <h4 className="text-sm font-bold text-gray-900 dark:text-white truncate mb-1">
-                {qrModalSession.class_name}
-              </h4>
-              <p className="text-xs text-gray-500 dark:text-slate-400 mb-4">
-                Students can scan this QR with their mobile camera to check in.
-              </p>
-
-              <div className="space-y-2">
-                <button
-                  onClick={() => copySelfieLink(qrModalSession)}
-                  className="w-full py-2 px-3 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 text-xs font-bold border border-indigo-200 dark:border-indigo-800 flex items-center justify-center gap-1.5 transition-all"
-                >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  <span>{copiedId === qrModalSession.id ? "Link Copied!" : "Copy Selfie Link"}</span>
-                </button>
-
-                <button
-                  onClick={() => {
-                    handleEnterLiveHub(qrModalSession);
-                    setQrModalSession(null);
-                  }}
-                  className="w-full py-2 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md flex items-center justify-center gap-1.5 transition-all"
-                >
-                  <Camera className="w-3.5 h-3.5" />
-                  <span>Enter Live Scan Hub</span>
-                </button>
-              </div>
-            </div>
           </div>
         )}
 
