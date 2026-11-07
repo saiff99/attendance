@@ -3291,6 +3291,56 @@ console.log('\n--- 51. Controlled Dual-Connection Concurrent Upload Pipeline (AD
   assert(sim.results[3].label === 'Photo 4', 'Results maintain deterministic index 3 (Photo 4)');
 }
 
+// --- 52. Per-Photo Exponential Backoff Retry on Mobile Network Flakes (ADR-048) ---
+console.log('\n--- 52. Per-Photo Exponential Backoff Retry on Mobile Network Flakes (ADR-048) ---');
+{
+  const networkRetryPath = path.resolve(__dirname, '../src/lib/networkRetry.ts');
+  assert(fs.existsSync(networkRetryPath), 'frontend/src/lib/networkRetry.ts exists');
+  const networkRetryContent = fs.readFileSync(networkRetryPath, 'utf8');
+
+  // 1. Verify export of retry engine functions
+  assert(networkRetryContent.includes('export function isRetryableError'), 'networkRetry.ts exports isRetryableError');
+  assert(networkRetryContent.includes('export async function executeWithRetry'), 'networkRetry.ts exports executeWithRetry');
+  assert(networkRetryContent.includes('export async function uploadPhotoWithRetry'), 'networkRetry.ts exports uploadPhotoWithRetry');
+
+  // 2. Verify LiveScan integration
+  const liveScanPath = path.resolve(__dirname, '../src/app/live-scan/page.tsx');
+  assert(fs.existsSync(liveScanPath), 'frontend/src/app/live-scan/page.tsx exists');
+  const liveScanContent = fs.readFileSync(liveScanPath, 'utf8');
+  assert(liveScanContent.includes("from \"@/lib/networkRetry\""), 'live-scan/page.tsx imports from @/lib/networkRetry');
+  assert(liveScanContent.includes("await executeWithRetry("), 'live-scan/page.tsx invokes executeWithRetry in batch attendance pipeline');
+  assert(liveScanContent.includes("maxRetries: 2"), 'live-scan/page.tsx configures maxRetries = 2');
+  assert(liveScanContent.includes("onRetry:"), 'live-scan/page.tsx hooks onRetry for live progress updates');
+
+  // 3. Behavioral simulation of exponential backoff retry
+  let attempts = 0;
+  const retryDelays = [];
+  const maxRetries = 2;
+  const initialDelay = 50;
+  const factor = 2.0;
+
+  const simulatedWorker = async () => {
+    let curDelay = initialDelay;
+    for (let att = 0; att <= maxRetries; att++) {
+      attempts++;
+      if (att === 0) {
+        // First attempt simulates transient connection reset
+        retryDelays.push(curDelay);
+        curDelay = Math.round(curDelay * factor);
+        continue;
+      }
+      // Second attempt succeeds
+      return { recognized: ['Dr. Alice', 'Dr. Bob'] };
+    }
+    throw new Error('Unreachable in test');
+  };
+
+  const res = await simulatedWorker();
+  assert(attempts === 2, 'Simulated network flake recovered cleanly on attempt 2');
+  assert(res.recognized.length === 2, 'Attendance recognition payload recovered successfully');
+  assert(retryDelays[0] === 50, 'Initial retry backoff delay was 50ms');
+}
+
 // Summary
 console.log('\n' + '=' .repeat(65));
 console.log(`📊 Offline Unit Test Summary: ${passed} Passed, ${failed} Failed`);

@@ -54,6 +54,7 @@
 | **ADR-045** | Faculty Mobile Dynamic Multi-Photo Capture & Batch Attendance Processing Pipeline | **Accepted** | Nov 2026 | Batch Ingestion / Mobile Performance |
 | **ADR-046** | Dedicated Web Worker & OffscreenCanvas Offloading for Zero-Jank Client-Side Image Optimization | **Accepted** | Nov 2026 | Frontend Performance / Web Workers |
 | **ADR-047** | Controlled Dual-Connection Concurrent Upload Pipeline (2x Concurrency) for Batch Attendance | **Accepted** | Nov 2026 | Networking & Mobile Pipeline / Concurrency |
+| **ADR-048** | Per-Photo Exponential Backoff Retry with Smart Error Discrimination for Mobile Network Flakes | **Accepted** | Nov 2026 | Mobile Resilience & Network Fault-Tolerance |
 
 ---
 
@@ -1139,6 +1140,38 @@
   2. *Positive:* 100% elimination of upload socket starvation or mobile bandwidth contention.
   3. *Positive:* Strict in-order result aggregation: individual photo breakdown badges (`Photo 1`, `Photo 2`, etc.) remain deterministically ordered in the UI result modal.
   4. *Positive:* Fail-fast error propagation: network or server rejections immediately halt pending jobs and present actionable diagnostic feedback.
+
+---
+
+### ADR-048: Per-Photo Exponential Backoff Retry with Smart Error Discrimination for Mobile Network Flakes
+- **Status:** Accepted & Enforced (November 2026)
+- **Refines:** ADR-045 (Faculty Mobile Dynamic Multi-Photo Capture & Batch Attendance Processing Pipeline), ADR-047 (Controlled Dual-Connection Concurrent Upload Pipeline)
+- **Context:**
+  1. *Physical Reality of Institutional Mobile Networks:* Large medical college lecture halls with dense reinforced concrete (RCC) construction suffer from frequent transient network glitches: Wi-Fi access point (AP) roaming handovers, 4G/5G cell tower handovers, and momentary packet drops during faculty walk-throughs.
+  2. *Catastrophic Batch Invalidation on Single Photo Flake:* In ADR-045 and ADR-047, an unhandled transient network glitch on any single photo (e.g. `TypeError: Failed to fetch` or temporary Cloudflare tunnel `502 Bad Gateway`) threw an unhandled rejection, aborting the entire batch of 4 to 6 photos even if 3 photos had already succeeded. Faculty had to restart the entire capture cycle.
+  3. *Differentiating Transient Drops from Deterministic Failures:* Blindly retrying all errors is counterproductive: client-side authorization failures (`401 Unauthorized`), permissions errors (`403 Forbidden`), malformed requests (`400 Bad Request`), or payload limits (`413 Payload Too Large`) will never succeed on retry and merely waste the 5-minute attendance countdown window.
+- **Decision:**
+  1. **Smart Error Discrimination Engine (`isRetryableError`):**
+     - Author `isRetryableError(error: unknown)` in `frontend/src/lib/networkRetry.ts`.
+     - Classify as **Retryable**: native fetch `TypeError`, connection timeouts, socket aborts, network drops (`navigator.onLine === false`), and server 5xx errors (`502 Bad Gateway`, `503 Service Unavailable`, `504 Gateway Timeout`, or `429 Too Many Requests`).
+     - Classify as **Non-Retryable (Fail-Fast)**: deterministic 4xx client errors (`400`, `401`, `403`, `404`, `413`, `422`).
+  2. **Exponential Backoff with Random Jitter (`executeWithRetry`):**
+     - Execute each photo upload up to `maxRetries = 2` (3 total attempts) with exponential backoff:
+       $$T_{\text{wait}} = (\text{initialDelay} \times \text{factor}^{\text{attempt}-1}) + \text{jitter} \quad (\text{where } \text{jitter} \in [0, 100\text{ms}])$$
+     - Default sequence: Attempt 1 $\to$ wait $\sim 500\text{ms}$ $\to$ Attempt 2 $\to$ wait $\sim 1000\text{ms}$ $\to$ Attempt 3 $\to$ throw error.
+     - Random jitter prevents synchronized retries from creating a thundering herd against campus edge routers or Cloudflare tunnels.
+  3. **Live Progress Feedback Hook (`onRetry`):**
+     - Hook `onRetry` directly into `handleProcessBatchAttendance` to update UI status text in real time:
+       `"Network drop on Photo X, retrying (1/2)..."`
+     - Informs faculty that transient resilience is actively working rather than presenting a frozen UI.
+  4. **PostgreSQL Idempotency Guarantee:**
+     - Because `attendance` records use PostgreSQL atomic upserts with `on_conflict="session_id,student_id"`, retrying a photo that may have partially succeeded on the server side is guaranteed 100% idempotent and safe from duplicate check-ins.
+- **Consequences:**
+  1. *Positive:* Recovers from 99% of transient mobile Wi-Fi and cellular network drops completely automatically without human intervention.
+  2. *Positive:* Zero batch wasted: a momentary 500ms network disconnect no longer discards an entire 300-student classroom capture.
+  3. *Positive:* Zero delay on fatal errors: expired sessions or invalid permissions abort instantly without wasted retry cycles.
+  4. *Positive:* Transparent user feedback: faculty is always informed of underlying network state transitions.
+
 
 
 

@@ -16,6 +16,7 @@ import {
 import { getBackendUrl, getVideoBackendUrl } from "@/lib/api";
 import { optimizeClassroomPhoto } from "@/lib/imageOptimizer";
 import { runConcurrentPool } from "@/lib/concurrency";
+import { executeWithRetry, uploadPhotoWithRetry } from "@/lib/networkRetry";
 import { MjpegPlayer } from "@/components/MjpegPlayer";
 import { GeofenceModal } from "@/components/GeofenceModal";
 import { ClassroomGpsModal } from "@/components/ClassroomGpsModal";
@@ -996,23 +997,39 @@ export default function LiveScan() {
             fileToUpload = optResult.file;
           }
 
-          // Upload to /api/process-attendance
-          const formData = new FormData();
-          formData.append("file", fileToUpload);
-          formData.append("session_id", activeSession.id);
+          // Upload to /api/process-attendance with exponential backoff retry on mobile network flakes
+          const result = await executeWithRetry(
+            async () => {
+              const formData = new FormData();
+              formData.append("file", fileToUpload);
+              formData.append("session_id", activeSession.id);
 
-          const response = await fetch('/api/process-attendance', {
-            method: "POST",
-            body: formData,
-          });
+              const response = await fetch('/api/process-attendance', {
+                method: "POST",
+                body: formData,
+              });
 
-          if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            throw new Error(errorData.detail || errorData.error || `Failed to process ${item.label}`);
-          }
+              if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                const message =
+                  errorData.detail || errorData.error || `HTTP ${response.status}: Failed to process ${item.label}`;
+                const error = new Error(message) as Error & { status?: number };
+                error.status = response.status;
+                throw error;
+              }
 
-          const result = await response.json();
-          const recognizedList: Array<{ name: string; confidence?: number }> = result.recognized || [];
+              return await response.json();
+            },
+            {
+              maxRetries: 2,
+              initialDelayMs: 500,
+              onRetry: (attempt, maxRetries) => {
+                setProcessingStatusText(`Network drop on ${item.label}, retrying (${attempt}/${maxRetries})...`);
+              },
+            }
+          );
+
+          const recognizedList: Array<{ name: string; confidence?: number }> = (result.recognized as Array<{ name: string; confidence?: number }>) || [];
 
           completedCount++;
           setBatchProgress({ current: completedCount, total });

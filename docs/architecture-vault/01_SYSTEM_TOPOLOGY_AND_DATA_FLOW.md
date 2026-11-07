@@ -189,12 +189,14 @@ sequenceDiagram
     F->>FE: Tap "Process All N Photos"
     Note over FE: runConcurrentPool (Controlled 2x Dual-Connection Pipeline)
     par Concurrent Upload Worker A (Photo 1)
+        Note over FE, Proxy: executeWithRetry (Max 2 retries, 500ms -> 1000ms backoff)
         FE->>Proxy: POST /api/process-attendance (Photo 1)
         Proxy->>AI: Forward to InsightFace 512D
         AI->>DB: Atomic Batch Upsert INTO attendance
         AI-->>Proxy: { recognized: [...] }
         Proxy-->>FE: Stream Photo 1 Result (In-Order Slot 1)
     and Concurrent Upload Worker B (Photo 2)
+        Note over FE, Proxy: executeWithRetry (Max 2 retries, 500ms -> 1000ms backoff)
         FE->>Proxy: POST /api/process-attendance (Photo 2)
         Proxy->>AI: Forward to InsightFace 512D
         AI->>DB: Atomic Batch Upsert INTO attendance
