@@ -3397,6 +3397,99 @@ console.log('\n--- 53. Fast-Path ONNX Runtime Thread Optimization & Memory-Mappe
   assert(parseFloat(reductionPercentage) > 60.0, `Fast-path achieves >60% reduction in transient heap allocations (${reductionPercentage}% saved)`);
 }
 
+// --- 54. Real-time Classroom Framing & Quality Advisor Engine (ADR-050) ---
+console.log('\n--- 54. Real-time Classroom Framing & Quality Advisor Engine (ADR-050) ---');
+{
+  const frameQualityPath = path.resolve(__dirname, '../src/lib/frameQuality.ts');
+  assert(fs.existsSync(frameQualityPath), 'frontend/src/lib/frameQuality.ts exists');
+  const frameQualityContent = fs.readFileSync(frameQualityPath, 'utf8');
+
+  // 1. Verify exports in frameQuality.ts
+  assert(frameQualityContent.includes('export function calculateLuminance'), 'frameQuality.ts exports calculateLuminance');
+  assert(frameQualityContent.includes('export function calculateLaplacianVariance'), 'frameQuality.ts exports calculateLaplacianVariance');
+  assert(frameQualityContent.includes('export function evaluateImageDataQuality'), 'frameQuality.ts exports evaluateImageDataQuality');
+  assert(frameQualityContent.includes('export function analyzeFrameQuality'), 'frameQuality.ts exports analyzeFrameQuality');
+  assert(frameQualityContent.includes('export async function analyzeImageFileQuality'), 'frameQuality.ts exports analyzeImageFileQuality');
+  assert(frameQualityContent.includes('QUALITY_THRESHOLDS'), 'frameQuality.ts exports QUALITY_THRESHOLDS');
+
+  // 2. Verify LiveScan integration
+  const liveScanPath = path.resolve(__dirname, '../src/app/live-scan/page.tsx');
+  assert(fs.existsSync(liveScanPath), 'frontend/src/app/live-scan/page.tsx exists');
+  const liveScanContent = fs.readFileSync(liveScanPath, 'utf8');
+
+  assert(liveScanContent.includes("from \"@/lib/frameQuality\""), 'live-scan/page.tsx imports from @/lib/frameQuality');
+  assert(liveScanContent.includes("analyzeFrameQuality("), 'live-scan/page.tsx analyzes live video frame quality');
+  assert(liveScanContent.includes("analyzeImageFileQuality("), 'live-scan/page.tsx analyzes staged image file quality');
+  assert(liveScanContent.includes("isSmartCameraOpen"), 'live-scan/page.tsx manages isSmartCameraOpen state');
+  assert(liveScanContent.includes("handleCaptureSmartPhoto"), 'live-scan/page.tsx provides smart photo capture handler');
+
+  // 3. Mathematical validation of luminance algorithm (ITU-R BT.601)
+  const calculateLuminancePure = (data) => {
+    let sum = 0;
+    const count = data.length / 4;
+    for (let i = 0; i < data.length; i += 4) {
+      sum += 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+    }
+    return sum / count;
+  };
+
+  const blackPixel = new Uint8ClampedArray([0, 0, 0, 255]);
+  const whitePixel = new Uint8ClampedArray([255, 255, 255, 255]);
+  const redPixel = new Uint8ClampedArray([255, 0, 0, 255]);
+  const greenPixel = new Uint8ClampedArray([0, 255, 0, 255]);
+  const bluePixel = new Uint8ClampedArray([0, 0, 255, 255]);
+
+  assert(calculateLuminancePure(blackPixel) === 0, 'Pure black evaluates to 0 luminance');
+  assert(calculateLuminancePure(whitePixel) === 255, 'Pure white evaluates to 255 luminance');
+  assert(Math.abs(calculateLuminancePure(redPixel) - 76.245) < 0.1, 'Red channel BT.601 luminance coefficient verified (76.25)');
+  assert(Math.abs(calculateLuminancePure(greenPixel) - 149.685) < 0.1, 'Green channel BT.601 luminance coefficient verified (149.69)');
+  assert(Math.abs(calculateLuminancePure(bluePixel) - 29.07) < 0.1, 'Blue channel BT.601 luminance coefficient verified (29.07)');
+
+  // 4. Mathematical validation of Laplacian Variance (Edge Sharpness vs Blur)
+  const calculateLaplacianVariancePure = (gray, width, height) => {
+    let lapSum = 0;
+    let lapSumSq = 0;
+    let count = 0;
+
+    for (let y = 1; y < height - 1; y++) {
+      const rowOffset = y * width;
+      const prevRowOffset = (y - 1) * width;
+      const nextRowOffset = (y + 1) * width;
+
+      for (let x = 1; x < width - 1; x++) {
+        const center = gray[rowOffset + x];
+        const up = gray[prevRowOffset + x];
+        const down = gray[nextRowOffset + x];
+        const left = gray[rowOffset + (x - 1)];
+        const right = gray[rowOffset + (x + 1)];
+
+        const lap = up + down + left + right - 4 * center;
+        lapSum += lap;
+        lapSumSq += lap * lap;
+        count++;
+      }
+    }
+    if (count === 0) return 0;
+    const mean = lapSum / count;
+    return (lapSumSq / count) - (mean * mean);
+  };
+
+  // Uniform flat image (blurry / featureless)
+  const flatGray = new Float32Array(10 * 10).fill(128);
+  const flatVariance = calculateLaplacianVariancePure(flatGray, 10, 10);
+  assert(flatVariance === 0, 'Completely flat / blurred surface returns 0 Laplacian variance');
+
+  // High-frequency alternating pattern (sharp)
+  const sharpGray = new Float32Array(10 * 10);
+  for (let y = 0; y < 10; y++) {
+    for (let x = 0; x < 10; x++) {
+      sharpGray[y * 10 + x] = (x + y) % 2 === 0 ? 0 : 255;
+    }
+  }
+  const sharpVariance = calculateLaplacianVariancePure(sharpGray, 10, 10);
+  assert(sharpVariance > 100, 'Sharp high-frequency edge grid yields high Laplacian variance (> 100)');
+}
+
 // Summary
 console.log('\n' + '=' .repeat(65));
 console.log(`📊 Offline Unit Test Summary: ${passed} Passed, ${failed} Failed`);

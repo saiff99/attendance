@@ -178,8 +178,11 @@ sequenceDiagram
 
     Note over F, FE: Walking lecture hall rows & aisles
     loop For each classroom section/angle (1..N photos)
-        F->>FE: Tap "Snap Next Photo" (Rear Camera)
-        FE->>FE: Staged in memory (QueuedPhotoItem, label: Photo N)
+        F->>FE: Open Smart Camera Viewfinder (Live Video Stream)
+        Note over FE: evaluateImageDataQuality (ITU-R BT.601 Luminance + Laplacian Variance)
+        FE-->>F: Live HUD Advisor ("Lighting & Focus Good ✅" / "Low Light 💡" / "Blurry ⚠️")
+        F->>FE: Tap Shutter Button (In-App Capture)
+        FE->>FE: Staged in memory (QueuedPhotoItem with Quality Tag)
         FE->>Worker: postMessage(file, 2560px, 0.88) [Off-Thread Web Worker]
         Note over Worker: createImageBitmap + OffscreenCanvas downscale (Zero UI jank)
         Worker-->>FE: postMessage(compressedBlob, Status: Ready)

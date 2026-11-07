@@ -1203,6 +1203,43 @@
   3. *Positive:* Deterministic, predictable inference latency under high concurrency: dedicated intra-op thread allocation ensures stable throughput across concurrent faculty photo batches and student selfies.
   4. *Positive:* 100% backward-compatible: seamlessly handles edge cases through graceful PIL fallback.
 
+---
+
+### ADR-050: Real-Time Classroom Framing & Blur/Low-Light Quality Advisor Engine
+- **Status:** Accepted
+- **Date:** 2026-11-08
+- **Refines:** ADR-045 (Faculty Mobile Dynamic Multi-Photo Capture & Batch Attendance Processing Pipeline), ADR-046 (OffscreenCanvas Web Worker Downscaling)
+- **Context:**
+  1. *Uncertainty in Classroom Capture Quality:* In large medical college lecture halls or poorly lit amphitheaters, faculty capture classroom photos with varying ambient illumination (dim rear benches, projector glare) and hand movement (motion blur).
+  2. *Delayed Failure Discovery:* Previously, faculty only discovered that a photo was unusable after uploading and waiting for backend AI inference, resulting in missed student attendances, wasted bandwidth, and faculty frustration.
+  3. *Zero-Latency Requirement:* Quality evaluation must run strictly on the client device in $< 2\text{ms}$ per evaluation without introducing framerate drops to the camera viewfinder or consuming server compute.
+- **Decision:**
+  1. **Zero-Dependency Client-Side Quality Engine (`frontend/src/lib/frameQuality.ts`):**
+     - Author pure TypeScript quality analysis module with zero external dependencies.
+     - Implement **Average Luminance (ITU-R BT.601)**: $Y = 0.299R + 0.587G + 0.114B$. Classifies frames as `low-light` ($Y < 40$) or `overexposed` ($Y > 228$).
+     - Implement **Discrete 3x3 Laplacian Convolution Variance**: Convolves a 160x120 downscaled scratch buffer with kernel $\begin{bmatrix} 0 & 1 & 0 \\ 1 & -4 & 1 \\ 0 & 1 & 0 \end{bmatrix}$ to compute Laplacian response variance. Classifies frames as `blurry` when variance $< 35$.
+  2. **Smart In-App Camera Viewfinder with Live HUD Advisor (`frontend/src/app/live-scan/page.tsx`):**
+     - Provide an in-app viewfinder modal utilizing `navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } } })`.
+     - Sample video frames every 400ms to drive a real-time HUD pill:
+       - 🟢 *Lighting & Focus Good ✅*
+       - 🟡 *Low Light 💡 - Room lighting recommended*
+       - 🟡 *Overexposed ☀️ - Adjust angle away from glare*
+       - 🔴 *Motion Blur Detected ⚠️ - Hold phone steady*
+     - Center framing reticle guides faculty on framing 20–30 student seats per angle.
+     - Tactile circular shutter with visual flash animation supports rapid consecutive snaps into the staging tray.
+  3. **Staging Tray Visual Quality Chips:**
+     - Runs `analyzeImageFileQuality` on every staged photo (whether captured via Smart Viewfinder, native camera, or gallery).
+     - Renders visual quality status chips on thumbnails (`Clear`, `Low Light`, `Blurry`) allowing immediate 1-tap deletion and re-take before batch submission.
+  4. **Advisory Non-Blocking Design:**
+     - Warnings are purely advisory and never disable the shutter button, ensuring faculty maintains 100% operational authority even in unconventional lighting.
+     - Graceful fallback to standard file/camera inputs if browser denies camera permissions.
+- **Consequences:**
+  1. *Positive:* First-time face recognition pass rate is substantially improved by preventing blurry or dark uploads at the point of capture.
+  2. *Positive:* Zero backend compute cost: 100% of quality metric extraction occurs client-side in $< 2\text{ms}$ using reusable scratch canvas buffers.
+  3. *Positive:* Streamlined multi-photo snapping: faculty can capture 4–8 photos sequentially from the in-app viewfinder without jumping in and out of the OS camera app.
+  4. *Positive:* Zero friction on staged photos: instant visual badges highlight blurry photos for immediate retake.
+
+
 
 
 

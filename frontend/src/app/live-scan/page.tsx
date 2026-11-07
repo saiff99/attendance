@@ -17,6 +17,11 @@ import { getBackendUrl, getVideoBackendUrl } from "@/lib/api";
 import { optimizeClassroomPhoto } from "@/lib/imageOptimizer";
 import { runConcurrentPool } from "@/lib/concurrency";
 import { executeWithRetry, uploadPhotoWithRetry } from "@/lib/networkRetry";
+import {
+  analyzeFrameQuality,
+  analyzeImageFileQuality,
+  type QualityAssessment,
+} from "@/lib/frameQuality";
 import { MjpegPlayer } from "@/components/MjpegPlayer";
 import { GeofenceModal } from "@/components/GeofenceModal";
 import { ClassroomGpsModal } from "@/components/ClassroomGpsModal";
@@ -366,6 +371,7 @@ interface QueuedPhotoItem {
     width: number;
     height: number;
   };
+  quality?: QualityAssessment;
 }
 
 export default function LiveScan() {
@@ -394,6 +400,14 @@ export default function LiveScan() {
   } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+
+  // Smart In-App Camera Viewfinder State (ADR-050)
+  const [isSmartCameraOpen, setIsSmartCameraOpen] = useState(false);
+  const [smartCameraFacing, setSmartCameraFacing] = useState<"environment" | "user">("environment");
+  const [liveQuality, setLiveQuality] = useState<QualityAssessment | null>(null);
+  const [cameraFlash, setCameraFlash] = useState(false);
+  const smartVideoRef = useRef<HTMLVideoElement>(null);
+  const smartStreamRef = useRef<MediaStream | null>(null);
 
   // Session State
   const [activeSession, setActiveSession] = useState<Session | null>(null);
@@ -942,6 +956,15 @@ export default function LiveScan() {
             )
           );
         });
+
+      // Real-time Framing & Quality Advisor on staged photos (ADR-050)
+      analyzeImageFileQuality(item.file)
+        .then((quality) => {
+          setQueuedPhotos((curr) =>
+            curr.map((p) => (p.id === item.id ? { ...p, quality } : p))
+          );
+        })
+        .catch(() => {});
     });
   };
 
@@ -967,6 +990,129 @@ export default function LiveScan() {
     if (fileInputRef.current) fileInputRef.current.value = "";
     if (cameraInputRef.current) cameraInputRef.current.value = "";
   };
+
+  // Smart Camera Viewfinder Lifecycle (ADR-050)
+  const handleStartSmartCamera = useCallback(() => {
+    if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      cameraInputRef.current?.click();
+      return;
+    }
+    setIsSmartCameraOpen(true);
+  }, []);
+
+  const handleStopSmartCamera = useCallback(() => {
+    if (smartStreamRef.current) {
+      smartStreamRef.current.getTracks().forEach((track) => track.stop());
+      smartStreamRef.current = null;
+    }
+    if (smartVideoRef.current) {
+      smartVideoRef.current.srcObject = null;
+    }
+    setLiveQuality(null);
+    setIsSmartCameraOpen(false);
+  }, []);
+
+  // Effect to manage stream lifecycle when isSmartCameraOpen is toggled
+  useEffect(() => {
+    if (!isSmartCameraOpen) return;
+
+    let isSubscribed = true;
+    let qualityInterval: NodeJS.Timeout | null = null;
+
+    const initCamera = async () => {
+      try {
+        if (smartStreamRef.current) {
+          smartStreamRef.current.getTracks().forEach((t) => t.stop());
+        }
+
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: smartCameraFacing },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+          },
+          audio: false,
+        });
+
+        if (!isSubscribed) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+
+        smartStreamRef.current = stream;
+        if (smartVideoRef.current) {
+          smartVideoRef.current.srcObject = stream;
+          try {
+            await smartVideoRef.current.play();
+          } catch {}
+        }
+
+        // Real-time quality evaluation every 400ms
+        qualityInterval = setInterval(() => {
+          if (!isSubscribed) return;
+          if (smartVideoRef.current && smartVideoRef.current.readyState >= 2) {
+            const assessment = analyzeFrameQuality(smartVideoRef.current);
+            if (assessment && isSubscribed) {
+              setLiveQuality(assessment);
+            }
+          }
+        }, 400);
+      } catch (err) {
+        console.warn("[Smart Camera] Failed to open in-app viewfinder:", err);
+        toast.info("Opening standard camera...");
+        if (isSubscribed) {
+          setIsSmartCameraOpen(false);
+          cameraInputRef.current?.click();
+        }
+      }
+    };
+
+    initCamera();
+
+    return () => {
+      isSubscribed = false;
+      if (qualityInterval) clearInterval(qualityInterval);
+      if (smartStreamRef.current) {
+        smartStreamRef.current.getTracks().forEach((t) => t.stop());
+        smartStreamRef.current = null;
+      }
+      if (smartVideoRef.current) {
+        smartVideoRef.current.srcObject = null;
+      }
+    };
+  }, [isSmartCameraOpen, smartCameraFacing]);
+
+  const handleCaptureSmartPhoto = useCallback(() => {
+    if (!smartVideoRef.current) return;
+    const video = smartVideoRef.current;
+    const width = video.videoWidth || 1920;
+    const height = video.videoHeight || 1080;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    // Trigger visual shutter flash
+    setCameraFlash(true);
+    setTimeout(() => setCameraFlash(false), 120);
+
+    ctx.drawImage(video, 0, 0, width, height);
+    canvas.toBlob(
+      (blob) => {
+        if (!blob) return;
+        const file = new File(
+          [blob],
+          `classroom-snap-${Date.now()}.jpg`,
+          { type: "image/jpeg", lastModified: Date.now() }
+        );
+        handleQueuePhotoFiles([file]);
+      },
+      "image/jpeg",
+      0.92
+    );
+  }, [queuedPhotos.length]);
 
   // Process all staged classroom photos with dual-connection concurrent upload (2x Concurrency)
   const handleProcessBatchAttendance = async () => {
@@ -1093,7 +1239,7 @@ export default function LiveScan() {
   const handleTriggerPhotoAction = () => {
     setUploadResultModal(null);
     if (activeTab === "photo") {
-      cameraInputRef.current?.click();
+      handleStartSmartCamera();
     } else {
       fileInputRef.current?.click();
     }
@@ -1906,6 +2052,37 @@ export default function LiveScan() {
                           />
                           <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/30 pointer-events-none" />
 
+                          {/* Real-time Quality Advisor Badge (ADR-050) */}
+                          {item.quality && (
+                            <div
+                              className={`absolute top-2 left-2 px-1.5 py-0.5 rounded-md backdrop-blur-md text-[9px] font-bold shadow flex items-center gap-1 ${
+                                item.quality.status === "good"
+                                  ? "bg-emerald-500/80 text-white"
+                                  : item.quality.status === "blurry"
+                                  ? "bg-rose-500/85 text-white"
+                                  : "bg-amber-500/85 text-white"
+                              }`}
+                              title={item.quality.message}
+                            >
+                              {item.quality.status === "good" ? (
+                                <>
+                                  <ShieldCheck className="w-2.5 h-2.5" />
+                                  <span>Clear</span>
+                                </>
+                              ) : item.quality.status === "blurry" ? (
+                                <>
+                                  <AlertCircle className="w-2.5 h-2.5" />
+                                  <span>Blurry</span>
+                                </>
+                              ) : (
+                                <>
+                                  <AlertCircle className="w-2.5 h-2.5" />
+                                  <span>Low Light</span>
+                                </>
+                              )}
+                            </div>
+                          )}
+
                           {/* Photo Label Badge */}
                           <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded-md bg-indigo-600/90 text-white font-bold text-[10px] shadow">
                             {item.label}
@@ -1971,7 +2148,7 @@ export default function LiveScan() {
                       <button
                         type="button"
                         disabled={isProcessing}
-                        onClick={() => cameraInputRef.current?.click()}
+                        onClick={handleStartSmartCamera}
                         className="flex-1 sm:flex-initial px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 shadow-md shadow-indigo-600/20 transition-all cursor-pointer disabled:opacity-50"
                       >
                         <Plus className="w-3.5 h-3.5" />
@@ -2036,11 +2213,12 @@ export default function LiveScan() {
                       <button
                         type="button"
                         disabled={!activeSession || isProcessing}
-                        onClick={() => cameraInputRef.current?.click()}
-                        className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 disabled:opacity-50 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/25 transition-all cursor-pointer"
+                        onClick={handleStartSmartCamera}
+                        className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-500 to-teal-500 hover:from-indigo-500 hover:to-teal-400 disabled:opacity-50 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/25 transition-all cursor-pointer"
                       >
                         <Camera className="w-4 h-4" />
-                        <span>Take Photo</span>
+                        <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                        <span>Smart Camera Viewfinder</span>
                       </button>
 
                       <button
@@ -2050,9 +2228,19 @@ export default function LiveScan() {
                         className="w-full py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-200 border border-slate-700 font-semibold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
                       >
                         <Upload className="w-4 h-4" />
-                        <span>Choose from Gallery</span>
+                        <span>Gallery Photos</span>
                       </button>
                     </div>
+
+                    {/* Standard System Camera Fallback */}
+                    <button
+                      type="button"
+                      disabled={!activeSession || isProcessing}
+                      onClick={() => cameraInputRef.current?.click()}
+                      className="mt-2 text-[11px] text-slate-400 hover:text-indigo-400 transition-colors underline underline-offset-2 cursor-pointer disabled:opacity-50"
+                    >
+                      Or use standard system camera
+                    </button>
 
                     {!activeSession && (
                       <p className="text-[11px] text-amber-400 mt-3 font-medium px-1">
@@ -2558,6 +2746,135 @@ export default function LiveScan() {
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Smart In-App Camera Viewfinder Modal with Real-time Quality Advisor (ADR-050) */}
+        {isSmartCameraOpen && (
+          <div className="fixed inset-0 z-50 bg-black/95 flex flex-col justify-between overflow-hidden select-none">
+            {/* Camera Video Stream */}
+            <video
+              ref={smartVideoRef}
+              autoPlay
+              playsInline
+              muted
+              className="absolute inset-0 w-full h-full object-cover"
+            />
+
+            {/* Shutter Flash Animation */}
+            {cameraFlash && (
+              <div className="absolute inset-0 bg-white/90 z-40 pointer-events-none transition-opacity duration-150" />
+            )}
+
+            {/* Top HUD: Real-time Quality Advisor & Controls */}
+            <div className="relative z-30 pt-4 px-4 sm:pt-6 sm:px-6 flex items-center justify-between gap-3 bg-gradient-to-b from-black/80 via-black/40 to-transparent">
+              {/* Quality Advisor Pill */}
+              <div
+                className={`px-3 py-1.5 rounded-full backdrop-blur-md border text-xs font-medium flex items-center gap-2 shadow-lg transition-all ${
+                  liveQuality
+                    ? liveQuality.status === "good"
+                      ? "bg-emerald-950/80 border-emerald-500/50 text-emerald-200"
+                      : liveQuality.status === "blurry"
+                      ? "bg-rose-950/80 border-rose-500/50 text-rose-200"
+                      : "bg-amber-950/80 border-amber-500/50 text-amber-200"
+                    : "bg-slate-900/80 border-slate-700 text-slate-300"
+                }`}
+              >
+                <span
+                  className={`w-2 h-2 rounded-full ${
+                    liveQuality
+                      ? liveQuality.status === "good"
+                        ? "bg-emerald-400"
+                        : liveQuality.status === "blurry"
+                        ? "bg-rose-400"
+                        : "bg-amber-400"
+                      : "bg-indigo-400"
+                  } animate-pulse`}
+                />
+                <span className="truncate max-w-[200px] sm:max-w-none">
+                  {liveQuality ? liveQuality.message : "Calibrating lighting & focus..."}
+                </span>
+              </div>
+
+              {/* Action Buttons: Flip Camera & Close */}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setSmartCameraFacing((curr) =>
+                      curr === "environment" ? "user" : "environment"
+                    )
+                  }
+                  className="p-2.5 rounded-full bg-slate-900/80 hover:bg-slate-800 text-white border border-slate-700/80 backdrop-blur-md transition-all cursor-pointer shadow-md"
+                  title="Switch camera"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={handleStopSmartCamera}
+                  className="p-2.5 rounded-full bg-slate-900/80 hover:bg-rose-900/80 text-white border border-slate-700/80 backdrop-blur-md transition-all cursor-pointer shadow-md"
+                  title="Close camera"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Center Framing Reticle Guide */}
+            <div className="relative z-20 flex-1 flex flex-col items-center justify-center p-4 pointer-events-none">
+              <div className="w-full max-w-sm sm:max-w-md aspect-[16/10] border-2 border-dashed border-white/25 rounded-2xl relative flex items-center justify-center">
+                {/* Corner Accents */}
+                <div className="absolute top-0 left-0 w-4 h-4 border-t-2 border-l-2 border-indigo-400 rounded-tl" />
+                <div className="absolute top-0 right-0 w-4 h-4 border-t-2 border-r-2 border-indigo-400 rounded-tr" />
+                <div className="absolute bottom-0 left-0 w-4 h-4 border-b-2 border-l-2 border-indigo-400 rounded-bl" />
+                <div className="absolute bottom-0 right-0 w-4 h-4 border-b-2 border-r-2 border-indigo-400 rounded-br" />
+
+                <div className="px-3 py-1 rounded-full bg-black/50 backdrop-blur-sm border border-white/10 text-[11px] text-white/80 font-medium text-center">
+                  Align student seating rows in frame
+                </div>
+              </div>
+            </div>
+
+            {/* Bottom Controls Bar: Shutter, Staged Counter, Done */}
+            <div className="relative z-30 pb-8 pt-4 px-6 bg-gradient-to-t from-black/90 via-black/60 to-transparent flex flex-col items-center gap-3">
+              <p className="text-[11px] text-slate-300 font-medium drop-shadow text-center">
+                Snap photos across the classroom. Pan left to right for complete coverage.
+              </p>
+
+              <div className="w-full max-w-md flex items-center justify-between gap-4">
+                {/* Photos Staged Pill */}
+                <div className="flex-1 text-left">
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900/80 border border-slate-700 text-xs font-semibold text-white backdrop-blur-md">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                    <span>{queuedPhotos.length} Staged</span>
+                  </div>
+                </div>
+
+                {/* Shutter Button */}
+                <button
+                  type="button"
+                  onClick={handleCaptureSmartPhoto}
+                  className="w-18 h-18 sm:w-20 sm:h-20 rounded-full border-4 border-white/90 p-1 flex items-center justify-center active:scale-95 transition-transform cursor-pointer shadow-2xl hover:border-indigo-400"
+                  title="Capture photo"
+                >
+                  <div className="w-full h-full rounded-full bg-white flex items-center justify-center">
+                    <Camera className="w-7 h-7 text-indigo-950" />
+                  </div>
+                </button>
+
+                {/* Done & Review Button */}
+                <div className="flex-1 text-right">
+                  <button
+                    type="button"
+                    onClick={handleStopSmartCamera}
+                    className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-lg transition-all cursor-pointer"
+                  >
+                    Done ({queuedPhotos.length})
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         )}
