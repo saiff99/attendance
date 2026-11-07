@@ -1239,6 +1239,45 @@
   3. *Positive:* Streamlined multi-photo snapping: faculty can capture 4–8 photos sequentially from the in-app viewfinder without jumping in and out of the OS camera app.
   4. *Positive:* Zero friction on staged photos: instant visual badges highlight blurry photos for immediate retake.
 
+---
+
+### ADR-051: Interactive Face Bounding-Box Inspector & 1-Tap Manual Correction
+
+- **Status:** Accepted
+- **Date:** 2026-11-08
+- **Context:**
+  1. *Subtle Angle/Occlusion Recognition Gaps:* Even with InsightFace ArcFace 512D neural vectors, classroom settings (100–250 students) occasionally encounter partially occluded, side-turned, or shadowed faces that fall slightly below the 0.42 similarity threshold, resulting in unrecognized faces.
+  2. *Lack of Visual Feedback:* Previously, faculty only received a numeric count and list of matched student names, without knowing *which* person in the photo was recognized or who was missed.
+  3. *Audit & Verification Burden:* If a student was physically present in class but missed by AI due to lighting or distance, faculty had to search through the entire absent list separately and manually mark them, without visual confirmation linking the student to their physical location in the room.
+- **Decision:**
+  1. **Backend Inspection Metadata Contract (`backend/app/ai.py` & `backend/app/routes.py`):**
+     - Author `match_faces_with_inspection` while preserving backward-compatible `match_faces_vectorized`.
+     - Calculate normalized coordinates ($0.0 - 1.0$) for every detected face:
+       $$\text{left} = \frac{x_1}{W}, \quad \text{top} = \frac{y_1}{H}, \quad \text{width} = \frac{x_2 - x_1}{W}, \quad \text{height} = \frac{y_2 - y_1}{H}$$
+     - Return `detected_faces` array containing `face_id`, raw `bbox`, `bbox_norm`, detection confidence `det_score`, match status `matched`, matched `student_id`, `student_name`, `student_roll`, and `confidence`.
+     - Return `image_meta` containing source image dimensions `{"width": W, "height": H}`.
+  2. **Interactive Face Inspector Modal (`frontend/src/components/FaceInspectorModal.tsx`):**
+     - Full-screen modal with multi-touch Pinch-to-Zoom ($1.0\times$ to $3.5\times$), double-tap/wheel zoom, and smooth drag panning for inspecting distant student rows.
+     - Multi-photo pagination (`<` and `>` pager) to toggle across multiple classroom angles.
+     - Interactive filter HUD: `All Faces`, `Needs Review (Unrecognized Only)`, `Identified Only`.
+     - Visual bounding boxes:
+       - 🟢 **Green Solid Overlays**: Successfully identified students (`[✓ Name (Roll) • Conf%]`).
+       - 🔴 **Red/Amber Pulsing Overlays**: Unrecognized faces (`[❓ Unrecognized Face • Tap to Identify]`).
+     - **1-Tap Manual Correction Popover**:
+       - Tapping an unrecognized box opens a quick absent student popover with instant real-time search.
+       - Tapping a student invokes `onManualMarkPresent(studentId, faceId)`, atomically recording attendance in PostgreSQL and immediately flipping the bounding box to green identified status.
+       - Input strictly enforces font-size $\ge 16\text{px}$ to comply with Vault Gotcha 1 (preventing iOS Safari viewport auto-zoom).
+       - Includes a "Dismiss / False Detection" action for non-human background artifacts (posters, mannequins).
+  3. **Live Scan Integration (`frontend/src/app/live-scan/page.tsx`):**
+     - Stores `detected_faces` and `image_meta` from `perPhotoResults` into component state `inspectedPhotos`.
+     - Keeps photo object URLs alive during the inspection lifecycle, revoking them only on unmount or when a new photo batch begins.
+     - Prominently surfaces the `[Inspect Face Bounding Boxes]` trigger button in both the Success modal and the 0-Identified warning modal.
+- **Consequences:**
+  1. *Positive:* 100% visual transparency: faculty can inspect exact classroom positions of recognized and unrecognized students.
+  2. *Positive:* Instant friction-free correction: unresolved students can be marked present in 1 tap without navigating away from the photo view.
+  3. *Positive:* Responsive & scale-independent: normalized $0.0-1.0$ coordinates render pixel-perfect CSS overlays across any mobile or desktop screen resolution and during CSS transform zoom/pan.
+  4. *Positive:* Zero database regression: manual marks reuse the standard atomic `POST /api/attendance/mark` RPC and update in-memory attendance state immediately.
+
 
 
 

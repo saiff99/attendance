@@ -137,29 +137,36 @@ def calculate_confidence_score(sim: float) -> float:
     return round(float(mapped), 2)
 
 
-def match_faces_vectorized(
+def match_faces_with_inspection(
     faces: list,
     enrolled_students: list,
     similarity_threshold: float = 0.42,
     det_score_threshold: float = 0.20,
-    enrolled_matrix: Optional[np.ndarray] = None
-) -> list:
+    enrolled_matrix: Optional[np.ndarray] = None,
+    image_width: int = 0,
+    image_height: int = 0,
+) -> tuple[list, list]:
     """
-    Vectorized 2D Matrix Cosine Similarity matching for batch face recognition.
-    Accelerated via NumPy BLAS / AVX2 matrix operations (O(1) matrix multiplication).
+    Vectorized 2D Matrix Cosine Similarity matching for batch face recognition,
+    returning both recognized students AND detailed bounding box detection metadata
+    for the Interactive Face Inspector (ADR-051).
     
     Args:
-        faces: List of detected face objects (InsightFace Face objects or objects with .embedding and optional .det_score)
+        faces: List of detected face objects
         enrolled_students: List of student dicts containing 'face_encoding' and 'id'
         similarity_threshold: Cosine similarity threshold (default 0.42 for ArcFace 512D)
         det_score_threshold: Minimum face detection confidence to consider (default 0.20)
-        enrolled_matrix: Optional pre-stacked normalized 2D matrix (N, 512) to bypass runtime allocation.
+        enrolled_matrix: Optional pre-stacked normalized 2D matrix (N, 512)
+        image_width: Optional pixel width of source image for normalized coordinates
+        image_height: Optional pixel height of source image for normalized coordinates
         
     Returns:
-        List of matched student dicts with added 'confidence' score, deduplicated by student id.
+        tuple (recognized_students, detected_faces):
+            - recognized_students: Deduplicated list of matched student dicts with 'confidence'
+            - detected_faces: List of all detected faces with bounding boxes and identification metadata
     """
     if not faces or not enrolled_students:
-        return []
+        return [], []
 
     # 1. Fast Path: Use pre-stacked normalized 2D matrix if supplied (Zero runtime allocation)
     if enrolled_matrix is not None and isinstance(enrolled_matrix, np.ndarray) and enrolled_matrix.ndim == 2:
@@ -190,13 +197,42 @@ def match_faces_vectorized(
         enc_matrix = np.vstack(valid_encodings) if has_matrix else None
 
     recognized = []
+    detected_faces = []
 
-    for face in faces:
-        if hasattr(face, 'det_score') and face.det_score is not None and face.det_score < det_score_threshold:
+    for idx, face in enumerate(faces):
+        det_score = float(face.det_score) if hasattr(face, 'det_score') and face.det_score is not None else 1.0
+        if det_score < det_score_threshold:
             continue
+
+        raw_bbox = [0.0, 0.0, 0.0, 0.0]
+        if hasattr(face, 'bbox') and face.bbox is not None:
+            try:
+                raw_bbox = [round(float(c), 1) for c in face.bbox[:4]]
+            except Exception:
+                pass
+
+        bbox_norm = None
+        if image_width > 0 and image_height > 0 and len(raw_bbox) == 4:
+            x1, y1, x2, y2 = raw_bbox
+            left_norm = max(0.0, min(1.0, x1 / image_width))
+            top_norm = max(0.0, min(1.0, y1 / image_height))
+            w_norm = max(0.0, min(1.0, (x2 - x1) / image_width))
+            h_norm = max(0.0, min(1.0, (y2 - y1) / image_height))
+            bbox_norm = [round(left_norm, 4), round(top_norm, 4), round(w_norm, 4), round(h_norm, 4)]
 
         unknown_encoding = getattr(face, 'embedding', None)
         if unknown_encoding is None:
+            detected_faces.append({
+                "face_id": f"face_{idx}",
+                "bbox": raw_bbox,
+                "bbox_norm": bbox_norm,
+                "det_score": round(det_score, 2),
+                "matched": False,
+                "student_id": None,
+                "student_name": None,
+                "student_roll": None,
+                "confidence": None,
+            })
             continue
 
         best_match_student = None
@@ -232,13 +268,67 @@ def match_faces_vectorized(
                     continue
 
         if best_match_student:
-            # Avoid duplicates in the same scan
+            conf = calculate_confidence_score(float(highest_sim))
             if not any(s['id'] == best_match_student['id'] for s in recognized):
                 recognized.append({
                     **best_match_student,
-                    "confidence": calculate_confidence_score(float(highest_sim))
+                    "confidence": conf
                 })
+            detected_faces.append({
+                "face_id": f"face_{idx}",
+                "bbox": raw_bbox,
+                "bbox_norm": bbox_norm,
+                "det_score": round(det_score, 2),
+                "matched": True,
+                "student_id": best_match_student["id"],
+                "student_name": best_match_student["full_name"],
+                "student_roll": best_match_student.get("student_roll"),
+                "confidence": conf,
+            })
+        else:
+            detected_faces.append({
+                "face_id": f"face_{idx}",
+                "bbox": raw_bbox,
+                "bbox_norm": bbox_norm,
+                "det_score": round(det_score, 2),
+                "matched": False,
+                "student_id": None,
+                "student_name": None,
+                "student_roll": None,
+                "confidence": None,
+            })
 
+    return recognized, detected_faces
+
+
+def match_faces_vectorized(
+    faces: list,
+    enrolled_students: list,
+    similarity_threshold: float = 0.42,
+    det_score_threshold: float = 0.20,
+    enrolled_matrix: Optional[np.ndarray] = None
+) -> list:
+    """
+    Vectorized 2D Matrix Cosine Similarity matching for batch face recognition.
+    Accelerated via NumPy BLAS / AVX2 matrix operations (O(1) matrix multiplication).
+    
+    Args:
+        faces: List of detected face objects
+        enrolled_students: List of student dicts containing 'face_encoding' and 'id'
+        similarity_threshold: Cosine similarity threshold (default 0.42 for ArcFace 512D)
+        det_score_threshold: Minimum face detection confidence to consider (default 0.20)
+        enrolled_matrix: Optional pre-stacked normalized 2D matrix (N, 512)
+        
+    Returns:
+        List of matched student dicts with added 'confidence' score, deduplicated by student id.
+    """
+    recognized, _ = match_faces_with_inspection(
+        faces,
+        enrolled_students,
+        similarity_threshold=similarity_threshold,
+        det_score_threshold=det_score_threshold,
+        enrolled_matrix=enrolled_matrix
+    )
     return recognized
 
 

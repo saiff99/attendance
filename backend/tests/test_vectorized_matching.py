@@ -7,13 +7,14 @@ import time
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from app.ai import match_faces_vectorized, calculate_confidence_score
+from app.ai import match_faces_vectorized, match_faces_with_inspection, calculate_confidence_score
 
 
 class MockFace:
-    def __init__(self, embedding, det_score=0.95):
+    def __init__(self, embedding, det_score=0.95, bbox=None):
         self.embedding = embedding
         self.det_score = det_score
+        self.bbox = bbox if bbox is not None else [50.0, 40.0, 150.0, 180.0]
 
 
 class TestVectorizedFaceMatching(unittest.TestCase):
@@ -209,6 +210,47 @@ class TestVectorizedFaceMatching(unittest.TestCase):
         self.assertEqual(res_prestacked[0]["id"], res_standard[0]["id"])
         self.assertEqual(res_prestacked[0]["confidence"], res_standard[0]["confidence"])
         self.assertEqual(res_prestacked[0]["id"], self.students[2]["id"])
+
+    def test_match_faces_with_inspection_boxes_and_coordinates(self):
+        """Verify match_faces_with_inspection extracts bounding boxes and normalizes coordinates (ADR-051)."""
+        target = self.students[1]
+        probe = np.array(target["face_encoding"], dtype=np.float32)
+
+        # 1 matched face and 1 unmatched face (random vector)
+        unmatched_probe = np.random.randn(512).astype(np.float32)
+        unmatched_probe = unmatched_probe / float(norm(unmatched_probe))
+
+        face_matched = MockFace(embedding=probe, det_score=0.96, bbox=[100.0, 50.0, 300.0, 450.0])
+        face_unmatched = MockFace(embedding=unmatched_probe, det_score=0.88, bbox=[400.0, 80.0, 550.0, 320.0])
+
+        rec, det_boxes = match_faces_with_inspection(
+            [face_matched, face_unmatched],
+            self.students,
+            similarity_threshold=0.42,
+            image_width=1000,
+            image_height=800,
+        )
+
+        # 1 recognized student in attendance list
+        self.assertEqual(len(rec), 1)
+        self.assertEqual(rec[0]["id"], target["id"])
+
+        # 2 detected faces in inspector metadata
+        self.assertEqual(len(det_boxes), 2)
+
+        # First face is matched
+        self.assertTrue(det_boxes[0]["matched"])
+        self.assertEqual(det_boxes[0]["student_id"], target["id"])
+        self.assertEqual(det_boxes[0]["student_name"], target["full_name"])
+        self.assertEqual(det_boxes[0]["bbox"], [100.0, 50.0, 300.0, 450.0])
+        # Normalized: x1/1000 = 0.1, y1/800 = 0.0625, w/1000 = 0.2, h/800 = 0.5
+        self.assertEqual(det_boxes[0]["bbox_norm"], [0.1, 0.0625, 0.2, 0.5])
+
+        # Second face is unrecognized
+        self.assertFalse(det_boxes[1]["matched"])
+        self.assertIsNone(det_boxes[1]["student_id"])
+        self.assertEqual(det_boxes[1]["bbox"], [400.0, 80.0, 550.0, 320.0])
+        self.assertEqual(det_boxes[1]["bbox_norm"], [0.4, 0.1, 0.15, 0.3])
 
 
 if __name__ == "__main__":

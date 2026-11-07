@@ -2479,7 +2479,7 @@ console.log('\n--- 41. AI Inference Concurrency Limiter & Thundering Herd Protec
 
   // 3. Verify routes.py guards upload-photo attendance with get_ai_semaphore()
   assert(
-    routesPyContent.includes('recognized_students = await asyncio.to_thread(_match_photo_faces)'),
+    routesPyContent.includes('await asyncio.to_thread(_match_photo_faces)'),
     'backend/app/routes.py guards batch photo attendance with get_ai_semaphore()'
   );
 
@@ -3488,6 +3488,55 @@ console.log('\n--- 54. Real-time Classroom Framing & Quality Advisor Engine (ADR
   }
   const sharpVariance = calculateLaplacianVariancePure(sharpGray, 10, 10);
   assert(sharpVariance > 100, 'Sharp high-frequency edge grid yields high Laplacian variance (> 100)');
+}
+
+// --- 55. Interactive Face Bounding-Box Inspector & 1-Tap Manual Correction (ADR-051) ---
+{
+  console.log('\n--- 55. Interactive Face Bounding-Box Inspector & 1-Tap Manual Correction (ADR-051) ---');
+
+  // 1. Verify component exists
+  const inspectorPath = path.join(__dirname, '../src/components/FaceInspectorModal.tsx');
+  assert(fs.existsSync(inspectorPath), 'frontend/src/components/FaceInspectorModal.tsx exists');
+
+  const inspectorContent = fs.readFileSync(inspectorPath, 'utf8');
+  assert(inspectorContent.includes('export function FaceInspectorModal'), 'FaceInspectorModal.tsx exports FaceInspectorModal');
+  assert(inspectorContent.includes('detected_faces') || inspectorContent.includes('DetectedFaceBox'), 'FaceInspectorModal defines DetectedFaceBox contract');
+  assert(inspectorContent.includes('onManualMarkPresent'), 'FaceInspectorModal supports onManualMarkPresent prop');
+  assert(inspectorContent.includes('handleAssignStudent'), 'FaceInspectorModal implements handleAssignStudent for 1-tap correction');
+  assert(inspectorContent.includes('fontSize: "16px"') || inspectorContent.includes("text-base"), 'FaceInspectorModal search input enforces 16px font-size (Vault Gotcha 1)');
+
+  // 2. Verify backend AI contract
+  const aiPyPath = path.join(__dirname, '../../backend/app/ai.py');
+  const aiPyContent = fs.readFileSync(aiPyPath, 'utf8');
+  assert(aiPyContent.includes('def match_faces_with_inspection'), 'backend/app/ai.py exports match_faces_with_inspection');
+  assert(aiPyContent.includes('bbox_norm'), 'ai.py calculates normalized bounding box coordinates');
+
+  // 3. Verify backend routes return inspection metadata
+  const routesPyPath = path.join(__dirname, '../../backend/app/routes.py');
+  const routesPyContent = fs.readFileSync(routesPyPath, 'utf8');
+  assert(routesPyContent.includes('"detected_faces": detected_faces'), 'routes.py includes detected_faces in response');
+  assert(routesPyContent.includes('"image_meta": image_meta'), 'routes.py includes image_meta in response');
+
+  // 4. Verify live-scan integration
+  const liveScanPath = path.join(__dirname, '../src/app/live-scan/page.tsx');
+  const liveScanContent = fs.readFileSync(liveScanPath, 'utf8');
+  assert(liveScanContent.includes('FaceInspectorModal'), 'live-scan/page.tsx imports and renders FaceInspectorModal');
+  assert(liveScanContent.includes('inspectedPhotos'), 'live-scan/page.tsx manages inspectedPhotos state');
+  assert(liveScanContent.includes('isInspectorOpen'), 'live-scan/page.tsx manages isInspectorOpen modal state');
+
+  // 5. Mathematical validation of normalized bounding box calculations
+  const imageW = 1920;
+  const imageH = 1080;
+  const rawBox = [192, 108, 384, 324]; // x1, y1, x2, y2
+  const leftNorm = rawBox[0] / imageW;
+  const topNorm = rawBox[1] / imageH;
+  const widthNorm = (rawBox[2] - rawBox[0]) / imageW;
+  const heightNorm = (rawBox[3] - rawBox[1]) / imageH;
+
+  assert(Math.abs(leftNorm - 0.1) < 0.001, 'Bounding box left normalization verified (10%)');
+  assert(Math.abs(topNorm - 0.1) < 0.001, 'Bounding box top normalization verified (10%)');
+  assert(Math.abs(widthNorm - 0.1) < 0.001, 'Bounding box width normalization verified (10%)');
+  assert(Math.abs(heightNorm - 0.2) < 0.001, 'Bounding box height normalization verified (20%)');
 }
 
 // Summary

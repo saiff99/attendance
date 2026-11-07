@@ -163,25 +163,33 @@ async def process_attendance(request: Request, file: UploadFile = File(...), ses
             detail="Biometric AI face recognition engine is not initialized. Batch photo attendance processing cannot proceed without AI."
         )
 
+    image_meta = {"width": 0, "height": 0}
+    detected_faces = []
+
     def _match_photo_faces():
-        from app.ai import decode_image_bytes
+        from app.ai import decode_image_bytes, match_faces_with_inspection
         image_bgr = decode_image_bytes(contents)
+        h, w = image_bgr.shape[:2]
+        meta = {"width": int(w), "height": int(h)}
         
         # Detect faces with InsightFace AI
         faces = app_fa.get(image_bgr) or []
         
-        # High-performance Vectorized 2D Matrix Cosine Matching (NumPy BLAS/AVX2 accelerated)
-        return match_faces_vectorized(
+        # High-performance Vectorized 2D Matrix Cosine Matching with Inspection Metadata (ADR-051)
+        rec, det_boxes = match_faces_with_inspection(
             faces,
             enrolled_students,
             similarity_threshold=0.42,
-            enrolled_matrix=enrolled_matrix
+            enrolled_matrix=enrolled_matrix,
+            image_width=int(w),
+            image_height=int(h)
         )
+        return rec, det_boxes, meta
 
     try:
         # Concurrency Limiter: Guard neural inference under asyncio semaphore to prevent CPU/memory exhaustion
         async with get_ai_semaphore():
-            recognized_students = await asyncio.to_thread(_match_photo_faces)
+            recognized_students, detected_faces, image_meta = await asyncio.to_thread(_match_photo_faces)
     except Exception as e:
         print("Error matching faces:", str(e))
         raise HTTPException(status_code=500, detail="Failed to run AI face matching.")
@@ -232,7 +240,9 @@ async def process_attendance(request: Request, file: UploadFile = File(...), ses
         "success": True,
         "message": f"Processed image. Recognized {len(recognized_students)} students.",
         "recognized": results,
-        "ai_used": AI_ENABLED
+        "ai_used": AI_ENABLED,
+        "detected_faces": detected_faces,
+        "image_meta": image_meta
     }
 
 @router.post("/api/geofence/invalidate")

@@ -25,6 +25,11 @@ import {
 import { MjpegPlayer } from "@/components/MjpegPlayer";
 import { GeofenceModal } from "@/components/GeofenceModal";
 import { ClassroomGpsModal } from "@/components/ClassroomGpsModal";
+import {
+  FaceInspectorModal,
+  type DetectedFaceBox,
+  type InspectorPhotoItem,
+} from "@/components/FaceInspectorModal";
 import { useAuth } from "@/lib/auth";
 import {
   CampusGeofenceConfig,
@@ -372,6 +377,14 @@ interface QueuedPhotoItem {
     height: number;
   };
   quality?: QualityAssessment;
+  inspection?: {
+    imageWidth: number;
+    imageHeight: number;
+    faces: DetectedFaceBox[];
+    totalDetected: number;
+    recognizedCount: number;
+    unrecognizedCount: number;
+  };
 }
 
 export default function LiveScan() {
@@ -393,6 +406,18 @@ export default function LiveScan() {
     queuedPhotosRef.current = queuedPhotos;
   }, [queuedPhotos]);
   const [batchProgress, setBatchProgress] = useState<{ current: number; total: number } | null>(null);
+  const [inspectedPhotos, setInspectedPhotos] = useState<InspectorPhotoItem[]>([]);
+  const [isInspectorOpen, setIsInspectorOpen] = useState(false);
+  const [inspectorPhotoIndex, setInspectorPhotoIndex] = useState(0);
+
+  // Clean up inspectedPhotos object URLs when component unmounts or batch reloads
+  useEffect(() => {
+    return () => {
+      inspectedPhotos.forEach((p) => {
+        try { URL.revokeObjectURL(p.previewUrl); } catch {}
+      });
+    };
+  }, [inspectedPhotos]);
   const [uploadResultModal, setUploadResultModal] = useState<{
     isOpen: boolean;
     count: number;
@@ -1230,15 +1255,23 @@ export default function LiveScan() {
           );
 
           const recognizedList: Array<{ name: string; confidence?: number }> = (result.recognized as Array<{ name: string; confidence?: number }>) || [];
+          const detectedFaces: DetectedFaceBox[] = (result.detected_faces as DetectedFaceBox[]) || [];
+          const imageWidth = (result.image_meta?.width as number) || 0;
+          const imageHeight = (result.image_meta?.height as number) || 0;
 
           completedCount++;
           setBatchProgress({ current: completedCount, total });
           setProcessingStatusText(`Scanned ${completedCount} of ${total} photos with AI...`);
 
           return {
+            id: item.id,
             label: item.label,
+            previewUrl: item.previewUrl,
             count: recognizedList.length,
             recognized: recognizedList,
+            faces: detectedFaces,
+            imageWidth,
+            imageHeight,
           };
         }
       );
@@ -1256,10 +1289,23 @@ export default function LiveScan() {
       // 3. Refresh live logs in the sidebar
       await fetchLogs();
 
-      // 4. Clean up previews and tray
-      queuedPhotos.forEach((p) => {
+      // Revoke previous inspectedPhotos object URLs if any to prevent memory leaks
+      inspectedPhotos.forEach((p) => {
         try { URL.revokeObjectURL(p.previewUrl); } catch {}
       });
+
+      // Populate interactive face inspection photos (ADR-051)
+      const inspectorItems: InspectorPhotoItem[] = perPhotoResults.map((r) => ({
+        id: r.id,
+        label: r.label,
+        previewUrl: r.previewUrl,
+        faces: r.faces,
+        imageWidth: r.imageWidth,
+        imageHeight: r.imageHeight,
+      }));
+      setInspectedPhotos(inspectorItems);
+
+      // Clean up tray staging queue without revoking current preview URLs (transferred to inspectorItems)
       setQueuedPhotos([]);
 
       const finalRecognized = Array.from(allRecognizedMap.values());
@@ -2668,6 +2714,24 @@ export default function LiveScan() {
                   <p className="text-sm text-gray-600 dark:text-slate-300 mb-6 bg-rose-50 dark:bg-rose-950/40 p-3 rounded-xl border border-rose-200 dark:border-rose-900/50 w-full text-left font-mono text-xs break-words">
                     {uploadResultModal.errorMessage || "An unexpected error occurred while analyzing the image."}
                   </p>
+                  {/* Interactive Face Bounding-Box Inspector Trigger (ADR-051) */}
+                  {inspectedPhotos.length > 0 && inspectedPhotos.some((p) => (p.faces?.length || 0) > 0) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setUploadResultModal(null);
+                        setInspectorPhotoIndex(0);
+                        setIsInspectorOpen(true);
+                      }}
+                      className="w-full mb-3 py-2.5 px-4 rounded-xl font-bold text-xs text-white bg-gradient-to-r from-indigo-600 via-indigo-500 to-teal-500 hover:from-indigo-500 hover:to-teal-400 transition-all shadow-md shadow-indigo-600/25 cursor-pointer flex items-center justify-center gap-2"
+                    >
+                      <Eye className="w-4 h-4 text-amber-300" />
+                      <span>
+                        Inspect Face Bounding Boxes ({inspectedPhotos.reduce((acc, p) => acc + (p.faces?.length || 0), 0)} Detected)
+                      </span>
+                    </button>
+                  )}
+
                   <div className="flex gap-2.5 w-full">
                     <button
                       onClick={handleTriggerPhotoAction}
@@ -2756,6 +2820,24 @@ export default function LiveScan() {
                     </div>
                   )}
 
+                  {/* Interactive Face Bounding-Box Inspector Trigger (ADR-051) */}
+                  {inspectedPhotos.length > 0 && inspectedPhotos.some((p) => (p.faces?.length || 0) > 0) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setUploadResultModal(null);
+                        setInspectorPhotoIndex(0);
+                        setIsInspectorOpen(true);
+                      }}
+                      className="w-full mb-3 py-2.5 px-4 rounded-xl font-bold text-xs text-white bg-gradient-to-r from-indigo-600 via-indigo-500 to-teal-500 hover:from-indigo-500 hover:to-teal-400 transition-all shadow-md shadow-indigo-600/25 cursor-pointer flex items-center justify-center gap-2"
+                    >
+                      <Eye className="w-4 h-4 text-amber-300" />
+                      <span>
+                        Inspect Face Bounding Boxes ({inspectedPhotos.reduce((acc, p) => acc + (p.faces?.length || 0), 0)} Detected)
+                      </span>
+                    </button>
+                  )}
+
                   <div className="flex gap-2.5 w-full">
                     <button
                       onClick={handleTriggerPhotoAction}
@@ -2783,6 +2865,24 @@ export default function LiveScan() {
                   <p className="text-xs text-gray-500 dark:text-slate-400 mb-5">
                     The AI engine could not match any faces from this photo with enrolled students. Ensure students are enrolled and photo is sufficiently bright.
                   </p>
+                  {/* Interactive Face Bounding-Box Inspector Trigger (ADR-051) */}
+                  {inspectedPhotos.length > 0 && inspectedPhotos.some((p) => (p.faces?.length || 0) > 0) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setUploadResultModal(null);
+                        setInspectorPhotoIndex(0);
+                        setIsInspectorOpen(true);
+                      }}
+                      className="w-full mb-3 py-2.5 px-4 rounded-xl font-bold text-xs text-white bg-gradient-to-r from-indigo-600 via-indigo-500 to-teal-500 hover:from-indigo-500 hover:to-teal-400 transition-all shadow-md shadow-indigo-600/25 cursor-pointer flex items-center justify-center gap-2"
+                    >
+                      <Eye className="w-4 h-4 text-amber-300" />
+                      <span>
+                        Inspect Face Bounding Boxes ({inspectedPhotos.reduce((acc, p) => acc + (p.faces?.length || 0), 0)} Detected)
+                      </span>
+                    </button>
+                  )}
+
                   <div className="flex gap-2.5 w-full">
                     <button
                       onClick={handleTriggerPhotoAction}
@@ -2931,6 +3031,20 @@ export default function LiveScan() {
               </div>
             </div>
           </div>
+        )}
+
+        {/* Interactive Face Bounding-Box Inspector Modal (ADR-051) */}
+        {isInspectorOpen && (
+          <FaceInspectorModal
+            isOpen={isInspectorOpen}
+            photos={inspectedPhotos}
+            initialPhotoIndex={inspectorPhotoIndex}
+            absentStudents={absentStudents as Array<{ id: string; full_name?: string; student_roll?: string | number }>}
+            onClose={() => setIsInspectorOpen(false)}
+            onManualMarkPresent={async (studentId) => {
+              await handleManualMarkPresent(studentId);
+            }}
+          />
         )}
 
         {/* Scanning Animation Styles */}

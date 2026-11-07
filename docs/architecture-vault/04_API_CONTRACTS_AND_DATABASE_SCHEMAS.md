@@ -425,7 +425,35 @@ High-performance PostgreSQL stored procedure and composite index replacing seque
       "confidence": 0.89
     }
   ],
-  "ai_used": true
+  "ai_used": true,
+  "detected_faces": [
+    {
+      "face_id": "face_0",
+      "bbox": [120.0, 85.0, 240.0, 210.0],
+      "bbox_norm": [0.0625, 0.0787, 0.0625, 0.1157],
+      "det_score": 0.96,
+      "matched": true,
+      "student_id": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d",
+      "student_name": "Rahim Ahmed",
+      "student_roll": "101",
+      "confidence": 0.94
+    },
+    {
+      "face_id": "face_1",
+      "bbox": [450.0, 110.0, 560.0, 230.0],
+      "bbox_norm": [0.2344, 0.1018, 0.0573, 0.1111],
+      "det_score": 0.88,
+      "matched": false,
+      "student_id": null,
+      "student_name": null,
+      "student_roll": null,
+      "confidence": null
+    }
+  ],
+  "image_meta": {
+    "width": 1920,
+    "height": 1080
+  }
 }
 ```
 - **Audit Logging:** Emits `CLASSROOM_PHOTO_ATTENDANCE_PROCESSED` audit event to `audit_logs` ledger detailing session ID, recognized student count, and faculty actor.
