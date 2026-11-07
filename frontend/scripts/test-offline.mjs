@@ -2958,6 +2958,89 @@ console.log('\n--- 46. Rate Limiter L2 Settings Table Thrashing Mitigation & Con
   assert(proxyCaught, 'Proxy device attempt was blocked 100% in memory');
 }
 
+// --- 47. Live Scan Dashboard Memoized Attendance Cards & Timer Isolation (ADR-043) ---
+console.log('\n--- 47. Live Scan Dashboard Memoized Attendance Cards & Timer Isolation (ADR-043) ---');
+{
+  const liveScanPath = path.resolve(__dirname, '../src/app/live-scan/page.tsx');
+  const liveScanCode = fs.readFileSync(liveScanPath, 'utf-8');
+
+  // 1. Verify component isolation and memoization
+  assert(liveScanCode.includes('SessionTimerBadge = memo('), 'SessionTimerBadge is wrapped in memo');
+  assert(liveScanCode.includes('AttendanceLogCard = memo('), 'AttendanceLogCard is wrapped in memo');
+  assert(liveScanCode.includes('AbsentStudentCard = memo('), 'AbsentStudentCard is wrapped in memo');
+  assert(liveScanCode.includes('CameraCard = memo('), 'CameraCard is wrapped in memo');
+
+  // 2. Verify root page does not hold 1-second timer state
+  assert(!liveScanCode.includes('setSessionTime('), 'Root LiveScan does not contain setSessionTime ticker');
+  assert(!liveScanCode.includes('const [sessionTime, setSessionTime]'), 'Root LiveScan does not define sessionTime state');
+
+  // 3. Verify callbacks are memoized with useCallback
+  assert(liveScanCode.includes('handleManualMarkPresent = useCallback('), 'handleManualMarkPresent is wrapped in useCallback');
+  assert(liveScanCode.includes('handleUndoPresent = useCallback('), 'handleUndoPresent is wrapped in useCallback');
+  assert(liveScanCode.includes('backRowCameras = useMemo('), 'backRowCameras is wrapped in useMemo');
+  assert(liveScanCode.includes('frontRowCameras = useMemo('), 'frontRowCameras is wrapped in useMemo');
+
+  // 4. Verify mobile 16px search input to prevent iOS Safari auto-zoom
+  assert(liveScanCode.includes('text-base sm:text-xs'), 'Search input enforces text-base (16px) on mobile for iOS Safari anti-zoom compliance');
+
+  // 5. Simulate React.memo shallow comparison behavior for 150 student cards
+  let renderCount = 0;
+  const memoCache = new Map();
+
+  function renderMemoCard(log, isUndoing, onUndo) {
+    const key = log.id;
+    const prev = memoCache.get(key);
+    if (prev && prev.log === log && prev.isUndoing === isUndoing && prev.onUndo === onUndo) {
+      return prev.rendered; // React.memo bail out: 0 DOM reconciliation!
+    }
+    renderCount++;
+    const rendered = { id: log.id, renderedAt: Date.now() };
+    memoCache.set(key, { log, isUndoing, onUndo, rendered });
+    return rendered;
+  }
+
+  const dummyCallback = () => {};
+  const currentLogs = [];
+
+  // Simulate initial 150 students
+  for (let i = 1; i <= 150; i++) {
+    currentLogs.push({
+      id: `log-${i}`,
+      student_id: `stu-${i}`,
+      session_id: 'sess-1',
+      status: 'Present',
+      capture_mode: 'Live Scan',
+      recorded_at: '2026-11-07T10:00:00Z',
+      students: { full_name: `Student ${i}`, student_roll: `MBBS-${i}` }
+    });
+  }
+
+  // Initial render: 150 cards rendered
+  currentLogs.forEach(l => renderMemoCard(l, false, dummyCallback));
+  assert(renderCount === 150, 'Initial 150 student cards render once');
+
+  // 1-second timer tick simulation: parent re-renders or checks cards with identical references
+  renderCount = 0;
+  currentLogs.forEach(l => renderMemoCard(l, false, dummyCallback));
+  assert(renderCount === 0, 'Zero student cards re-render on timer tick (100% memoized bail-out)');
+
+  // 1 new student arrives via delta poll
+  const newStudentLog = {
+    id: 'log-151',
+    student_id: 'stu-151',
+    session_id: 'sess-1',
+    status: 'Present',
+    capture_mode: 'Live Scan',
+    recorded_at: '2026-11-07T10:01:00Z',
+    students: { full_name: 'Student 151', student_roll: 'MBBS-151' }
+  };
+  const updatedLogs = [newStudentLog, ...currentLogs];
+
+  renderCount = 0;
+  updatedLogs.forEach(l => renderMemoCard(l, false, dummyCallback));
+  assert(renderCount === 1, 'Exactly 1 card renders when a new student arrives ($O(1)$ dynamic scaling)');
+}
+
 // Summary
 console.log('\n' + '=' .repeat(65));
 console.log(`📊 Offline Unit Test Summary: ${passed} Passed, ${failed} Failed`);

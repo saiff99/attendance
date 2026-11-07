@@ -1,7 +1,7 @@
 /* eslint-disable */
 "use client";
 
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo, memo } from "react";
 import Link from "next/link";
 import {
   Camera, Upload, CheckCircle2, PlayCircle, StopCircle, Activity, Loader2,
@@ -73,6 +73,283 @@ interface AttendanceLogItem {
   } | null;
 }
 
+/* =========================================================================
+   MEMOIZED SUB-COMPONENTS (Zero-Re-Render Scalability for 60-150 Students)
+   ========================================================================= */
+
+interface SessionTimerBadgeProps {
+  startTime?: string | null;
+}
+
+const SessionTimerBadge = memo(function SessionTimerBadge({ startTime }: SessionTimerBadgeProps) {
+  const [time, setTime] = useState("00:00:00");
+
+  useEffect(() => {
+    if (!startTime) return;
+    const startMs = new Date(startTime).getTime();
+    const updateTime = () => {
+      const diff = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
+      const hours = Math.floor(diff / 3600).toString().padStart(2, "0");
+      const minutes = Math.floor((diff % 3600) / 60).toString().padStart(2, "0");
+      const seconds = (diff % 60).toString().padStart(2, "0");
+      setTime(`${hours}:${minutes}:${seconds}`);
+    };
+    updateTime();
+    const timer = setInterval(updateTime, 1000);
+    return () => clearInterval(timer);
+  }, [startTime]);
+
+  return (
+    <div className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-slate-950/80 border border-gray-200 dark:border-slate-800 text-xs font-mono font-medium text-gray-700 dark:text-slate-300">
+      <Clock className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+      <span>{time}</span>
+    </div>
+  );
+});
+
+interface AttendanceLogCardProps {
+  log: AttendanceLogItem;
+  isUndoing: boolean;
+  onUndo: (logId: string) => void;
+}
+
+const AttendanceLogCard = memo(function AttendanceLogCard({
+  log,
+  isUndoing,
+  onUndo,
+}: AttendanceLogCardProps) {
+  const studentName = log.students?.full_name?.toUpperCase() || "UNKNOWN STUDENT";
+  const studentRoll = log.students?.student_roll || "N/A";
+  const formattedTime = useMemo(() => {
+    try {
+      return new Date(log.recorded_at).toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      });
+    } catch {
+      return "--:--:--";
+    }
+  }, [log.recorded_at]);
+  const isManual = log.capture_mode === "Manual Upload" || log.capture_mode === "Manual Override";
+  const initials = useMemo(() => studentName.substring(0, 2), [studentName]);
+
+  return (
+    <div className="flex items-center p-2 sm:p-2.5 rounded-xl border border-gray-200/80 dark:border-slate-800/80 bg-gray-50/70 dark:bg-slate-950/60 hover:bg-white dark:hover:bg-slate-950 hover:border-indigo-400 dark:hover:border-indigo-500/40 hover:shadow-sm transition-all group">
+      {/* Avatar Initials Pill */}
+      <div className="flex-shrink-0 mr-2 sm:mr-2.5">
+        <div
+          className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center text-white font-bold text-[10px] sm:text-[11px] uppercase shadow-md ${
+            isManual
+              ? "bg-gradient-to-br from-purple-600 to-indigo-700 shadow-purple-600/20"
+              : "bg-gradient-to-br from-indigo-600 to-indigo-800 shadow-indigo-600/20"
+          }`}
+        >
+          {initials}
+        </div>
+      </div>
+
+      <div className="flex-1 min-w-0 pr-2">
+        <p className="text-xs font-bold text-gray-900 dark:text-white truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-300 transition-colors">
+          {studentName}
+        </p>
+        <div className="flex items-center gap-1.5 text-[9px] sm:text-[10px] text-gray-500 dark:text-slate-400 mt-0.5">
+          <span className="font-mono bg-gray-200/80 dark:bg-slate-900 px-1 sm:px-1.5 py-0.5 rounded text-gray-700 dark:text-slate-300 border border-gray-300/80 dark:border-slate-800">
+            {studentRoll}
+          </span>
+          {isManual && (
+            <>
+              <span>•</span>
+              <span className="text-purple-600 dark:text-purple-400 font-semibold">Faculty Verified</span>
+            </>
+          )}
+        </div>
+      </div>
+
+      <div className="flex-shrink-0 text-right flex flex-col items-end gap-1">
+        <span className="text-[9px] sm:text-[10px] text-gray-500 dark:text-slate-500 font-mono block">
+          {formattedTime}
+        </span>
+        <div className="flex items-center gap-1">
+          <span
+            className={`inline-flex items-center text-[8px] sm:text-[9px] font-semibold px-1.5 py-0.5 rounded-md ${
+              isManual
+                ? "text-purple-700 dark:text-purple-300 bg-purple-500/10 border border-purple-500/20"
+                : "text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20"
+            }`}
+          >
+            {isManual ? "Manual" : "Present"}
+          </span>
+          {isManual && (
+            <button
+              type="button"
+              disabled={isUndoing}
+              onClick={() => onUndo(log.id)}
+              className="p-1 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded transition-colors cursor-pointer"
+              title="Undo manual attendance"
+            >
+              {isUndoing ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <RotateCcw className="w-2.5 h-2.5" />}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+});
+
+interface AbsentStudentCardProps {
+  student: Record<string, any>;
+  isMarking: boolean;
+  onMarkPresent: (studentId: string) => void;
+}
+
+const AbsentStudentCard = memo(function AbsentStudentCard({
+  student,
+  isMarking,
+  onMarkPresent,
+}: AbsentStudentCardProps) {
+  const studentName = (student.full_name as string | undefined)?.toUpperCase() || "UNKNOWN";
+  const studentRoll = (student.student_roll as string | number | undefined) || "N/A";
+  const studentId = student.id as string;
+  const initials = useMemo(() => studentName.substring(0, 2), [studentName]);
+
+  return (
+    <div className="flex items-center justify-between p-2 sm:p-2.5 rounded-xl border border-gray-200/80 dark:border-slate-800/80 bg-gray-50/70 dark:bg-slate-950/60 hover:bg-white dark:hover:bg-slate-950 hover:border-emerald-500/40 hover:shadow-sm transition-all gap-2 min-w-0">
+      {/* Avatar Initials Pill */}
+      <div className="flex-shrink-0">
+        <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-gradient-to-br from-slate-700 to-slate-900 border border-slate-700 flex items-center justify-center text-slate-300 font-bold text-[10px] sm:text-[11px] uppercase">
+          {initials}
+        </div>
+      </div>
+
+      <div className="flex-1 min-w-0">
+        <p className="text-xs font-bold text-gray-900 dark:text-slate-200 truncate">
+          {studentName}
+        </p>
+        <div className="flex items-center gap-1.5 text-[9px] sm:text-[10px] text-gray-500 dark:text-slate-400 mt-0.5">
+          <span className="font-mono bg-gray-200/80 dark:bg-slate-900 px-1.5 py-0.5 rounded text-gray-700 dark:text-slate-300 border border-gray-300/80 dark:border-slate-800">
+            {studentRoll}
+          </span>
+          <span>•</span>
+          <span className="text-rose-500 dark:text-rose-400 font-medium">Unverified</span>
+        </div>
+      </div>
+
+      {/* 1-Click Mark Present Button */}
+      <button
+        type="button"
+        disabled={isMarking}
+        onClick={() => onMarkPresent(studentId)}
+        className="px-2.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold flex items-center gap-1 transition-all shadow-md shadow-emerald-600/20 active:scale-95 disabled:opacity-50 cursor-pointer shrink-0"
+        title="1-Click Mark Present for unscanned student"
+      >
+        {isMarking ? (
+          <Loader2 className="w-3 h-3 animate-spin text-white" />
+        ) : (
+          <Check className="w-3 h-3" />
+        )}
+        <span>Mark Present</span>
+      </button>
+    </div>
+  );
+});
+
+interface CameraCardProps {
+  cam: CameraMeta;
+  sessionId?: string;
+  isFocused: boolean;
+  onFocus: (cam: CameraMeta) => void;
+}
+
+const CameraCard = memo(function CameraCard({
+  cam,
+  sessionId,
+  isFocused,
+  onFocus,
+}: CameraCardProps) {
+  const isConnected = !!cam.is_connected;
+  return (
+    <div
+      className={`group relative rounded-2xl overflow-hidden bg-gradient-to-b from-slate-900/95 via-[#0B0F19] to-slate-950 border ${
+        isConnected
+          ? "border-slate-800/90 hover:border-emerald-500/50 hover:shadow-lg hover:shadow-emerald-500/10"
+          : "border-slate-800/80 hover:border-indigo-500/40 hover:shadow-lg hover:shadow-indigo-500/10"
+      } shadow-md aspect-video flex flex-col cursor-pointer transition-all duration-300`}
+      onClick={() => onFocus(cam)}
+    >
+      {/* Subtle Ambient Radial Lighting */}
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-500/[0.04] via-transparent to-transparent pointer-events-none" />
+
+      {/* Top-Left Camera Label Badge */}
+      <div className="absolute top-2.5 left-2.5 z-10 flex items-center gap-2 bg-slate-950/80 backdrop-blur-md px-2.5 py-1 rounded-lg text-[10px] font-semibold text-slate-200 border border-slate-800/90 shadow-sm">
+        <span
+          className={`w-1.5 h-1.5 rounded-full ${
+            isConnected ? "bg-emerald-400 shadow-sm shadow-emerald-400/80 animate-pulse" : "bg-amber-400"
+          }`}
+        />
+        <span className="tracking-wide font-medium">{cam.name}</span>
+        <span
+          className={`text-[9px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded ${
+            isConnected
+              ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+              : "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+          }`}
+        >
+          {isConnected ? "Live 4K" : "Standby"}
+        </span>
+      </div>
+
+      {/* Top-Right Maximize / Studio Focus Action */}
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onFocus(cam);
+        }}
+        className="absolute top-2.5 right-2.5 z-10 p-1.5 rounded-lg bg-slate-950/70 backdrop-blur-md text-slate-400 hover:text-white hover:bg-slate-800/90 border border-slate-800/80 opacity-0 group-hover:opacity-100 transition-all duration-200 shadow-sm"
+        title="Focus Camera Studio"
+      >
+        <Maximize2 className="w-3.5 h-3.5" />
+      </button>
+
+      {/* Video Content or Sleek Native Dormant Card */}
+      {isConnected ? (
+        <div className="w-full h-full flex items-center justify-center bg-black">
+          <MjpegPlayer
+            url={`${getVideoBackendUrl(cam.index)}/api/video-feed/${sessionId}?camera_index=${cam.index}&grid=1`}
+            className="w-full h-full object-contain"
+            fallbackText="Connecting..."
+            paused={isFocused}
+          />
+        </div>
+      ) : (
+        <div className="w-full h-full flex flex-col items-center justify-center p-3 select-none relative">
+          <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-slate-900/90 border border-slate-800/90 flex items-center justify-center shadow-inner group-hover:scale-105 group-hover:border-slate-700/80 transition-all duration-300 mb-2">
+            <VideoOff className="w-4 h-4 sm:w-5 sm:h-5 text-slate-500 group-hover:text-slate-400 transition-colors" />
+          </div>
+
+          <span className="text-[11px] sm:text-xs font-semibold text-slate-300 group-hover:text-white transition-colors tracking-tight">
+            {cam.name} Node Offline
+          </span>
+
+          <div className="flex items-center gap-1.5 mt-1 px-2.5 py-0.5 rounded-full bg-slate-900/80 border border-slate-800 text-[10px] text-slate-400">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400/80" />
+            <span className="text-amber-400/90 font-medium">Dormant</span>
+            <span className="text-slate-600">•</span>
+            <span className="text-slate-500 text-[9px]">Power Saver</span>
+          </div>
+
+          {/* Quick Hover Bottom Cue */}
+          <div className="absolute bottom-2 inset-x-0 flex justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
+            <span className="text-[9px] font-medium text-indigo-300 bg-indigo-950/80 px-2.5 py-0.5 rounded-md border border-indigo-800/50 backdrop-blur-sm flex items-center gap-1">
+              <Maximize2 className="w-2.5 h-2.5" /> Studio Focus
+            </span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+});
+
 export default function LiveScan() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<"grid" | "cctv" | "photo" | "manual">("grid");
@@ -93,7 +370,6 @@ export default function LiveScan() {
     isError?: boolean;
     errorMessage?: string;
   } | null>(null);
-  const [sessionTime, setSessionTime] = useState("00:00:00");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
@@ -276,20 +552,6 @@ export default function LiveScan() {
     onRotateCamera: setSelectedCctvIndex,
   });
 
-
-  // Session Duration Timer
-  useEffect(() => {
-    if (!activeSession) return;
-    const startTime = new Date(activeSession.start_time || Date.now()).getTime();
-    const timer = setInterval(() => {
-      const diff = Math.floor((Date.now() - startTime) / 1000);
-      const hours = Math.floor(diff / 3600).toString().padStart(2, '0');
-      const minutes = Math.floor((diff % 3600) / 60).toString().padStart(2, '0');
-      const seconds = (diff % 60).toString().padStart(2, '0');
-      setSessionTime(`${hours}:${minutes}:${seconds}`);
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [activeSession]);
 
   // In-flight guard to avoid stacking requests if network latency spikes
   const isFetchingLogsRef = useRef(false);
@@ -685,8 +947,8 @@ export default function LiveScan() {
     });
   }, [absentStudents, searchQuery]);
 
-  // 1-Click Faculty Manual Override Handlers
-  const handleManualMarkPresent = async (studentId: string) => {
+  // 1-Click Faculty Manual Override Handlers (Memoized callbacks to preserve pure $O(1)$ child renders)
+  const handleManualMarkPresent = useCallback(async (studentId: string) => {
     if (!activeSession || !studentId) return;
     setMarkingStudentId(studentId);
     try {
@@ -711,9 +973,9 @@ export default function LiveScan() {
     } finally {
       setMarkingStudentId(null);
     }
-  };
+  }, [activeSession, fetchLogs]);
 
-  const handleUndoPresent = async (logId: string) => {
+  const handleUndoPresent = useCallback(async (logId: string) => {
     if (!logId) return;
     setUndoingLogId(logId);
     try {
@@ -729,7 +991,7 @@ export default function LiveScan() {
     } finally {
       setUndoingLogId(null);
     }
-  };
+  }, [fetchLogs]);
 
   // Modal navigation (Next/Previous camera)
   const handleNextCamera = useCallback((e?: React.MouseEvent) => {
@@ -770,84 +1032,14 @@ export default function LiveScan() {
   }, [focusedCamera, handleNextCamera, handlePrevCamera]);
 
   // Split cameras into Back Row (2nd Row) and Front Row (1st Row)
-  const backRowCameras = cctvCameras.filter(c => c.row.includes("2nd") || c.name.includes("2nd") || c.index >= 3);
-  const frontRowCameras = cctvCameras.filter(c => c.row.includes("1st") || c.name.includes("1st") || c.index < 3);
-
-  const renderCameraCard = (cam: CameraMeta) => {
-    const isConnected = !!cam.is_connected;
-    return (
-      <div
-        key={cam.id}
-        className={`group relative rounded-2xl overflow-hidden bg-gradient-to-b from-slate-900/95 via-[#0B0F19] to-slate-950 border ${
-          isConnected
-            ? "border-slate-800/90 hover:border-emerald-500/50 hover:shadow-lg hover:shadow-emerald-500/10"
-            : "border-slate-800/80 hover:border-indigo-500/40 hover:shadow-lg hover:shadow-indigo-500/10"
-        } shadow-md aspect-video flex flex-col cursor-pointer transition-all duration-300`}
-        onClick={() => setFocusedCamera(cam)}
-      >
-        {/* Subtle Ambient Radial Lighting */}
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-500/[0.04] via-transparent to-transparent pointer-events-none" />
-
-        {/* Top-Left Camera Label Badge */}
-        <div className="absolute top-2.5 left-2.5 z-10 flex items-center gap-2 bg-slate-950/80 backdrop-blur-md px-2.5 py-1 rounded-lg text-[10px] font-semibold text-slate-200 border border-slate-800/90 shadow-sm">
-          <span className={`w-1.5 h-1.5 rounded-full ${isConnected ? "bg-emerald-400 shadow-sm shadow-emerald-400/80 animate-pulse" : "bg-amber-400"}`} />
-          <span className="tracking-wide font-medium">{cam.name}</span>
-          <span className={`text-[9px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded ${
-            isConnected
-              ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-              : "bg-amber-500/10 text-amber-400 border border-amber-500/20"
-          }`}>
-            {isConnected ? "Live 4K" : "Standby"}
-          </span>
-        </div>
-
-        {/* Top-Right Maximize / Studio Focus Action */}
-        <button
-          onClick={(e) => { e.stopPropagation(); setFocusedCamera(cam); }}
-          className="absolute top-2.5 right-2.5 z-10 p-1.5 rounded-lg bg-slate-950/70 backdrop-blur-md text-slate-400 hover:text-white hover:bg-slate-800/90 border border-slate-800/80 opacity-0 group-hover:opacity-100 transition-all duration-200 shadow-sm"
-          title="Focus Camera Studio"
-        >
-          <Maximize2 className="w-3.5 h-3.5" />
-        </button>
-
-        {/* Video Content or Sleek Native Dormant Card */}
-        {isConnected ? (
-          <div className="w-full h-full flex items-center justify-center bg-black">
-            <MjpegPlayer
-              url={`${getVideoBackendUrl(cam.index)}/api/video-feed/${activeSession?.id}?camera_index=${cam.index}&grid=1`}
-              className="w-full h-full object-contain"
-              fallbackText="Connecting..."
-              paused={focusedCamera !== null}
-            />
-          </div>
-        ) : (
-          <div className="w-full h-full flex flex-col items-center justify-center p-3 select-none relative">
-            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-slate-900/90 border border-slate-800/90 flex items-center justify-center shadow-inner group-hover:scale-105 group-hover:border-slate-700/80 transition-all duration-300 mb-2">
-              <VideoOff className="w-4 h-4 sm:w-5 sm:h-5 text-slate-500 group-hover:text-slate-400 transition-colors" />
-            </div>
-
-            <span className="text-[11px] sm:text-xs font-semibold text-slate-300 group-hover:text-white transition-colors tracking-tight">
-              {cam.name} Node Offline
-            </span>
-
-            <div className="flex items-center gap-1.5 mt-1 px-2.5 py-0.5 rounded-full bg-slate-900/80 border border-slate-800 text-[10px] text-slate-400">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-400/80" />
-              <span className="text-amber-400/90 font-medium">Dormant</span>
-              <span className="text-slate-600">•</span>
-              <span className="text-slate-500 text-[9px]">Power Saver</span>
-            </div>
-
-            {/* Quick Hover Bottom Cue */}
-            <div className="absolute bottom-2 inset-x-0 flex justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
-              <span className="text-[9px] font-medium text-indigo-300 bg-indigo-950/80 px-2.5 py-0.5 rounded-md border border-indigo-800/50 backdrop-blur-sm flex items-center gap-1">
-                <Maximize2 className="w-2.5 h-2.5" /> Studio Focus
-              </span>
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  };
+  const backRowCameras = useMemo(
+    () => cctvCameras.filter(c => c.row.includes("2nd") || c.name.includes("2nd") || c.index >= 3),
+    [cctvCameras]
+  );
+  const frontRowCameras = useMemo(
+    () => cctvCameras.filter(c => c.row.includes("1st") || c.name.includes("1st") || c.index < 3),
+    [cctvCameras]
+  );
 
   const backendUrl = getBackendUrl();
 
@@ -1185,11 +1377,8 @@ export default function LiveScan() {
           </div>
 
           <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap justify-between sm:justify-end pt-2 md:pt-0 border-t md:border-t-0 border-gray-200 dark:border-slate-800/80">
-            {/* Live Timer Pill */}
-            <div className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-slate-950/80 border border-gray-200 dark:border-slate-800 text-xs font-mono font-medium text-gray-700 dark:text-slate-300">
-              <Clock className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-              <span>{sessionTime}</span>
-            </div>
+            {/* Live Timer Pill (Isolated Memoized Component) */}
+            <SessionTimerBadge startTime={activeSession?.start_time} />
 
             {/* GPS Geofence Configuration Button */}
             <button
@@ -1333,7 +1522,15 @@ export default function LiveScan() {
                       </div>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-3">
-                      {backRowCameras.map((cam) => renderCameraCard(cam))}
+                      {backRowCameras.map((cam) => (
+                        <CameraCard
+                          key={cam.id}
+                          cam={cam}
+                          sessionId={activeSession?.id}
+                          isFocused={focusedCamera !== null}
+                          onFocus={setFocusedCamera}
+                        />
+                      ))}
                     </div>
                   </div>
 
@@ -1351,7 +1548,15 @@ export default function LiveScan() {
                       </div>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-3">
-                      {frontRowCameras.map((cam) => renderCameraCard(cam))}
+                      {frontRowCameras.map((cam) => (
+                        <CameraCard
+                          key={cam.id}
+                          cam={cam}
+                          sessionId={activeSession?.id}
+                          isFocused={focusedCamera !== null}
+                          onFocus={setFocusedCamera}
+                        />
+                      ))}
                     </div>
                   </div>
                 </div>
@@ -1628,7 +1833,7 @@ export default function LiveScan() {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder={sidebarTab === "present" ? "Search present students..." : "Search absent students to mark..."}
-                  className="w-full bg-white dark:bg-slate-950/80 border border-gray-200 dark:border-slate-800 rounded-xl pl-8 pr-3 py-1.5 text-xs text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-indigo-500 transition-all"
+                  className="w-full bg-white dark:bg-slate-950/80 border border-gray-200 dark:border-slate-800 rounded-xl pl-8 pr-3 py-1.5 text-base sm:text-xs text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-indigo-500 transition-all"
                 />
                 {searchQuery && (
                   <button onClick={() => setSearchQuery("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 dark:text-slate-500 dark:hover:text-white">
@@ -1653,69 +1858,14 @@ export default function LiveScan() {
                     </p>
                   </div>
                 ) : (
-                  filteredLogs.map((log: any) => {
-                    const studentName = log.students?.full_name?.toUpperCase() || "UNKNOWN STUDENT";
-                    const studentRoll = log.students?.student_roll || "N/A";
-                    const time = new Date(log.recorded_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-                    const isManual = log.capture_mode === 'Manual Upload' || log.capture_mode === 'Manual Override';
-
-                    return (
-                      <div
-                        key={log.id}
-                        className="flex items-center p-2 sm:p-2.5 rounded-xl border border-gray-200/80 dark:border-slate-800/80 bg-gray-50/70 dark:bg-slate-950/60 hover:bg-white dark:hover:bg-slate-950 hover:border-indigo-400 dark:hover:border-indigo-500/40 hover:shadow-sm transition-all group"
-                      >
-                        {/* Avatar Initials Pill */}
-                        <div className="flex-shrink-0 mr-2 sm:mr-2.5">
-                          <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center text-white font-bold text-[10px] sm:text-[11px] uppercase shadow-md ${isManual
-                              ? "bg-gradient-to-br from-purple-600 to-indigo-700 shadow-purple-600/20"
-                              : "bg-gradient-to-br from-indigo-600 to-indigo-800 shadow-indigo-600/20"
-                            }`}>
-                            {studentName.substring(0, 2)}
-                          </div>
-                        </div>
-
-                        <div className="flex-1 min-w-0 pr-2">
-                          <p className="text-xs font-bold text-gray-900 dark:text-white truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-300 transition-colors">
-                            {studentName}
-                          </p>
-                          <div className="flex items-center gap-1.5 text-[9px] sm:text-[10px] text-gray-500 dark:text-slate-400 mt-0.5">
-                            <span className="font-mono bg-gray-200/80 dark:bg-slate-900 px-1 sm:px-1.5 py-0.5 rounded text-gray-700 dark:text-slate-300 border border-gray-300/80 dark:border-slate-800">
-                              {studentRoll}
-                            </span>
-                            {isManual && (
-                              <>
-                                <span>•</span>
-                                <span className="text-purple-600 dark:text-purple-400 font-semibold">Faculty Verified</span>
-                              </>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="flex-shrink-0 text-right flex flex-col items-end gap-1">
-                          <span className="text-[9px] sm:text-[10px] text-gray-500 dark:text-slate-500 font-mono block">{time}</span>
-                          <div className="flex items-center gap-1">
-                            <span className={`inline-flex items-center text-[8px] sm:text-[9px] font-semibold px-1.5 py-0.5 rounded-md ${isManual
-                                ? "text-purple-700 dark:text-purple-300 bg-purple-500/10 border border-purple-500/20"
-                                : "text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20"
-                              }`}>
-                              {isManual ? "Manual" : "Present"}
-                            </span>
-                            {isManual && (
-                              <button
-                                type="button"
-                                disabled={undoingLogId === log.id}
-                                onClick={() => handleUndoPresent(log.id)}
-                                className="p-1 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded transition-colors cursor-pointer"
-                                title="Undo manual attendance"
-                              >
-                                {undoingLogId === log.id ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <RotateCcw className="w-2.5 h-2.5" />}
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })
+                  filteredLogs.map((log: any) => (
+                    <AttendanceLogCard
+                      key={log.id}
+                      log={log}
+                      isUndoing={undoingLogId === log.id}
+                      onUndo={handleUndoPresent}
+                    />
+                  ))
                 )
               ) : (
                 /* ABSENT TAB LIST (WITH 1-CLICK FACULTY OVERRIDE) */
@@ -1736,53 +1886,14 @@ export default function LiveScan() {
                       </p>
                     </div>
                   ) : (
-                    filteredAbsentStudents.map((student: any) => {
-                      const studentName = student.full_name?.toUpperCase() || "UNKNOWN";
-                      const studentRoll = student.student_roll || "N/A";
-
-                      return (
-                        <div
-                          key={student.id}
-                          className="flex items-center justify-between p-2 sm:p-2.5 rounded-xl border border-gray-200/80 dark:border-slate-800/80 bg-gray-50/70 dark:bg-slate-950/60 hover:bg-white dark:hover:bg-slate-950 hover:border-emerald-500/40 hover:shadow-sm transition-all gap-2 min-w-0"
-                        >
-                          {/* Avatar Initials Pill */}
-                          <div className="flex-shrink-0">
-                            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-gradient-to-br from-slate-700 to-slate-900 border border-slate-700 flex items-center justify-center text-slate-300 font-bold text-[10px] sm:text-[11px] uppercase">
-                              {studentName.substring(0, 2)}
-                            </div>
-                          </div>
-
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-bold text-gray-900 dark:text-slate-200 truncate">
-                              {studentName}
-                            </p>
-                            <div className="flex items-center gap-1.5 text-[9px] sm:text-[10px] text-gray-500 dark:text-slate-400 mt-0.5">
-                              <span className="font-mono bg-gray-200/80 dark:bg-slate-900 px-1.5 py-0.5 rounded text-gray-700 dark:text-slate-300 border border-gray-300/80 dark:border-slate-800">
-                                {studentRoll}
-                              </span>
-                              <span>•</span>
-                              <span className="text-rose-500 dark:text-rose-400 font-medium">Unverified</span>
-                            </div>
-                          </div>
-
-                          {/* 1-Click Mark Present Button */}
-                          <button
-                            type="button"
-                            disabled={markingStudentId === student.id}
-                            onClick={() => handleManualMarkPresent(student.id)}
-                            className="px-2.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold flex items-center gap-1 transition-all shadow-md shadow-emerald-600/20 active:scale-95 disabled:opacity-50 cursor-pointer shrink-0"
-                            title="1-Click Mark Present for unscanned student"
-                          >
-                            {markingStudentId === student.id ? (
-                              <Loader2 className="w-3 h-3 animate-spin text-white" />
-                            ) : (
-                              <Check className="w-3 h-3" />
-                            )}
-                            <span>Mark Present</span>
-                          </button>
-                        </div>
-                      );
-                    })
+                    filteredAbsentStudents.map((student: any) => (
+                      <AbsentStudentCard
+                        key={student.id}
+                        student={student}
+                        isMarking={markingStudentId === student.id}
+                        onMarkPresent={handleManualMarkPresent}
+                      />
+                    ))
                   )}
                 </div>
               )}
