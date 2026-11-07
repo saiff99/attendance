@@ -15,6 +15,7 @@ import {
 // Live Scan Faculty Portal
 import { getBackendUrl, getVideoBackendUrl } from "@/lib/api";
 import { optimizeClassroomPhoto } from "@/lib/imageOptimizer";
+import { runConcurrentPool } from "@/lib/concurrency";
 import { MjpegPlayer } from "@/components/MjpegPlayer";
 import { GeofenceModal } from "@/components/GeofenceModal";
 import { ClassroomGpsModal } from "@/components/ClassroomGpsModal";
@@ -966,58 +967,74 @@ export default function LiveScan() {
     if (cameraInputRef.current) cameraInputRef.current.value = "";
   };
 
-  // Process all staged classroom photos with zero-wait pre-compressed stream & live progress
+  // Process all staged classroom photos with dual-connection concurrent upload (2x Concurrency)
   const handleProcessBatchAttendance = async () => {
     if (queuedPhotos.length === 0 || !activeSession) return;
 
     setIsProcessing(true);
     const total = queuedPhotos.length;
     setBatchProgress({ current: 0, total });
-    setProcessingStatusText(`Starting AI attendance for ${total} classroom photo${total > 1 ? "s" : ""}...`);
+    setProcessingStatusText(`Starting AI attendance for ${total} classroom photo${total > 1 ? "s" : ""} (Dual Connection)...`);
 
     const allRecognizedMap = new Map<string, { name: string; confidence?: number }>();
     const photoBreakdown: Array<{ label: string; count: number }> = [];
 
     try {
-      for (let i = 0; i < queuedPhotos.length; i++) {
-        const item = queuedPhotos[i];
-        setBatchProgress({ current: i + 1, total });
-        setProcessingStatusText(`Uploading & scanning ${item.label} (${i + 1}/${total}) with AI...`);
+      const CONCURRENCY_LIMIT = 2;
+      let completedCount = 0;
 
-        // Zero-Wait Pre-Compression: Grab pre-compressed file or wait if still optimizing
-        let fileToUpload = item.optimizedFile;
-        if (!fileToUpload) {
-          setProcessingStatusText(`Finalizing ${item.label} (${i + 1}/${total})...`);
-          const optResult = await optimizeClassroomPhoto(item.file, 2560, 0.88);
-          fileToUpload = optResult.file;
+      // Execute dual-connection concurrent upload pipeline with guaranteed in-order results
+      const perPhotoResults = await runConcurrentPool(
+        queuedPhotos,
+        CONCURRENCY_LIMIT,
+        async (item) => {
+          // Zero-Wait Pre-Compression: Grab pre-compressed file or wait if still optimizing
+          let fileToUpload = item.optimizedFile;
+          if (!fileToUpload) {
+            setProcessingStatusText(`Optimizing ${item.label}...`);
+            const optResult = await optimizeClassroomPhoto(item.file, 2560, 0.88);
+            fileToUpload = optResult.file;
+          }
+
+          // Upload to /api/process-attendance
+          const formData = new FormData();
+          formData.append("file", fileToUpload);
+          formData.append("session_id", activeSession.id);
+
+          const response = await fetch('/api/process-attendance', {
+            method: "POST",
+            body: formData,
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || errorData.error || `Failed to process ${item.label}`);
+          }
+
+          const result = await response.json();
+          const recognizedList: Array<{ name: string; confidence?: number }> = result.recognized || [];
+
+          completedCount++;
+          setBatchProgress({ current: completedCount, total });
+          setProcessingStatusText(`Scanned ${completedCount} of ${total} photos with AI...`);
+
+          return {
+            label: item.label,
+            count: recognizedList.length,
+            recognized: recognizedList,
+          };
         }
+      );
 
-        // Upload to /api/process-attendance
-        const formData = new FormData();
-        formData.append("file", fileToUpload);
-        formData.append("session_id", activeSession.id);
-
-        const response = await fetch('/api/process-attendance', {
-          method: "POST",
-          body: formData,
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.detail || errorData.error || `Failed to process ${item.label}`);
-        }
-
-        const result = await response.json();
-        const recognizedList: Array<{ name: string; confidence?: number }> = result.recognized || [];
-        photoBreakdown.push({ label: item.label, count: recognizedList.length });
-
-        // Aggregate unique recognized students across all classroom photos
-        recognizedList.forEach((rec) => {
+      // In-order aggregation of unique recognized students across all classroom photos
+      perPhotoResults.forEach((res) => {
+        photoBreakdown.push({ label: res.label, count: res.count });
+        res.recognized.forEach((rec) => {
           if (!allRecognizedMap.has(rec.name)) {
             allRecognizedMap.set(rec.name, rec);
           }
         });
-      }
+      });
 
       // 3. Refresh live logs in the sidebar
       await fetchLogs();

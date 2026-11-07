@@ -187,16 +187,21 @@ sequenceDiagram
 
     Note over F, FE: All photos pre-compressed with 0ms remaining lag
     F->>FE: Tap "Process All N Photos"
-    loop For each pre-compressed photo (1..N)
-        FE->>Proxy: POST /api/process-attendance (Multipart Form: optimizedFile, sessionId)
-        Proxy->>Proxy: Verify Faculty Session & RBAC
-        Proxy->>AI: Forward with X-Internal-API-Key
-        AI->>AI: InsightFace SCRFD detect all faces
-        AI->>AI: Vectorized 2D Matrix Cosine Matching (NumPy BLAS/AVX2)
-        AI->>DB: Atomic Batch Upsert INTO attendance (on_conflict="session_id,student_id")
-        AI-->>Proxy: { recognized: [{ name, confidence }] }
-        Proxy-->>FE: Stream result & update live log feed
+    Note over FE: runConcurrentPool (Controlled 2x Dual-Connection Pipeline)
+    par Concurrent Upload Worker A (Photo 1)
+        FE->>Proxy: POST /api/process-attendance (Photo 1)
+        Proxy->>AI: Forward to InsightFace 512D
+        AI->>DB: Atomic Batch Upsert INTO attendance
+        AI-->>Proxy: { recognized: [...] }
+        Proxy-->>FE: Stream Photo 1 Result (In-Order Slot 1)
+    and Concurrent Upload Worker B (Photo 2)
+        FE->>Proxy: POST /api/process-attendance (Photo 2)
+        Proxy->>AI: Forward to InsightFace 512D
+        AI->>DB: Atomic Batch Upsert INTO attendance
+        AI-->>Proxy: { recognized: [...] }
+        Proxy-->>FE: Stream Photo 2 Result (In-Order Slot 2)
     end
+    Note over FE: Workers pull remaining photos (3..N) until queue is exhausted
     FE-->>F: Display Aggregate Attendance Result Modal (deduplicated across photos)
 ```
 

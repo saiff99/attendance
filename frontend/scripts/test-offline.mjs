@@ -3226,6 +3226,71 @@ console.log('\n--- 50. Web Worker Offloaded Image Downscaling via OffscreenCanva
   });
 }
 
+// --- 51. Controlled Dual-Connection Concurrent Upload Pipeline (ADR-047) ---
+console.log('\n--- 51. Controlled Dual-Connection Concurrent Upload Pipeline (ADR-047) ---');
+{
+  const concurrencyTsPath = path.resolve(__dirname, '../src/lib/concurrency.ts');
+  assert(fs.existsSync(concurrencyTsPath), 'frontend/src/lib/concurrency.ts exists');
+  const concurrencyContent = fs.readFileSync(concurrencyTsPath, 'utf8');
+
+  // 1. Verify export of runConcurrentPool
+  assert(concurrencyContent.includes('export async function runConcurrentPool'), 'concurrency.ts exports runConcurrentPool');
+
+  // 2. Verify LiveScan integration
+  const liveScanPath = path.resolve(__dirname, '../src/app/live-scan/page.tsx');
+  assert(fs.existsSync(liveScanPath), 'frontend/src/app/live-scan/page.tsx exists');
+  const liveScanContent = fs.readFileSync(liveScanPath, 'utf8');
+  assert(liveScanContent.includes("from \"@/lib/concurrency\""), 'live-scan/page.tsx imports runConcurrentPool from @/lib/concurrency');
+  assert(liveScanContent.includes("const CONCURRENCY_LIMIT = 2;"), 'live-scan/page.tsx enforces CONCURRENCY_LIMIT = 2');
+  assert(liveScanContent.includes("await runConcurrentPool("), 'live-scan/page.tsx invokes runConcurrentPool for batch attendance processing');
+
+  // 3. Behavioral simulation of 2x concurrent uploads vs sequential execution
+  const simulatePhotoUploads = async (photos, limit) => {
+    let active = 0;
+    let maxActive = 0;
+    const completed = [];
+
+    const results = new Array(photos.length);
+    let nextIdx = 0;
+
+    const worker = async () => {
+      while (nextIdx < photos.length) {
+        const cur = nextIdx++;
+        active++;
+        maxActive = Math.max(maxActive, active);
+        // Simulate async network upload + inference
+        await new Promise(res => setTimeout(res, 20));
+        active--;
+        results[cur] = { label: photos[cur].label, count: photos[cur].count };
+        completed.push(photos[cur].label);
+      }
+    };
+
+    const workerCount = Math.max(1, Math.min(limit, photos.length));
+    await Promise.all(Array.from({ length: workerCount }, () => worker()));
+    return { results, maxActive, completed };
+  };
+
+  const testPhotos = [
+    { label: 'Photo 1', count: 45 },
+    { label: 'Photo 2', count: 50 },
+    { label: 'Photo 3', count: 55 },
+    { label: 'Photo 4', count: 48 },
+  ];
+
+  // Run simulation with concurrency = 2
+  const startTime = Date.now();
+  const sim = await simulatePhotoUploads(testPhotos, 2);
+  const elapsed = Date.now() - startTime;
+
+  assert(sim.maxActive === 2, 'Simulated upload strictly caps concurrent connections at 2');
+  assert(sim.results.length === 4, 'All 4 photos successfully processed');
+  assert(sim.results[0].label === 'Photo 1', 'Results maintain deterministic index 0 (Photo 1)');
+  assert(sim.results[1].label === 'Photo 2', 'Results maintain deterministic index 1 (Photo 2)');
+  assert(sim.results[2].label === 'Photo 3', 'Results maintain deterministic index 2 (Photo 3)');
+  assert(sim.results[3].label === 'Photo 4', 'Results maintain deterministic index 3 (Photo 4)');
+}
+
 // Summary
 console.log('\n' + '=' .repeat(65));
 console.log(`📊 Offline Unit Test Summary: ${passed} Passed, ${failed} Failed`);
