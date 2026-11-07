@@ -14,17 +14,14 @@
 
 ---
 
-## 🔔 2. Mandatory Proactive Vault Synchronization Reminder
+## 🔄 2. Mandatory Automatic Vault Synchronization (Zero Friction)
 Whenever working on any task with the user, if the requested change introduces or modifies any of the following:
 1. **Database tables, columns, migrations, or foreign keys**
 2. **Core security rules, countdown windows, anti-spoofing criteria, or geofence thresholds**
 3. **Architectural components, failover mechanics, or network ingress**
 4. **Critical solved bugs, platform gotchas, or edge case fixes**
 
-You **MUST PROACTIVELY REMIND** the user at the conclusion of your response:
-> *"যেহেতু আমরা অমুক কাঠামোগত পরিবর্তনটি করেছি, তাই আমাদের Context Architecture Vault-এর [ফাইলের নাম] ফাইলটি আপডেট করা প্রয়োজন। আপনি সম্মতি দিলে আমি এখনই তা আপডেট করে দিচ্ছি।"*
-
-Once the user approves, immediately update the corresponding document in `docs/architecture-vault/` and commit/push to git.
+You **MUST AUTOMATICALLY UPDATE** the corresponding document in [`docs/architecture-vault/`](docs/architecture-vault/INDEX.md) in the exact same turn and commit alongside the code implementation. Do not pause to ask permission for routine vault documentation sync; update the vault immediately, run verification tests, and inform the user of what was updated.
 
 ---
 

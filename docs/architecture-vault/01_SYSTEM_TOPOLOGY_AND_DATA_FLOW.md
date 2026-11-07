@@ -164,6 +164,43 @@ sequenceDiagram
 
 ---
 
+### 3.3. Faculty Mobile Multi-Photo Classroom Batch Attendance Flow (ADR-045)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor F as Faculty / Assistant
+    participant FE as Faculty Mobile Client (LiveScan)
+    participant Worker as Background Canvas Optimizer
+    participant Proxy as Next.js Ingress Proxy (/api/process-attendance)
+    participant AI as FastAPI Inference Core (InsightFace 512D)
+    participant DB as Supabase PostgreSQL
+
+    Note over F, FE: Walking lecture hall rows & aisles
+    loop For each classroom section/angle (1..N photos)
+        F->>FE: Tap "Snap Next Photo" (Rear Camera)
+        FE->>FE: Staged in memory (QueuedPhotoItem, label: Photo N)
+        FE->>Worker: Asynchronously trigger optimizeClassroomPhoto(2560px, 0.88)
+        Worker-->>FE: Returns pre-compressed blob (~600KB, Status: Ready)
+    end
+
+    Note over F, FE: All photos pre-compressed with 0ms remaining lag
+    F->>FE: Tap "Process All N Photos"
+    loop For each pre-compressed photo (1..N)
+        FE->>Proxy: POST /api/process-attendance (Multipart Form: optimizedFile, sessionId)
+        Proxy->>Proxy: Verify Faculty Session & RBAC
+        Proxy->>AI: Forward with X-Internal-API-Key
+        AI->>AI: InsightFace SCRFD detect all faces
+        AI->>AI: Vectorized 2D Matrix Cosine Matching (NumPy BLAS/AVX2)
+        AI->>DB: Atomic Batch Upsert INTO attendance (on_conflict="session_id,student_id")
+        AI-->>Proxy: { recognized: [{ name, confidence }] }
+        Proxy-->>FE: Stream result & update live log feed
+    end
+    FE-->>F: Display Aggregate Attendance Result Modal (deduplicated across photos)
+```
+
+---
+
 ## 4. Latency & Throughput Profile
 
 | Operation | Typical Latency (Local Mac CoreML) | Typical Latency (Hugging Face Cloud) | SLA Target |
