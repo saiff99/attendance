@@ -2,7 +2,7 @@ import os
 import time
 import math
 import threading
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Set
 from fastapi import HTTPException
 from app.config import supabase
 
@@ -31,6 +31,10 @@ _memory_selfie_limits: Dict[str, List[float]] = {} # "ip:roll" -> [timestamp, ..
 _memory_selfie_ip_limits: Dict[str, List[float]] = {} # "ip" -> [timestamp, ...] (Global IP ceiling)
 _memory_lookup_limits: Dict[str, List[float]] = {} # "ip" -> [timestamp, ...]
 _memory_fail_cooldowns: Dict[str, Dict[str, Any]] = {} # "session_id:roll:ip" -> {"fails": int, "locked_until": float}
+
+# Session-scoped initialization tracking to prevent redundant per-student DB lookups
+_session_devlocks_initialized: Set[str] = set()
+_session_fails_initialized: Set[str] = set()
 
 
 def _atomic_db_check_limit(key: str, max_attempts: int, window_seconds: float, now_ts: float) -> Optional[Dict[str, Any]]:
@@ -132,10 +136,38 @@ def _atomic_sliding_window_check_and_record(
 
 
 # ==============================================================================
-# 1. Device Lock Registry (Atomic Concurrency Protected)
+# 1. Device Lock Registry (Atomic Concurrency Protected with Session-Scoped Batch Ingestion)
 # Enforces: 1 mobile device per student per lecture session.
 # Prevents proxy attendance across multiple workers and survives server restarts.
 # ==============================================================================
+
+def _init_session_device_locks(session_id: str) -> None:
+    """
+    Lazily initializes all active device locks for session_id in ONE batch query.
+    Eliminates hundreds of redundant individual SELECT queries on the 'settings' table.
+    """
+    if session_id in _session_devlocks_initialized:
+        return
+    with _locks_mutex:
+        if session_id in _session_devlocks_initialized:
+            return
+        if supabase:
+            try:
+                prefix = f"devlock:{session_id}:"
+                res = supabase.table("settings").select("key, value").like("key", f"{prefix}%").execute()
+                if res and res.data:
+                    for item in res.data:
+                        k = str(item.get("key") or "")
+                        val = item.get("value") or {}
+                        if k.startswith(prefix):
+                            dev_id = k[len(prefix):]
+                            roll = str(val.get("student_roll") or "").strip().upper()
+                            if dev_id and roll:
+                                _memory_dev_locks[f"{session_id}:{dev_id}"] = roll
+            except Exception as e:
+                print(f"[DeviceLock Warning] Session devlock init fallback: {e}")
+        _session_devlocks_initialized.add(session_id)
+
 
 def check_device_lock(session_id: str, device_id: Optional[str], clean_roll: str) -> None:
     """
@@ -143,17 +175,21 @@ def check_device_lock(session_id: str, device_id: Optional[str], clean_roll: str
     Uses per-device key lock to prevent simultaneous race conditions where two students
     attempt to check in from the same device at the exact same millisecond.
     """
-    if not device_id or not device_id.strip():
+    if not session_id or not session_id.strip() or not device_id or not device_id.strip():
         return
 
+    clean_sess = session_id.strip()
     clean_dev = device_id.strip()
     clean_r = clean_roll.strip().upper()
-    lock_key = f"devlock:{session_id}:{clean_dev}"
-    mem_key = f"{session_id}:{clean_dev}"
+    lock_key = f"devlock:{clean_sess}:{clean_dev}"
+    mem_key = f"{clean_sess}:{clean_dev}"
+
+    # Lazily pre-populate session device locks once if not yet initialized
+    _init_session_device_locks(clean_sess)
 
     lock = _get_key_lock(lock_key)
     with lock:
-        # 1. Check L1 Memory Cache
+        # 1. Check L1 Memory Cache (Fast-path 0ms)
         existing_roll = _memory_dev_locks.get(mem_key)
         if existing_roll:
             if existing_roll != clean_r:
@@ -163,13 +199,13 @@ def check_device_lock(session_id: str, device_id: Optional[str], clean_roll: str
                 )
             return
 
-        # 2. Check L2 Shared Database
-        if supabase:
+        # 2. Check L2 Shared Database (only as secondary safety fallback if not initialized)
+        if supabase and clean_sess not in _session_devlocks_initialized:
             try:
                 res = supabase.table("settings").select("value").eq("key", lock_key).execute()
                 if res.data and len(res.data) > 0:
                     val = res.data[0].get("value") or {}
-                    db_roll = (val.get("student_roll") or "").strip().upper()
+                    db_roll = str(val.get("student_roll") or "").strip().upper()
                     if db_roll:
                         _memory_dev_locks[mem_key] = db_roll
                         if db_roll != clean_r:
@@ -183,7 +219,7 @@ def check_device_lock(session_id: str, device_id: Optional[str], clean_roll: str
             except Exception as e:
                 print(f"[DeviceLock Warning] L2 DB check fallback: {e}")
 
-        # 3. Atomically reserve device for clean_roll immediately to block concurrent attempts
+        # 3. Atomically reserve device for clean_roll immediately in RAM to block concurrent attempts
         _memory_dev_locks[mem_key] = clean_r
 
 
@@ -192,13 +228,14 @@ def record_device_lock(session_id: str, device_id: Optional[str], clean_roll: st
     Locks the physical device to the given student roll for the session.
     Persists to both L1 in-memory cache and L2 shared database under key lock.
     """
-    if not device_id or not device_id.strip():
+    if not session_id or not session_id.strip() or not device_id or not device_id.strip():
         return
 
+    clean_sess = session_id.strip()
     clean_dev = device_id.strip()
     clean_r = clean_roll.strip().upper()
-    lock_key = f"devlock:{session_id}:{clean_dev}"
-    mem_key = f"{session_id}:{clean_dev}"
+    lock_key = f"devlock:{clean_sess}:{clean_dev}"
+    mem_key = f"{clean_sess}:{clean_dev}"
     now_ts = time.time()
 
     lock = _get_key_lock(lock_key)
@@ -212,7 +249,7 @@ def record_device_lock(session_id: str, device_id: Optional[str], clean_roll: st
                 supabase.table("settings").upsert({
                     "key": lock_key,
                     "value": {
-                        "session_id": session_id,
+                        "session_id": clean_sess,
                         "device_id": clean_dev,
                         "student_roll": clean_r,
                         "locked_at": now_ts
@@ -228,27 +265,61 @@ def record_device_lock(session_id: str, device_id: Optional[str], clean_roll: st
 # Scoped to Session + Roll + Client IP to prevent DoS against innocent students.
 # ==============================================================================
 
+def _init_session_fail_cooldowns(session_id: str) -> None:
+    """
+    Lazily initializes active failure cooldowns for session_id in ONE batch query.
+    Eliminates hundreds of redundant SELECT queries for innocent students with zero failures.
+    """
+    if session_id in _session_fails_initialized:
+        return
+    with _locks_mutex:
+        if session_id in _session_fails_initialized:
+            return
+        if supabase:
+            try:
+                prefix = f"rl_fail:{session_id}:"
+                res = supabase.table("settings").select("key, value").like("key", f"{prefix}%").execute()
+                if res and res.data:
+                    for item in res.data:
+                        k = str(item.get("key") or "")
+                        val = item.get("value") or {}
+                        if k.startswith(prefix):
+                            rest = k[len(prefix):]
+                            mem_key = f"{session_id}:{rest}"
+                            _memory_fail_cooldowns[mem_key] = {
+                                "fails": int(val.get("fails") or 0),
+                                "locked_until": float(val.get("locked_until") or 0.0),
+                                "updated_at": float(val.get("updated_at") or time.time()),
+                            }
+            except Exception as e:
+                print(f"[FailCooldown Warning] Session fail cooldowns init fallback: {e}")
+        _session_fails_initialized.add(session_id)
+
+
 def check_fail_cooldown(session_id: str, clean_roll: str, client_ip: str) -> Dict[str, Any]:
     """
     Checks if a temporary lockout cooldown is currently active.
     If locked, raises HTTP 429 with remaining seconds.
     Returns the current failure record: {"fails": int, "locked_until": float}.
     """
+    clean_sess = session_id.strip()
     clean_r = clean_roll.strip().upper()
-    mem_key = f"{session_id}:{clean_r}:{client_ip}"
-    db_key = f"rl_fail:{session_id}:{clean_r}:{client_ip}"
+    mem_key = f"{clean_sess}:{clean_r}:{client_ip}"
+    db_key = f"rl_fail:{clean_sess}:{clean_r}:{client_ip}"
     now_ts = time.time()
+
+    # Lazily pre-populate session fail cooldowns once if not yet initialized
+    _init_session_fail_cooldowns(clean_sess)
 
     lock = _get_key_lock(db_key)
     with lock:
         lock_info: Dict[str, Any] = {"fails": 0, "locked_until": 0.0}
 
-        # 1. Check L1 Memory Cache
+        # 1. Check L1 Memory Cache (Fast-path 0ms)
         if mem_key in _memory_fail_cooldowns:
             lock_info = _memory_fail_cooldowns[mem_key].copy()
-
-        # 2. Sync with L2 Shared Database
-        if supabase:
+        elif supabase and clean_sess not in _session_fails_initialized:
+            # 2. Sync with L2 Shared Database only if session was not batch-initialized
             try:
                 res = supabase.table("settings").select("value").eq("key", db_key).execute()
                 if res.data and len(res.data) > 0:
@@ -278,9 +349,10 @@ def record_face_failure(session_id: str, clean_roll: str, client_ip: str, curren
     Records a failed face match. If fails reach 3, activates 60s lockout cooldown.
     Persists atomically to L1 cache and L2 database under key lock.
     """
+    clean_sess = session_id.strip()
     clean_r = clean_roll.strip().upper()
-    mem_key = f"{session_id}:{clean_r}:{client_ip}"
-    db_key = f"rl_fail:{session_id}:{clean_r}:{client_ip}"
+    mem_key = f"{clean_sess}:{clean_r}:{client_ip}"
+    db_key = f"rl_fail:{clean_sess}:{clean_r}:{client_ip}"
     now_ts = time.time()
 
     lock = _get_key_lock(db_key)
@@ -316,19 +388,21 @@ def record_face_failure(session_id: str, clean_roll: str, client_ip: str, curren
 def clear_face_failure(session_id: str, clean_roll: str, client_ip: str) -> None:
     """
     Resets failure counters on successful face match.
-    Purges atomically from both L1 memory cache and L2 database under key lock.
+    Purges atomically from both L1 memory cache and conditionally from L2 database under key lock.
+    Only issues DB DELETE if an actual failure was recorded, saving hundreds of redundant queries.
     """
+    clean_sess = session_id.strip()
     clean_r = clean_roll.strip().upper()
-    mem_key = f"{session_id}:{clean_r}:{client_ip}"
-    db_key = f"rl_fail:{session_id}:{clean_r}:{client_ip}"
+    mem_key = f"{clean_sess}:{clean_r}:{client_ip}"
+    db_key = f"rl_fail:{clean_sess}:{clean_r}:{client_ip}"
 
     lock = _get_key_lock(db_key)
     with lock:
-        # 1. Clear from L1 Memory Cache
-        _memory_fail_cooldowns.pop(mem_key, None)
+        record = _memory_fail_cooldowns.pop(mem_key, None)
+        had_failures = record is not None and int(record.get("fails") or 0) > 0
 
-        # 2. Clear from L2 Database
-        if supabase:
+        # Only execute DB DELETE if there was an actual failure recorded in DB
+        if had_failures and supabase:
             try:
                 supabase.table("settings").delete().eq("key", db_key).execute()
             except Exception as e:
@@ -504,6 +578,13 @@ def prune_all_expired_rate_limit_state(session_id: Optional[str] = None) -> Dict
     # 1. Prune L1 Device Locks
     # If session_id specified, purge all locks for that session immediately.
     with _locks_mutex:
+        if session_id:
+            _session_devlocks_initialized.discard(session_id)
+            _session_fails_initialized.discard(session_id)
+        else:
+            _session_devlocks_initialized.clear()
+            _session_fails_initialized.clear()
+
         dev_keys = list(_memory_dev_locks.keys())
         for k in dev_keys:
             # key format: "session_id:device_id"

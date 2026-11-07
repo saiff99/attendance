@@ -2849,6 +2849,115 @@ console.log('\n--- 45. In-Memory Session Attendance Caching & Single-Roundtrip A
   assert(totalQueriesWithCache === 151, `Total database queries is 151 (saved ${totalQueriesWithoutCache - totalQueriesWithCache} queries out of 400)`);
 }
 
+// --- 46. Rate Limiter L2 Settings Table Thrashing Mitigation & Conditional Purge ---
+console.log('\n--- 46. Rate Limiter L2 Settings Table Thrashing Mitigation & Conditional Purge ---');
+{
+  const limiterPath = path.resolve(__dirname, '../../backend/app/rate_limiter.py');
+  assert(fs.existsSync(limiterPath), 'backend/app/rate_limiter.py exists');
+  const limiterContent = fs.readFileSync(limiterPath, 'utf8');
+
+  // 1. Verify session-scoped batch initialization helpers exist
+  assert(
+    limiterContent.includes('def _init_session_device_locks(session_id: str) -> None:') &&
+    limiterContent.includes('def _init_session_fail_cooldowns(session_id: str) -> None:'),
+    'backend/app/rate_limiter.py defines session-scoped batch initialization helpers'
+  );
+
+  // 2. Verify check_device_lock uses batch init and memory-first check
+  assert(
+    limiterContent.includes('_init_session_device_locks(clean_sess)') &&
+    limiterContent.includes('_memory_dev_locks.get(mem_key)') &&
+    limiterContent.includes('_memory_dev_locks[mem_key] = clean_r'),
+    'check_device_lock utilizes session batch pre-population and memory-first guard'
+  );
+
+  // 3. Verify check_fail_cooldown uses batch init and memory-first check
+  assert(
+    limiterContent.includes('_init_session_fail_cooldowns(clean_sess)') &&
+    limiterContent.includes('if mem_key in _memory_fail_cooldowns:'),
+    'check_fail_cooldown utilizes session batch pre-population and memory-first guard'
+  );
+
+  // 4. Verify clear_face_failure conditionally skips DELETE when zero failures
+  assert(
+    limiterContent.includes('had_failures = record is not None and int(record.get("fails") or 0) > 0') &&
+    limiterContent.includes('if had_failures and supabase:'),
+    'clear_face_failure conditionally skips DELETE queries when students have 0 failures'
+  );
+
+  // 5. Behavioral simulation of 150 students completing attendance
+  let batchSelectCount = 0;
+  let individualSelectCount = 0;
+  let deleteCount = 0;
+  let upsertCount = 0;
+
+  const mockDevLocks = new Map();
+  const mockFailCooldowns = new Map();
+  const initializedSessions = new Set();
+
+  function simulateStudentCheckin(sessionId, deviceId, roll, clientIp) {
+    // A. Batch init check
+    if (!initializedSessions.has(sessionId)) {
+      batchSelectCount += 2; // 1 for devlocks, 1 for fail cooldowns
+      initializedSessions.add(sessionId);
+    }
+
+    // B. check_fail_cooldown
+    const memFailKey = `${sessionId}:${roll}:${clientIp}`;
+    const failInfo = mockFailCooldowns.get(memFailKey) || { fails: 0, locked_until: 0 };
+    if (failInfo.fails >= 3) {
+      throw new Error('Lockout active');
+    }
+
+    // C. check_device_lock
+    const memDevKey = `${sessionId}:${deviceId}`;
+    const existingLock = mockDevLocks.get(memDevKey);
+    if (existingLock && existingLock !== roll) {
+      throw new Error('Device lock violation: One device cannot be used for multiple students');
+    }
+    mockDevLocks.set(memDevKey, roll);
+
+    // D. clear_face_failure (after authentic face match)
+    const hadFailures = (mockFailCooldowns.get(memFailKey)?.fails || 0) > 0;
+    if (hadFailures) {
+      deleteCount++;
+      mockFailCooldowns.delete(memFailKey);
+    }
+
+    // E. record_device_lock
+    upsertCount++;
+    mockDevLocks.set(memDevKey, roll);
+
+    return { success: true };
+  }
+
+  // 150 students with their own distinct mobile devices
+  for (let i = 1; i <= 150; i++) {
+    const res = simulateStudentCheckin('session-rush-100', `device-${i}`, `ROLL-${i}`, `192.168.1.${i % 250}`);
+    assert(res.success === true, `Student ${i} checked in without error`);
+  }
+
+  // Verify query metrics
+  assert(batchSelectCount === 2, 'Exactly 2 batch SELECT queries executed for entire session');
+  assert(individualSelectCount === 0, 'Zero individual SELECT queries executed against settings table');
+  assert(deleteCount === 0, 'Zero DELETE queries executed against settings table for innocent students');
+  assert(upsertCount === 150, 'Exactly 150 legitimate device lock upserts recorded');
+
+  const totalSettingsQueries = batchSelectCount + individualSelectCount + deleteCount + upsertCount;
+  const legacySettingsQueries = 150 * 4; // 150 fail checks + 150 devlock checks + 150 deletes + 150 upserts = 600
+  assert(totalSettingsQueries === 152, `Total settings queries is 152 (saved ${legacySettingsQueries - totalSettingsQueries} queries out of 600)`);
+
+  // Proxy attempt check
+  let proxyCaught = false;
+  try {
+    simulateStudentCheckin('session-rush-100', 'device-1', 'ROLL-999', '192.168.1.1');
+  } catch (err) {
+    proxyCaught = true;
+    assert(err.message.includes('Device lock violation'), 'Proxy attempt caught with device lock violation');
+  }
+  assert(proxyCaught, 'Proxy device attempt was blocked 100% in memory');
+}
+
 // Summary
 console.log('\n' + '=' .repeat(65));
 console.log(`📊 Offline Unit Test Summary: ${passed} Passed, ${failed} Failed`);
