@@ -1054,30 +1054,32 @@
 
 ---
 
-### ADR-045: Faculty Mobile Multi-Row Staged Photo Capture & Batch Attendance Processing Pipeline
+### ADR-045: Faculty Mobile Dynamic Multi-Photo Capture & Batch Attendance Processing Pipeline
 - **Status:** Accepted & Enforced (November 2026)
 - **Refines:** ADR-010 (Atomic Single-Roundtrip Batch Upsert), ADR-044 (Portal-Native 1-Tap Attendance & Complete Elimination of Impractical Classroom QR Codes)
 - **Context:**
   1. *Physical Reality of Large Medical Lecture Halls:* In an MBBS lecture hall with 150–300 students, requiring every student to operate their personal smartphones inside class introduces major operational friction: battery exhaustion, lack of mobile data inside shielded RCC lecture halls, device storage limits, and institutional phone usage bans during lectures.
   2. *Single-Photo Processing Bottlenecks:* Previously, `live-scan/page.tsx` only supported capturing and uploading a single classroom photo at a time. Taking a single wide-angle photo of 300 students from the podium causes severe face occlusion (front row heads blocking back row faces) and extreme distance blur (faces shrinking under 50px).
-  3. *Unusable Sequential Interruption:* If faculty or teaching assistants wanted to take photos of multiple rows, the previous UI forced them to wait 3–5 seconds after *every single photo* for upload, network roundtrip, and AI inference, rendering a walk-through impossible.
+  3. *Elimination of Rigid Row Labeling:* In real lecture hall walkthroughs, seating rows are wide (30–40 seats) and variable. A teacher or assistant naturally snaps 1, 2, or 3 shots per row from different angles (front, middle, side aisles) to ensure complete face coverage. Forcing rigid labels like "Row 1", "Row 2" creates a false 1-to-1 assumption and user confusion. Captures should simply scale as dynamic photos (`Photo 1`, `Photo 2`, `Photo 3`...).
+  4. *Unusable Sequential Interruption:* If faculty or teaching assistants wanted to take photos from multiple angles, the previous UI forced them to wait 3–5 seconds after *every single photo* for upload, network roundtrip, and AI inference, rendering a walk-through impossible.
 - **Decision:**
-  1. **Multi-Row Staging Tray Architecture (`QueuedPhotoItem`):**
+  1. **Dynamic Multi-Photo Staging Tray Architecture (`QueuedPhotoItem`):**
      - Decouple photo capture from immediate network upload in `frontend/src/app/live-scan/page.tsx`.
      - Introduce a non-blocking in-memory staging tray state (`queuedPhotos: QueuedPhotoItem[]`) with thumbnail previews created via `URL.createObjectURL(file)`.
      - Enable immediate successive snapping via rear camera (`capture="environment"`) or batch gallery selection (`multiple={true}`).
-     - Automatically index staged shots (`Row 1`, `Row 2`, `Row 3`...) with per-photo delete actions to discard accidental or blurry captures.
+     - Automatically index staged shots dynamically (`Photo 1`, `Photo 2`, `Photo 3`...) without rigid row constraints, providing per-photo delete actions to discard accidental or blurry captures.
   2. **1-Tap Batch AI Processing Pipeline (`handleProcessBatchAttendance`):**
-     - Execute client-side smart canvas downscaling and compression (`optimizeClassroomPhoto`, 2560px, 0.88 quality) sequentially for each staged row photo.
-     - Transmit each photo to `/api/process-attendance` with real-time UI progress feedback (`"Optimizing & scanning Row X of Y with AI..."`).
-     - PostgREST atomic batch upsert with `on_conflict="session_id,student_id"` guarantees complete idempotency: students appearing in overlapping row photos are deduplicated seamlessly without database constraint errors or duplicate records.
-  3. **Row-by-Row Result Breakdown:**
-     - Enhance `uploadResultModal` to display aggregate unique attendees, individual row detection badges (`Row 1: 52 present`, `Row 2: 68 present`...), and real-time live sidebar synchronization.
-     - Provide a "+ Snap More Rows" action to seamlessly add further row captures if required.
+     - Execute client-side smart canvas downscaling and compression (`optimizeClassroomPhoto`, 2560px, 0.88 quality) sequentially for each staged photo.
+     - Transmit each photo to `/api/process-attendance` with real-time UI progress feedback (`"Optimizing & scanning Photo X of Y with AI..."`).
+     - PostgREST atomic batch upsert with `on_conflict="session_id,student_id"` guarantees complete idempotency: students appearing across overlapping photos or multiple camera angles are deduplicated seamlessly without database constraint errors or duplicate records.
+  3. **Photo-by-Photo Result Breakdown:**
+     - Enhance `uploadResultModal` to display aggregate unique attendees, individual photo detection badges (`Photo 1: 52 present`, `Photo 2: 68 present`...), and real-time live sidebar synchronization.
+     - Provide a "+ Snap More Photos" action to seamlessly add further photo captures if required.
 - **Consequences:**
-  - *Positive:* Allows a single faculty member or teaching assistant to capture 300 students in 4–8 quick row snaps in under 1–2 minutes, completely bypassing student phone dependency.
-  - *Positive:* 100% elimination of proxy attendance (students must be physically seated in their row).
-  - *Positive:* 98% reduction in server network concurrency during the 5-minute countdown rush (4–8 faculty uploads vs 300 simultaneous student websocket/HTTP requests).
+  - *Positive:* Allows a single faculty member or teaching assistant to capture 300 students in 4–10 flexible photo snaps in under 1–2 minutes, completely bypassing student phone dependency.
+  - *Positive:* Complete physical flexibility: faculty can snap as many photos per row/angle as needed without artificial row restrictions.
+  - *Positive:* 100% elimination of proxy attendance (students must be physically present in class).
+  - *Positive:* 98% reduction in server network concurrency during the 5-minute countdown rush (4–10 faculty uploads vs 300 simultaneous student websocket/HTTP requests).
   - *Positive:* Preserves complete backwards compatibility with student portal and student selfie attendance workflows.
 
 

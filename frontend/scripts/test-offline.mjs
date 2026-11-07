@@ -3110,8 +3110,8 @@ console.log('\n--- 48. Portal-Native 1-Tap Attendance & Removal of QR Code Clutt
   assert(authFastPathTimeMs <= 2, '100 authenticated portal check-ins execute in <=2ms (Zero event loop freeze)');
 }
 
-// --- 49. Faculty Mobile Multi-Row Staged Photo Attendance ---
-console.log('\n--- 49. Faculty Mobile Multi-Row Staged Photo Attendance ---');
+// --- 49. Faculty Mobile Multi-Photo Staged Attendance ---
+console.log('\n--- 49. Faculty Mobile Multi-Photo Staged Attendance ---');
 {
   const liveScanPath = path.resolve(__dirname, '../src/app/live-scan/page.tsx');
   assert(fs.existsSync(liveScanPath), 'frontend/src/app/live-scan/page.tsx exists');
@@ -3131,29 +3131,29 @@ console.log('\n--- 49. Faculty Mobile Multi-Row Staged Photo Attendance ---');
   // 3. Verify multiple attribute on file input and camera input
   assert(liveScanContent.includes('multiple') && liveScanContent.includes('capture="environment"'), 'live-scan/page.tsx supports multi-photo gallery selection and rear-camera capture');
 
-  // 4. Verify batch progress and row breakdown in result modal
-  assert(liveScanContent.includes('uploadResultModal.rowBreakdown'), 'live-scan/page.tsx displays row-by-row breakdown badges in modal');
-  assert(liveScanContent.includes('Snap More Rows'), 'live-scan/page.tsx includes action button to snap more rows');
+  // 4. Verify batch progress and photo breakdown in result modal
+  assert(liveScanContent.includes('uploadResultModal.photoBreakdown'), 'live-scan/page.tsx displays photo breakdown badges in modal');
+  assert(liveScanContent.includes('Snap More Photos'), 'live-scan/page.tsx includes action button to snap more photos');
 
-  // 5. Behavioral simulation of multi-row attendance deduplication
-  const row1 = Array.from({ length: 50 }, (_, i) => ({ name: `Student ${i + 1}`, id: `stu-${i + 1}`, confidence: 0.85 }));
-  const row2 = Array.from({ length: 60 }, (_, i) => ({ name: `Student ${i + 45}`, id: `stu-${i + 45}`, confidence: 0.88 }));
-  const row3 = Array.from({ length: 70 }, (_, i) => ({ name: `Student ${i + 100}`, id: `stu-${i + 100}`, confidence: 0.84 }));
-  const row4 = Array.from({ length: 80 }, (_, i) => ({ name: `Student ${i + 165}`, id: `stu-${i + 165}`, confidence: 0.89 }));
+  // 5. Behavioral simulation of multi-photo attendance deduplication
+  const photo1 = Array.from({ length: 50 }, (_, i) => ({ name: `Student ${i + 1}`, id: `stu-${i + 1}`, confidence: 0.85 }));
+  const photo2 = Array.from({ length: 60 }, (_, i) => ({ name: `Student ${i + 45}`, id: `stu-${i + 45}`, confidence: 0.88 }));
+  const photo3 = Array.from({ length: 70 }, (_, i) => ({ name: `Student ${i + 100}`, id: `stu-${i + 100}`, confidence: 0.84 }));
+  const photo4 = Array.from({ length: 80 }, (_, i) => ({ name: `Student ${i + 165}`, id: `stu-${i + 165}`, confidence: 0.89 }));
 
-  const simulatedRows = [
-    { label: 'Row 1', recognized: row1 },
-    { label: 'Row 2', recognized: row2 },
-    { label: 'Row 3', recognized: row3 },
-    { label: 'Row 4', recognized: row4 },
+  const simulatedPhotos = [
+    { label: 'Photo 1', recognized: photo1 },
+    { label: 'Photo 2', recognized: photo2 },
+    { label: 'Photo 3', recognized: photo3 },
+    { label: 'Photo 4', recognized: photo4 },
   ];
 
   const aggregatedStudentsMap = new Map();
-  const rowBreakdown = [];
+  const photoBreakdown = [];
 
-  simulatedRows.forEach(row => {
-    rowBreakdown.push({ label: row.label, count: row.recognized.length });
-    row.recognized.forEach(s => {
+  simulatedPhotos.forEach(photo => {
+    photoBreakdown.push({ label: photo.label, count: photo.recognized.length });
+    photo.recognized.forEach(s => {
       if (!aggregatedStudentsMap.has(s.id)) {
         aggregatedStudentsMap.set(s.id, s);
       }
@@ -3163,9 +3163,9 @@ console.log('\n--- 49. Faculty Mobile Multi-Row Staged Photo Attendance ---');
   const totalRawRecognitions = 50 + 60 + 70 + 80;
   const uniquePresentStudents = aggregatedStudentsMap.size;
 
-  assert(totalRawRecognitions === 260, '260 total face recognitions across 4 row photos');
+  assert(totalRawRecognitions === 260, '260 total face recognitions across 4 classroom photos');
   assert(uniquePresentStudents === 244, 'Deduplication cleanly merges 16 overlapping boundary students into 244 unique present records');
-  assert(rowBreakdown.length === 4, 'Row breakdown tracks 4 individual row detection statistics');
+  assert(photoBreakdown.length === 4, 'Photo breakdown tracks 4 individual photo detection statistics');
 }
 
 // Summary

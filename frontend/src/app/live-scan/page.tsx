@@ -378,7 +378,7 @@ export default function LiveScan() {
     count: number;
     recognized: Array<{ name: string; confidence?: number }>;
     totalPhotos?: number;
-    rowBreakdown?: Array<{ label: string; count: number }>;
+    photoBreakdown?: Array<{ label: string; count: number }>;
     isError?: boolean;
     errorMessage?: string;
   } | null>(null);
@@ -866,7 +866,7 @@ export default function LiveScan() {
     };
   }, []);
 
-  // Queue row photos for batch attendance
+  // Queue classroom photos for batch attendance
   const handleQueuePhotoFiles = (files: FileList | File[] | null) => {
     if (!files || files.length === 0) return;
     const fileArray = Array.from(files);
@@ -877,7 +877,7 @@ export default function LiveScan() {
         file: f,
         previewUrl: URL.createObjectURL(f),
         timestamp: Date.now(),
-        label: `Row ${startIdx + idx + 1}`,
+        label: `Photo ${startIdx + idx + 1}`,
       }));
       return [...prev, ...newItems];
     });
@@ -894,7 +894,7 @@ export default function LiveScan() {
       const remaining = prev.filter((p) => p.id !== id);
       return remaining.map((p, idx) => ({
         ...p,
-        label: `Row ${idx + 1}`,
+        label: `Photo ${idx + 1}`,
       }));
     });
   };
@@ -908,17 +908,17 @@ export default function LiveScan() {
     if (cameraInputRef.current) cameraInputRef.current.value = "";
   };
 
-  // Process all staged row photos sequentially with live progress and aggregate unique students
+  // Process all staged classroom photos sequentially with live progress and aggregate unique students
   const handleProcessBatchAttendance = async () => {
     if (queuedPhotos.length === 0 || !activeSession) return;
 
     setIsProcessing(true);
     const total = queuedPhotos.length;
     setBatchProgress({ current: 0, total });
-    setProcessingStatusText(`Preparing ${total} row photo${total > 1 ? "s" : ""}...`);
+    setProcessingStatusText(`Preparing ${total} classroom photo${total > 1 ? "s" : ""}...`);
 
     const allRecognizedMap = new Map<string, { name: string; confidence?: number }>();
-    const rowBreakdown: Array<{ label: string; count: number }> = [];
+    const photoBreakdown: Array<{ label: string; count: number }> = [];
 
     try {
       for (let i = 0; i < queuedPhotos.length; i++) {
@@ -954,9 +954,9 @@ export default function LiveScan() {
 
         const result = await response.json();
         const recognizedList: Array<{ name: string; confidence?: number }> = result.recognized || [];
-        rowBreakdown.push({ label: item.label, count: recognizedList.length });
+        photoBreakdown.push({ label: item.label, count: recognizedList.length });
 
-        // Aggregate unique recognized students across all row photos
+        // Aggregate unique recognized students across all classroom photos
         recognizedList.forEach((rec) => {
           if (!allRecognizedMap.has(rec.name)) {
             allRecognizedMap.set(rec.name, rec);
@@ -979,7 +979,7 @@ export default function LiveScan() {
         count: finalRecognized.length,
         recognized: finalRecognized,
         totalPhotos: total,
-        rowBreakdown,
+        photoBreakdown,
         isError: false,
       });
     } catch (error: any) {
@@ -990,7 +990,7 @@ export default function LiveScan() {
         recognized: [],
         totalPhotos: total,
         isError: true,
-        errorMessage: error.message || "Failed to process row photos.",
+        errorMessage: error.message || "Failed to process classroom photos.",
       });
     } finally {
       setIsProcessing(false);
@@ -1541,7 +1541,7 @@ export default function LiveScan() {
                   }`}
               >
                 <Camera className="w-3.5 h-3.5 mr-1 shrink-0" />
-                <span>Row Photos{queuedPhotos.length > 0 ? ` (${queuedPhotos.length})` : ""}</span>
+                <span>Take Photos{queuedPhotos.length > 0 ? ` (${queuedPhotos.length})` : ""}</span>
               </button>
               <button
                 onClick={() => setActiveTab("manual")}
@@ -1775,7 +1775,7 @@ export default function LiveScan() {
                   </div>
                 </div>
               ) : queuedPhotos.length > 0 ? (
-                /* MULTI-ROW PHOTO STAGING TRAY */
+                /* MULTI-PHOTO STAGING TRAY */
                 <div className="w-full max-w-full min-w-0 flex-1 flex flex-col bg-slate-950/90 rounded-2xl border border-slate-800 p-3 sm:p-5 box-border">
                   {/* Tray Header Bar */}
                   <div className="flex items-center justify-between pb-3 border-b border-slate-800/80 gap-2 flex-wrap">
@@ -1785,13 +1785,13 @@ export default function LiveScan() {
                       </div>
                       <div>
                         <h4 className="text-sm font-bold text-white flex items-center gap-2">
-                          <span>{queuedPhotos.length} Row Photo{queuedPhotos.length > 1 ? "s" : ""} Staged</span>
+                          <span>{queuedPhotos.length} Photo{queuedPhotos.length > 1 ? "s" : ""} Staged</span>
                           <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
                             Ready
                           </span>
                         </h4>
                         <p className="text-[11px] text-slate-400">
-                          Review photos or snap additional rows before running AI attendance
+                          Review photos or snap additional angles before running AI attendance
                         </p>
                       </div>
                     </div>
@@ -1804,7 +1804,7 @@ export default function LiveScan() {
                         className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-1.5 shadow-md shadow-indigo-600/20 transition-all cursor-pointer disabled:opacity-50"
                       >
                         <Plus className="w-3.5 h-3.5" />
-                        <span>Snap Next Row</span>
+                        <span>Snap Next Photo</span>
                       </button>
 
                       <button
@@ -1845,7 +1845,7 @@ export default function LiveScan() {
                           />
                           <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/30 pointer-events-none" />
 
-                          {/* Row Label Badge */}
+                          {/* Photo Label Badge */}
                           <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded-md bg-indigo-600/90 text-white font-bold text-[10px] shadow">
                             {item.label}
                           </div>
@@ -1856,7 +1856,7 @@ export default function LiveScan() {
                               type="button"
                               onClick={() => handleRemoveQueuedPhoto(item.id)}
                               className="absolute top-1.5 right-1.5 p-1 rounded-full bg-black/70 hover:bg-rose-600 text-white transition-all cursor-pointer shadow"
-                              title="Delete this row photo"
+                              title="Delete this photo"
                             >
                               <X className="w-3.5 h-3.5" />
                             </button>
@@ -1906,15 +1906,15 @@ export default function LiveScan() {
                         <Camera className="w-8 h-8 sm:w-10 sm:h-10" />
                       </div>
                       <div className="absolute -bottom-1 -right-1 px-1.5 sm:px-2 py-0.5 rounded-full bg-emerald-500 text-white text-[9px] font-bold shadow-md uppercase tracking-wider">
-                        Row AI
+                        Multi-Photo AI
                       </div>
                     </div>
 
                     <h3 className="text-base sm:text-xl font-bold text-white mb-1 px-1">
-                      Classroom Row Multi-Photo Attendance
+                      Classroom Multi-Photo Attendance
                     </h3>
                     <p className="text-xs sm:text-sm text-slate-400 max-w-md mb-4 leading-relaxed">
-                      Snap row-by-row photos (4–8 shots) walking the aisles to cover all 200–300 students. InsightFace AI will detect and mark everyone present at once.
+                      Walk through the lecture hall and capture photos from different angles (front, middle, sides) to cover all students. InsightFace AI will detect and mark everyone present at once.
                     </p>
 
                     <div className="flex flex-col sm:flex-row items-center gap-2.5 w-full max-w-sm">
@@ -1925,7 +1925,7 @@ export default function LiveScan() {
                         className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 disabled:opacity-50 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/25 transition-all cursor-pointer"
                       >
                         <Camera className="w-4 h-4" />
-                        <span>Take Row 1 Photo</span>
+                        <span>Take Photo</span>
                       </button>
 
                       <button
@@ -1953,7 +1953,7 @@ export default function LiveScan() {
                   className={`w-full max-w-full min-w-0 flex-1 flex flex-col items-center justify-center border-2 border-dashed border-slate-800 rounded-2xl bg-slate-950/60 hover:bg-slate-950 hover:border-indigo-500/50 transition-all min-h-[220px] sm:min-h-[340px] lg:min-h-[420px] p-3.5 sm:p-6 box-border text-center ${!isProcessing ? 'cursor-pointer' : 'opacity-70 cursor-not-allowed'}`}
                 >
                   <Upload className="w-8 h-8 sm:w-12 sm:h-12 text-slate-600 mb-3" />
-                  <p className="text-slate-300 font-medium text-xs sm:text-sm text-center px-2">Click or drag classroom row photos to upload</p>
+                  <p className="text-slate-300 font-medium text-xs sm:text-sm text-center px-2">Click or drag classroom photos to upload</p>
                   <p className="text-slate-500 text-[10px] sm:text-xs mt-1 text-center px-2">Select multiple photos from gallery (Auto-compressed client-side for smooth processing)</p>
                 </div>
               )}
@@ -1975,7 +1975,7 @@ export default function LiveScan() {
                       {isProcessing ? (
                         <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> {processingStatusText}</>
                       ) : (
-                        <><CheckCircle2 className="w-3.5 h-3.5 mr-1.5" /> Process All {queuedPhotos.length} Row Photo{queuedPhotos.length > 1 ? "s" : ""}</>
+                        <><CheckCircle2 className="w-3.5 h-3.5 mr-1.5" /> Process All {queuedPhotos.length} Photo{queuedPhotos.length > 1 ? "s" : ""}</>
                       )}
                     </button>
                   ) : activeTab === "photo" ? (
@@ -1984,7 +1984,7 @@ export default function LiveScan() {
                       onClick={() => cameraInputRef.current?.click()}
                       className="w-full sm:w-auto flex items-center justify-center px-4 py-2 sm:py-1.5 rounded-xl font-semibold text-xs text-white bg-indigo-600 hover:bg-indigo-500 shadow-md transition-all disabled:opacity-50 cursor-pointer"
                     >
-                      <Camera className="w-3.5 h-3.5 mr-1.5" /> Take Row 1 Photo
+                      <Camera className="w-3.5 h-3.5 mr-1.5" /> Take Photo
                     </button>
                   ) : (
                     <button
@@ -2353,7 +2353,7 @@ export default function LiveScan() {
                         </p>
                         <p className="text-[11px] text-emerald-600 dark:text-emerald-400">
                           {uploadResultModal.totalPhotos && uploadResultModal.totalPhotos > 1
-                            ? `Recognized across ${uploadResultModal.totalPhotos} row photos`
+                            ? `Recognized across ${uploadResultModal.totalPhotos} classroom photos`
                             : "Marked present in this session"}
                         </p>
                       </div>
@@ -2363,16 +2363,16 @@ export default function LiveScan() {
                     </span>
                   </div>
 
-                  {/* Row Breakdown Pills */}
-                  {uploadResultModal.rowBreakdown && uploadResultModal.rowBreakdown.length > 1 && (
+                  {/* Photo Breakdown Pills */}
+                  {uploadResultModal.photoBreakdown && uploadResultModal.photoBreakdown.length > 1 && (
                     <div className="w-full flex flex-wrap gap-1.5 justify-center mb-3">
-                      {uploadResultModal.rowBreakdown.map((rb, idx) => (
+                      {uploadResultModal.photoBreakdown.map((pb, idx) => (
                         <span
                           key={idx}
                           className="px-2.5 py-1 rounded-lg bg-emerald-100/80 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-800/80 text-[11px] font-semibold text-emerald-800 dark:text-emerald-300 flex items-center gap-1"
                         >
-                          <span className="font-bold">{rb.label}:</span>
-                          <span>{rb.count} detected</span>
+                          <span className="font-bold">{pb.label}:</span>
+                          <span>{pb.count} detected</span>
                         </span>
                       ))}
                     </div>
@@ -2406,7 +2406,7 @@ export default function LiveScan() {
                       title={activeTab === "photo" ? "Take another group photo" : "Upload another classroom photo"}
                     >
                       {activeTab === "photo" ? <Camera className="w-3.5 h-3.5" /> : <Upload className="w-3.5 h-3.5" />}
-                      {activeTab === "photo" ? "Snap More Rows" : "Upload More Rows"}
+                      {activeTab === "photo" ? "Snap More Photos" : "Upload More Photos"}
                     </button>
                     <button
                       onClick={() => setUploadResultModal(null)}
