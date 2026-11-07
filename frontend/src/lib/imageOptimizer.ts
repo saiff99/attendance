@@ -123,6 +123,7 @@ self.onmessage = async function(e) {
 
 let optimizerWorker: Worker | null = null;
 let workerFailed = false;
+let workerBlobUrl: string | null = null;
 
 interface WorkerTask {
   resolve: (res: { blob: Blob; width: number; height: number; wasCompressed: boolean }) => void;
@@ -161,9 +162,10 @@ export function getOrCreateOptimizerWorker(): Worker | null {
 
   try {
     const blob = new Blob([WORKER_CODE], { type: "application/javascript" });
-    const workerUrl = URL.createObjectURL(blob);
-    const worker = new Worker(workerUrl);
-    URL.revokeObjectURL(workerUrl);
+    workerBlobUrl = URL.createObjectURL(blob);
+    const worker = new Worker(workerBlobUrl);
+    // Note: Do NOT revokeObjectURL synchronously here! Safari WebKit requires the blob URL to remain
+    // valid during initial script compilation in the worker thread. Revoke on cleanup in resetOptimizerWorker.
 
     worker.onmessage = (e: MessageEvent) => {
       const { id, success, blob: resultBlob, width, height, wasCompressed, error } = e.data || {};
@@ -218,6 +220,14 @@ export function resetOptimizerWorker(): void {
     }
     optimizerWorker = null;
   }
+  if (workerBlobUrl) {
+    try {
+      URL.revokeObjectURL(workerBlobUrl);
+    } catch {
+      // Ignore
+    }
+    workerBlobUrl = null;
+  }
   for (const [, task] of pendingTasks) {
     clearTimeout(task.timer);
   }
@@ -241,10 +251,16 @@ function optimizeWithWorker(
 
     const taskId = `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 
+    // 2-second timeout for background worker response before gracefully falling back
     const timer = setTimeout(() => {
       pendingTasks.delete(taskId);
-      reject(new Error("Worker optimization timed out after 8000ms"));
-    }, 8000);
+      if (optimizerWorker) {
+        try { optimizerWorker.terminate(); } catch {}
+        optimizerWorker = null;
+      }
+      workerFailed = true;
+      reject(new Error("Worker optimization timed out after 2000ms"));
+    }, 2000);
 
     pendingTasks.set(taskId, { resolve, reject, timer });
 
@@ -288,7 +304,7 @@ export function fallbackOptimizeClassroomPhoto(
       resolve(res);
     };
 
-    // 4-second safety watchdog against frozen image decoding in sluggish or mock DOMs
+    // 2-second safety watchdog against frozen image decoding in sluggish or mock DOMs
     const safetyTimer = setTimeout(() => {
       console.warn("[ImageOptimizerFallback] Image decoding timed out, preserving original file");
       safeResolve({
@@ -299,7 +315,7 @@ export function fallbackOptimizeClassroomPhoto(
         height: 0,
         wasCompressed: false,
       });
-    }, 4000);
+    }, 2000);
 
     const reader = new FileReader();
 
@@ -454,6 +470,19 @@ export async function optimizeClassroomPhoto(
 
   // Pass-through for non-browser / non-image files
   if (typeof window === "undefined" || !file.type.startsWith("image/")) {
+    return {
+      file,
+      originalSize,
+      compressedSize: originalSize,
+      width: 0,
+      height: 0,
+      wasCompressed: false,
+    };
+  }
+
+  // Fast-Path: If file is already compact (<= 600KB), it's well below Vercel's 4.5MB limit
+  // and does not require costly re-encoding cycles.
+  if (file.size <= 600 * 1024) {
     return {
       file,
       originalSize,

@@ -264,3 +264,4 @@ export async function analyzeImageFileQuality(file: File | Blob): Promise<Qualit
     img.src = objectUrl;
   });
 }
+

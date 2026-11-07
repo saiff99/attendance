@@ -178,4 +178,14 @@ describe('Image Optimizer & Web Worker Offloading', () => {
       });
     }
   });
+
+  it('instantly fast-paths files under 600KB without redundant re-encoding', async () => {
+    const compactBlob = new Blob([new Uint8Array(350 * 1024)], { type: 'image/jpeg' });
+    const compactFile = new File([compactBlob], 'camera_snap.jpg', { type: 'image/jpeg' });
+
+    const result = await optimizeClassroomPhoto(compactFile, 2560, 0.88);
+    expect(result.wasCompressed).toBe(false);
+    expect(result.file.name).toBe('camera_snap.jpg');
+    expect(result.compressedSize).toBe(compactFile.size);
+  });
 });

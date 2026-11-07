@@ -388,6 +388,10 @@ export default function LiveScan() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingStatusText, setProcessingStatusText] = useState("Analyzing image...");
   const [queuedPhotos, setQueuedPhotos] = useState<QueuedPhotoItem[]>([]);
+  const queuedPhotosRef = useRef<QueuedPhotoItem[]>([]);
+  useEffect(() => {
+    queuedPhotosRef.current = queuedPhotos;
+  }, [queuedPhotos]);
   const [batchProgress, setBatchProgress] = useState<{ current: number; total: number } | null>(null);
   const [uploadResultModal, setUploadResultModal] = useState<{
     isOpen: boolean;
@@ -891,30 +895,75 @@ export default function LiveScan() {
   }, []);
 
   // Queue classroom photos for batch attendance with Eager Background Compression (Issue 1)
-  const handleQueuePhotoFiles = (files: FileList | File[] | null) => {
+  const handleQueuePhotoFiles = (
+    files: FileList | File[] | null,
+    options?: {
+      isPreOptimized?: boolean;
+      quality?: QualityAssessment;
+      width?: number;
+      height?: number;
+    }
+  ) => {
     if (!files || files.length === 0) return;
     const fileArray = Array.from(files);
-    const newItems: QueuedPhotoItem[] = [];
 
+    const isPreOptimized = !!options?.isPreOptimized;
+    const initialQuality = options?.quality;
+    const initialWidth = options?.width || 0;
+    const initialHeight = options?.height || 0;
+
+    // Build newItems synchronously BEFORE setting state to guarantee accurate references and IDs
+    const currentQueue = queuedPhotosRef.current;
+    const startIdx = currentQueue.length;
+    const newItems: QueuedPhotoItem[] = fileArray.map((f, idx) => ({
+      id: `photo-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 6)}`,
+      file: f,
+      previewUrl: URL.createObjectURL(f),
+      timestamp: Date.now(),
+      label: `Photo ${startIdx + idx + 1}`,
+      optimizedFile: isPreOptimized ? f : undefined,
+      compressionStatus: isPreOptimized ? ("ready" as const) : ("compressing" as const),
+      compressionStats: isPreOptimized
+        ? {
+            originalSize: f.size,
+            compressedSize: f.size,
+            width: initialWidth,
+            height: initialHeight,
+          }
+        : undefined,
+      quality: initialQuality,
+    }));
+
+    // Update state and mirror into ref
     setQueuedPhotos((prev) => {
-      const startIdx = prev.length;
-      fileArray.forEach((f, idx) => {
-        newItems.push({
-          id: `photo-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 6)}`,
-          file: f,
-          previewUrl: URL.createObjectURL(f),
-          timestamp: Date.now(),
-          label: `Photo ${startIdx + idx + 1}`,
-          compressionStatus: "compressing",
-        });
-      });
-      return [...prev, ...newItems];
+      const combined = [...prev, ...newItems];
+      return combined.map((p, idx) => ({
+        ...p,
+        label: `Photo ${idx + 1}`,
+      }));
     });
+    queuedPhotosRef.current = [...currentQueue, ...newItems];
 
     if (fileInputRef.current) fileInputRef.current.value = "";
     if (cameraInputRef.current) cameraInputRef.current.value = "";
 
-    // Eagerly trigger background compression immediately on capture (Pipeline Overlap)
+    // If pre-optimized (e.g. snapped directly in Smart Camera Viewfinder), no background re-compression needed!
+    if (isPreOptimized) {
+      if (!initialQuality) {
+        newItems.forEach((item) => {
+          analyzeImageFileQuality(item.file)
+            .then((quality) => {
+              setQueuedPhotos((curr) =>
+                curr.map((p) => (p.id === item.id ? { ...p, quality } : p))
+              );
+            })
+            .catch(() => {});
+        });
+      }
+      return;
+    }
+
+    // For external gallery / system camera files: trigger background compression
     newItems.forEach((item) => {
       optimizeClassroomPhoto(item.file, 2560, 0.88)
         .then((result) => {
@@ -987,6 +1036,7 @@ export default function LiveScan() {
       try { URL.revokeObjectURL(p.previewUrl); } catch {}
     });
     setQueuedPhotos([]);
+    queuedPhotosRef.current = [];
     if (fileInputRef.current) fileInputRef.current.value = "";
     if (cameraInputRef.current) cameraInputRef.current.value = "";
   };
@@ -1099,6 +1149,10 @@ export default function LiveScan() {
     setTimeout(() => setCameraFlash(false), 120);
 
     ctx.drawImage(video, 0, 0, width, height);
+
+    // Instantaneous snapshot quality assessment from live video HUD
+    const capturedQuality = liveQuality ? { ...liveQuality } : undefined;
+
     canvas.toBlob(
       (blob) => {
         if (!blob) return;
@@ -1107,12 +1161,17 @@ export default function LiveScan() {
           `classroom-snap-${Date.now()}.jpg`,
           { type: "image/jpeg", lastModified: Date.now() }
         );
-        handleQueuePhotoFiles([file]);
+        handleQueuePhotoFiles([file], {
+          isPreOptimized: true,
+          quality: capturedQuality,
+          width,
+          height,
+        });
       },
       "image/jpeg",
       0.92
     );
-  }, [queuedPhotos.length]);
+  }, [liveQuality]);
 
   // Process all staged classroom photos with dual-connection concurrent upload (2x Concurrency)
   const handleProcessBatchAttendance = async () => {
@@ -1135,13 +1194,8 @@ export default function LiveScan() {
         queuedPhotos,
         CONCURRENCY_LIMIT,
         async (item) => {
-          // Zero-Wait Pre-Compression: Grab pre-compressed file or wait if still optimizing
-          let fileToUpload = item.optimizedFile;
-          if (!fileToUpload) {
-            setProcessingStatusText(`Optimizing ${item.label}...`);
-            const optResult = await optimizeClassroomPhoto(item.file, 2560, 0.88);
-            fileToUpload = optResult.file;
-          }
+          // Zero-Wait Pre-Compression: Grab pre-compressed file or immediate fallback
+          const fileToUpload = item.optimizedFile || item.file;
 
           // Upload to /api/process-attendance with exponential backoff retry on mobile network flakes
           const result = await executeWithRetry(

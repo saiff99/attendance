@@ -397,6 +397,24 @@ This document catalogs critical real-world edge cases, platform-specific quirks,
      - Polyfilled `queueMicrotask` in `frontend/src/components/layout/Sidebar.tsx` with a `setTimeout(..., 0)` fallback for legacy engines (< Chrome 71).
 - **Rule:** Never rely solely on modern CSS individual transform properties (`translate`, `rotate`, `scale`) for critical off-screen navigation drawers without providing an `@supports not (translate: 0px 0px)` fallback to standard `transform: translateX(...)` for institutional cross-device compatibility.
 
+---
+
+### Gotcha 22: Safari WebKit Worker Blob Revocation & React 19 Staging Optimization Deadlock
+- **Symptom:**
+  When faculty snapped multiple classroom photos using the in-app Smart Camera Viewfinder, the photos staged in the tray remained permanently stuck showing yellow `🔄 Optimizing` badges with spinning wheels. Tapping "Process All Photos" caused long hangs.
+- **Root Cause:**
+  1. **Premature Blob URL Revocation on Safari/WebKit:** In `getOrCreateOptimizerWorker()`, `URL.revokeObjectURL(workerUrl)` was invoked synchronously immediately following `new Worker(workerUrl)`. WebKit fetches the worker script asynchronously; revoking the blob URL immediately caused the script fetch to fail silently, putting the worker into an unresponsive state.
+  2. **Unbounded Task Queue Timeout:** Unresponsive worker tasks hung for 8000ms each without marking `workerFailed = true`, cascading 8-second timeouts per photo (24s–32s total).
+  3. **React 19 Concurrent Updater Mutation Antipattern:** In `handleQueuePhotoFiles`, `newItems` was declared outside `setQueuedPhotos` and pushed to *inside* the state updater callback. In React 19's batched execution, `newItems.forEach` executed before the updater was scheduled, running on an empty array and never triggering optimization.
+  4. **Redundant Re-Optimization of Native Canvas Snaps:** Photos captured via Smart Camera Viewfinder were drawn directly from `<video>` onto `<canvas>` at 1080p and exported as ~250KB JPEG blobs. They were already optimized and well below Vercel's 4.5MB limit, yet were marked as `compressing` and queued for redundant worker processing.
+- **Architectural Fix:**
+  1. **Preserve Worker Blob URL Lifetime:** Retained `workerBlobUrl` for the duration of the worker lifecycle, revoking only in `resetOptimizerWorker()`.
+  2. **Fast-Path Compact File Bypass & 2s Worker Watchdog:** In `optimizeClassroomPhoto()`, files `<= 600KB` bypass canvas re-encoding immediately. Reduced worker watchdog from 8000ms to 2000ms, immediately terminating and setting `workerFailed = true` on timeout so fallbacks run without delay.
+  3. **Deterministic State Construction:** Constructed `newItems` purely and synchronously before calling `setQueuedPhotos`, synchronized with `queuedPhotosRef.current`.
+  4. **Zero-Wait Pre-Optimized Smart Camera Injection:** `handleCaptureSmartPhoto` marks camera snaps as `isPreOptimized: true`, setting `compressionStatus: "ready"` and snapshot `quality` instantaneously without spinner delay.
+  5. **Resilient Upload Fallback:** In `handleProcessBatchAttendance`, `fileToUpload = item.optimizedFile || item.file` ensures upload never blocks on redundant optimization.
+- **Rule:** Never revoke a Web Worker blob URL synchronously immediately after instantiation. Never mutate an outer array inside a React functional state updater. All in-app camera canvas captures must bypass re-compression pipelines as pre-optimized assets.
+
 
 
 
