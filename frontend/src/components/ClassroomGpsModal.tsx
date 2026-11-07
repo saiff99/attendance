@@ -45,6 +45,23 @@ export function ClassroomGpsModal({
   const [copied, setCopied] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
 
+  // Platform & Browser Detection for Context-Aware User Tips
+  const isBrowser = typeof navigator !== "undefined";
+  const ua = isBrowser ? (navigator.userAgent || "").toLowerCase() : "";
+  const isIOS =
+    /iphone|ipad|ipod/.test(ua) ||
+    (isBrowser && /macintosh/.test(ua) && (navigator.maxTouchPoints || 0) > 1);
+  const isAndroid = /android/.test(ua);
+  const isMac = !isIOS && /macintosh|mac os x/.test(ua);
+  const isWindows = /windows/.test(ua);
+  const isChromeIOS = isIOS && ua.includes("crios");
+  const isChrome = ua.includes("chrome") || isChromeIOS;
+  const isInsecureLocalIp =
+    typeof window !== "undefined" &&
+    window.location.protocol === "http:" &&
+    window.location.hostname !== "localhost" &&
+    window.location.hostname !== "127.0.0.1";
+
   useModalBehavior({
     isOpen,
     onClose,
@@ -278,15 +295,73 @@ export function ClassroomGpsModal({
               {errorMessage || "Unable to acquire high-precision GPS coordinates from your device."}
             </p>
 
-            <div className="w-full p-3 rounded-2xl bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-900/50 text-left text-[11px] text-amber-800 dark:text-amber-300 mb-5 space-y-1">
+            <div className="w-full p-3.5 rounded-2xl bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-900/50 text-left text-[11px] text-amber-800 dark:text-amber-300 mb-5 space-y-1.5">
               <p className="font-semibold flex items-center gap-1.5">
-                <Navigation className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-                <span>Tips to resolve:</span>
+                <Navigation className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                <span>Tips to resolve ({isIOS ? "iPhone / iPad" : isAndroid ? "Android" : isMac ? "macOS" : isWindows ? "Windows" : "Device"}):</span>
               </p>
-              <ul className="list-disc list-inside space-y-1 text-[11px] text-amber-700 dark:text-amber-300/90 pl-1">
-                <li>Make sure location permission is set to <strong>&ldquo;Allow&rdquo;</strong> in your browser settings.</li>
-                <li><strong>On Mac (macOS):</strong> Open  <strong>System Settings &gt; Privacy &amp; Security &gt; Location Services</strong>, and ensure both <strong>Location Services</strong> and <strong>Google Chrome</strong> are toggled <strong>ON</strong>.</li>
-                <li>Ensure <strong>Wi-Fi is turned ON</strong> (Macs locate themselves using Wi-Fi networks).</li>
+              <ul className="list-disc list-inside space-y-1.5 text-[11px] text-amber-700 dark:text-amber-300/90 pl-1 leading-relaxed">
+                {isIOS && (
+                  <>
+                    <li>
+                      <strong>On iPhone / iPad:</strong> Open <strong>Settings &gt; Privacy &amp; Security &gt; Location Services</strong> (make sure it is toggled <strong>ON</strong>).
+                    </li>
+                    <li>
+                      In Settings, scroll down to <strong>{isChromeIOS ? "Chrome" : "Safari"}</strong> &gt; <strong>Location</strong>, select <strong>&ldquo;While Using the App&rdquo;</strong>, and turn <strong>&ldquo;Precise Location&rdquo; ON</strong>.
+                    </li>
+                    <li>
+                      Ensure <strong>Wi-Fi is turned ON</strong> (iOS uses nearby Wi-Fi beacons to fix indoor GPS coordinates).
+                    </li>
+                    {isInsecureLocalIp && (
+                      <li className="text-amber-900 dark:text-amber-200 font-medium bg-amber-200/40 dark:bg-amber-900/40 p-2 rounded-xl list-none mt-1">
+                        ⚠️ <strong>Insecure HTTP Notice:</strong> iOS strictly blocks GPS over plain <code>http://192.168.x.x</code>. Run <code>npm run dev:https</code> or use Cloudflare Tunnel to access via <code>https://</code> on mobile.
+                      </li>
+                    )}
+                  </>
+                )}
+
+                {isAndroid && (
+                  <>
+                    <li>
+                      <strong>On Android:</strong> Open <strong>Settings &gt; Location</strong> and verify it is turned <strong>ON</strong>.
+                    </li>
+                    <li>
+                      Go to <strong>App permissions &gt; {isChrome ? "Chrome" : "Browser"} &gt; Location</strong>, choose <strong>&ldquo;Allow only while using the app&rdquo;</strong>, and enable <strong>&ldquo;Use precise location&rdquo;</strong>.
+                    </li>
+                    <li>
+                      Ensure the <strong>Location / GPS</strong> tile is turned on in your phone&apos;s pull-down quick settings tray.
+                    </li>
+                    {isInsecureLocalIp && (
+                      <li className="text-amber-900 dark:text-amber-200 font-medium bg-amber-200/40 dark:bg-amber-900/40 p-2 rounded-xl list-none mt-1">
+                        ⚠️ <strong>Insecure HTTP Notice:</strong> Android Chrome may restrict GPS over plain <code>http://192.168.x.x</code>. Use <code>https://</code> or a Cloudflare tunnel.
+                      </li>
+                    )}
+                  </>
+                )}
+
+                {isMac && (
+                  <>
+                    <li>Make sure location permission is set to <strong>&ldquo;Allow&rdquo;</strong> in your browser settings.</li>
+                    <li><strong>On Mac (macOS):</strong> Open  <strong>System Settings &gt; Privacy &amp; Security &gt; Location Services</strong>, and ensure both <strong>Location Services</strong> and <strong>{isChrome ? "Google Chrome" : "Safari"}</strong> are toggled <strong>ON</strong>.</li>
+                    <li>Ensure <strong>Wi-Fi is turned ON</strong> (Macs locate themselves using Wi-Fi networks).</li>
+                  </>
+                )}
+
+                {isWindows && (
+                  <>
+                    <li>Make sure location permission is set to <strong>&ldquo;Allow&rdquo;</strong> in your browser settings.</li>
+                    <li><strong>On Windows:</strong> Open <strong>Settings &gt; Privacy &amp; security &gt; Location</strong>, and ensure both <strong>Location services</strong> and <strong>Let desktop apps access your location</strong> are toggled <strong>ON</strong>.</li>
+                    <li>Ensure <strong>Wi-Fi is turned ON</strong> to assist indoor positioning.</li>
+                  </>
+                )}
+
+                {!isIOS && !isAndroid && !isMac && !isWindows && (
+                  <>
+                    <li>Make sure location permission is set to <strong>&ldquo;Allow&rdquo;</strong> in your browser settings.</li>
+                    <li>Ensure <strong>Location Services / GPS</strong> is turned <strong>ON</strong> in your device settings.</li>
+                    <li>Ensure <strong>Wi-Fi is turned ON</strong> to assist indoor positioning.</li>
+                  </>
+                )}
               </ul>
             </div>
 

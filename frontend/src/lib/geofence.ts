@@ -77,7 +77,8 @@ export function getGeolocationErrorMessage(err: { code?: number }): string {
       return "Location permission was denied. Please allow location access in your browser or Android App Settings (Settings > Apps > Chrome/MedAttend > Permissions > Location).";
     }
     if (isIOS) {
-      return "Location permission was denied. Please allow location access in iOS Settings > Safari (or MedAttend) > Location.";
+      const browser = ua.includes("crios") ? "Chrome" : "Safari";
+      return `Location permission was denied. Please allow location access in iOS Settings > ${browser} (or MedAttend) > Location.`;
     }
     if (isMac) {
       return "Location permission was denied. Please allow location access in your browser settings and macOS System Settings > Privacy & Security > Location Services.";
