@@ -164,10 +164,8 @@ async def process_attendance(request: Request, file: UploadFile = File(...), ses
         )
 
     def _match_photo_faces():
-        import cv2  # type: ignore
-        image = Image.open(io.BytesIO(contents)).convert('RGB')
-        image_np = np.array(image)
-        image_bgr = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
+        from app.ai import decode_image_bytes
+        image_bgr = decode_image_bytes(contents)
         
         # Detect faces with InsightFace AI
         faces = app_fa.get(image_bgr) or []
@@ -858,10 +856,8 @@ async def selfie_attendance(
 
     def _verify_selfie():
         import cv2  # type: ignore
-        raw_img = Image.open(io.BytesIO(contents))
-        image = ImageOps.exif_transpose(raw_img).convert('RGB')
-        image_np = np.array(image)
-        image_bgr = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
+        from app.ai import decode_image_bytes
+        image_bgr = decode_image_bytes(contents)
         
         # Anti-Spoofing / Blur check (Adaptive frame & face Laplacian variance)
         gray = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)

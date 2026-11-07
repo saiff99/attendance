@@ -192,6 +192,7 @@ sequenceDiagram
         Note over FE, Proxy: executeWithRetry (Max 2 retries, 500ms -> 1000ms backoff)
         FE->>Proxy: POST /api/process-attendance (Photo 1)
         Proxy->>AI: Forward to InsightFace 512D
+        Note over AI: decode_image_bytes (Fast-Path Zero-Copy np.frombuffer + cv2.imdecode)
         AI->>DB: Atomic Batch Upsert INTO attendance
         AI-->>Proxy: { recognized: [...] }
         Proxy-->>FE: Stream Photo 1 Result (In-Order Slot 1)
@@ -199,6 +200,7 @@ sequenceDiagram
         Note over FE, Proxy: executeWithRetry (Max 2 retries, 500ms -> 1000ms backoff)
         FE->>Proxy: POST /api/process-attendance (Photo 2)
         Proxy->>AI: Forward to InsightFace 512D
+        Note over AI: decode_image_bytes (Fast-Path Zero-Copy np.frombuffer + cv2.imdecode)
         AI->>DB: Atomic Batch Upsert INTO attendance
         AI-->>Proxy: { recognized: [...] }
         Proxy-->>FE: Stream Photo 2 Result (In-Order Slot 2)

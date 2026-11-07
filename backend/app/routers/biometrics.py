@@ -109,9 +109,8 @@ async def enroll_face(
 
     def _extract_single_face():
         import cv2  # type: ignore
-        image = Image.open(io.BytesIO(contents)).convert('RGB')
-        image_np = np.array(image)
-        image_bgr = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
+        from app.ai import decode_image_bytes
+        image_bgr = decode_image_bytes(contents)
         
         faces = app_fa.get(image_bgr)
         if not faces:
@@ -260,14 +259,12 @@ async def enroll_face_burst(
 
     def _extract_burst_encodings():
         import cv2  # type: ignore
+        from app.ai import decode_image_bytes
         encs = []
         for contents in file_contents:
             if not contents:
                 continue
-            raw_img = Image.open(io.BytesIO(contents))
-            image = ImageOps.exif_transpose(raw_img).convert('RGB')
-            image_np = np.array(image)
-            image_bgr = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
+            image_bgr = decode_image_bytes(contents)
             
             faces = app_fa.get(image_bgr)
             if not faces:
