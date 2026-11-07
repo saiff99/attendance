@@ -1778,7 +1778,7 @@ export default function LiveScan() {
                 /* MULTI-PHOTO STAGING TRAY */
                 <div className="w-full max-w-full min-w-0 flex-1 flex flex-col bg-slate-950/90 rounded-2xl border border-slate-800 p-3 sm:p-5 box-border">
                   {/* Tray Header Bar */}
-                  <div className="flex items-center justify-between pb-3 border-b border-slate-800/80 gap-2 flex-wrap">
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-800/80 gap-2">
                     <div className="flex items-center gap-2.5">
                       <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-600 text-white flex items-center justify-center font-bold text-xs shadow-md shadow-indigo-600/30">
                         {queuedPhotos.length}
@@ -1796,37 +1796,9 @@ export default function LiveScan() {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        disabled={isProcessing}
-                        onClick={() => cameraInputRef.current?.click()}
-                        className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-1.5 shadow-md shadow-indigo-600/20 transition-all cursor-pointer disabled:opacity-50"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                        <span>Snap Next Photo</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        disabled={isProcessing}
-                        onClick={() => fileInputRef.current?.click()}
-                        className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold flex items-center gap-1 border border-slate-700 transition-all cursor-pointer disabled:opacity-50"
-                        title="Add more photos from phone gallery"
-                      >
-                        <Upload className="w-3.5 h-3.5" />
-                        <span className="hidden sm:inline">Gallery</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        disabled={isProcessing}
-                        onClick={handleClearQueuedPhotos}
-                        className="p-1.5 rounded-xl bg-slate-800/80 hover:bg-rose-950/40 text-slate-400 hover:text-rose-400 border border-slate-700/60 transition-all cursor-pointer disabled:opacity-50"
-                        title="Clear all staged photos"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                    <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-900 border border-slate-800 text-[11px] text-slate-400">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      <span className="text-slate-300 font-medium">Stage Active</span>
                     </div>
                   </div>
 
@@ -1890,6 +1862,47 @@ export default function LiveScan() {
                       )}
                     </div>
                   )}
+
+                  {/* Tray Bottom Controls (Snap Next Photo, Gallery, Clear) */}
+                  <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-2 w-full sm:w-auto">
+                      <button
+                        type="button"
+                        disabled={isProcessing}
+                        onClick={() => cameraInputRef.current?.click()}
+                        className="flex-1 sm:flex-initial px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 shadow-md shadow-indigo-600/20 transition-all cursor-pointer disabled:opacity-50"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Snap Next Photo</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={isProcessing}
+                        onClick={() => fileInputRef.current?.click()}
+                        className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold flex items-center justify-center gap-1.5 border border-slate-700 transition-all cursor-pointer disabled:opacity-50"
+                        title="Add more photos from phone gallery"
+                      >
+                        <Upload className="w-3.5 h-3.5" />
+                        <span className="text-xs">Gallery</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={isProcessing}
+                        onClick={handleClearQueuedPhotos}
+                        className="p-2 rounded-xl bg-slate-800/80 hover:bg-rose-950/40 text-slate-400 hover:text-rose-400 border border-slate-700/60 transition-all cursor-pointer disabled:opacity-50"
+                        title="Clear all staged photos"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    <div className="text-[11px] text-slate-400 hidden sm:flex items-center gap-1 font-medium">
+                      <span>{queuedPhotos.length}</span>
+                      <span>{queuedPhotos.length === 1 ? "photo staged" : "photos staged"}</span>
+                    </div>
+                  </div>
                 </div>
               ) : activeTab === "photo" ? (
                 /* TAKE PHOTO VIEWPORT (EMPTY STATE) */
