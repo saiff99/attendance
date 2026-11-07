@@ -44,6 +44,7 @@ jobs:
     name: Backend Security, Liveness & Unit Tests
     runs-on: ubuntu-latest
     env:
+      PYTHONPATH: backend
       SUPABASE_URL: https://ci-test-mock.supabase.co
       SUPABASE_SERVICE_ROLE_KEY: ci_mock_service_role_key_for_build_testing
       INTERNAL_API_KEY: f49c83a8f77acd625223d740ae06db19a679df1904aa1b4df924c24e0c234573
@@ -61,7 +62,7 @@ jobs:
       - name: Install Minimal Test Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install numpy opencv-python-headless Pillow python-dotenv fastapi starlette pydantic supabase
+          pip install numpy opencv-python-headless Pillow python-dotenv fastapi starlette pydantic supabase onnxruntime
 
       - name: Run Backend Offline Unit Tests
         run: python -m unittest discover backend/tests

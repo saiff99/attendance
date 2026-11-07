@@ -1,6 +1,12 @@
 import unittest
+import os
+import sys
 import cv2
 import numpy as np
+
+# Ensure backend root is on sys.path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from app.ai import decode_image_bytes
 
 
@@ -47,7 +53,11 @@ class TestFastImageDecodeAndOnnxOptions(unittest.TestCase):
 
     def test_onnx_runtime_session_options_configured(self):
         """Verify ONNX runtime session options environment configurations."""
-        import onnxruntime as ort
+        try:
+            import onnxruntime as ort
+        except ImportError:
+            self.skipTest("onnxruntime is not installed in this environment; skipping ONNX SessionOptions test.")
+
         opts = ort.SessionOptions()
         opts.intra_op_num_threads = 2
         opts.inter_op_num_threads = 1
@@ -62,3 +72,4 @@ class TestFastImageDecodeAndOnnxOptions(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
