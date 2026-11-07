@@ -171,7 +171,7 @@ sequenceDiagram
     autonumber
     actor F as Faculty / Assistant
     participant FE as Faculty Mobile Client (LiveScan)
-    participant Worker as Background Canvas Optimizer
+    participant Worker as Dedicated Web Worker (OffscreenCanvas)
     participant Proxy as Next.js Ingress Proxy (/api/process-attendance)
     participant AI as FastAPI Inference Core (InsightFace 512D)
     participant DB as Supabase PostgreSQL
@@ -180,8 +180,9 @@ sequenceDiagram
     loop For each classroom section/angle (1..N photos)
         F->>FE: Tap "Snap Next Photo" (Rear Camera)
         FE->>FE: Staged in memory (QueuedPhotoItem, label: Photo N)
-        FE->>Worker: Asynchronously trigger optimizeClassroomPhoto(2560px, 0.88)
-        Worker-->>FE: Returns pre-compressed blob (~600KB, Status: Ready)
+        FE->>Worker: postMessage(file, 2560px, 0.88) [Off-Thread Web Worker]
+        Note over Worker: createImageBitmap + OffscreenCanvas downscale (Zero UI jank)
+        Worker-->>FE: postMessage(compressedBlob, Status: Ready)
     end
 
     Note over F, FE: All photos pre-compressed with 0ms remaining lag

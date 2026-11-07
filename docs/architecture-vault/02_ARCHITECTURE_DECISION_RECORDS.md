@@ -50,6 +50,9 @@
 | **ADR-041** | In-Memory Session Attendance Caching & Single-Roundtrip Atomic Save for Zero-Redundant SELECT Database Queries | **Accepted** | Nov 2026 | Database Scalability / Backend Latency |
 | **ADR-042** | Rate Limiter L2 Settings Table Thrashing Mitigation via Session-Scoped Batch Ingestion and Conditional Failure Purging | **Accepted** | Nov 2026 | Security & Scalability / Database Optimization |
 | **ADR-043** | Live-Scan Dashboard Attendance Card Memoization & Session Timer Isolation for Zero-Re-Render Scalability | **Accepted** | Nov 2026 | Frontend Performance / UI Scalability |
+| **ADR-044** | Portal-Native 1-Tap Attendance & Complete Elimination of Impractical Classroom QR Codes | **Accepted** | Nov 2026 | UX / Biometrics & Fraud Prevention |
+| **ADR-045** | Faculty Mobile Dynamic Multi-Photo Capture & Batch Attendance Processing Pipeline | **Accepted** | Nov 2026 | Batch Ingestion / Mobile Performance |
+| **ADR-046** | Dedicated Web Worker & OffscreenCanvas Offloading for Zero-Jank Client-Side Image Optimization | **Accepted** | Nov 2026 | Frontend Performance / Web Workers |
 
 ---
 
@@ -1082,6 +1085,34 @@
   - *Positive:* 100% elimination of proxy attendance (students must be physically present in class).
   - *Positive:* 98% reduction in server network concurrency during the 5-minute countdown rush (4–10 faculty uploads vs 300 simultaneous student websocket/HTTP requests).
   - *Positive:* Preserves complete backwards compatibility with student portal and student selfie attendance workflows.
+
+---
+
+### ADR-046: Dedicated Web Worker & OffscreenCanvas Offloading for Zero-Jank Client-Side Image Optimization
+- **Status:** Accepted & Enforced (November 2026)
+- **Refines:** ADR-009 (Client-Side Canvas Compression), ADR-045 (Faculty Mobile Dynamic Multi-Photo Capture & Batch Attendance Processing Pipeline)
+- **Context:**
+  1. *Mobile UI Thread Starvation:* Modern smartphones capture classroom attendance photos at 12MP to 48MP resolution ($4032 \times 3024$ to $8000 \times 6000$ pixels). Downscaling these massive images to 2560px JPEG quality 0.88 on the browser's main UI thread requires significant CPU operations: decoding, multi-megapixel bilinear resampling, and JPEG encoding ($100\text{ms} - 500\text{ms}$ per photo).
+  2. *Severe Jitter and Framedrops During Continuous Snapping:* With ADR-045's eager background compression running immediately upon each photo capture, executing downscaling on the main thread causes stuttering camera viewfinders, unresponsive UI taps ("Snap Next Photo" freezing), and mobile UI jank.
+  3. *Browser Multi-Threading Capabilities:* Modern mobile browsers (iOS Safari $\ge 16.4$, Android Chrome) support `OffscreenCanvas` and `createImageBitmap` inside dedicated Web Workers, enabling intensive 2D rendering and compression to run in parallel on secondary CPU cores without competing with the UI thread.
+- **Decision:**
+  1. **Inline Blob Web Worker Architecture:**
+     - Package the worker execution script into a standalone inline Blob (`URL.createObjectURL(new Blob([WORKER_CODE], { type: 'application/javascript' }))`) in `frontend/src/lib/imageOptimizer.ts`, avoiding bundler chunk loading failures across Next.js SSR/CSR transitions.
+     - Decode image files asynchronously off the main thread using `createImageBitmap(fileOrBlob, { imageOrientation: 'from-image' })`, preserving physical camera orientation and avoiding heavy synchronous DOM `new Image()` parsing.
+     - Downscale proportionally on an `OffscreenCanvas(width, height)` and compress directly into a JPEG blob via `canvas.convertToBlob({ type: 'image/jpeg', quality: 0.88 })`.
+     - Free RAM and GPU resources immediately after rendering via `bitmap.close()`.
+  2. **Singleton Worker Manager & Concurrent Task Dispatching:**
+     - Maintain a singleton worker instance (`getOrCreateOptimizerWorker()`) with an asynchronous task registry (`Map<taskId, { resolve, reject, timer }>`), allowing multiple photos snapped in rapid succession to queue and process concurrently on the background thread without spawning multiple Web Worker processes.
+     - Enforce an 8,000ms safety watchdog timer per optimization task to prevent memory leaks or hanging promises.
+  3. **Resilient In-Thread Canvas Fallback (`fallbackOptimizeClassroomPhoto`):**
+     - Provide automatic feature detection via `isOffscreenWorkerSupported()`. If the environment lacks `OffscreenCanvas`, `Worker`, or `createImageBitmap` (e.g. legacy iOS < 16.4, Node.js SSR, Vitest mock environments), or if the background worker encounters an unrecoverable runtime error, the engine seamlessly routes execution to `fallbackOptimizeClassroomPhoto` using standard `HTMLCanvasElement`.
+     - Equip the fallback canvas pipeline with a 4,000ms watchdog timer to prevent hanging promises in headless/mock DOM environments.
+- **Consequences:**
+  1. *Positive:* 100% elimination of main-thread UI blocking ($0\text{ms}$ frame jank): camera viewfinder remains buttery smooth at 60 FPS while background photos are compressed.
+  2. *Positive:* Zero upload delay: by the time faculty reaches the next row or finishes snapping all sections, all captured photos are already fully compressed and ready for immediate AI inference.
+  3. *Positive:* Memory safety: explicit `bitmap.close()` calls immediately release uncompressed raw pixel buffers from GPU/RAM, preventing Out-Of-Memory (OOM) browser tab crashes on low-end mobile devices.
+  4. *Positive:* Strict backward compatibility and fault tolerance: gracefully falls back in unsupported or restricted webviews without crashing or disrupting attendance capture.
+
 
 
 

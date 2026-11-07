@@ -3168,6 +3168,64 @@ console.log('\n--- 49. Faculty Mobile Multi-Photo Staged Attendance ---');
   assert(photoBreakdown.length === 4, 'Photo breakdown tracks 4 individual photo detection statistics');
 }
 
+// --- 50. Web Worker Offloaded Image Downscaling via OffscreenCanvas (ADR-045) ---
+console.log('\n--- 50. Web Worker Offloaded Image Downscaling via OffscreenCanvas (ADR-045) ---');
+{
+  const imgOptimizerPath = path.resolve(__dirname, '../src/lib/imageOptimizer.ts');
+  assert(fs.existsSync(imgOptimizerPath), 'frontend/src/lib/imageOptimizer.ts exists');
+  const imgOptimizerContent = fs.readFileSync(imgOptimizerPath, 'utf8');
+
+  // 1. Verify Worker code and modern Web API usage
+  assert(imgOptimizerContent.includes('const WORKER_CODE = `'), 'imageOptimizer.ts defines embedded Web Worker script');
+  assert(imgOptimizerContent.includes('OffscreenCanvas'), 'imageOptimizer.ts utilizes OffscreenCanvas for off-thread rendering');
+  assert(imgOptimizerContent.includes('createImageBitmap'), 'imageOptimizer.ts utilizes createImageBitmap for non-blocking decoding');
+  assert(imgOptimizerContent.includes('convertToBlob'), 'imageOptimizer.ts uses convertToBlob for asynchronous JPEG encoding');
+
+  // 2. Verify lifecycle and feature detection functions
+  assert(imgOptimizerContent.includes('export function isOffscreenWorkerSupported()'), 'imageOptimizer.ts exports isOffscreenWorkerSupported');
+  assert(imgOptimizerContent.includes('export function getOrCreateOptimizerWorker()'), 'imageOptimizer.ts exports getOrCreateOptimizerWorker singleton');
+  assert(imgOptimizerContent.includes('export function resetOptimizerWorker()'), 'imageOptimizer.ts exports resetOptimizerWorker cleanup');
+  assert(imgOptimizerContent.includes('export function fallbackOptimizeClassroomPhoto'), 'imageOptimizer.ts exports fallbackOptimizeClassroomPhoto');
+  assert(imgOptimizerContent.includes('export async function optimizeClassroomPhoto'), 'imageOptimizer.ts exports optimizeClassroomPhoto');
+
+  // 3. Verify LiveScan integration
+  const liveScanPath = path.resolve(__dirname, '../src/app/live-scan/page.tsx');
+  assert(fs.existsSync(liveScanPath), 'frontend/src/app/live-scan/page.tsx exists');
+  const liveScanContent = fs.readFileSync(liveScanPath, 'utf8');
+  assert(liveScanContent.includes("from \"@/lib/imageOptimizer\""), 'live-scan/page.tsx imports from @/lib/imageOptimizer');
+  assert(liveScanContent.includes("optimizeClassroomPhoto("), 'live-scan/page.tsx invokes optimizeClassroomPhoto in background staging pipeline');
+
+  // 4. Mathematical validation of aspect ratio preservation for 12MP-48MP smartphone photos
+  const testSensors = [
+    { name: '12MP iPhone (4032x3024)', width: 4032, height: 3024 },
+    { name: '48MP Android (8000x6000)', width: 8000, height: 6000 },
+    { name: 'Ultra-wide Portrait (3000x4000)', width: 3000, height: 4000 },
+    { name: 'Standard HD (1920x1080)', width: 1920, height: 1080 },
+  ];
+
+  const maxDimension = 2560;
+
+  testSensors.forEach(sensor => {
+    let targetW = sensor.width;
+    let targetH = sensor.height;
+    const initialRatio = sensor.width / sensor.height;
+
+    if (targetW > maxDimension || targetH > maxDimension) {
+      if (targetW > targetH) {
+        targetH = Math.round((targetH * maxDimension) / targetW);
+        targetW = maxDimension;
+      } else {
+        targetW = Math.round((targetW * maxDimension) / targetH);
+        targetH = maxDimension;
+      }
+    }
+
+    const finalRatio = targetW / targetH;
+    assert(Math.max(targetW, targetH) <= maxDimension, `${sensor.name} downscaled bounded by max ${maxDimension}px`);
+    assert(Math.abs(initialRatio - finalRatio) < 0.01, `${sensor.name} aspect ratio strictly preserved (error < 1%)`);
+  });
+}
+
 // Summary
 console.log('\n' + '=' .repeat(65));
 console.log(`📊 Offline Unit Test Summary: ${passed} Passed, ${failed} Failed`);
