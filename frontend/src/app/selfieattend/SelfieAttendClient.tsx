@@ -842,6 +842,12 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
     const loop = (timestamp: number) => {
       if (isDestroyed || isVerified) return;
 
+      // Standby Power-Saving Guard (ADR-059): Skip frame capture & liveness worker when tab is backgrounded
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+        animationFrameId = requestAnimationFrame(loop);
+        return;
+      }
+
       if (timestamp - lastProcessTime >= THROTTLE_INTERVAL_MS && !isProcessing) {
         lastProcessTime = timestamp;
 

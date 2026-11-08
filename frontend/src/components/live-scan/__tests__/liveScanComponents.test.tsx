@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import React from "react";
 import { ClassroomPhotoTray } from "../ClassroomPhotoTray";
@@ -303,6 +303,64 @@ describe("LiveScan Modular Sub-Components (ADR-054)", () => {
       const shutterBtn = screen.getByTitle("Capture photo");
       expect(shutterBtn).toBeInTheDocument();
       expect(shutterBtn).not.toBeDisabled();
+    });
+
+    it("transitions camera sensor to standby on document hidden and resumes on visible (ADR-059)", async () => {
+      const mockStop = vi.fn();
+      const mockGetUserMedia = vi.fn().mockImplementation(() =>
+        Promise.resolve({
+          getTracks: () => [{ stop: mockStop }],
+        })
+      );
+      Object.defineProperty(global.navigator, "mediaDevices", {
+        value: { getUserMedia: mockGetUserMedia },
+        writable: true,
+        configurable: true,
+      });
+
+      await act(async () => {
+        render(
+          <SmartCameraViewfinder
+            isOpen={true}
+            queuedCount={2}
+            onClose={vi.fn()}
+            onCapturePhoto={vi.fn()}
+          />
+        );
+      });
+
+      expect(mockGetUserMedia).toHaveBeenCalledTimes(1);
+
+      // Simulate switching tabs or minimizing mobile browser
+      Object.defineProperty(document, "visibilityState", {
+        value: "hidden",
+        writable: true,
+        configurable: true,
+      });
+      await act(async () => {
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+
+      // Camera sensor tracks should be stopped immediately
+      expect(mockStop).toHaveBeenCalled();
+      expect(screen.getByText("Camera on Standby")).toBeInTheDocument();
+
+      // Shutter button should be locked during standby
+      const shutterBtn = screen.getByTitle("Camera on Standby");
+      expect(shutterBtn).toBeDisabled();
+
+      // Simulate returning to view
+      Object.defineProperty(document, "visibilityState", {
+        value: "visible",
+        writable: true,
+        configurable: true,
+      });
+      await act(async () => {
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+
+      // Camera re-acquired cleanly
+      expect(mockGetUserMedia).toHaveBeenCalledTimes(2);
     });
   });
 });

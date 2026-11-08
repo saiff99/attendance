@@ -35,6 +35,7 @@ export const SmartCameraViewfinder = memo(function SmartCameraViewfinder({
   const [liveQuality, setLiveQuality] = useState<QualityAssessment | null>(null);
   const [cameraFlash, setCameraFlash] = useState(false);
   const [isShutterCoolingDown, setIsShutterCoolingDown] = useState(false);
+  const [isCameraStandby, setIsCameraStandby] = useState(false);
   const smartVideoRef = useRef<HTMLVideoElement>(null);
   const smartStreamRef = useRef<MediaStream | null>(null);
   const isCapturingRef = useRef(false);
@@ -47,6 +48,20 @@ export const SmartCameraViewfinder = memo(function SmartCameraViewfinder({
     let isSubscribed = true;
     let qualityInterval: NodeJS.Timeout | null = null;
     const currentVideoEl = smartVideoRef.current;
+
+    const stopStream = () => {
+      if (qualityInterval) {
+        clearInterval(qualityInterval);
+        qualityInterval = null;
+      }
+      if (smartStreamRef.current) {
+        smartStreamRef.current.getTracks().forEach((t) => t.stop());
+        smartStreamRef.current = null;
+      }
+      if (currentVideoEl) {
+        currentVideoEl.srcObject = null;
+      }
+    };
 
     const initCamera = async () => {
       try {
@@ -75,6 +90,7 @@ export const SmartCameraViewfinder = memo(function SmartCameraViewfinder({
             await smartVideoRef.current.play();
           } catch {}
         }
+        setIsCameraStandby(false);
 
         // Real-time quality evaluation every 400ms (throttled/paused during active capture, ADR-056)
         qualityInterval = setInterval(() => {
@@ -96,18 +112,33 @@ export const SmartCameraViewfinder = memo(function SmartCameraViewfinder({
       }
     };
 
+    // Camera Sensor Standby & Lifecycle Management on Tab Inactivity (ADR-059)
+    const handleVisibilityChange = () => {
+      if (typeof document === "undefined") return;
+      if (document.visibilityState === "hidden") {
+        // Standby Mode: Release physical camera sensor to prevent mobile battery drain & overheating
+        setIsCameraStandby(true);
+        stopStream();
+      } else if (document.visibilityState === "visible" && isSubscribed) {
+        // Instant Resume: Re-acquire camera hardware cleanly upon returning to the tab
+        setIsCameraStandby(false);
+        initCamera();
+      }
+    };
+
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", handleVisibilityChange);
+    }
+
     initCamera();
 
     return () => {
       isSubscribed = false;
-      if (qualityInterval) clearInterval(qualityInterval);
-      if (smartStreamRef.current) {
-        smartStreamRef.current.getTracks().forEach((t) => t.stop());
-        smartStreamRef.current = null;
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", handleVisibilityChange);
       }
-      if (currentVideoEl) {
-        currentVideoEl.srcObject = null;
-      }
+      stopStream();
+      setIsCameraStandby(false);
     };
   }, [isOpen, smartCameraFacing, onClose, onFallbackSystemCamera]);
 
@@ -175,6 +206,25 @@ export const SmartCameraViewfinder = memo(function SmartCameraViewfinder({
         muted
         className="absolute inset-0 w-full h-full object-cover"
       />
+
+      {/* Standby Power-Saving Overlay (ADR-059) */}
+      {isCameraStandby && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="absolute inset-0 bg-slate-950/85 backdrop-blur-md z-35 flex flex-col items-center justify-center gap-3 p-6 text-center animate-in fade-in duration-200"
+        >
+          <div className="w-12 h-12 rounded-full bg-slate-900 border border-slate-700 flex items-center justify-center text-emerald-400 shadow-xl">
+            <Camera className="w-6 h-6 animate-pulse" />
+          </div>
+          <div className="flex flex-col gap-1 max-w-xs">
+            <span className="text-sm font-bold text-slate-100">Camera on Standby</span>
+            <span className="text-xs text-slate-400 leading-relaxed">
+              Camera sensor was safely powered down to save battery while in background. Resuming live feed...
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Shutter Flash Animation */}
       {cameraFlash && (
@@ -266,17 +316,17 @@ export const SmartCameraViewfinder = memo(function SmartCameraViewfinder({
             </div>
           </div>
 
-          {/* Shutter Button with De-bounce Cooldown Protection (ADR-056) */}
+          {/* Shutter Button with De-bounce Cooldown Protection (ADR-056) & Standby Lock (ADR-059) */}
           <button
             type="button"
-            disabled={isShutterCoolingDown}
+            disabled={isShutterCoolingDown || isCameraStandby}
             onClick={handleCapture}
             className={`w-18 h-18 sm:w-20 sm:h-20 rounded-full border-4 border-white/90 p-1 flex items-center justify-center transition-all shadow-2xl ${
-              isShutterCoolingDown
+              isShutterCoolingDown || isCameraStandby
                 ? "opacity-60 scale-95 cursor-not-allowed border-indigo-400"
                 : "active:scale-95 cursor-pointer hover:border-indigo-400"
             }`}
-            title={isShutterCoolingDown ? "Capturing..." : "Capture photo"}
+            title={isCameraStandby ? "Camera on Standby" : isShutterCoolingDown ? "Capturing..." : "Capture photo"}
           >
             <div className="w-full h-full rounded-full bg-white flex items-center justify-center">
               <Camera className="w-7 h-7 text-indigo-950" />

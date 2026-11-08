@@ -3736,7 +3736,8 @@ console.log('\n--- 59. Shutter Burst De-Bouncing & Video Quality Worker Throttli
   );
 
   assert(
-    smartCamContent.includes('disabled={isShutterCoolingDown}'),
+    smartCamContent.includes('isShutterCoolingDown') &&
+    (smartCamContent.includes('disabled={isShutterCoolingDown}') || smartCamContent.includes('disabled={isShutterCoolingDown || isCameraStandby}')),
     'SmartCameraViewfinder disables shutter button during cooldown window'
   );
 
@@ -3899,6 +3900,72 @@ console.log('\n--- 62. Post-Optimization IndexedDB Memory Hygiene: Purge Raw Blo
   assert(
     adrContent.includes('ADR-058: Post-Optimization IndexedDB Memory Hygiene: Purge Raw Camera Blobs to Reclaim 85% Mobile Disk Space'),
     '02_ARCHITECTURE_DECISION_RECORDS.md documents ADR-058'
+  );
+}
+
+// --- 63. Camera Sensor Standby & Lifecycle Management on Tab Inactivity (ADR-059) ---
+console.log('\n--- 63. Camera Sensor Standby & Lifecycle Management on Tab Inactivity (ADR-059) ---');
+{
+  const viewfinderPath = path.resolve(__dirname, '../src/components/live-scan/SmartCameraViewfinder.tsx');
+  assert(fs.existsSync(viewfinderPath), 'SmartCameraViewfinder.tsx exists');
+  const viewfinderContent = fs.readFileSync(viewfinderPath, 'utf8');
+
+  // 1. Verify isCameraStandby state exists
+  assert(
+    viewfinderContent.includes('const [isCameraStandby, setIsCameraStandby] = useState(false);'),
+    'SmartCameraViewfinder manages isCameraStandby state'
+  );
+
+  // 2. Verify visibilitychange listener registration
+  assert(
+    viewfinderContent.includes('document.addEventListener("visibilitychange", handleVisibilityChange)'),
+    'SmartCameraViewfinder registers document visibilitychange listener'
+  );
+
+  // 3. Verify standby entry on hidden state
+  assert(
+    viewfinderContent.includes('if (document.visibilityState === "hidden")') &&
+    viewfinderContent.includes('setIsCameraStandby(true);') &&
+    viewfinderContent.includes('stopStream();'),
+    'SmartCameraViewfinder releases camera tracks and enters standby on hidden state'
+  );
+
+  // 4. Verify clean camera resumption on visible state
+  assert(
+    viewfinderContent.includes('else if (document.visibilityState === "visible"') &&
+    viewfinderContent.includes('setIsCameraStandby(false);') &&
+    viewfinderContent.includes('initCamera();'),
+    'SmartCameraViewfinder resumes live stream on visible state'
+  );
+
+  // 5. Verify standby overlay render
+  assert(
+    viewfinderContent.includes('Camera on Standby') &&
+    viewfinderContent.includes('Camera sensor was safely powered down'),
+    'SmartCameraViewfinder renders standby overlay HUD'
+  );
+
+  // 6. Verify shutter button disabled during standby
+  assert(
+    viewfinderContent.includes('disabled={isShutterCoolingDown || isCameraStandby}'),
+    'SmartCameraViewfinder locks shutter button during camera standby'
+  );
+
+  // 7. Verify student selfie attend visibility guard
+  const selfiePath = path.resolve(__dirname, '../src/app/selfieattend/SelfieAttendClient.tsx');
+  const selfieContent = fs.readFileSync(selfiePath, 'utf8');
+  assert(
+    selfieContent.includes('document.visibilityState === "hidden"') &&
+    selfieContent.includes('animationFrameId = requestAnimationFrame(loop);'),
+    'SelfieAttendClient skips liveness processing when tab is backgrounded'
+  );
+
+  // 8. Verify documentation in 02_ARCHITECTURE_DECISION_RECORDS.md
+  const adrPath = path.resolve(__dirname, '../../docs/architecture-vault/02_ARCHITECTURE_DECISION_RECORDS.md');
+  const adrContent = fs.readFileSync(adrPath, 'utf8');
+  assert(
+    adrContent.includes('ADR-059: Camera Sensor Standby & Lifecycle Management on Inactivity for Mobile Battery and Thermal Preservation'),
+    '02_ARCHITECTURE_DECISION_RECORDS.md documents ADR-059'
   );
 }
 

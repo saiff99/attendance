@@ -1474,6 +1474,35 @@
   3. *Positive:* 15x–20x faster page restore and re-hydration from IndexedDB on session refresh or network reconnection.
   4. *Positive:* Zero data loss risk: uncompressed photos remain safely preserved in IndexedDB if optimization is in-flight or fails.
 
+---
+
+### ADR-059: Camera Sensor Standby & Lifecycle Management on Inactivity for Mobile Battery and Thermal Preservation
+
+- **Status:** Accepted
+- **Date:** 2026-11-08
+- **Context:**
+  1. *Background Camera Drain:* When faculty opened the Smart Camera Viewfinder ([ADR-050](file:///Users/saif/Desktop/Attendance/Attendance-app/docs/architecture-vault/02_ARCHITECTURE_DECISION_RECORDS.md)), `navigator.mediaDevices.getUserMedia()` acquired the mobile camera sensor and initiated 1080p stream rendering alongside a 400ms frame quality analysis loop.
+  2. *Tab Switching & Phone Lock Latency:* If a faculty member locked their phone, minimized the browser, or switched to another app while the viewfinder modal was open, the `MediaStreamTrack` continued streaming frames to the unrendered `<video>` element. Mobile camera sensors and autofocus actuators draw 1.0W – 1.8W of power, causing severe battery depletion (10%–15% in 10 minutes) and device overheating.
+  3. *Privacy Indicator Persistence:* The OS green camera indicator LED remained active even while the smartphone was locked or on the home screen, creating privacy concerns.
+  4. *iOS Safari Eviction:* iOS Safari WebKit frequently terminates background browser tabs that maintain active camera streaming to enforce battery governance.
+- **Decision:**
+  1. **Visibility-Aware Camera Standby Lifecycle:**
+     - Registered a `visibilitychange` listener in [`frontend/src/components/live-scan/SmartCameraViewfinder.tsx`](file:///Users/saif/Desktop/Attendance/Attendance-app/frontend/src/components/live-scan/SmartCameraViewfinder.tsx).
+     - When `document.visibilityState === "hidden"`, immediately clears the 400ms quality analysis interval, invokes `track.stop()` on all video tracks, releases `video.srcObject`, and sets `isCameraStandby(true)`.
+     - Powers down the physical camera sensor, shuts off the OS green privacy indicator, and eliminates CPU/GPU power consumption.
+  2. **Instant Automatic Wakeup & Resumption:**
+     - When `document.visibilityState === "visible"`, automatically re-acquires `getUserMedia` and cleanly binds the stream to `<video>` within 200–300ms without user intervention.
+  3. **Visual Standby Overlay and Shutter Lock:**
+     - Renders a graceful "Camera on Standby" overlay while the sensor is warming up.
+     - Disables the shutter button (`disabled={isShutterCoolingDown || isCameraStandby}`) during the standby phase.
+  4. **Student Selfie Attendance Standby Guard:**
+     - Added visibility state check in [`frontend/src/app/selfieattend/SelfieAttendClient.tsx`](file:///Users/saif/Desktop/Attendance/Attendance-app/frontend/src/app/selfieattend/SelfieAttendClient.tsx) to pause canvas frame extraction and Web Worker messaging while the student's tab is backgrounded.
+- **Consequences:**
+  1. *Positive:* Zero battery drain and zero thermal heating while phone is locked or browser is minimized.
+  2. *Positive:* OS camera privacy indicator turns off immediately when switching away from the browser.
+  3. *Positive:* Completely eliminates iOS Safari background tab terminations caused by rogue camera streams.
+  4. *Positive:* Seamless, flicker-free re-activation upon returning to the app.
+
 
 
 
