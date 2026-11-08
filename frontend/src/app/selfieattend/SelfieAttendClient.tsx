@@ -1714,7 +1714,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                         ) : student.is_already_present ? (
                           <div
                             className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs font-bold shrink-0 animate-in zoom-in-75 duration-150 shadow-sm"
-                            title="Attendance Already Recorded by CCTV Cameras"
+                            title="Attendance Already Recorded"
                           >
                             <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                             <span>Present</span>
@@ -1722,7 +1722,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                         ) : (
                           <div
                             className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-500/15 text-red-300 border border-red-500/30 text-xs font-bold shrink-0 animate-in zoom-in-75 duration-150 shadow-sm"
-                            title="Not Yet Detected by CCTV Cameras"
+                            title="Attendance Not Recorded Yet"
                           >
                             <X className="w-3.5 h-3.5 text-red-400" />
                             <span>Not Present Yet</span>
@@ -1748,17 +1748,17 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
                         <div className="p-3 rounded-xl bg-emerald-950/60 border border-emerald-500/30 text-xs text-emerald-200 flex flex-col gap-1">
                           <div className="flex items-center gap-1.5 font-bold text-emerald-300">
                             <Sparkles className="w-4 h-4 text-emerald-400 shrink-0" />
-                            <span>Attendance Confirmed via CCTV AI!</span>
+                            <span>Attendance Confirmed!</span>
                           </div>
                           <p className="text-[11px] text-slate-300 leading-relaxed">
-                            Your presence was successfully recognized by the classroom CCTV cameras. You do not need to take a selfie!
+                            Your attendance has been successfully recorded for this session. You do not need to take a selfie!
                           </p>
                         </div>
                       ) : (
                         <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-300 flex items-start gap-2">
                           <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
                           <span className="text-[11px] text-slate-300 leading-relaxed">
-                            CCTV cameras haven't caught your face yet. Please click below to capture your selfie and verify attendance.
+                            Your attendance is not recorded yet. Please click below to capture your selfie and verify attendance.
                           </span>
                         </div>
                       )}
@@ -2348,7 +2348,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
 
       {/* Footer Branding */}
       <footer className="w-full max-w-md text-center py-3 text-[11px] text-slate-500">
-        MedAttend Smart Face Verification • AI CCTV & Mobile Hybrid
+        MedAttend Smart Face Verification • AI &amp; Mobile Attendance
       </footer>
 
       {/* Animation Style */}
