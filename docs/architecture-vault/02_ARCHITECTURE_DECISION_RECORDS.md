@@ -1549,7 +1549,7 @@
      - `/api/cameras`: Configured `Cache-Control: private, max-age=15, stale-while-revalidate=60` to eliminate duplicate fetches during tab focus and re-renders.
   2. **Selective Column Projection in Attendance Polling:**
      - Replaced wildcard query in `/api/attendance/session/[sessionId]` with strict projection:
-       `select('id, session_id, student_id, status, capture_mode, recorded_at, confidence_score, metadata_tags, students(id, student_roll, full_name)')`.
+       `select('id, session_id, student_id, status, capture_mode, recorded_at, confidence_score, students(id, student_roll, full_name)')`.
      - Stripped unrendered database columns, slashing the payload size of every incremental delta tick by ~35%.
 - **Consequences:**
   1. *Positive:* Reclaims 35%–40% of network data transfer during live classroom attendance sessions.

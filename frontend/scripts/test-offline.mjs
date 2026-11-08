@@ -4053,7 +4053,7 @@ console.log('\n--- 65. HTTP Cache-Control Headers & Column Projection for Cloud 
   assert(fs.existsSync(attendancePath), 'api/attendance/session/[sessionId]/route.ts exists');
   const attendanceContent = fs.readFileSync(attendancePath, 'utf8');
   assert(
-    attendanceContent.includes("select('id, session_id, student_id, status, capture_mode, recorded_at, confidence_score, metadata_tags, students(id, student_roll, full_name)')"),
+    attendanceContent.includes("select('id, session_id, student_id, status, capture_mode, recorded_at, confidence_score, students(id, student_roll, full_name)')"),
     'api/attendance/session/[sessionId]/route.ts specifies selective column projection to strip unused payload bytes'
   );
 

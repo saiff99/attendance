@@ -1344,7 +1344,7 @@ export default function LiveScan() {
             </button>
 
             <button
-              onClick={() => fetchLogs()}
+              onClick={() => fetchLogs(true)}
               className="inline-flex items-center px-2.5 sm:px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800/80 border border-gray-300 dark:border-slate-700/60 text-xs font-semibold text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-700/80 shadow-sm transition-all cursor-pointer"
               title="Synchronize Attendance Records"
             >
