@@ -47,7 +47,15 @@ import { AcademicSubject, getCachedSubjects, saveCachedSubjects, getSubjectsForC
 import type { Session } from "@/types/database";
 import { toast } from "@/components/Toast";
 import { confirmDialog } from "@/components/ConfirmDialog";
-import { useCctvAutoTour, useCurriculumSubjects, useGeofenceSync } from "@/hooks";
+import { useCctvAutoTour, useCurriculumSubjects, useGeofenceSync, useOfflineStatus } from "@/hooks";
+import {
+  saveStagedPhoto,
+  updateStagedPhoto,
+  deleteStagedPhoto,
+  clearStagedPhotosForSession,
+  getStagedPhotosForSession,
+  cleanupStaleStagedPhotos,
+} from "@/lib/photoStagingDb";
 
 interface CameraMeta {
   index: number;
@@ -405,6 +413,22 @@ export default function LiveScan() {
   useEffect(() => {
     queuedPhotosRef.current = queuedPhotos;
   }, [queuedPhotos]);
+
+  // Offline-First Network & IndexedDB Sync (ADR-052)
+  const { isOnline } = useOfflineStatus();
+  const prevOnlineRef = useRef(isOnline);
+  const isRestoringPhotosRef = useRef(false);
+
+  // Network Reconnection Toast Advisor (ADR-052)
+  useEffect(() => {
+    if (!prevOnlineRef.current && isOnline && queuedPhotos.length > 0) {
+      toast.success(
+        `Internet reconnected! ${queuedPhotos.length} photo${queuedPhotos.length > 1 ? "s" : ""} staged and ready to process.`
+      );
+    }
+    prevOnlineRef.current = isOnline;
+  }, [isOnline, queuedPhotos.length]);
+
   const [batchProgress, setBatchProgress] = useState<{ current: number; total: number } | null>(null);
   const [inspectedPhotos, setInspectedPhotos] = useState<InspectorPhotoItem[]>([]);
   const [isInspectorOpen, setIsInspectorOpen] = useState(false);
@@ -441,6 +465,73 @@ export default function LiveScan() {
   // Session State
   const [activeSession, setActiveSession] = useState<Session | null>(null);
   const [isLoadingSession, setIsLoadingSession] = useState(true);
+
+  // Restore staged photos from IndexedDB on session mount / refresh (ADR-052)
+  useEffect(() => {
+    if (!activeSession?.id) return;
+    let isSubscribed = true;
+
+    const restoreStagedPhotos = async () => {
+      if (isRestoringPhotosRef.current) return;
+      isRestoringPhotosRef.current = true;
+      try {
+        // Run housekeeping cleanup for expired drafts (> 24 hours)
+        await cleanupStaleStagedPhotos(24);
+
+        const stored = await getStagedPhotosForSession(activeSession.id);
+        if (!isSubscribed || stored.length === 0) return;
+
+        // Only restore if current queuedPhotos is empty
+        if (queuedPhotosRef.current.length === 0) {
+          const restored: QueuedPhotoItem[] = stored.map((item, idx) => {
+            const file =
+              item.file instanceof File
+                ? item.file
+                : new File([item.file], item.name || `classroom-photo-${idx + 1}.jpg`, {
+                    type: item.type || "image/jpeg",
+                    lastModified: item.timestamp,
+                  });
+
+            const optimizedFile = item.optimizedBlob
+              ? (item.optimizedBlob instanceof File
+                  ? item.optimizedBlob
+                  : new File([item.optimizedBlob], `optimized-${item.name || `classroom-photo-${idx + 1}.jpg`}`, {
+                      type: item.type || "image/jpeg",
+                      lastModified: item.timestamp,
+                    }))
+              : (item.compressionStatus === "ready" ? file : undefined);
+
+            return {
+              id: item.id,
+              file,
+              previewUrl: URL.createObjectURL(file),
+              timestamp: item.timestamp,
+              label: item.label || `Photo ${idx + 1}`,
+              optimizedFile,
+              compressionStatus: (item.compressionStatus || "ready") as QueuedPhotoItem["compressionStatus"],
+              quality: item.quality,
+            };
+          });
+
+          setQueuedPhotos(restored);
+          queuedPhotosRef.current = restored;
+          toast.info(
+            `Restored ${restored.length} staged photo${restored.length > 1 ? "s" : ""} from offline storage.`
+          );
+        }
+      } catch (err) {
+        console.warn("[IndexedDB Staging] Error restoring photos:", err);
+      } finally {
+        isRestoringPhotosRef.current = false;
+      }
+    };
+
+    restoreStagedPhotos();
+
+    return () => {
+      isSubscribed = false;
+    };
+  }, [activeSession?.id]);
   const [setupData, setSetupData] = useState({
     subject: "Anatomy",
     hall: "Lecture Hall 1",
@@ -969,6 +1060,25 @@ export default function LiveScan() {
     });
     queuedPhotosRef.current = [...currentQueue, ...newItems];
 
+    // Persist new staged photos in IndexedDB for session crash / refresh resilience (ADR-052)
+    if (activeSession?.id) {
+      newItems.forEach((item) => {
+        saveStagedPhoto({
+          id: item.id,
+          sessionId: activeSession.id,
+          file: item.file,
+          optimizedBlob: item.optimizedFile,
+          name: item.file.name,
+          type: item.file.type,
+          size: item.file.size,
+          timestamp: item.timestamp,
+          label: item.label,
+          quality: item.quality,
+          compressionStatus: item.compressionStatus,
+        });
+      });
+    }
+
     if (fileInputRef.current) fileInputRef.current.value = "";
     if (cameraInputRef.current) cameraInputRef.current.value = "";
 
@@ -981,6 +1091,7 @@ export default function LiveScan() {
               setQueuedPhotos((curr) =>
                 curr.map((p) => (p.id === item.id ? { ...p, quality } : p))
               );
+              updateStagedPhoto(item.id, { quality });
             })
             .catch(() => {});
         });
@@ -1014,6 +1125,10 @@ export default function LiveScan() {
               `[Eager Background Optimizer] Pre-compressed ${item.label}: ${(result.originalSize / (1024 * 1024)).toFixed(1)}MB -> ${(result.compressedSize / 1024).toFixed(0)}KB (${result.width}x${result.height}) in background`
             );
           }
+          updateStagedPhoto(item.id, {
+            optimizedBlob: result.file,
+            compressionStatus: "ready",
+          });
         })
         .catch((err) => {
           console.warn(`[Eager Background Optimizer] Fallback for ${item.label}:`, err);
@@ -1029,6 +1144,10 @@ export default function LiveScan() {
                 : p
             )
           );
+          updateStagedPhoto(item.id, {
+            optimizedBlob: item.file,
+            compressionStatus: "ready",
+          });
         });
 
       // Real-time Framing & Quality Advisor on staged photos (ADR-050)
@@ -1037,12 +1156,14 @@ export default function LiveScan() {
           setQueuedPhotos((curr) =>
             curr.map((p) => (p.id === item.id ? { ...p, quality } : p))
           );
+          updateStagedPhoto(item.id, { quality });
         })
         .catch(() => {});
     });
   };
 
   const handleRemoveQueuedPhoto = (id: string) => {
+    deleteStagedPhoto(id);
     setQueuedPhotos((prev) => {
       const target = prev.find((p) => p.id === id);
       if (target) {
@@ -1057,6 +1178,9 @@ export default function LiveScan() {
   };
 
   const handleClearQueuedPhotos = () => {
+    if (activeSession?.id) {
+      clearStagedPhotosForSession(activeSession.id);
+    }
     queuedPhotos.forEach((p) => {
       try { URL.revokeObjectURL(p.previewUrl); } catch {}
     });
@@ -1307,6 +1431,9 @@ export default function LiveScan() {
 
       // Clean up tray staging queue without revoking current preview URLs (transferred to inspectorItems)
       setQueuedPhotos([]);
+      if (activeSession?.id) {
+        clearStagedPhotosForSession(activeSession.id);
+      }
 
       const finalRecognized = Array.from(allRecognizedMap.values());
       setUploadResultModal({
@@ -2131,9 +2258,11 @@ export default function LiveScan() {
                       </div>
                     </div>
 
-                    <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-900 border border-slate-800 text-[11px] text-slate-400">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                      <span className="text-slate-300 font-medium">Stage Active</span>
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-900 border border-slate-800 text-[11px] text-slate-400">
+                      <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? "bg-emerald-400 animate-pulse" : "bg-amber-400"}`} />
+                      <span className="text-slate-300 font-medium text-[10px] sm:text-[11px]">
+                        {isOnline ? "IndexedDB Staged" : "Offline (IndexedDB Staged)"}
+                      </span>
                     </div>
                   </div>
 
@@ -2370,17 +2499,28 @@ export default function LiveScan() {
 
                 {activeTab === "photo" || activeTab === "manual" ? (
                   queuedPhotos.length > 0 ? (
-                    <button
-                      disabled={isProcessing || !activeSession}
-                      onClick={handleProcessBatchAttendance}
-                      className="w-full sm:w-auto flex items-center justify-center px-5 py-2 sm:py-1.5 rounded-xl font-bold text-xs text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 shadow-md transition-all disabled:opacity-50 cursor-pointer"
-                    >
-                      {isProcessing ? (
-                        <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> {processingStatusText}</>
-                      ) : (
-                        <><CheckCircle2 className="w-3.5 h-3.5 mr-1.5" /> Process All {queuedPhotos.length} Photo{queuedPhotos.length > 1 ? "s" : ""}</>
+                    <div className="w-full sm:w-auto flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                      {!isOnline && (
+                        <span className="text-[10px] text-amber-400 font-medium flex items-center justify-center sm:justify-start gap-1 px-1">
+                          <AlertCircle className="w-3 h-3 text-amber-400 shrink-0" />
+                          Offline: Staged in IndexedDB
+                        </span>
                       )}
-                    </button>
+                      <button
+                        disabled={isProcessing || !activeSession || !isOnline}
+                        onClick={handleProcessBatchAttendance}
+                        title={!isOnline ? "Internet connection required to run AI attendance" : ""}
+                        className="w-full sm:w-auto flex items-center justify-center px-5 py-2 sm:py-1.5 rounded-xl font-bold text-xs text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 shadow-md transition-all disabled:opacity-50 cursor-pointer"
+                      >
+                        {isProcessing ? (
+                          <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> {processingStatusText}</>
+                        ) : !isOnline ? (
+                          <><Radio className="w-3.5 h-3.5 mr-1.5 text-amber-300 animate-pulse" /> Waiting for Network ({queuedPhotos.length} Staged)</>
+                        ) : (
+                          <><CheckCircle2 className="w-3.5 h-3.5 mr-1.5" /> Process All {queuedPhotos.length} Photo{queuedPhotos.length > 1 ? "s" : ""}</>
+                        )}
+                      </button>
+                    </div>
                   ) : activeTab === "photo" ? (
                     <button
                       disabled={isProcessing || !activeSession}

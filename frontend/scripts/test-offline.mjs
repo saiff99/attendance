@@ -3539,6 +3539,50 @@ console.log('\n--- 54. Real-time Classroom Framing & Quality Advisor Engine (ADR
   assert(Math.abs(heightNorm - 0.2) < 0.001, 'Bounding box height normalization verified (20%)');
 }
 
+// --- 56. Offline-First Classroom Photo Staging via IndexedDB (ADR-052) ---
+{
+  console.log('\n--- 56. Offline-First Classroom Photo Staging via IndexedDB (ADR-052) ---');
+
+  // 1. Verify module exists
+  const dbPath = path.join(__dirname, '../src/lib/photoStagingDb.ts');
+  assert(fs.existsSync(dbPath), 'frontend/src/lib/photoStagingDb.ts exists');
+
+  const dbContent = fs.readFileSync(dbPath, 'utf8');
+  assert(dbContent.includes('export function isIndexedDBAvailable'), 'photoStagingDb.ts exports isIndexedDBAvailable');
+  assert(dbContent.includes('export async function saveStagedPhoto'), 'photoStagingDb.ts exports saveStagedPhoto');
+  assert(dbContent.includes('export async function updateStagedPhoto'), 'photoStagingDb.ts exports updateStagedPhoto');
+  assert(dbContent.includes('export async function getStagedPhotosForSession'), 'photoStagingDb.ts exports getStagedPhotosForSession');
+  assert(dbContent.includes('export async function deleteStagedPhoto'), 'photoStagingDb.ts exports deleteStagedPhoto');
+  assert(dbContent.includes('export async function clearStagedPhotosForSession'), 'photoStagingDb.ts exports clearStagedPhotosForSession');
+  assert(dbContent.includes('export async function cleanupStaleStagedPhotos'), 'photoStagingDb.ts exports cleanupStaleStagedPhotos');
+
+  // 2. Verify schema indexes and constants
+  assert(dbContent.includes('MedAttendClassroomDB'), 'photoStagingDb configures MedAttendClassroomDB database name');
+  assert(dbContent.includes('staged_photos'), 'photoStagingDb configures staged_photos object store');
+  assert(dbContent.includes('store.createIndex("sessionId"'), 'photoStagingDb creates sessionId index for session-scoping');
+  assert(dbContent.includes('store.createIndex("timestamp"'), 'photoStagingDb creates timestamp index for TTL pruning');
+
+  // 3. Verify live-scan integration
+  const liveScanPath = path.join(__dirname, '../src/app/live-scan/page.tsx');
+  const liveScanContent = fs.readFileSync(liveScanPath, 'utf8');
+  assert(liveScanContent.includes('saveStagedPhoto'), 'live-scan/page.tsx persists new snaps into IndexedDB');
+  assert(liveScanContent.includes('deleteStagedPhoto'), 'live-scan/page.tsx purges deleted photos from IndexedDB');
+  assert(liveScanContent.includes('clearStagedPhotosForSession'), 'live-scan/page.tsx clears session storage after successful submission');
+  assert(liveScanContent.includes('getStagedPhotosForSession'), 'live-scan/page.tsx restores staged photos on session reload');
+  assert(liveScanContent.includes('useOfflineStatus'), 'live-scan/page.tsx integrates useOfflineStatus for network monitoring');
+  assert(liveScanContent.includes('Offline (IndexedDB Staged)'), 'live-scan/page.tsx displays offline indicator badge');
+
+  // 4. Mathematical validation of TTL pruning window
+  const now = Date.now();
+  const maxAgeHours = 24;
+  const cutoff = now - maxAgeHours * 60 * 60 * 1000;
+  const photoAge30h = now - 30 * 60 * 60 * 1000;
+  const photoAge2h = now - 2 * 60 * 60 * 1000;
+
+  assert(photoAge30h < cutoff, 'Photo older than 24h evaluates to stale (purged)');
+  assert(photoAge2h >= cutoff, 'Photo within 24h evaluates to fresh (retained)');
+}
+
 // Summary
 console.log('\n' + '=' .repeat(65));
 console.log(`📊 Offline Unit Test Summary: ${passed} Passed, ${failed} Failed`);

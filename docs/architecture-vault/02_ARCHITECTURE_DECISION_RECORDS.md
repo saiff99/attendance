@@ -1278,6 +1278,41 @@
   3. *Positive:* Responsive & scale-independent: normalized $0.0-1.0$ coordinates render pixel-perfect CSS overlays across any mobile or desktop screen resolution and during CSS transform zoom/pan.
   4. *Positive:* Zero database regression: manual marks reuse the standard atomic `POST /api/attendance/mark` RPC and update in-memory attendance state immediately.
 
+---
+
+### ADR-052: Offline-First Classroom Photo Staging via IndexedDB
+
+- **Status:** Accepted
+- **Date:** 2026-11-08
+- **Context:**
+  1. *Faraday/Basement Network Blackouts:* Medical institutional lecture halls and clinical demonstration rooms frequently suffer from severe mobile signal attenuation (0–1 bars, No Service), preventing real-time online attendance uploads.
+  2. *Accidental Tab Eviction & Data Loss:* Previously, snapped classroom photos existed exclusively in ephemeral React state (`queuedPhotos: StagedPhoto[]`). When faculty encountered incoming phone calls, accidental browser refreshes, or aggressive mobile OS memory pruning, all unsubmitted staged photos were instantly erased, forcing faculty to re-walk the lecture hall and re-take all angles.
+  3. *Client Storage Limitations:* Traditional web `localStorage` is hard-capped at 5 MB and supports only string serialization, making it entirely unsuitable for multiple high-resolution classroom images ($15\text{ MB} - 50\text{ MB}$).
+- **Decision:**
+  1. **Persistent Client-Side IndexedDB Storage (`frontend/src/lib/photoStagingDb.ts`):**
+     - Author zero-dependency IndexedDB wrapper (`MedAttendClassroomDB`, version 1, store `staged_photos`).
+     - Keyed by unique photo ID (`id`), with composite indexes on `sessionId` (for session isolation) and `timestamp` (for chronological ordering and TTL pruning).
+     - Standardize storage on native `Blob` primitives (`file`, `optimizedBlob`) alongside metadata (`name`, `type`, `size`, `timestamp`, `quality`, `compressionStatus`). Native Blobs prevent `DataCloneError` on older mobile Safari engines.
+  2. **Session Mount Auto-Restoration Pipeline (`frontend/src/app/live-scan/page.tsx`):**
+     - Upon session start or page reload with an active `sessionId`, the component queries `getStagedPhotosForSession(activeSession.id)`.
+     - Automatically reconstructs File objects, instantiates persistent Object URLs, populates the staging tray, and displays an informative toast: `Restored X staged photos from offline storage`.
+  3. **Reactive Staging Tray Synchronization:**
+     - `handleQueuePhotoFiles` immediately writes captured snaps to IndexedDB.
+     - Background pre-compression (`optimizeClassroomPhoto`) updates the record with `optimizedBlob: result.file` and `compressionStatus: "ready"` so pre-compressed data survives reloads.
+     - Individual removal (`handleRemoveQueuedPhoto`) deletes the target record from IndexedDB via `deleteStagedPhoto(id)`.
+     - Tray clear (`handleClearQueuedPhotos`) and successful batch upload (`handleProcessBatchAttendance`) execute `clearStagedPhotosForSession(activeSession.id)` to purge disk usage.
+  4. **Network Reconnection & Offline UX:**
+     - Uses `useOfflineStatus` hook to track `isOnline`.
+     - While offline: Staging tray displays an amber `Offline Mode (IndexedDB Staged)` badge; the submission button informs faculty `Waiting for Network (X Staged)` while safely preserving staged photos.
+     - Upon network recovery: `window.ononline` triggers a success toast: `Internet reconnected! X photos staged and ready to process.` and enables 1-tap submission.
+  5. **Automated Housekeeping & TTL Draft Pruning:**
+     - On initialization, `cleanupStaleStagedPhotos(24)` scans the `timestamp` index and purges abandoned drafts older than 24 hours, preventing device storage pollution.
+- **Consequences:**
+  1. *Positive:* 100% resilience against browser refreshes, tab discards, and mobile app switches during classroom attendance capture.
+  2. *Positive:* Faculty can reliably photograph large lecture halls even in subterranean or shielded rooms with zero network connectivity.
+  3. *Positive:* Zero disk bloat: staged photos are purged immediately upon batch attendance completion or after 24h TTL expiration.
+  4. *Positive:* High performance: binary Blobs are stored natively without expensive base64 encoding or main-thread JSON serialization bottlenecks.
+
 
 
 
