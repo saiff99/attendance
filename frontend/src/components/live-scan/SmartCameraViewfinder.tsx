@@ -34,8 +34,11 @@ export const SmartCameraViewfinder = memo(function SmartCameraViewfinder({
   const [smartCameraFacing, setSmartCameraFacing] = useState<"environment" | "user">("environment");
   const [liveQuality, setLiveQuality] = useState<QualityAssessment | null>(null);
   const [cameraFlash, setCameraFlash] = useState(false);
+  const [isShutterCoolingDown, setIsShutterCoolingDown] = useState(false);
   const smartVideoRef = useRef<HTMLVideoElement>(null);
   const smartStreamRef = useRef<MediaStream | null>(null);
+  const isCapturingRef = useRef(false);
+  const isQualityPausedRef = useRef(false);
 
   // Manage stream lifecycle when isOpen is toggled
   useEffect(() => {
@@ -73,12 +76,12 @@ export const SmartCameraViewfinder = memo(function SmartCameraViewfinder({
           } catch {}
         }
 
-        // Real-time quality evaluation every 400ms
+        // Real-time quality evaluation every 400ms (throttled/paused during active capture, ADR-056)
         qualityInterval = setInterval(() => {
-          if (!isSubscribed) return;
+          if (!isSubscribed || isQualityPausedRef.current) return;
           if (smartVideoRef.current && smartVideoRef.current.readyState >= 2) {
             const assessment = analyzeFrameQuality(smartVideoRef.current);
-            if (assessment && isSubscribed) {
+            if (assessment && isSubscribed && !isQualityPausedRef.current) {
               setLiveQuality(assessment);
             }
           }
@@ -109,7 +112,18 @@ export const SmartCameraViewfinder = memo(function SmartCameraViewfinder({
   }, [isOpen, smartCameraFacing, onClose, onFallbackSystemCamera]);
 
   const handleCapture = useCallback(() => {
-    if (!smartVideoRef.current) return;
+    // 300ms software de-bounce lock to prevent duplicate frames on rapid burst clicks (ADR-056)
+    if (isCapturingRef.current || !smartVideoRef.current) return;
+    isCapturingRef.current = true;
+    isQualityPausedRef.current = true;
+    setIsShutterCoolingDown(true);
+
+    setTimeout(() => {
+      isCapturingRef.current = false;
+      isQualityPausedRef.current = false;
+      setIsShutterCoolingDown(false);
+    }, 300);
+
     const video = smartVideoRef.current;
     const width = video.videoWidth || 1920;
     const height = video.videoHeight || 1080;
@@ -252,12 +266,17 @@ export const SmartCameraViewfinder = memo(function SmartCameraViewfinder({
             </div>
           </div>
 
-          {/* Shutter Button */}
+          {/* Shutter Button with De-bounce Cooldown Protection (ADR-056) */}
           <button
             type="button"
+            disabled={isShutterCoolingDown}
             onClick={handleCapture}
-            className="w-18 h-18 sm:w-20 sm:h-20 rounded-full border-4 border-white/90 p-1 flex items-center justify-center active:scale-95 transition-transform cursor-pointer shadow-2xl hover:border-indigo-400"
-            title="Capture photo"
+            className={`w-18 h-18 sm:w-20 sm:h-20 rounded-full border-4 border-white/90 p-1 flex items-center justify-center transition-all shadow-2xl ${
+              isShutterCoolingDown
+                ? "opacity-60 scale-95 cursor-not-allowed border-indigo-400"
+                : "active:scale-95 cursor-pointer hover:border-indigo-400"
+            }`}
+            title={isShutterCoolingDown ? "Capturing..." : "Capture photo"}
           >
             <div className="w-full h-full rounded-full bg-white flex items-center justify-center">
               <Camera className="w-7 h-7 text-indigo-950" />

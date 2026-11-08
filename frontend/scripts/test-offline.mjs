@@ -3706,6 +3706,49 @@ console.log('\n--- 58. Virtualized Scrolling & content-visibility for 300+ Atten
   );
 }
 
+// --- 59. Shutter Burst De-Bouncing & Video Quality Worker Throttling (ADR-056) ---
+console.log('\n--- 59. Shutter Burst De-Bouncing & Video Quality Worker Throttling (ADR-056) ---');
+{
+  const frameQualityPath = path.join(__dirname, '../src/lib/frameQuality.ts');
+  assert(fs.existsSync(frameQualityPath), 'frameQuality.ts exists');
+  const frameQualityContent = fs.readFileSync(frameQualityPath, 'utf8');
+
+  // 1. Verify optimized scratch canvas resolution of 120x90
+  assert(
+    frameQualityContent.includes('ANALYSIS_WIDTH: 120') && frameQualityContent.includes('ANALYSIS_HEIGHT: 90'),
+    'frameQuality.ts configures 120x90 scratch canvas dimensions (44% fewer pixels)'
+  );
+
+  // 2. Verify SmartCameraViewfinder shutter de-bounce lock
+  const smartCamPath = path.join(__dirname, '../src/components/live-scan/SmartCameraViewfinder.tsx');
+  assert(fs.existsSync(smartCamPath), 'SmartCameraViewfinder.tsx exists');
+  const smartCamContent = fs.readFileSync(smartCamPath, 'utf8');
+
+  assert(
+    smartCamContent.includes('isCapturingRef') && smartCamContent.includes('isShutterCoolingDown'),
+    'SmartCameraViewfinder implements 300ms software de-bounce lock and cooldown state'
+  );
+
+  assert(
+    smartCamContent.includes('isQualityPausedRef') &&
+    smartCamContent.includes('isQualityPausedRef.current'),
+    'SmartCameraViewfinder pauses real-time quality evaluation during active shutter snap'
+  );
+
+  assert(
+    smartCamContent.includes('disabled={isShutterCoolingDown}'),
+    'SmartCameraViewfinder disables shutter button during cooldown window'
+  );
+
+  // 3. Verify ADR-056 in architecture vault
+  const adrPath = path.join(__dirname, '../../docs/architecture-vault/02_ARCHITECTURE_DECISION_RECORDS.md');
+  const adrContent = fs.readFileSync(adrPath, 'utf8');
+  assert(
+    adrContent.includes('ADR-056: Shutter Burst De-Bouncing and Quality Evaluation Throttling for Mobile Viewfinder Performance'),
+    '02_ARCHITECTURE_DECISION_RECORDS.md documents ADR-056'
+  );
+}
+
 // Summary
 console.log('\n' + '=' .repeat(65));
 console.log(`📊 Offline Unit Test Summary: ${passed} Passed, ${failed} Failed`);

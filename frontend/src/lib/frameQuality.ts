@@ -24,8 +24,8 @@ export const QUALITY_THRESHOLDS = {
   MIN_LUMINANCE: 40,      // Below 40 is underexposed/too dark for distant face recognition
   MAX_LUMINANCE: 228,     // Above 228 is overexposed/blown out (e.g. facing direct projector/sunlight)
   MIN_SHARPNESS: 35,      // Laplacian variance below 35 indicates severe motion blur or out-of-focus
-  ANALYSIS_WIDTH: 160,    // Scratch analysis resolution (fast, low memory footprint)
-  ANALYSIS_HEIGHT: 120,
+  ANALYSIS_WIDTH: 120,    // Optimized scratch analysis resolution (44% fewer pixels, low memory footprint, ADR-056)
+  ANALYSIS_HEIGHT: 90,
 };
 
 let cachedScratchCanvas: HTMLCanvasElement | null = null;

@@ -6,8 +6,10 @@ import { ClassroomPhotoTray } from "../ClassroomPhotoTray";
 import { LiveAttendanceDrawer } from "../LiveAttendanceDrawer";
 import { LiveScanCctvStudio } from "../LiveScanCctvStudio";
 import { SessionSetupForm } from "../SessionSetupForm";
+import { SmartCameraViewfinder } from "../SmartCameraViewfinder";
 import { DEFAULT_CAMERAS } from "../types";
 import { DEFAULT_GEOFENCE_CONFIG } from "@/lib/geofence";
+import { QUALITY_THRESHOLDS } from "@/lib/frameQuality";
 
 describe("LiveScan Modular Sub-Components (ADR-054)", () => {
   describe("ClassroomPhotoTray", () => {
@@ -266,6 +268,41 @@ describe("LiveScan Modular Sub-Components (ADR-054)", () => {
       expect(screen.getByText("Target Student Cohort")).toBeInTheDocument();
       expect(screen.getByText("Classroom GPS Shield")).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /Launch Live Attendance Session/i })).toBeInTheDocument();
+    });
+  });
+
+  describe("SmartCameraViewfinder (ADR-056)", () => {
+    beforeEach(() => {
+      Object.defineProperty(global.navigator, "mediaDevices", {
+        value: {
+          getUserMedia: vi.fn().mockResolvedValue({
+            getTracks: () => [{ stop: vi.fn() }],
+          }),
+        },
+        writable: true,
+        configurable: true,
+      });
+    });
+
+    it("verifies optimized scratch canvas resolution of 120x90 (ADR-056)", () => {
+      expect(QUALITY_THRESHOLDS.ANALYSIS_WIDTH).toBe(120);
+      expect(QUALITY_THRESHOLDS.ANALYSIS_HEIGHT).toBe(90);
+    });
+
+    it("renders shutter button with de-bounce cooldown capability", () => {
+      render(
+        <SmartCameraViewfinder
+          isOpen={true}
+          queuedCount={3}
+          onClose={vi.fn()}
+          onCapturePhoto={vi.fn()}
+        />
+      );
+
+      expect(screen.getByText("3 Staged")).toBeInTheDocument();
+      const shutterBtn = screen.getByTitle("Capture photo");
+      expect(shutterBtn).toBeInTheDocument();
+      expect(shutterBtn).not.toBeDisabled();
     });
   });
 });

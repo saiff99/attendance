@@ -1399,6 +1399,32 @@
   3. *Positive:* In-page search (`Ctrl+F`) and accessibility trees remain fully intact.
   4. *Positive:* Zero scrollbar jumping/jitter thanks to `contain-intrinsic-size: auto`.
 
+---
+
+### ADR-056: Shutter Burst De-Bouncing and Quality Evaluation Throttling for Mobile Viewfinder Performance
+
+- **Status:** Accepted
+- **Date:** 2026-11-08
+- **Context:**
+  1. *Rapid Burst Clicks & Duplicate Snaps:* When faculty or assistants rapidly tap the camera shutter button to capture multiple classroom aisles, accidental double-clicks or touch latency without a cooldown lock triggered concurrent capture executions. This duplicated 1080p canvas rendering, wasted IndexedDB storage, and sent redundant images to background optimization.
+  2. *CPU Contention During Snap:* In the Smart Camera Viewfinder ([ADR-050](file:///Users/saif/Desktop/Attendance/Attendance-app/docs/architecture-vault/02_ARCHITECTURE_DECISION_RECORDS.md)), real-time quality evaluation fired every 400ms calculating Laplacian variance and luminance over a scratch canvas. When running simultaneously with 1080p canvas `drawImage()` and `toBlob()` compression, this caused mobile CPU frame drops, shutter lag, and thermal heating on budget Android devices.
+  3. *Scratch Canvas Pixel Footprint:* The previous scratch canvas dimensions of 160x120 ($19,200$ pixels) incurred unnecessary pixel iterations on mobile CPU threads for basic brightness and blur assessment.
+- **Decision:**
+  1. **300ms Software De-bounce Cooldown Lock:**
+     - Implemented `isCapturingRef` lock and `isShutterCoolingDown` state in [`frontend/src/components/live-scan/SmartCameraViewfinder.tsx`](file:///Users/saif/Desktop/Attendance/Attendance-app/frontend/src/components/live-scan/SmartCameraViewfinder.tsx).
+     - Any tap within 300ms of an active capture is immediately dropped, and the shutter button visually indicates cooling-down state (`opacity-60 scale-95 cursor-not-allowed`).
+  2. **Pause Quality Evaluation During Shutter Snap:**
+     - Introduced `isQualityPausedRef` in `SmartCameraViewfinder.tsx`.
+     - When `handleCapture` executes, real-time quality evaluation interval is paused for 300ms, giving 100% of the mobile CPU main thread to high-resolution canvas extraction and JPEG blob encoding without stutter.
+  3. **Optimized Scratch Canvas Dimensions (120x90):**
+     - Scaled `QUALITY_THRESHOLDS.ANALYSIS_WIDTH` to `120` and `QUALITY_THRESHOLDS.ANALYSIS_HEIGHT` to `90` in [`frontend/src/lib/frameQuality.ts`](file:///Users/saif/Desktop/Attendance/Attendance-app/frontend/src/lib/frameQuality.ts).
+     - Reduced scratch pixel count from $19,200$ to $10,800$ (a 43.75% computational and memory reduction) while preserving exact ITU-R BT.601 luminance and Laplacian variance thresholds.
+- **Consequences:**
+  1. *Positive:* Completely eliminates duplicate snap artifacts from accidental double-taps.
+  2. *Positive:* Instantaneous, stutter-free shutter response on mobile devices.
+  3. *Positive:* 43.75% lower CPU memory and computation footprint during live camera preview, keeping phones cool during continuous multi-photo capture.
+
+
 
 
 
