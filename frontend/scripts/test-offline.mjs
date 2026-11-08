@@ -4012,9 +4012,66 @@ console.log('\n--- 64. Next.js Package Import Optimization for Lucide and Rechar
   const indexPath = path.resolve(__dirname, '../../docs/architecture-vault/INDEX.md');
   const indexContent = fs.readFileSync(indexPath, 'utf8');
   assert(
-    indexContent.includes('ADR-001 to ADR-060') &&
     indexContent.includes('Next.js Package Import Optimization optimizePackageImports for Lucide and Recharts Bundles'),
     'INDEX.md references ADR-060 in vault catalog'
+  );
+}
+
+// --- 65. HTTP Cache-Control Headers & Column Projection for Cloud Bandwidth Conservation (ADR-061) ---
+console.log('\n--- 65. HTTP Cache-Control Headers & Column Projection for Cloud Bandwidth Conservation (ADR-061) ---');
+{
+  // 1. Verify api/subjects/route.ts sends Cache-Control headers
+  const subjectsPath = path.resolve(__dirname, '../src/app/api/subjects/route.ts');
+  assert(fs.existsSync(subjectsPath), 'api/subjects/route.ts exists');
+  const subjectsContent = fs.readFileSync(subjectsPath, 'utf8');
+  assert(
+    subjectsContent.includes("'Cache-Control': 'public, max-age=120, stale-while-revalidate=600'"),
+    'api/subjects/route.ts sets public Cache-Control headers for browser bandwidth preservation'
+  );
+
+  // 2. Verify api/geofence/route.ts sends dynamic Cache-Control headers
+  const geofencePath = path.resolve(__dirname, '../src/app/api/geofence/route.ts');
+  assert(fs.existsSync(geofencePath), 'api/geofence/route.ts exists');
+  const geofenceContent = fs.readFileSync(geofencePath, 'utf8');
+  assert(
+    geofenceContent.includes("'Cache-Control': 'public, max-age=60, stale-while-revalidate=300'") &&
+    geofenceContent.includes("'Cache-Control': 'no-cache, no-store, must-revalidate'"),
+    'api/geofence/route.ts sends dynamic Cache-Control headers with forceRefresh bypass'
+  );
+
+  // 3. Verify api/cameras/route.ts sends private Cache-Control headers
+  const camerasPath = path.resolve(__dirname, '../src/app/api/cameras/route.ts');
+  assert(fs.existsSync(camerasPath), 'api/cameras/route.ts exists');
+  const camerasContent = fs.readFileSync(camerasPath, 'utf8');
+  assert(
+    camerasContent.includes("'Cache-Control': 'private, max-age=15, stale-while-revalidate=60'"),
+    'api/cameras/route.ts sets private Cache-Control headers to debounce repeated focus calls'
+  );
+
+  // 4. Verify api/attendance/session/[sessionId]/route.ts uses selective projection
+  const attendancePath = path.resolve(__dirname, '../src/app/api/attendance/session/[sessionId]/route.ts');
+  assert(fs.existsSync(attendancePath), 'api/attendance/session/[sessionId]/route.ts exists');
+  const attendanceContent = fs.readFileSync(attendancePath, 'utf8');
+  assert(
+    attendanceContent.includes("select('id, session_id, student_id, status, capture_mode, recorded_at, confidence_score, metadata_tags, students(id, student_roll, full_name)')"),
+    'api/attendance/session/[sessionId]/route.ts specifies selective column projection to strip unused payload bytes'
+  );
+
+  // 5. Verify documentation in 02_ARCHITECTURE_DECISION_RECORDS.md
+  const adrPath = path.resolve(__dirname, '../../docs/architecture-vault/02_ARCHITECTURE_DECISION_RECORDS.md');
+  const adrContent = fs.readFileSync(adrPath, 'utf8');
+  assert(
+    adrContent.includes('ADR-061: HTTP Cache-Control Headers and Column Projection Pruning for Cloud Bandwidth Conservation'),
+    '02_ARCHITECTURE_DECISION_RECORDS.md documents ADR-061'
+  );
+
+  // 6. Verify INDEX.md references ADR-061
+  const indexPath = path.resolve(__dirname, '../../docs/architecture-vault/INDEX.md');
+  const indexContent = fs.readFileSync(indexPath, 'utf8');
+  assert(
+    indexContent.includes('ADR-001 to ADR-061') &&
+    indexContent.includes('HTTP Cache-Control Headers and Column Projection Pruning for Cloud Bandwidth Conservation'),
+    'INDEX.md references ADR-061 in vault catalog'
   );
 }
 

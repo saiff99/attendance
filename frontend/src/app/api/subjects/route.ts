@@ -19,21 +19,35 @@ export async function GET(request: NextRequest) {
       subjects = subjects.filter(s => s.academic_year === yearParam || yearParam.startsWith(s.academic_year));
     }
 
-    return NextResponse.json({
-      success: true,
-      subjects,
-      tableReady: true,
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        subjects,
+        tableReady: true,
+      },
+      {
+        headers: {
+          'Cache-Control': 'public, max-age=120, stale-while-revalidate=600',
+        },
+      }
+    );
   } catch (err: unknown) {
     console.error('Error fetching academic subjects:', err);
     const message = err instanceof Error ? err.message : 'Unknown error';
     // Graceful fallback to default subjects so app never crashes
-    return NextResponse.json({
-      success: true,
-      subjects: DEFAULT_MBBS_SUBJECTS,
-      tableReady: false,
-      error: message,
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        subjects: DEFAULT_MBBS_SUBJECTS,
+        tableReady: false,
+        error: message,
+      },
+      {
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+        },
+      }
+    );
   }
 }
 

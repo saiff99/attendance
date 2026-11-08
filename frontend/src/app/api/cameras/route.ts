@@ -15,9 +15,20 @@ export async function GET(request: NextRequest) {
     const res = await fetchBackend('/api/cameras', { cache: 'no-store' });
     if (res.ok) {
       const data = await res.json();
-      return NextResponse.json(data);
+      return NextResponse.json(data, {
+        headers: {
+          'Cache-Control': 'private, max-age=15, stale-while-revalidate=60',
+        },
+      });
     }
   } catch {}
 
-  return NextResponse.json({ count: 6, cameras: [] });
+  return NextResponse.json(
+    { count: 6, cameras: [] },
+    {
+      headers: {
+        'Cache-Control': 'private, max-age=15, stale-while-revalidate=60',
+      },
+    }
+  );
 }

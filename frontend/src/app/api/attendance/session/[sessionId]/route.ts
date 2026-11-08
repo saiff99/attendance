@@ -91,7 +91,7 @@ export async function GET(
 
     let query = supabaseServer
       .from('attendance')
-      .select('*, students(id, student_roll, full_name, email)')
+      .select('id, session_id, student_id, status, capture_mode, recorded_at, confidence_score, metadata_tags, students(id, student_roll, full_name)')
       .eq('session_id', sessionId);
 
     const isDelta = Boolean(since && !isNaN(Date.parse(since)));

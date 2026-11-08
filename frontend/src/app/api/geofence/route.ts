@@ -136,9 +136,13 @@ export async function GET(request?: Request) {
       }
     }
 
+    const cacheHeaders = forceRefresh
+      ? { 'Cache-Control': 'no-cache, no-store, must-revalidate' }
+      : { 'Cache-Control': 'public, max-age=60, stale-while-revalidate=300' };
+
     // 1. Fast-Path: Serve from in-memory cache if within 5-minute TTL window
     if (!forceRefresh && cacheLastFetched > 0 && (now - cacheLastFetched) < GEOFENCE_CACHE_TTL_MS) {
-      return NextResponse.json({ success: true, config: cachedGeofence, cached: true });
+      return NextResponse.json({ success: true, config: cachedGeofence, cached: true }, { headers: cacheHeaders });
     }
 
     // 2. Try reading from Supabase settings if table exists
@@ -164,7 +168,7 @@ export async function GET(request?: Request) {
             campusName: String(v.campusName || DEFAULT_GEOFENCE_CONFIG.campusName),
           };
           cacheLastFetched = Date.now();
-          return NextResponse.json({ success: true, config: cachedGeofence });
+          return NextResponse.json({ success: true, config: cachedGeofence }, { headers: cacheHeaders });
         }
       }
     } catch {
@@ -195,7 +199,7 @@ export async function GET(request?: Request) {
               campusName: String(parsed.campusName || DEFAULT_GEOFENCE_CONFIG.campusName),
             };
             cacheLastFetched = Date.now();
-            return NextResponse.json({ success: true, config: cachedGeofence });
+            return NextResponse.json({ success: true, config: cachedGeofence }, { headers: cacheHeaders });
           }
         } catch {
           // JSON parsing failed, proceed to cached/default
@@ -207,7 +211,7 @@ export async function GET(request?: Request) {
 
     // Mark cache fresh even with default fallback to protect database under outages
     cacheLastFetched = Date.now();
-    return NextResponse.json({ success: true, config: cachedGeofence });
+    return NextResponse.json({ success: true, config: cachedGeofence }, { headers: cacheHeaders });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Failed to retrieve geofence configuration';
     return NextResponse.json({ success: false, error: message }, { status: 500 });
