@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard, ScanLine, Radio, Users, FileBarChart, Activity,
   Menu, X, Smartphone, LogOut, ShieldCheck, UserCog,
@@ -49,6 +49,7 @@ function classNames(...classes: string[]) {
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const [ongoingCount, setOngoingCount] = useState<number>(0);
   const { user, logout } = useAuth();
@@ -260,10 +261,17 @@ export default function Sidebar() {
           ).map((item) => {
             const isActive = pathname === item.href;
             const isOngoing = item.href === "/ongoing";
+            const isPrimary = item.href === "/" || item.href === "/ongoing" || item.href === "/portal";
             return (
               <Link
                 key={item.name}
                 href={item.href}
+                prefetch={isPrimary ? undefined : false}
+                onMouseEnter={() => {
+                  if (!isPrimary) {
+                    router.prefetch(item.href);
+                  }
+                }}
                 className={classNames(
                   isActive
                     ? "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 font-semibold"

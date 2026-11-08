@@ -4069,9 +4069,77 @@ console.log('\n--- 65. HTTP Cache-Control Headers & Column Projection for Cloud 
   const indexPath = path.resolve(__dirname, '../../docs/architecture-vault/INDEX.md');
   const indexContent = fs.readFileSync(indexPath, 'utf8');
   assert(
-    indexContent.includes('ADR-001 to ADR-061') &&
     indexContent.includes('HTTP Cache-Control Headers and Column Projection Pruning for Cloud Bandwidth Conservation'),
     'INDEX.md references ADR-061 in vault catalog'
+  );
+}
+
+// --- 66. Balanced Next.js Viewport Link Prefetch Optimization (ADR-062) ---
+console.log('\n--- 66. Balanced Next.js Viewport Link Prefetch Optimization (ADR-062) ---');
+{
+  // 1. Verify Sidebar.tsx imports useRouter and configures balanced prefetch
+  const sidebarPath = path.resolve(__dirname, '../src/components/layout/Sidebar.tsx');
+  assert(fs.existsSync(sidebarPath), 'Sidebar.tsx exists');
+  const sidebarContent = fs.readFileSync(sidebarPath, 'utf8');
+  assert(
+    sidebarContent.includes('useRouter') &&
+    sidebarContent.includes('const router = useRouter()'),
+    'Sidebar.tsx imports and initializes Next.js useRouter'
+  );
+  assert(
+    sidebarContent.includes('const isPrimary = item.href === "/" || item.href === "/ongoing" || item.href === "/portal"') &&
+    sidebarContent.includes('prefetch={isPrimary ? undefined : false}'),
+    'Sidebar.tsx disables automatic viewport prefetch on heavy secondary routes'
+  );
+  assert(
+    sidebarContent.includes('onMouseEnter=') &&
+    sidebarContent.includes('router.prefetch(item.href)'),
+    'Sidebar.tsx implements intent-driven desktop hover prefetch onMouseEnter'
+  );
+
+  // 2. Verify heavy entry points disable prefetch
+  const ongoingPath = path.resolve(__dirname, '../src/app/ongoing/page.tsx');
+  assert(fs.existsSync(ongoingPath), 'ongoing/page.tsx exists');
+  const ongoingContent = fs.readFileSync(ongoingPath, 'utf8');
+  assert(
+    ongoingContent.includes('href="/live-scan"') &&
+    ongoingContent.includes('prefetch={false}'),
+    'ongoing/page.tsx disables prefetch for live-scan link'
+  );
+
+  const portalPath = path.resolve(__dirname, '../src/app/portal/page.tsx');
+  assert(fs.existsSync(portalPath), 'portal/page.tsx exists');
+  const portalContent = fs.readFileSync(portalPath, 'utf8');
+  assert(
+    portalContent.includes('href="/selfieattend"') &&
+    portalContent.includes('prefetch={false}'),
+    'portal/page.tsx disables prefetch for selfieattend camera link'
+  );
+
+  const recentTablePath = path.resolve(__dirname, '../src/components/RecentClassSessionsTable.tsx');
+  assert(fs.existsSync(recentTablePath), 'RecentClassSessionsTable.tsx exists');
+  const recentTableContent = fs.readFileSync(recentTablePath, 'utf8');
+  assert(
+    recentTableContent.includes('href="/live-scan"') &&
+    recentTableContent.includes('prefetch={false}'),
+    'RecentClassSessionsTable.tsx disables prefetch for live-scan link'
+  );
+
+  // 3. Verify ADR-062 documentation in 02_ARCHITECTURE_DECISION_RECORDS.md
+  const adrPath = path.resolve(__dirname, '../../docs/architecture-vault/02_ARCHITECTURE_DECISION_RECORDS.md');
+  const adrContent = fs.readFileSync(adrPath, 'utf8');
+  assert(
+    adrContent.includes('ADR-062: Balanced Next.js Viewport Link Prefetch Optimization for Mobile Cellular Data Savings'),
+    '02_ARCHITECTURE_DECISION_RECORDS.md documents ADR-062'
+  );
+
+  // 4. Verify INDEX.md references ADR-062
+  const indexPath = path.resolve(__dirname, '../../docs/architecture-vault/INDEX.md');
+  const indexContent = fs.readFileSync(indexPath, 'utf8');
+  assert(
+    indexContent.includes('ADR-001 to ADR-062') &&
+    indexContent.includes('Balanced Next.js Viewport Link Prefetch Optimization for Mobile Cellular Data Savings'),
+    'INDEX.md references ADR-062 in vault catalog'
   );
 }
 

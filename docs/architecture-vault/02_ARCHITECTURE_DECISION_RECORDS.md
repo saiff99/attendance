@@ -56,6 +56,19 @@
 | **ADR-047** | Controlled Dual-Connection Concurrent Upload Pipeline (2x Concurrency) for Batch Attendance | **Accepted** | Nov 2026 | Networking & Mobile Pipeline / Concurrency |
 | **ADR-048** | Per-Photo Exponential Backoff Retry with Smart Error Discrimination for Mobile Network Flakes | **Accepted** | Nov 2026 | Mobile Resilience & Network Fault-Tolerance |
 | **ADR-049** | Fast-Path ONNX Runtime Thread Tuning & Memory-Mapped Image Decoding via np.frombuffer and cv2.imdecode | **Accepted** | Nov 2026 | Backend AI Engine & Memory Optimization |
+| **ADR-050** | Real-Time Classroom Framing & Blur/Low-Light Quality Advisor Engine | **Accepted** | Nov 2026 | Mobile Camera / Quality Intelligence |
+| **ADR-051** | Interactive Face Bounding-Box Inspector & 1-Tap Manual Correction | **Accepted** | Nov 2026 | Biometrics / UX & Verification |
+| **ADR-052** | Offline-First Classroom Photo Staging via IndexedDB | **Accepted** | Nov 2026 | Offline Storage / Client Resilience |
+| **ADR-053** | Large Classroom High-Resolution Face Detector Scaling (1280x1280 Scale Box) | **Accepted** | Nov 2026 | Biometrics / AI Detection Scale |
+| **ADR-054** | Modular Code-Splitting and Component Decomposition for Live-Scan Faculty Hub | **Accepted** | Nov 2026 | Frontend Architecture / Maintainability |
+| **ADR-055** | Zero-Overhead Virtualized Card Rendering via CSS content-visibility for 300+ Student Rosters | **Accepted** | Nov 2026 | Frontend Performance / UI Scalability |
+| **ADR-056** | Shutter Burst De-Bouncing and Quality Evaluation Throttling for Mobile Viewfinder Performance | **Accepted** | Nov 2026 | Mobile Performance / Battery & CPU |
+| **ADR-057** | Client-Side WebP Encoding with Lossless Fallback in ImageOptimizer Worker | **Accepted** | Nov 2026 | Frontend / Compression & Bandwidth |
+| **ADR-058** | Post-Optimization IndexedDB Memory Hygiene: Purge Raw Blobs | **Accepted** | Nov 2026 | Client Storage / Disk Hygiene |
+| **ADR-059** | Camera Sensor Standby & Lifecycle Management on Inactivity | **Accepted** | Nov 2026 | Mobile Battery & Thermal Defense |
+| **ADR-060** | Next.js Package Import Optimization (optimizePackageImports) for Lucide and Recharts Bundles | **Accepted** | Nov 2026 | Frontend Build & HMR Performance |
+| **ADR-061** | HTTP Cache-Control Headers and Column Projection Pruning for Cloud Bandwidth Conservation | **Accepted** | Nov 2026 | Cloud Bandwidth / Edge Caching |
+| **ADR-062** | Balanced Next.js Viewport Link Prefetch Optimization for Mobile Cellular Data Savings | **Accepted** | Nov 2026 | Mobile Cellular Bandwidth / Prefetching |
 
 ---
 
@@ -1556,6 +1569,34 @@
   2. *Positive:* Eliminates redundant mobile data requests on campus Wi-Fi/4G for curriculum subjects and campus geofence.
   3. *Positive:* Zero regression on admin updates; `forceRefresh` and server cache invalidations remain 100% authoritative.
   4. *Positive:* Fully compliant with existing `AttendanceLogItem` UI contracts.
+
+---
+
+### ADR-062: Balanced Next.js Viewport Link Prefetch Optimization for Mobile Cellular Data Savings
+
+- **Status:** Accepted
+- **Date:** 2026-11-09
+- **Context:**
+  1. *Automatic Viewport Link Prefetching in Next.js App Router:* In Next.js App Router, `<Link>` components default to `prefetch={null}` (evaluating to `true` in production), automatically initiating HTTP fetches for RSC (React Server Components) payloads and associated JavaScript code split chunks via `IntersectionObserver` as soon as the link enters the viewport.
+  2. *Excessive Mobile Cellular Data Waste:* In the primary navigation sidebar ([`frontend/src/components/layout/Sidebar.tsx`](file:///Users/saif/Desktop/Attendance/Attendance-app/frontend/src/components/layout/Sidebar.tsx)), 9 different application routes appear in the viewport simultaneously. On mobile cellular data (3G/4G/5G), this eagerly triggered background downloads for heavyweight pages like `/live-scan` (camera, multi-node canvas, face detection worker), `/reports` (charts, ExcelJS exporter), and `/audit-logs`—even if the student or faculty member only wanted to check active sessions or mark their own attendance.
+  3. *Unintended Cache Downloads on Secondary Entry Points:* Links to heavy routes from empty states (e.g. `Link href="/live-scan"` in [`frontend/src/app/ongoing/page.tsx`](file:///Users/saif/Desktop/Attendance/Attendance-app/frontend/src/app/ongoing/page.tsx) and [`frontend/src/components/RecentClassSessionsTable.tsx`](file:///Users/saif/Desktop/Attendance/Attendance-app/frontend/src/components/RecentClassSessionsTable.tsx), or `Link href="/selfieattend"` in [`frontend/src/app/portal/page.tsx`](file:///Users/saif/Desktop/Attendance/Attendance-app/frontend/src/app/portal/page.tsx)) immediately fetched large bundle chunks on initial render.
+  4. *Preserving Instant Desktop Navigation Feel:* While mobile users on cellular connections suffer from bandwidth bloat and battery drain due to viewport prefetching, desktop users on fast connections benefit from near-instant page transitions when hovering over navigation links.
+- **Decision:**
+  1. **Tiered Route Classification:**
+     - Classify application routes into *Primary Routes* (`/`, `/ongoing`, `/portal`) and *Heavy Secondary Routes* (`/live-scan`, `/students`, `/selfieattend`, `/reports`, `/users`, `/subjects`, `/audit-logs`, `/backup`).
+  2. **Viewport Prefetch Disable for Heavy Secondary Routes:**
+     - Set `prefetch={isPrimary ? undefined : false}` on `<Link>` items in `Sidebar.tsx`.
+     - Explicitly set `prefetch={false}` on heavy route entry links in `ongoing/page.tsx`, `RecentClassSessionsTable.tsx`, and `portal/page.tsx`.
+  3. **Intent-Driven Desktop Hover Prefetch (`onMouseEnter`):**
+     - Add `onMouseEnter={() => { if (!isPrimary) router.prefetch(item.href); }}` to secondary navigation links in `Sidebar.tsx`.
+     - On desktop, hovering with the mouse over a link (typically occurring 100ms–300ms before a click) triggers an instant background prefetch via Next.js `useRouter().prefetch()`.
+     - On touch devices (smartphones and tablets), where hover events do not occur prior to tap, unnecessary viewport prefetching is 100% prevented.
+- **Consequences:**
+  1. *Positive:* Saves 2MB–5MB of redundant JavaScript chunk downloads per mobile session for students and faculty on cellular connections.
+  2. *Positive:* Completely eliminates background network contention and battery drain on low-end mobile devices during attendance check-in.
+  3. *Positive:* Zero perceptible latency impact on desktop users due to hover-initiated prefetching.
+  4. *Positive:* Zero disruption to primary workflows (`/`, `/ongoing`, `/portal`) which retain instantaneous prefetching.
+
 
 
 

@@ -219,6 +219,7 @@ export function RecentClassSessionsTable({ initialSessions, userRole }: RecentCl
                     {isFaculty && (
                       <Link
                         href="/live-scan"
+                        prefetch={false}
                         className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs shadow-sm transition-all"
                       >
                         <Sparkles className="w-3.5 h-3.5" />

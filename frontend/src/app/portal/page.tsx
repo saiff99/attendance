@@ -453,6 +453,7 @@ export default function StudentPortalPage() {
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           <Link
             href="/selfieattend"
+            prefetch={false}
             className="flex items-center gap-1.5 py-1.5 px-2.5 sm:px-3 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-xs font-semibold transition-all shadow-sm group shrink-0"
             title="Mark Attendance"
           >
