@@ -3654,6 +3654,58 @@ console.log('\n--- 57. Modular Component Extraction & Lazy-Loading for live-scan
   assert(lineCount < 2000, `live-scan/page.tsx line count reduced below 2000 lines (currently ${lineCount} lines)`);
 }
 
+// --- 58. Virtualized Scrolling & content-visibility for 300+ Attendance Cards (ADR-055) ---
+console.log('\n--- 58. Virtualized Scrolling & content-visibility for 300+ Attendance Cards (ADR-055) ---');
+{
+  const cssPath = path.join(__dirname, '../src/app/globals.css');
+  assert(fs.existsSync(cssPath), 'globals.css exists');
+  const cssContent = fs.readFileSync(cssPath, 'utf8');
+
+  // 1. Verify CSS class .virtual-card-contain with content-visibility: auto and contain-intrinsic-size
+  assert(
+    cssContent.includes('.virtual-card-contain'),
+    'globals.css defines .virtual-card-contain class'
+  );
+  assert(
+    cssContent.includes('content-visibility: auto'),
+    'globals.css configures content-visibility: auto to skip offscreen card rendering'
+  );
+  assert(
+    cssContent.includes('contain-intrinsic-size: auto 54px'),
+    'globals.css configures contain-intrinsic-size: auto 54px for jitter-free scroll geometry'
+  );
+
+  // 2. Verify LiveAttendanceDrawer applies .virtual-card-contain
+  const drawerPath = path.join(__dirname, '../src/components/live-scan/LiveAttendanceDrawer.tsx');
+  assert(fs.existsSync(drawerPath), 'LiveAttendanceDrawer.tsx exists');
+  const drawerContent = fs.readFileSync(drawerPath, 'utf8');
+
+  assert(
+    drawerContent.includes('virtual-card-contain') && drawerContent.includes('AttendanceLogCard'),
+    'LiveAttendanceDrawer applies virtual-card-contain to AttendanceLogCard'
+  );
+  assert(
+    drawerContent.includes('virtual-card-contain') && drawerContent.includes('AbsentStudentCard'),
+    'LiveAttendanceDrawer applies virtual-card-contain to AbsentStudentCard'
+  );
+
+  // 3. Verify live-scan/page.tsx applies .virtual-card-contain in uploadResultModal list
+  const liveScanPath = path.join(__dirname, '../src/app/live-scan/page.tsx');
+  const liveScanContent = fs.readFileSync(liveScanPath, 'utf8');
+  assert(
+    liveScanContent.includes('uploadResultModal.recognized.map') && liveScanContent.includes('virtual-card-contain'),
+    'live-scan/page.tsx applies virtual-card-contain to uploadResultModal recognized student cards'
+  );
+
+  // 4. Verify ADR-055 in architecture vault
+  const adrPath = path.join(__dirname, '../../docs/architecture-vault/02_ARCHITECTURE_DECISION_RECORDS.md');
+  const adrContent = fs.readFileSync(adrPath, 'utf8');
+  assert(
+    adrContent.includes('ADR-055: Zero-Overhead Virtualized Card Rendering via CSS content-visibility for 300+ Student Rosters'),
+    '02_ARCHITECTURE_DECISION_RECORDS.md documents ADR-055'
+  );
+}
+
 // Summary
 console.log('\n' + '=' .repeat(65));
 console.log(`📊 Offline Unit Test Summary: ${passed} Passed, ${failed} Failed`);

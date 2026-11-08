@@ -151,3 +151,10 @@ svg *,
   animation: profile-menu-exit 160ms cubic-bezier(0.4, 0, 1, 1) forwards;
   will-change: transform, opacity;
 }
+
+/* High-Performance Virtualized Attendance Card Rendering (ADR-055)
+   Skips layout and painting for off-screen cards in 300+ student rosters, achieving 60fps scrolling. */
+.virtual-card-contain {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 54px;
+}

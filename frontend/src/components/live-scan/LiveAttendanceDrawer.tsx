@@ -35,7 +35,7 @@ export const AttendanceLogCard = memo(function AttendanceLogCard({
   const initials = useMemo(() => studentName.substring(0, 2), [studentName]);
 
   return (
-    <div className="flex items-center p-2 sm:p-2.5 rounded-xl border border-gray-200/80 dark:border-slate-800/80 bg-gray-50/70 dark:bg-slate-950/60 hover:bg-white dark:hover:bg-slate-950 hover:border-indigo-400 dark:hover:border-indigo-500/40 hover:shadow-sm transition-all group">
+    <div className="virtual-card-contain flex items-center p-2 sm:p-2.5 rounded-xl border border-gray-200/80 dark:border-slate-800/80 bg-gray-50/70 dark:bg-slate-950/60 hover:bg-white dark:hover:bg-slate-950 hover:border-indigo-400 dark:hover:border-indigo-500/40 hover:shadow-sm transition-all group">
       {/* Avatar Initials Pill */}
       <div className="flex-shrink-0 mr-2 sm:mr-2.5">
         <div
@@ -121,7 +121,7 @@ export const AbsentStudentCard = memo(function AbsentStudentCard({
   const initials = useMemo(() => studentName.substring(0, 2), [studentName]);
 
   return (
-    <div className="flex items-center justify-between p-2 sm:p-2.5 rounded-xl border border-gray-200/80 dark:border-slate-800/80 bg-gray-50/70 dark:bg-slate-950/60 hover:bg-white dark:hover:bg-slate-950 hover:border-emerald-500/40 hover:shadow-sm transition-all gap-2 min-w-0">
+    <div className="virtual-card-contain flex items-center justify-between p-2 sm:p-2.5 rounded-xl border border-gray-200/80 dark:border-slate-800/80 bg-gray-50/70 dark:bg-slate-950/60 hover:bg-white dark:hover:bg-slate-950 hover:border-emerald-500/40 hover:shadow-sm transition-all gap-2 min-w-0">
       {/* Avatar Initials Pill */}
       <div className="flex-shrink-0">
         <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-gradient-to-br from-slate-700 to-slate-900 border border-slate-700 flex items-center justify-center text-slate-300 font-bold text-[10px] sm:text-[11px] uppercase">

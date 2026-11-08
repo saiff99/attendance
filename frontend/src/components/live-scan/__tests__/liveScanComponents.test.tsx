@@ -18,7 +18,14 @@ describe("LiveScan Modular Sub-Components (ADR-054)", () => {
         previewUrl: "blob:http://localhost/p1",
         timestamp: Date.now(),
         label: "Photo 1",
-        quality: { status: "good" as const, luminance: 120, variance: 150, message: "Good lighting" },
+        quality: {
+          status: "good" as const,
+          brightness: 120,
+          sharpness: 150,
+          message: "Good lighting",
+          badgeColor: "emerald" as const,
+          isAcceptable: true,
+        },
         compressionStatus: "ready" as const,
       },
       {
@@ -27,7 +34,14 @@ describe("LiveScan Modular Sub-Components (ADR-054)", () => {
         previewUrl: "blob:http://localhost/p2",
         timestamp: Date.now(),
         label: "Photo 2",
-        quality: { status: "blurry" as const, luminance: 110, variance: 10, message: "Camera shake" },
+        quality: {
+          status: "blurry" as const,
+          brightness: 110,
+          sharpness: 10,
+          message: "Camera shake",
+          badgeColor: "rose" as const,
+          isAcceptable: false,
+        },
         compressionStatus: "compressing" as const,
       },
     ];
@@ -169,6 +183,26 @@ describe("LiveScan Modular Sub-Components (ADR-054)", () => {
       await user.click(markBtn);
       expect(onMarkPresent).toHaveBeenCalledWith("stu-2");
     });
+
+    it("applies virtual-card-contain class for high performance rendering (ADR-055)", () => {
+      const { container } = render(
+        <LiveAttendanceDrawer
+          sidebarTab="present"
+          onTabChange={vi.fn()}
+          searchQuery=""
+          onSearchChange={vi.fn()}
+          logs={dummyLogs}
+          absentStudents={dummyAbsent}
+          undoingLogId={null}
+          markingStudentId={null}
+          onUndoLog={vi.fn()}
+          onMarkPresent={vi.fn()}
+        />
+      );
+
+      const virtualCards = container.querySelectorAll(".virtual-card-contain");
+      expect(virtualCards.length).toBeGreaterThan(0);
+    });
   });
 
   describe("LiveScanCctvStudio", () => {
@@ -235,3 +269,4 @@ describe("LiveScan Modular Sub-Components (ADR-054)", () => {
     });
   });
 });
+

@@ -1715,7 +1715,7 @@ export default function LiveScan() {
                   {uploadResultModal.recognized.length > 0 && (
                     <div className="w-full max-h-48 overflow-y-auto rounded-xl border border-gray-200 dark:border-slate-800/80 divide-y divide-gray-100 dark:divide-slate-800 mb-5 text-left bg-gray-50/50 dark:bg-slate-950/40">
                       {uploadResultModal.recognized.map((student, idx) => (
-                        <div key={idx} className="p-2.5 flex items-center justify-between gap-2 hover:bg-emerald-500/5 transition-colors">
+                        <div key={idx} className="virtual-card-contain p-2.5 flex items-center justify-between gap-2 hover:bg-emerald-500/5 transition-colors">
                           <div className="flex items-center gap-2 min-w-0">
                             <div className="w-6 h-6 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-xs font-bold shrink-0">
                               {idx + 1}
