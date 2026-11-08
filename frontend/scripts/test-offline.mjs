@@ -4137,9 +4137,58 @@ console.log('\n--- 66. Balanced Next.js Viewport Link Prefetch Optimization (ADR
   const indexPath = path.resolve(__dirname, '../../docs/architecture-vault/INDEX.md');
   const indexContent = fs.readFileSync(indexPath, 'utf8');
   assert(
-    indexContent.includes('ADR-001 to ADR-062') &&
     indexContent.includes('Balanced Next.js Viewport Link Prefetch Optimization for Mobile Cellular Data Savings'),
     'INDEX.md references ADR-062 in vault catalog'
+  );
+}
+
+// --- 67. Forensic Audit Logs Summary Projection & Lazy Loading (ADR-063) ---
+console.log('\n--- 67. Forensic Audit Logs Summary Projection & Lazy Loading (ADR-063) ---');
+{
+  // 1. Verify api/audit-logs/route.ts implements id parameter single-record lookup
+  const auditApiPath = path.resolve(__dirname, '../src/app/api/audit-logs/route.ts');
+  assert(fs.existsSync(auditApiPath), 'api/audit-logs/route.ts exists');
+  const auditApiContent = fs.readFileSync(auditApiPath, 'utf8');
+  assert(
+    auditApiContent.includes('const logId = searchParams.get("id")') &&
+    auditApiContent.includes('.eq("id", logId)'),
+    'api/audit-logs/route.ts implements on-demand single record lookup by id'
+  );
+
+  // 2. Verify api/audit-logs/route.ts implements pruneAuditDetails summary projection
+  assert(
+    auditApiContent.includes('function pruneAuditDetails') &&
+    auditApiContent.includes('detailsMode = searchParams.get("details") || "summary"') &&
+    auditApiContent.includes('_lazy'),
+    'api/audit-logs/route.ts prunes heavy details JSONB and sets _lazy sentinel for extended payloads'
+  );
+
+  // 3. Verify audit-logs/page.tsx implements on-demand lazy loading and memory caching
+  const auditPagePath = path.resolve(__dirname, '../src/app/audit-logs/page.tsx');
+  assert(fs.existsSync(auditPagePath), 'audit-logs/page.tsx exists');
+  const auditPageContent = fs.readFileSync(auditPagePath, 'utf8');
+  assert(
+    auditPageContent.includes('detailedLogsCache') &&
+    auditPageContent.includes('handleInspectLog') &&
+    auditPageContent.includes('/api/audit-logs?id='),
+    'audit-logs/page.tsx implements on-demand lazy fetch and in-memory cache for inspected audit records'
+  );
+
+  // 4. Verify ADR-063 documentation in 02_ARCHITECTURE_DECISION_RECORDS.md
+  const adrPath = path.resolve(__dirname, '../../docs/architecture-vault/02_ARCHITECTURE_DECISION_RECORDS.md');
+  const adrContent = fs.readFileSync(adrPath, 'utf8');
+  assert(
+    adrContent.includes('ADR-063: Forensic Audit Logs Selective Summary Projection & On-Demand JSONB Lazy Loading'),
+    '02_ARCHITECTURE_DECISION_RECORDS.md documents ADR-063'
+  );
+
+  // 5. Verify INDEX.md references ADR-063
+  const indexPath = path.resolve(__dirname, '../../docs/architecture-vault/INDEX.md');
+  const indexContent = fs.readFileSync(indexPath, 'utf8');
+  assert(
+    indexContent.includes('ADR-001 to ADR-063') &&
+    indexContent.includes('Forensic Audit Logs Selective Summary Projection & On-Demand JSONB Lazy Loading'),
+    'INDEX.md references ADR-063 in vault catalog'
   );
 }
 

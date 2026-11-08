@@ -23,7 +23,8 @@ import {
   Download,
   FileSpreadsheet,
   CalendarDays,
-  Lock
+  Lock,
+  Loader2
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import Link from "next/link";
@@ -52,6 +53,7 @@ interface AuditLogEntry {
     student_roll?: string;
     actor_name?: string;
     actor_role?: string;
+    _lazy?: boolean;
     [key: string]: unknown;
   } | null;
   ip_address: string | null;
@@ -67,6 +69,8 @@ export default function AuditLogsPage() {
   const [selectedActionFilter, setSelectedActionFilter] = useState("all");
   const [selectedTargetFilter, setSelectedTargetFilter] = useState("all");
   const [selectedLogForModal, setSelectedLogForModal] = useState<AuditLogEntry | null>(null);
+  const [inspectLoading, setInspectLoading] = useState(false);
+  const [detailedLogsCache, setDetailedLogsCache] = useState<Record<string, AuditLogEntry>>({});
 
   // Date Range Filtering & Forensic Checksum States
   const [startDate, setStartDate] = useState("");
@@ -102,6 +106,38 @@ export default function AuditLogsPage() {
     } finally {
       setLoading(false);
       setIsRefreshing(false);
+    }
+  };
+
+  const handleInspectLog = async (entry: AuditLogEntry) => {
+    // 1. Check local cache first
+    if (detailedLogsCache[entry.id]) {
+      setSelectedLogForModal(detailedLogsCache[entry.id]);
+      return;
+    }
+
+    // 2. Open modal immediately with available summary
+    setSelectedLogForModal(entry);
+
+    // 3. If extended details exist, lazy load them on demand (ADR-063)
+    if (entry.details?._lazy) {
+      setInspectLoading(true);
+      try {
+        const res = await fetch(`/api/audit-logs?id=${encodeURIComponent(entry.id)}`, {
+          cache: "no-store",
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.log) {
+            setDetailedLogsCache((prev) => ({ ...prev, [entry.id]: data.log }));
+            setSelectedLogForModal(data.log);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to lazy load audit details:", err);
+      } finally {
+        setInspectLoading(false);
+      }
     }
   };
 
@@ -737,7 +773,7 @@ export default function AuditLogsPage() {
                       {/* Inspect button */}
                       <td className="py-3.5 px-4 text-right whitespace-nowrap">
                         <button
-                          onClick={() => setSelectedLogForModal(entry)}
+                          onClick={() => handleInspectLog(entry)}
                           className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 hover:underline cursor-pointer px-2 py-1 rounded-md hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors"
                         >
                           <span>Inspect</span>
@@ -827,7 +863,7 @@ export default function AuditLogsPage() {
                   {/* Inspect Button */}
                   <div className="flex justify-end pt-1">
                     <button
-                      onClick={() => setSelectedLogForModal(entry)}
+                      onClick={() => handleInspectLog(entry)}
                       className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 py-1.5 px-3 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/50 hover:bg-indigo-100 transition-colors cursor-pointer"
                     >
                       <span>Inspect Payload</span>
@@ -996,9 +1032,17 @@ export default function AuditLogsPage() {
               </div>
 
               <div>
-                <span className="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider block mb-2">
-                  Payload Details (JSON)
-                </span>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider block">
+                    Payload Details (JSON)
+                  </span>
+                  {inspectLoading && (
+                    <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-indigo-600 dark:text-indigo-400 animate-pulse">
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      <span>Loading full payload...</span>
+                    </span>
+                  )}
+                </div>
                 <pre className="p-3 bg-gray-900 text-gray-100 rounded-xl text-xs font-mono overflow-x-auto border border-gray-800 max-h-56">
                   {JSON.stringify(selectedLogForModal.details, null, 2)}
                 </pre>
