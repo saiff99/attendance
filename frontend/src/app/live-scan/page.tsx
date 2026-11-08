@@ -463,7 +463,8 @@ export default function LiveScan() {
   }, [activeSession?.id]);
 
   const fetchLogs = useCallback(async (forceFullSync = false) => {
-    if (!activeSession || isFetchingLogsRef.current) return;
+    if (!activeSession) return;
+    if (isFetchingLogsRef.current && !forceFullSync) return;
     try {
       isFetchingLogsRef.current = true;
       const since = forceFullSync ? null : lastRecordedAtRef.current;
@@ -482,6 +483,8 @@ export default function LiveScan() {
         setLogs(incoming);
         if (incoming.length > 0 && incoming[0].recorded_at) {
           lastRecordedAtRef.current = incoming[0].recorded_at;
+        } else {
+          lastRecordedAtRef.current = null;
         }
       } else if (incoming.length > 0) {
         // Delta Sync: only merge truly new records if any arrived
@@ -1139,7 +1142,7 @@ export default function LiveScan() {
       });
       const resData = await res.json();
       if (!res.ok) throw new Error(resData.error || 'Failed to mark present');
-      await fetchLogs();
+      await fetchLogs(true);
       toast.success("Student marked present.");
     } catch (err: any) {
       toast.error("Failed to mark present: " + (err.message || "Unknown error"));
@@ -1151,15 +1154,31 @@ export default function LiveScan() {
   const handleUndoPresent = useCallback(async (logId: string) => {
     if (!logId) return;
     setUndoingLogId(logId);
+
+    // Instant 0ms Optimistic Removal: update UI immediately so student disappears from Present and returns to Absent
+    let removedLog: AttendanceLogItem | undefined;
+    setLogs((prev) => {
+      removedLog = prev.find((item) => item.id === logId);
+      return prev.filter((item) => item.id !== logId);
+    });
+
     try {
       const res = await fetch(`/api/attendance/mark?id=${encodeURIComponent(logId)}`, {
         method: 'DELETE',
       });
       const resData = await res.json();
       if (!res.ok) throw new Error(resData.error || 'Failed to undo attendance');
-      await fetchLogs();
+      // Force authoritative full sync to align timestamps and server state
+      await fetchLogs(true);
       toast.info("Attendance entry undone.");
     } catch (err: any) {
+      // Rollback optimistic removal on network or authorization failure
+      if (removedLog) {
+        setLogs((prev) => {
+          if (prev.some((item) => item.id === logId)) return prev;
+          return [removedLog!, ...prev];
+        });
+      }
       toast.error("Failed to undo attendance: " + (err.message || "Unknown error"));
     } finally {
       setUndoingLogId(null);

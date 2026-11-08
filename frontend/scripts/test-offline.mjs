@@ -3749,6 +3749,48 @@ console.log('\n--- 59. Shutter Burst De-Bouncing & Video Quality Worker Throttli
   );
 }
 
+// --- 60. Instant Optimistic Attendance Undo & Full-Sync Re-alignment (Gotcha 23) ---
+console.log('\n--- 60. Instant Optimistic Attendance Undo & Full-Sync Re-alignment (Gotcha 23) ---');
+{
+  const liveScanPath = path.join(__dirname, '../src/app/live-scan/page.tsx');
+  const liveScanContent = fs.readFileSync(liveScanPath, 'utf8');
+
+  // 1. Verify handleUndoPresent implements optimistic removal of the undone log ID
+  assert(
+    liveScanContent.includes('setLogs((prev) =>') &&
+    liveScanContent.includes('prev.filter((item) => item.id !== logId)'),
+    'live-scan/page.tsx immediately purges undone attendance record optimistically from logs state'
+  );
+
+  // 2. Verify handleUndoPresent calls fetchLogs(true) for authoritative full sync
+  assert(
+    liveScanContent.includes('await fetchLogs(true);') &&
+    liveScanContent.includes('handleUndoPresent'),
+    'live-scan/page.tsx triggers authoritative forced full sync upon successful attendance undo'
+  );
+
+  // 3. Verify fetchLogs handles forceFullSync and resets lastRecordedAtRef
+  assert(
+    liveScanContent.includes('if (!since || forceFullSync)') &&
+    liveScanContent.includes('lastRecordedAtRef.current = null;'),
+    'live-scan/page.tsx resets lastRecordedAtRef to null when full sync returns empty logs'
+  );
+
+  // 4. Verify in-flight guard bypass for forced full sync
+  assert(
+    liveScanContent.includes('if (isFetchingLogsRef.current && !forceFullSync) return;'),
+    'live-scan/page.tsx bypasses in-flight lock for forced full sync'
+  );
+
+  // 5. Verify documentation in Gotcha 23
+  const gotchasPath = path.join(__dirname, '../../docs/architecture-vault/05_EDGE_CASES_AND_SOLVED_GOTCHAS.md');
+  const gotchasContent = fs.readFileSync(gotchasPath, 'utf8');
+  assert(
+    gotchasContent.includes('Gotcha 23: Incremental Delta Polling Blindspot on Attendance Deletion (Undo Present) Causing Stale Present Cards'),
+    '05_EDGE_CASES_AND_SOLVED_GOTCHAS.md documents Gotcha 23'
+  );
+}
+
 // Summary
 console.log('\n' + '=' .repeat(65));
 console.log(`📊 Offline Unit Test Summary: ${passed} Passed, ${failed} Failed`);

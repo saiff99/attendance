@@ -415,6 +415,23 @@ This document catalogs critical real-world edge cases, platform-specific quirks,
   5. **Resilient Upload Fallback:** In `handleProcessBatchAttendance`, `fileToUpload = item.optimizedFile || item.file` ensures upload never blocks on redundant optimization.
 - **Rule:** Never revoke a Web Worker blob URL synchronously immediately after instantiation. Never mutate an outer array inside a React functional state updater. All in-app camera canvas captures must bypass re-compression pipelines as pre-optimized assets.
 
+---
+
+### Gotcha 23: Incremental Delta Polling Blindspot on Attendance Deletion (Undo Present) Causing Stale Present Cards
+- **Symptom:**
+  When faculty marked a student as present manually (or via photo detection) and subsequently clicked "Undo" (`RotateCcw` button) on that student's card, a toast notification appeared: *"Attendance entry undone."* However, the student remained visible in the "Present" tab, did not reappear in the "Absent" tab, and both tab counts ("Present (1)" / "Absent (2)") remained stale until a full hard page refresh.
+- **Root Cause:**
+  1. *Incremental Delta Polling Filter Blindspot:* In `LiveScan` (`page.tsx`), `fetchLogs` implemented ADR-028 incremental delta polling using `GET /api/attendance/session/${id}?since=${lastRecordedAt}`.
+  2. *Deletions Produce Zero New Records:* When a record is deleted from PostgreSQL, the database does not produce a record where `recorded_at > since`. The delta query returned empty `[]`, leaving the frontend `logs` array completely untouched.
+  3. *Absence of Optimistic UI Removal:* `handleUndoPresent` did not optimistically purge the undone log ID from React state before or after the DELETE call, keeping the student ID in `presentStudentIds` and out of `absentStudents`.
+  4. *Un-reset `lastRecordedAtRef`:* When all attendance records for a session were undone, `lastRecordedAtRef.current` was never reset to `null`, causing future delta polls to use an obsolete high timestamp.
+- **Architectural Fix:**
+  1. **Instant 0ms Optimistic UI Removal & Rollback:** In `handleUndoPresent`, immediately filter `logs` state by `id !== logId` before dispatching the DELETE request. This instantly decrements the Present counter, increments the Absent counter, and transitions the card from Present to Absent with 0ms perceived latency. If the DELETE request fails, state is rolled back.
+  2. **Authoritative Full Sync (`forceFullSync = true`):** On successful deletion, invoke `await fetchLogs(true)` which ignores `lastRecordedAtRef`, fetches the authoritative full attendance list, and resets `lastRecordedAtRef.current` to the latest valid timestamp (or `null` if all logs are undone).
+  3. **In-Flight Lock Bypass on Forced Full Sync:** Modified `fetchLogs` to allow `forceFullSync = true` to proceed without being blocked by background polling intervals (`if (isFetchingLogsRef.current && !forceFullSync) return;`).
+- **Rule:** Whenever performing deletion or cancellation of stateful records in an incrementally polled view, always apply optimistic UI state removal and trigger a forced full sync (`forceFullSync = true`) to align client delta markers with the database.
+
+
 
 
 
