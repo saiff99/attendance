@@ -21,6 +21,7 @@ export interface StoredStagedPhoto {
   label: string;
   quality?: QualityAssessment;
   compressionStatus?: "ready" | "compressing" | "error";
+  rawPurged?: boolean;
 }
 
 const DB_NAME = "MedAttendClassroomDB";
@@ -72,6 +73,10 @@ export function openStagingDb(): Promise<IDBDatabase> {
   });
 }
 
+export interface StagedPhotoUpdateOptions extends Partial<StoredStagedPhoto> {
+  purgeRawBlob?: boolean;
+}
+
 /**
  * Save or update a staged photo in IndexedDB.
  * Safely converts File to Blob to prevent DataCloneError on mobile Safari.
@@ -86,15 +91,26 @@ export async function saveStagedPhoto(photo: StoredStagedPhoto): Promise<void> {
       const store = tx.objectStore(STORE_NAME);
 
       // Ensure Blob storage for maximum cross-browser reliability
-      const safeBlob = photo.file instanceof Blob ? photo.file : new Blob([photo.file], { type: photo.type });
+      let safeBlob = photo.file instanceof Blob ? photo.file : new Blob([photo.file], { type: photo.type });
       const safeOptimizedBlob = photo.optimizedBlob
         ? (photo.optimizedBlob instanceof Blob ? photo.optimizedBlob : new Blob([photo.optimizedBlob], { type: photo.type }))
         : undefined;
+      let safeSize = photo.size;
+      let rawPurged = photo.rawPurged || false;
+
+      // If photo is already pre-optimized on initial save, store only the optimized blob (ADR-058)
+      if (photo.compressionStatus === "ready" && safeOptimizedBlob) {
+        safeBlob = safeOptimizedBlob;
+        safeSize = safeOptimizedBlob.size;
+        rawPurged = true;
+      }
 
       const record: StoredStagedPhoto = {
         ...photo,
         file: safeBlob,
         optimizedBlob: safeOptimizedBlob,
+        size: safeSize,
+        rawPurged,
       };
 
       const request = store.put(record);
@@ -121,7 +137,7 @@ export async function saveStagedPhoto(photo: StoredStagedPhoto): Promise<void> {
  */
 export async function updateStagedPhoto(
   id: string,
-  updates: Partial<StoredStagedPhoto>
+  updates: StagedPhotoUpdateOptions
 ): Promise<void> {
   if (!isIndexedDBAvailable()) return;
 
@@ -139,9 +155,32 @@ export async function updateStagedPhoto(
           return;
         }
 
+        let updatedFile = existing.file;
+        let updatedSize = existing.size;
+        let isRawPurged = existing.rawPurged || false;
+
+        // Post-Optimization Memory & Storage Hygiene (ADR-058):
+        // When pre-compression completes successfully and optimizedBlob is available,
+        // purge the redundant large camera raw blob (8-12MB) by replacing existing.file
+        // with the compact optimized blob (WebP / JPEG), reclaiming 85-90% client disk space.
+        if (
+          (updates.purgeRawBlob !== false && updates.compressionStatus === "ready") &&
+          updates.optimizedBlob
+        ) {
+          const safeOptimized = updates.optimizedBlob instanceof Blob
+            ? updates.optimizedBlob
+            : new Blob([updates.optimizedBlob], { type: updates.type || existing.type });
+          updatedFile = safeOptimized;
+          updatedSize = safeOptimized.size;
+          isRawPurged = true;
+        }
+
         const merged: StoredStagedPhoto = {
           ...existing,
           ...updates,
+          file: updatedFile,
+          size: updatedSize,
+          rawPurged: isRawPurged,
         };
 
         const putReq = store.put(merged);

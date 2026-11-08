@@ -868,6 +868,7 @@ export default function LiveScan() {
           updateStagedPhoto(item.id, {
             optimizedBlob: result.file,
             compressionStatus: "ready",
+            purgeRawBlob: true,
           });
         })
         .catch((err) => {

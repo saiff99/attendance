@@ -257,6 +257,51 @@ describe("Offline-First Classroom Photo Staging via IndexedDB (ADR-052)", () => 
       expect(staged.length).toBe(1);
       expect(staged[0].compressionStatus).toBe("ready");
       expect(staged[0].optimizedBlob).toBeDefined();
+      expect(staged[0].rawPurged).toBe(true);
+      expect(staged[0].size).toBe(optimizedBlob.size);
+    });
+
+    it("purges redundant raw camera blobs post-optimization to reclaim >85% mobile disk space (ADR-058)", async () => {
+      const RAW_SIZE = 10 * 1024 * 1024; // 10 MB raw camera capture
+      const rawBlob = new Blob([new Uint8Array(RAW_SIZE)], { type: "image/jpeg" });
+      const initial: StoredStagedPhoto = {
+        id: "p-hygiene",
+        sessionId: "session-hygiene",
+        file: rawBlob,
+        name: "dslr_classroom.jpg",
+        type: "image/jpeg",
+        size: RAW_SIZE,
+        timestamp: Date.now(),
+        label: "Photo 1",
+        compressionStatus: "compressing",
+      };
+
+      await saveStagedPhoto(initial);
+      let staged = await getStagedPhotosForSession("session-hygiene");
+      expect(staged.length).toBe(1);
+      expect(staged[0].size).toBe(RAW_SIZE);
+      expect(staged[0].rawPurged).toBeFalsy();
+
+      // Simulate Web Worker completing 600KB WebP optimization
+      const OPTIMIZED_SIZE = 600 * 1024; // 600 KB
+      const optimizedBlob = new Blob([new Uint8Array(OPTIMIZED_SIZE)], { type: "image/webp" });
+
+      await updateStagedPhoto("p-hygiene", {
+        optimizedBlob,
+        compressionStatus: "ready",
+        purgeRawBlob: true,
+      });
+
+      staged = await getStagedPhotosForSession("session-hygiene");
+      expect(staged.length).toBe(1);
+      expect(staged[0].compressionStatus).toBe("ready");
+      expect(staged[0].rawPurged).toBe(true);
+      expect(staged[0].size).toBe(OPTIMIZED_SIZE);
+      expect(staged[0].file.size).toBe(OPTIMIZED_SIZE);
+
+      // Verify >85% storage reclamation
+      const reclaimedPercent = ((RAW_SIZE - staged[0].size) / RAW_SIZE) * 100;
+      expect(reclaimedPercent).toBeGreaterThan(85.0);
     });
 
     it("deletes a single staged photo when removed by user", async () => {
