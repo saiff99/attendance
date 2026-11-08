@@ -3969,6 +3969,55 @@ console.log('\n--- 63. Camera Sensor Standby & Lifecycle Management on Tab Inact
   );
 }
 
+// --- 64. Next.js Package Import Optimization for Lucide and Recharts (ADR-060) ---
+console.log('\n--- 64. Next.js Package Import Optimization for Lucide and Recharts (ADR-060) ---');
+{
+  const nextConfigPath = path.resolve(__dirname, '../next.config.ts');
+  assert(fs.existsSync(nextConfigPath), 'next.config.ts exists');
+  const nextConfigContent = fs.readFileSync(nextConfigPath, 'utf8');
+
+  // 1. Verify experimental block exists in next.config.ts
+  assert(
+    nextConfigContent.includes('experimental:'),
+    'next.config.ts defines experimental options'
+  );
+
+  // 2. Verify optimizePackageImports is configured
+  assert(
+    nextConfigContent.includes('optimizePackageImports:'),
+    'next.config.ts configures optimizePackageImports'
+  );
+
+  // 3. Verify lucide-react is optimized
+  assert(
+    nextConfigContent.includes('"lucide-react"') || nextConfigContent.includes("'lucide-react'"),
+    'next.config.ts optimizes lucide-react imports to bypass 1,400+ icon barrel graph'
+  );
+
+  // 4. Verify recharts is optimized
+  assert(
+    nextConfigContent.includes('"recharts"') || nextConfigContent.includes("'recharts'"),
+    'next.config.ts optimizes recharts imports for granular component bundling'
+  );
+
+  // 5. Verify documentation in 02_ARCHITECTURE_DECISION_RECORDS.md
+  const adrPath = path.resolve(__dirname, '../../docs/architecture-vault/02_ARCHITECTURE_DECISION_RECORDS.md');
+  const adrContent = fs.readFileSync(adrPath, 'utf8');
+  assert(
+    adrContent.includes('ADR-060: Next.js Package Import Optimization (optimizePackageImports) for Lucide and Recharts Bundles'),
+    '02_ARCHITECTURE_DECISION_RECORDS.md documents ADR-060'
+  );
+
+  // 6. Verify INDEX.md references ADR-060
+  const indexPath = path.resolve(__dirname, '../../docs/architecture-vault/INDEX.md');
+  const indexContent = fs.readFileSync(indexPath, 'utf8');
+  assert(
+    indexContent.includes('ADR-001 to ADR-060') &&
+    indexContent.includes('Next.js Package Import Optimization optimizePackageImports for Lucide and Recharts Bundles'),
+    'INDEX.md references ADR-060 in vault catalog'
+  );
+}
+
 // Summary
 console.log('\n' + '=' .repeat(65));
 console.log(`📊 Offline Unit Test Summary: ${passed} Passed, ${failed} Failed`);
