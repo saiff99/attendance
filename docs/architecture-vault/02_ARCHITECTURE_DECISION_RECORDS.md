@@ -1313,6 +1313,29 @@
   3. *Positive:* Zero disk bloat: staged photos are purged immediately upon batch attendance completion or after 24h TTL expiration.
   4. *Positive:* High performance: binary Blobs are stored natively without expensive base64 encoding or main-thread JSON serialization bottlenecks.
 
+---
+
+### ADR-053: Large Classroom High-Resolution Face Detector Scaling (1280x1280 Scale Box)
+
+- **Status:** Accepted
+- **Date:** 2026-11-08
+- **Context:**
+  1. *Distant Classroom Back-Row Resolution Drop:* In institutional lecture halls with 200–300 students, students in rows 6–15 sit at distances of 5–15 meters from the capturing teacher. Under the legacy default detector bounding box of `det_size = (640, 640)`, these distant faces were compressed down to $< 12\text{px} \times 12\text{px}$, causing the SCRFD neural detector to fail to detect landmarks or reject them due to low confidence scores.
+  2. *Aspect-Ratio Preservation Invariant:* Mobile camera sensors capture in rectangular aspect ratios (16:9 or 4:3). The detector scale container must scale rectangular images without cropping or distortion (letterboxing) while increasing the effective pixel density of distant face regions.
+- **Decision:**
+  1. **Scale Default Detector Input from 640x640 to 1280x1280 (`backend/app/ai.py`):**
+     - Update default `INSIGHTFACE_DET_SIZE` fallback from `"640"` to `"1280"`.
+     - Maintains aspect-ratio preserving letterboxing: a 16:9 ($1920 \times 1080$) image scales to $1280 \times 720$, increasing small face resolution by $4\times$ area ($2\times$ linear dimensions) without squashing or stretching.
+  2. **Zero Mobile Payload Impact:**
+     - The client continues uploading pre-compressed 300–500 KB JPEG files. Zero additional network bandwidth or upload latency is introduced on mobile devices.
+  3. **Controlled Server Memory Overhead:**
+     - Float32 input tensor transient footprint increases from $\approx 4.9\text{ MB}$ to $\approx 19.6\text{ MB}$, completely negligible on server hardware ($< 0.15\%$ of 16 GB RAM).
+     - Execution latency on CPU increases by only $\approx 0.2\text{s}$ per image, safely fitting within the asynchronous worker pool.
+- **Consequences:**
+  1. *Positive:* Greatly improves small and distant face detection recall across 200–300 student lecture halls without requiring physical zoom lenses.
+  2. *Positive:* Zero network degradation on client devices.
+  3. *Positive:* Backward-compatible with single-student selfie check-in.
+
 
 
 

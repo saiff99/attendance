@@ -9,7 +9,7 @@ AI_FRAME_WIDTH = int(os.getenv("AI_FRAME_WIDTH", "960"))
 AI_FRAME_HEIGHT = int(os.getenv("AI_FRAME_HEIGHT", "540"))
 AI_DET_THRESH = float(os.getenv("INSIGHTFACE_DET_THRESH", os.getenv("AI_DET_THRESH", "0.15")))
 
-det_size_raw = os.getenv("INSIGHTFACE_DET_SIZE", os.getenv("AI_DET_SIZE", "640")).strip()
+det_size_raw = os.getenv("INSIGHTFACE_DET_SIZE", os.getenv("AI_DET_SIZE", "1280")).strip()
 if "," in det_size_raw:
     parts = det_size_raw.split(",")
     AI_DET_SIZE = (int(parts[0].strip()), int(parts[1].strip()))

@@ -402,7 +402,7 @@ High-performance PostgreSQL stored procedure and composite index replacing seque
   - `file`: High-resolution classroom photograph (`MAX_CLASSROOM_IMAGE_SIZE = 15 MB`).
   - `session_id`: Active lecture session UUID.
 - **Biometric Matching Pipeline:**
-  1. InsightFace detection identifies all face regions in BGR image (`det_thresh = 0.15`, `det_size = 640x640`).
+  1. InsightFace detection identifies all face regions in BGR image (`det_thresh = 0.15`, `det_size = 1280x1280` for high-precision distant classroom face resolution).
   2. In-memory biometric cache (`ADR-013`) resolves enrolled student vectors for the session cohort.
   3. Accelerated NumPy 2D matrix multiplication (`ADR-012`) matches all detected faces simultaneously.
 - **Database Persistence Contract (`ADR-017`):**
