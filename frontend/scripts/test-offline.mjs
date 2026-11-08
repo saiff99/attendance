@@ -3791,6 +3791,58 @@ console.log('\n--- 60. Instant Optimistic Attendance Undo & Full-Sync Re-alignme
   );
 }
 
+// --- 61. Client-Side WebP Encoding with Lossless Fallback in ImageOptimizer Worker (ADR-057) ---
+console.log('\n--- 61. Client-Side WebP Encoding with Lossless Fallback in ImageOptimizer Worker (ADR-057) ---');
+{
+  const imgOptimizerPath = path.resolve(__dirname, '../src/lib/imageOptimizer.ts');
+  assert(fs.existsSync(imgOptimizerPath), 'frontend/src/lib/imageOptimizer.ts exists');
+  const imgOptimizerContent = fs.readFileSync(imgOptimizerPath, 'utf8');
+
+  // 1. Verify Web Worker implements opportunistic WebP convertToBlob
+  assert(
+    imgOptimizerContent.includes("type: 'image/webp'"),
+    'imageOptimizer.ts worker opportunistically attempts image/webp conversion'
+  );
+
+  // 2. Verify Web Worker implements fallback to image/jpeg
+  assert(
+    imgOptimizerContent.includes("type: 'image/jpeg'"),
+    'imageOptimizer.ts worker implements graceful fallback to image/jpeg'
+  );
+
+  // 3. Verify extension resolution for both WebP and JPEG
+  assert(
+    imgOptimizerContent.includes('const isWebp = result.blob.type === "image/webp"') &&
+    imgOptimizerContent.includes('const ext = isWebp ? "_optimized.webp" : "_optimized.jpg"'),
+    'imageOptimizer.ts dynamically resolves .webp or .jpg extension based on blob type'
+  );
+
+  // 4. Verify fallback canvas function supports WebP and JPEG fallback
+  assert(
+    imgOptimizerContent.includes('"image/webp"') &&
+    imgOptimizerContent.includes('"image/jpeg"') &&
+    imgOptimizerContent.includes('fallbackOptimizeClassroomPhoto'),
+    'fallbackOptimizeClassroomPhoto supports WebP with automatic JPEG fallback'
+  );
+
+  // 5. Verify Backend safe_read_image_file WebP magic byte support
+  const helpersPyPath = path.resolve(__dirname, '../../backend/app/routers/helpers.py');
+  assert(fs.existsSync(helpersPyPath), 'backend/app/routers/helpers.py exists');
+  const helpersPyContent = fs.readFileSync(helpersPyPath, 'utf8');
+  assert(
+    helpersPyContent.includes('contents.startswith(b"RIFF") and b"WEBP" in contents[:16]'),
+    'backend/app/routers/helpers.py validates WebP magic bytes'
+  );
+
+  // 6. Verify documentation in 02_ARCHITECTURE_DECISION_RECORDS.md
+  const adrPath = path.resolve(__dirname, '../../docs/architecture-vault/02_ARCHITECTURE_DECISION_RECORDS.md');
+  const adrContent = fs.readFileSync(adrPath, 'utf8');
+  assert(
+    adrContent.includes('ADR-057: Client-Side WebP Encoding with Lossless Fallback in ImageOptimizer Worker'),
+    '02_ARCHITECTURE_DECISION_RECORDS.md documents ADR-057'
+  );
+}
+
 // Summary
 console.log('\n' + '=' .repeat(65));
 console.log(`📊 Offline Unit Test Summary: ${passed} Passed, ${failed} Failed`);

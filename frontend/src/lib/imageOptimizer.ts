@@ -93,13 +93,29 @@ self.onmessage = async function(e) {
       bitmap.close();
     }
 
-    // Convert offscreen canvas to JPEG blob
-    const compressedBlob = await canvas.convertToBlob({
-      type: 'image/jpeg',
-      quality: quality || 0.88,
-    });
+    // Convert offscreen canvas to compressed blob:
+    // Opportunistically attempt modern WebP first (25-35% smaller payload at equivalent fidelity),
+    // falling back to standard JPEG if the runtime or environment does not support WebP.
+    let compressedBlob = null;
+    let format = 'image/webp';
 
-    if (!compressedBlob) {
+    try {
+      compressedBlob = await canvas.convertToBlob({
+        type: 'image/webp',
+        quality: quality ? Math.min(quality, 0.85) : 0.82,
+      });
+      if (!compressedBlob || compressedBlob.size === 0 || compressedBlob.type !== 'image/webp') {
+        throw new Error('WebP convertToBlob unsupported or produced non-webp blob');
+      }
+    } catch {
+      format = 'image/jpeg';
+      compressedBlob = await canvas.convertToBlob({
+        type: 'image/jpeg',
+        quality: quality || 0.88,
+      });
+    }
+
+    if (!compressedBlob || compressedBlob.size === 0) {
       throw new Error('OffscreenCanvas.convertToBlob produced empty blob');
     }
 
@@ -109,6 +125,7 @@ self.onmessage = async function(e) {
       blob: compressedBlob,
       width,
       height,
+      format,
       wasCompressed: true
     });
   } catch (err) {
@@ -405,37 +422,65 @@ export function fallbackOptimizeClassroomPhoto(
           ctx.imageSmoothingQuality = "high";
           ctx.drawImage(img, 0, 0, width, height);
 
-          canvas.toBlob(
-            (blob) => {
-              if (!blob) {
-                return safeResolve({
-                  file,
-                  originalSize,
-                  compressedSize: originalSize,
-                  width,
-                  height,
-                  wasCompressed: false,
-                });
+          // Opportunistically attempt WebP in fallback canvas, with automatic JPEG fallback
+          const handleEncodedBlob = (blob: Blob | null, isFallbackToJpeg: boolean = false) => {
+            if (!blob || blob.size === 0) {
+              if (!isFallbackToJpeg) {
+                // If WebP produced null, fallback to JPEG
+                try {
+                  canvas.toBlob(
+                    (jpegBlob) => handleEncodedBlob(jpegBlob, true),
+                    "image/jpeg",
+                    quality || 0.88
+                  );
+                  return;
+                } catch {
+                  // Fall through
+                }
               }
-
-              const fileName = file.name.replace(/\.[^/.]+$/, "") + "_optimized.jpg";
-              const optimizedFile = new File([blob], fileName, {
-                type: "image/jpeg",
-                lastModified: Date.now(),
-              });
-
-              safeResolve({
-                file: optimizedFile,
+              return safeResolve({
+                file,
                 originalSize,
-                compressedSize: optimizedFile.size,
+                compressedSize: originalSize,
                 width,
                 height,
-                wasCompressed: true,
+                wasCompressed: false,
               });
-            },
-            "image/jpeg",
-            quality
-          );
+            }
+
+            const isWebp = blob.type === "image/webp";
+            const ext = isWebp ? "_optimized.webp" : "_optimized.jpg";
+            const mimeType = isWebp ? "image/webp" : (blob.type || "image/jpeg");
+            const fileName = file.name.replace(/\.[^/.]+$/, "") + ext;
+            const optimizedFile = new File([blob], fileName, {
+              type: mimeType,
+              lastModified: Date.now(),
+            });
+
+            safeResolve({
+              file: optimizedFile,
+              originalSize,
+              compressedSize: optimizedFile.size,
+              width,
+              height,
+              wasCompressed: true,
+            });
+          };
+
+          try {
+            canvas.toBlob(
+              (blob) => handleEncodedBlob(blob, false),
+              "image/webp",
+              quality ? Math.min(quality, 0.85) : 0.82
+            );
+          } catch {
+            // In case canvas.toBlob throws synchronously with unknown mime type
+            canvas.toBlob(
+              (blob) => handleEncodedBlob(blob, true),
+              "image/jpeg",
+              quality || 0.88
+            );
+          }
         } catch (canvasErr) {
           console.warn("[ImageOptimizerFallback] Canvas processing failed, falling back:", canvasErr);
           safeResolve({
@@ -499,9 +544,12 @@ export async function optimizeClassroomPhoto(
       const result = await optimizeWithWorker(file, maxDimension, quality);
       let optimizedFile: File;
       if (result.wasCompressed) {
-        const fileName = file.name.replace(/\.[^/.]+$/, "") + "_optimized.jpg";
+        const isWebp = result.blob.type === "image/webp";
+        const ext = isWebp ? "_optimized.webp" : "_optimized.jpg";
+        const mimeType = isWebp ? "image/webp" : (result.blob.type || "image/jpeg");
+        const fileName = file.name.replace(/\.[^/.]+$/, "") + ext;
         optimizedFile = new File([result.blob], fileName, {
-          type: "image/jpeg",
+          type: mimeType,
           lastModified: Date.now(),
         });
       } else {

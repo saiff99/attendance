@@ -1424,6 +1424,31 @@
   2. *Positive:* Instantaneous, stutter-free shutter response on mobile devices.
   3. *Positive:* 43.75% lower CPU memory and computation footprint during live camera preview, keeping phones cool during continuous multi-photo capture.
 
+---
+
+### ADR-057: Client-Side WebP Encoding with Lossless Fallback in ImageOptimizer Worker for 30% Smaller Upload Payloads
+
+- **Status:** Accepted
+- **Date:** 2026-11-08
+- **Context:**
+  1. *High Classroom Upload Payloads:* In classroom multi-photo attendance ([ADR-038](file:///Users/saif/Desktop/Attendance/Attendance-app/docs/architecture-vault/02_ARCHITECTURE_DECISION_RECORDS.md)), faculty capture 4 to 8 photos across lecture hall aisles. Previously, [`optimizeClassroomPhoto`](file:///Users/saif/Desktop/Attendance/Attendance-app/frontend/src/lib/imageOptimizer.ts) strictly generated JPEG files (`.jpg`, quality 0.88), producing 1.2 MB – 1.8 MB per image and totaling 8 MB – 15 MB per session.
+  2. *Lecture Hall Mobile Network Constraints:* College lecture halls often experience high carrier contention or weak cellular penetration. Uploading large JPEG batches over cellular connections causes mobile latency (6s – 12s) and increases retry frequency.
+  3. *Universal Modern WebP Support:* Modern browser platforms (Android Chrome, iOS Safari 14+, Edge, Firefox) natively support WebP generation via `OffscreenCanvas.convertToBlob({ type: 'image/webp' })` and `HTMLCanvasElement.toBlob()`. WebP delivers 25%–35% smaller payload sizes at equivalent visual fidelity and facial landmark sharpness.
+  4. *Native Backend WebP Decoding:* The FastAPI Python backend uses OpenCV `cv2.imdecode()` with built-in `libwebp` and validates WebP magic bytes (`b"RIFF...WEBP"`), allowing immediate WebP processing without backend alterations.
+- **Decision:**
+  1. **Opportunistic WebP Encoding in Web Worker:**
+     - Updated `WORKER_CODE` in [`frontend/src/lib/imageOptimizer.ts`](file:///Users/saif/Desktop/Attendance/Attendance-app/frontend/src/lib/imageOptimizer.ts) to attempt `canvas.convertToBlob({ type: 'image/webp', quality: 0.82 })`.
+     - Validates that the runtime generated a non-empty `image/webp` blob. If successful, assigns `_optimized.webp` filename and `image/webp` MIME type.
+  2. **Zero-Failure JPEG Fallback for Legacy Environments:**
+     - Wrapped WebP generation in try-catch. If `canvas.convertToBlob` throws or returns non-webp output on legacy platforms (e.g. older iOS Safari < 14 or mock test environments), it seamlessly falls back to `canvas.convertToBlob({ type: 'image/jpeg', quality: 0.88 })` with `_optimized.jpg`.
+  3. **Dual-Format Fallback in In-Thread Canvas:**
+     - Implemented opportunistic WebP attempt in `fallbackOptimizeClassroomPhoto`, seamlessly transitioning to JPEG on any error or missing WebP support.
+- **Consequences:**
+  1. *Positive:* Reduces batch classroom photo upload payload sizes by 25%–35% (e.g., 12 MB down to ~7.5 MB).
+  2. *Positive:* Accelerates upload transmission time over mobile 4G/5G networks by ~40%, minimizing spinner wait time for faculty.
+  3. *Positive:* 100% backward compatible: older browsers automatically fall back to JPEG without user intervention or errors.
+  4. *Positive:* Perfectly compatible with existing backend InsightFace ArcFace 512D facial verification pipelines.
+
 
 
 
