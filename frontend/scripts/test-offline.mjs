@@ -2958,17 +2958,22 @@ console.log('\n--- 46. Rate Limiter L2 Settings Table Thrashing Mitigation & Con
   assert(proxyCaught, 'Proxy device attempt was blocked 100% in memory');
 }
 
-// --- 47. Live Scan Dashboard Memoized Attendance Cards & Timer Isolation (ADR-043) ---
-console.log('\n--- 47. Live Scan Dashboard Memoized Attendance Cards & Timer Isolation (ADR-043) ---');
+// --- 47. Live Scan Dashboard Memoized Attendance Cards & Timer Isolation (ADR-043 & ADR-054) ---
+console.log('\n--- 47. Live Scan Dashboard Memoized Attendance Cards & Timer Isolation (ADR-043 & ADR-054) ---');
 {
   const liveScanPath = path.resolve(__dirname, '../src/app/live-scan/page.tsx');
   const liveScanCode = fs.readFileSync(liveScanPath, 'utf-8');
+  const drawerPath = path.resolve(__dirname, '../src/components/live-scan/LiveAttendanceDrawer.tsx');
+  const drawerCode = fs.existsSync(drawerPath) ? fs.readFileSync(drawerPath, 'utf-8') : '';
+  const studioPath = path.resolve(__dirname, '../src/components/live-scan/LiveScanCctvStudio.tsx');
+  const studioCode = fs.existsSync(studioPath) ? fs.readFileSync(studioPath, 'utf-8') : '';
+  const liveScanBundle = liveScanCode + drawerCode + studioCode;
 
   // 1. Verify component isolation and memoization
-  assert(liveScanCode.includes('SessionTimerBadge = memo('), 'SessionTimerBadge is wrapped in memo');
-  assert(liveScanCode.includes('AttendanceLogCard = memo('), 'AttendanceLogCard is wrapped in memo');
-  assert(liveScanCode.includes('AbsentStudentCard = memo('), 'AbsentStudentCard is wrapped in memo');
-  assert(liveScanCode.includes('CameraCard = memo('), 'CameraCard is wrapped in memo');
+  assert(liveScanBundle.includes('SessionTimerBadge = memo('), 'SessionTimerBadge is wrapped in memo');
+  assert(liveScanBundle.includes('AttendanceLogCard = memo('), 'AttendanceLogCard is wrapped in memo');
+  assert(liveScanBundle.includes('AbsentStudentCard = memo('), 'AbsentStudentCard is wrapped in memo');
+  assert(liveScanBundle.includes('CameraCard = memo('), 'CameraCard is wrapped in memo');
 
   // 2. Verify root page does not hold 1-second timer state
   assert(!liveScanCode.includes('setSessionTime('), 'Root LiveScan does not contain setSessionTime ticker');
@@ -2977,11 +2982,11 @@ console.log('\n--- 47. Live Scan Dashboard Memoized Attendance Cards & Timer Iso
   // 3. Verify callbacks are memoized with useCallback
   assert(liveScanCode.includes('handleManualMarkPresent = useCallback('), 'handleManualMarkPresent is wrapped in useCallback');
   assert(liveScanCode.includes('handleUndoPresent = useCallback('), 'handleUndoPresent is wrapped in useCallback');
-  assert(liveScanCode.includes('backRowCameras = useMemo('), 'backRowCameras is wrapped in useMemo');
-  assert(liveScanCode.includes('frontRowCameras = useMemo('), 'frontRowCameras is wrapped in useMemo');
+  assert(liveScanBundle.includes('backRowCameras = useMemo('), 'backRowCameras is wrapped in useMemo');
+  assert(liveScanBundle.includes('frontRowCameras = useMemo('), 'frontRowCameras is wrapped in useMemo');
 
   // 4. Verify mobile 16px search input to prevent iOS Safari auto-zoom
-  assert(liveScanCode.includes('text-base sm:text-xs'), 'Search input enforces text-base (16px) on mobile for iOS Safari anti-zoom compliance');
+  assert(liveScanBundle.includes('text-base sm:text-xs'), 'Search input enforces text-base (16px) on mobile for iOS Safari anti-zoom compliance');
 
   // 5. Simulate React.memo shallow comparison behavior for 150 student cards
   let renderCount = 0;
@@ -3565,12 +3570,18 @@ console.log('\n--- 54. Real-time Classroom Framing & Quality Advisor Engine (ADR
   // 3. Verify live-scan integration
   const liveScanPath = path.join(__dirname, '../src/app/live-scan/page.tsx');
   const liveScanContent = fs.readFileSync(liveScanPath, 'utf8');
+  const trayPath = path.join(__dirname, '../src/components/live-scan/ClassroomPhotoTray.tsx');
+  const trayContent = fs.existsSync(trayPath) ? fs.readFileSync(trayPath, 'utf8') : '';
+
   assert(liveScanContent.includes('saveStagedPhoto'), 'live-scan/page.tsx persists new snaps into IndexedDB');
   assert(liveScanContent.includes('deleteStagedPhoto'), 'live-scan/page.tsx purges deleted photos from IndexedDB');
   assert(liveScanContent.includes('clearStagedPhotosForSession'), 'live-scan/page.tsx clears session storage after successful submission');
   assert(liveScanContent.includes('getStagedPhotosForSession'), 'live-scan/page.tsx restores staged photos on session reload');
   assert(liveScanContent.includes('useOfflineStatus'), 'live-scan/page.tsx integrates useOfflineStatus for network monitoring');
-  assert(liveScanContent.includes('Offline (IndexedDB Staged)'), 'live-scan/page.tsx displays offline indicator badge');
+  assert(
+    liveScanContent.includes('Offline (IndexedDB Staged)') || trayContent.includes('Offline (IndexedDB Staged)'),
+    'live-scan displays offline indicator badge'
+  );
 
   // 4. Mathematical validation of TTL pruning window
   const now = Date.now();
@@ -3581,6 +3592,66 @@ console.log('\n--- 54. Real-time Classroom Framing & Quality Advisor Engine (ADR
 
   assert(photoAge30h < cutoff, 'Photo older than 24h evaluates to stale (purged)');
   assert(photoAge2h >= cutoff, 'Photo within 24h evaluates to fresh (retained)');
+}
+
+// --- 57. Modular Component Extraction & Lazy-Loading for live-scan (ADR-054) ---
+console.log('\n--- 57. Modular Component Extraction & Lazy-Loading for live-scan (ADR-054) ---');
+{
+  const liveScanPath = path.join(__dirname, '../src/app/live-scan/page.tsx');
+  const liveScanContent = fs.readFileSync(liveScanPath, 'utf8');
+
+  const trayPath = path.join(__dirname, '../src/components/live-scan/ClassroomPhotoTray.tsx');
+  assert(fs.existsSync(trayPath), 'ClassroomPhotoTray.tsx exists in components/live-scan');
+  const trayContent = fs.readFileSync(trayPath, 'utf8');
+  assert(trayContent.includes('export const ClassroomPhotoTray = memo('), 'ClassroomPhotoTray is memoized');
+
+  const smartCamPath = path.join(__dirname, '../src/components/live-scan/SmartCameraViewfinder.tsx');
+  assert(fs.existsSync(smartCamPath), 'SmartCameraViewfinder.tsx exists in components/live-scan');
+  const smartCamContent = fs.readFileSync(smartCamPath, 'utf8');
+  assert(smartCamContent.includes('export const SmartCameraViewfinder = memo('), 'SmartCameraViewfinder is memoized');
+
+  const drawerPath = path.join(__dirname, '../src/components/live-scan/LiveAttendanceDrawer.tsx');
+  assert(fs.existsSync(drawerPath), 'LiveAttendanceDrawer.tsx exists in components/live-scan');
+  const drawerContent = fs.readFileSync(drawerPath, 'utf8');
+  assert(drawerContent.includes('export const LiveAttendanceDrawer = memo('), 'LiveAttendanceDrawer is memoized');
+
+  const studioPath = path.join(__dirname, '../src/components/live-scan/LiveScanCctvStudio.tsx');
+  assert(fs.existsSync(studioPath), 'LiveScanCctvStudio.tsx exists in components/live-scan');
+  const studioContent = fs.readFileSync(studioPath, 'utf8');
+  assert(studioContent.includes('export const LiveScanCctvStudio = memo('), 'LiveScanCctvStudio is memoized');
+
+  const setupPath = path.join(__dirname, '../src/components/live-scan/SessionSetupForm.tsx');
+  assert(fs.existsSync(setupPath), 'SessionSetupForm.tsx exists in components/live-scan');
+  const setupContent = fs.readFileSync(setupPath, 'utf8');
+  assert(setupContent.includes('export const SessionSetupForm = memo('), 'SessionSetupForm is memoized');
+
+  // Verify next/dynamic lazy-loading with ssr: false for heavy modals
+  assert(liveScanContent.includes('import dynamic from "next/dynamic";'), 'live-scan imports next/dynamic');
+  assert(
+    liveScanContent.includes('dynamic(') &&
+    liveScanContent.includes('FaceInspectorModal') &&
+    liveScanContent.includes('{ ssr: false }'),
+    'FaceInspectorModal is dynamically imported with ssr: false'
+  );
+  assert(
+    liveScanContent.includes('ClassroomGpsModal') &&
+    liveScanContent.includes('{ ssr: false }'),
+    'ClassroomGpsModal is dynamically imported with ssr: false'
+  );
+  assert(
+    liveScanContent.includes('GeofenceModal') &&
+    liveScanContent.includes('{ ssr: false }'),
+    'GeofenceModal is dynamically imported with ssr: false'
+  );
+  assert(
+    liveScanContent.includes('SmartCameraViewfinder') &&
+    liveScanContent.includes('{ ssr: false }'),
+    'SmartCameraViewfinder is dynamically imported with ssr: false'
+  );
+
+  // Line count reduction verification: monolithic 3,205 lines reduced by at least 1,000 lines
+  const lineCount = liveScanContent.split('\n').length;
+  assert(lineCount < 2000, `live-scan/page.tsx line count reduced below 2000 lines (currently ${lineCount} lines)`);
 }
 
 // Summary

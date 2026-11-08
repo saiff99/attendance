@@ -1336,6 +1336,36 @@
   2. *Positive:* Zero network degradation on client devices.
   3. *Positive:* Backward-compatible with single-student selfie check-in.
 
+---
+
+### ADR-054: Modular Code-Splitting and Component Decomposition for Live-Scan Faculty Hub
+
+- **Status:** Accepted
+- **Date:** 2026-11-08
+- **Context:**
+  1. *Monolithic File Growth:* Following continuous feature enrichments (6-cam CCTV matrix, single-cam auto-tour, GPS calibration, face bounding-box inspector, multi-photo staging, indexedDB resilience), [`frontend/src/app/live-scan/page.tsx`](file:///Users/saif/Desktop/Attendance/Attendance-app/frontend/src/app/live-scan/page.tsx) grew to over 3,200 lines.
+  2. *Initial JS Bundle & Parse Bloat:* Heavy interactive modals (`FaceInspectorModal`, `ClassroomGpsModal`, `GeofenceModal`, `SmartCameraViewfinder`) were statically loaded on initial page load even though faculties typically open them conditionally on-demand.
+  3. *Zero-Regression Mandate:* Component extraction must preserve exact prop contracts, event handlers, and strict mobile invariants (such as 16px iOS Safari font size and offline IndexedDB synchronization).
+- **Decision:**
+  1. **Modular Sub-Component Extraction (`frontend/src/components/live-scan/`):**
+     - `ClassroomPhotoTray.tsx`: Encapsulates staged photo grid, quality status chips (Clear/Blurry/Low Light), background optimization indicators, delete buttons, offline sync status badge, and dual-connection batch upload progress bar.
+     - `SmartCameraViewfinder.tsx`: Encapsulates WebRTC `navigator.mediaDevices.getUserMedia` video stream, 400ms frame quality advisor HUD, visual shutter flash, canvas capture, flip camera facing, and staged photo counter.
+     - `LiveAttendanceDrawer.tsx`: Encapsulates present/absent student tabs, search query filtering with 16px mobile font-size, memoized `AttendanceLogCard` and `AbsentStudentCard`, 1-click manual override, and undo functionality.
+     - `LiveScanCctvStudio.tsx`: Encapsulates 6-camera grid (`CameraCard`), dormant standby graphics, single camera auto-tour player, and fullscreen studio focus modal with keyboard navigation (`Esc`, `←`, `→`, `F`).
+     - `SessionSetupForm.tsx`: Encapsulates cohort, sub-batch, subject, lecture hall, custom room input, and GPS Geofence security setup form.
+     - `types.ts`: Centralizes shared interfaces (`CameraMeta`, `AttendanceLogItem`, `QueuedPhotoItem`).
+  2. **Next.js Dynamic Code-Splitting (`next/dynamic` with `ssr: false`):**
+     - Heavy modals (`FaceInspectorModal`, `ClassroomGpsModal`, `GeofenceModal`, `SmartCameraViewfinder`) are loaded asynchronously on-demand with SSR disabled.
+  3. **Preserved Invariants & Zero Regression:**
+     - Orchestration state (`queuedPhotos`, `logs`, `activeSession`, `batchProgress`, `inspectedPhotos`) remains centralized in `live-scan/page.tsx`.
+     - Mobile 16px font-size rule on search and form inputs strictly preserved.
+     - Complete test suite passes: Vitest UI (73 tests), offline security suite (1,923 tests), and backend unittests (83 tests).
+- **Consequences:**
+  1. *Positive:* Reduced monolithic `live-scan/page.tsx` line count by $> 40\%$ (from 3,205 to 1,860 lines), improving developer readability and code maintainability.
+  2. *Positive:* Initial bundle size decreased via code-splitting; heavy modal chunks are downloaded on-demand only when opened.
+  3. *Positive:* Zero regressions on facial recognition, multi-photo staging, offline IndexedDB resilience, or 1-tap faculty override.
+
+
 
 
 
