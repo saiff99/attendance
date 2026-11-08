@@ -85,6 +85,11 @@ export default function StudentPortalPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Persistent student list cache for Admin Preview Switcher (ADR-064)
+  const cachedStudentListRef = useRef<{ roll: string; name: string; year: string }[]>([]);
+  const [adminStudentList, setAdminStudentList] = useState<{ roll: string; name: string; year: string }[]>([]);
+  const [switcherSearch, setSwitcherSearch] = useState<string>("");
+
   // PIN modal state
   const [isPinModalOpen, setIsPinModalOpen] = useState(false);
   const [oldPin, setOldPin] = useState("");
@@ -169,12 +174,27 @@ export default function StudentPortalPage() {
     setError(null);
     const startTime = Date.now();
     try {
-      const url = rollQuery ? `/api/student/portal-data?roll=${encodeURIComponent(rollQuery)}` : "/api/student/portal-data";
+      const hasCachedList = cachedStudentListRef.current.length > 0;
+      const params = new URLSearchParams();
+      if (rollQuery) params.set("roll", rollQuery);
+      if (hasCachedList) params.set("skip_switcher", "true");
+
+      const url = `/api/student/portal-data${params.toString() ? `?${params.toString()}` : ""}`;
       const res = await fetch(url, { cache: "no-store" });
       const json = await res.json();
       if (!res.ok || !json.success) {
         throw new Error(json.error || "Failed to load portal data");
       }
+
+      // If server returned adminStudentList, update cache (ADR-064)
+      if (json.adminStudentList && json.adminStudentList.length > 0) {
+        cachedStudentListRef.current = json.adminStudentList;
+        setAdminStudentList(json.adminStudentList);
+      } else if (cachedStudentListRef.current.length > 0) {
+        // Preserve cached student list in local state
+        json.adminStudentList = cachedStudentListRef.current;
+      }
+
       setData(json);
       if (json.student?.studentRoll) {
         setSelectedRoll((prev) => prev || json.student.studentRoll);
@@ -222,6 +242,16 @@ export default function StudentPortalPage() {
     window.addEventListener("focus", handleFocus);
     return () => window.removeEventListener("focus", handleFocus);
   }, [fetchPortalData]);
+
+  // Filtered student list for quick roll/name search in preview toolbar (ADR-064)
+  const filteredStudentList = useMemo(() => {
+    const list = adminStudentList.length > 0 ? adminStudentList : (data?.adminStudentList || []);
+    if (!switcherSearch.trim()) return list;
+    const term = switcherSearch.toLowerCase().trim();
+    return list.filter(
+      (s) => s.roll.toLowerCase().includes(term) || s.name.toLowerCase().includes(term) || s.year.toLowerCase().includes(term)
+    );
+  }, [adminStudentList, data?.adminStudentList, switcherSearch]);
 
   // Strictly filter Recent Class Attendance to the last 7 days (Top-level hook complying with React Rules of Hooks)
   const last7DaysSessions = useMemo(() => {
@@ -581,9 +611,32 @@ export default function StudentPortalPage() {
           </div>
 
           <div className="flex items-center gap-2.5">
-            {data.adminStudentList && data.adminStudentList.length > 0 && (
-              <div className="flex items-center gap-1.5">
-                <span className="text-[11px] text-slate-400 hidden md:inline">Inspect Student:</span>
+            {(adminStudentList.length > 0 || (data.adminStudentList && data.adminStudentList.length > 0)) && (
+              <div className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap">
+                <span className="text-[11px] text-slate-400 hidden md:inline">Inspect:</span>
+
+                {/* Quick Roll / Name Search Filter (ADR-064) */}
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Search roll/name..."
+                    value={switcherSearch}
+                    onChange={(e) => setSwitcherSearch(e.target.value)}
+                    className="w-24 sm:w-32 bg-slate-950/80 border border-slate-700 hover:border-indigo-500 text-white text-[11px] rounded-xl px-2.5 py-1.5 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors shadow-inner"
+                  />
+                  {switcherSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setSwitcherSearch("")}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white text-xs"
+                      title="Clear search"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+
+                {/* Dropdown Selector */}
                 <select
                   value={selectedRoll || student.studentRoll}
                   onChange={(e) => {
@@ -591,13 +644,18 @@ export default function StudentPortalPage() {
                     setSelectedRoll(newRoll);
                     fetchPortalData(newRoll);
                   }}
-                  className="bg-slate-950 border border-slate-700 hover:border-indigo-500 text-white text-xs rounded-xl px-3 py-1.5 focus:outline-none focus:border-indigo-500 cursor-pointer transition-colors shadow-inner"
+                  className="max-w-[170px] sm:max-w-[240px] truncate bg-slate-950 border border-slate-700 hover:border-indigo-500 text-white text-xs rounded-xl px-3 py-1.5 focus:outline-none focus:border-indigo-500 cursor-pointer transition-colors shadow-inner"
                 >
-                  {data.adminStudentList.map((st) => (
+                  {filteredStudentList.map((st) => (
                     <option key={st.roll} value={st.roll}>
                       Roll {st.roll} - {st.name} ({st.year})
                     </option>
                   ))}
+                  {filteredStudentList.length === 0 && (
+                    <option value="" disabled>
+                      No matches
+                    </option>
+                  )}
                 </select>
               </div>
             )}

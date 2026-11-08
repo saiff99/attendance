@@ -4186,9 +4186,55 @@ console.log('\n--- 67. Forensic Audit Logs Summary Projection & Lazy Loading (AD
   const indexPath = path.resolve(__dirname, '../../docs/architecture-vault/INDEX.md');
   const indexContent = fs.readFileSync(indexPath, 'utf8');
   assert(
-    indexContent.includes('ADR-001 to ADR-063') &&
     indexContent.includes('Forensic Audit Logs Selective Summary Projection & On-Demand JSONB Lazy Loading'),
     'INDEX.md references ADR-063 in vault catalog'
+  );
+}
+
+// --- 68. Student Portal Admin Switcher Bounded Projection & Client List Reuse (ADR-064) ---
+console.log('\n--- 68. Student Portal Admin Switcher Bounded Projection & Client List Reuse (ADR-064) ---');
+{
+  // 1. Verify api/student/portal-data/route.ts implements skip_switcher check & bounded query
+  const portalApiPath = path.resolve(__dirname, '../src/app/api/student/portal-data/route.ts');
+  assert(fs.existsSync(portalApiPath), 'api/student/portal-data/route.ts exists');
+  const portalApiContent = fs.readFileSync(portalApiPath, 'utf8');
+  assert(
+    portalApiContent.includes("searchParams.get('skip_switcher') === 'true'") &&
+    portalApiContent.includes(".limit(1000)"),
+    'api/student/portal-data/route.ts skips student directory when skip_switcher=true and bounds query to 1000 rows'
+  );
+
+  // 2. Verify portal/page.tsx implements cached student directory ref & search filter
+  const portalPagePath = path.resolve(__dirname, '../src/app/portal/page.tsx');
+  assert(fs.existsSync(portalPagePath), 'portal/page.tsx exists');
+  const portalPageContent = fs.readFileSync(portalPagePath, 'utf8');
+  assert(
+    portalPageContent.includes('cachedStudentListRef') &&
+    (portalPageContent.includes("params.set('skip_switcher', 'true')") ||
+     portalPageContent.includes('params.set("skip_switcher", "true")')),
+    'portal/page.tsx implements cachedStudentListRef and skips switcher payload on student switch'
+  );
+  assert(
+    portalPageContent.includes('switcherSearch') &&
+    portalPageContent.includes('filteredStudentList'),
+    'portal/page.tsx implements quick roll & name switcher search filter'
+  );
+
+  // 3. Verify ADR-064 documentation in 02_ARCHITECTURE_DECISION_RECORDS.md
+  const adrPath = path.resolve(__dirname, '../../docs/architecture-vault/02_ARCHITECTURE_DECISION_RECORDS.md');
+  const adrContent = fs.readFileSync(adrPath, 'utf8');
+  assert(
+    adrContent.includes('ADR-064: Student Portal Admin Switcher Bounded Projection & Client-Side List Reuse'),
+    '02_ARCHITECTURE_DECISION_RECORDS.md documents ADR-064'
+  );
+
+  // 4. Verify INDEX.md references ADR-064
+  const indexPath = path.resolve(__dirname, '../../docs/architecture-vault/INDEX.md');
+  const indexContent = fs.readFileSync(indexPath, 'utf8');
+  assert(
+    indexContent.includes('ADR-001 to ADR-064') &&
+    indexContent.includes('Student Portal Admin Switcher Bounded Projection & Client-Side List Reuse'),
+    'INDEX.md references ADR-064 in vault catalog'
   );
 }
 

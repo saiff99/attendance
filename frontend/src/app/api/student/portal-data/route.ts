@@ -92,14 +92,16 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Student not found in registry.' }, { status: 404 });
     }
 
-    // Fetch list of students if viewer is Super Admin, Admin or Faculty for interactive switcher
-    let adminStudentList: { roll: string; name: string; year: string }[] = [];
-    if (session.role === 'Super Admin' || session.role === 'Admin' || session.role === 'Faculty') {
+    // Fetch list of students if viewer is Super Admin, Admin or Faculty for interactive switcher (ADR-064)
+    let adminStudentList: { roll: string; name: string; year: string }[] | undefined = undefined;
+    const skipSwitcher = searchParams.get('skip_switcher') === 'true';
+    if (!skipSwitcher && (session.role === 'Super Admin' || session.role === 'Admin' || session.role === 'Faculty')) {
       const { data: stList } = await supabaseServer
         .from('students')
         .select('student_roll, full_name, academic_year')
         .eq('is_active', true)
-        .order('student_roll', { ascending: true });
+        .order('student_roll', { ascending: true })
+        .limit(1000);
       if (stList) {
         adminStudentList = stList.map(s => ({
           roll: s.student_roll,
@@ -351,7 +353,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       viewerRole: session.role,
-      adminStudentList,
+      ...(adminStudentList !== undefined ? { adminStudentList } : {}),
       student: {
         id: student.id,
         fullName: student.full_name,
