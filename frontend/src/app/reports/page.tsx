@@ -71,6 +71,12 @@ interface StudentReport {
   subjectBreakdown?: SubjectBreakdown[];
 }
 
+interface CachedReportsEntry {
+  totalSessions: number;
+  reports: StudentReport[];
+  timestamp: number;
+}
+
 type SortField = "full_name" | "student_roll" | "attendance_rate" | "total_present" | "total_absent";
 type SortOrder = "asc" | "desc";
 type RiskFilter = "all" | "critical" | "warning" | "good";
@@ -131,6 +137,9 @@ export default function ReportsPage() {
   const [endDate, setEndDate] = useState<string>("");
   const [dateRangePreset, setDateRangePreset] = useState<string>("all");
 
+  // In-Memory Client Cache for Date-Range Reports (ADR-065: Immutable Past Terms Caching)
+  const reportsCacheRef = useRef<Map<string, CachedReportsEntry>>(new Map());
+
   const handleDatePresetChange = (preset: string) => {
     setDateRangePreset(preset);
     const today = new Date();
@@ -164,7 +173,24 @@ export default function ReportsPage() {
     fetchReports(newStart, newEnd);
   };
 
-  const fetchReports = async (start = startDate, end = endDate) => {
+  const fetchReports = async (start = startDate, end = endDate, forceRefresh = false) => {
+    const cacheKey = `${start || "ALL"}_${end || "ALL"}`;
+    const now = Date.now();
+    const todayStr = new Date().toISOString().split("T")[0];
+    const isImmutablePast = Boolean(end && end < todayStr);
+
+    if (!forceRefresh && reportsCacheRef.current.has(cacheKey)) {
+      const cached = reportsCacheRef.current.get(cacheKey)!;
+      // Immutable past ranges persist indefinitely for the session; active/current ranges expire after 60s
+      const isExpired = !isImmutablePast && (now - cached.timestamp > 60_000);
+      if (!isExpired) {
+        setTotalSessions(cached.totalSessions);
+        setReports(cached.reports);
+        setLoading(false);
+        return;
+      }
+    }
+
     setLoading(true);
     try {
       const params = new URLSearchParams();
@@ -292,6 +318,12 @@ export default function ReportsPage() {
         };
       });
       setReports(built);
+      // Cache the computed reports for this date range (ADR-065)
+      reportsCacheRef.current.set(cacheKey, {
+        totalSessions: sessionCount,
+        reports: built,
+        timestamp: Date.now(),
+      });
     } catch (err) {
       console.error("Error fetching reports:", err);
     } finally {
@@ -456,7 +488,10 @@ export default function ReportsPage() {
           </div>
           <div className="flex gap-2 ml-11 sm:ml-0">
             <button
-              onClick={() => fetchReports(startDate, endDate)}
+              onClick={() => {
+                reportsCacheRef.current.clear();
+                void fetchReports(startDate, endDate, true);
+              }}
               disabled={loading}
               className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 hover:border-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all disabled:opacity-50"
             >
@@ -568,7 +603,7 @@ export default function ReportsPage() {
                 />
                 <button
                   type="button"
-                  onClick={() => fetchReports(startDate, endDate)}
+                  onClick={() => fetchReports(startDate, endDate, true)}
                   className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white transition-colors"
                 >
                   Apply

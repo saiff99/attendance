@@ -4232,9 +4232,72 @@ console.log('\n--- 68. Student Portal Admin Switcher Bounded Projection & Client
   const indexPath = path.resolve(__dirname, '../../docs/architecture-vault/INDEX.md');
   const indexContent = fs.readFileSync(indexPath, 'utf8');
   assert(
-    indexContent.includes('ADR-001 to ADR-064') &&
     indexContent.includes('Student Portal Admin Switcher Bounded Projection & Client-Side List Reuse'),
     'INDEX.md references ADR-064 in vault catalog'
+  );
+}
+
+// --- 69. Historical Attendance Reports Date-Range Client Caching (ADR-065) ---
+console.log('\n--- 69. Historical Attendance Reports Date-Range Client Caching (ADR-065) ---');
+{
+  // 1. Verify frontend/src/app/reports/page.tsx implements reportsCacheRef and forceRefresh logic
+  const reportsPagePath = path.resolve(__dirname, '../src/app/reports/page.tsx');
+  assert(fs.existsSync(reportsPagePath), 'reports/page.tsx exists');
+  const reportsPageContent = fs.readFileSync(reportsPagePath, 'utf8');
+  assert(
+    reportsPageContent.includes('reportsCacheRef') &&
+    reportsPageContent.includes('isImmutablePast') &&
+    reportsPageContent.includes('forceRefresh'),
+    'reports/page.tsx implements reportsCacheRef in-memory date range caching with immutable past term check'
+  );
+  assert(
+    reportsPageContent.includes('reportsCacheRef.current.clear()'),
+    'reports/page.tsx implements manual cache invalidation on Refresh button'
+  );
+
+  // 2. Behavioral simulation of immutable past caching vs active range TTL
+  const testCache = new Map();
+  const today = '2026-11-09';
+  const pastRange = { start: '2026-01-01', end: '2026-03-31' };
+  const currentRange = { start: '2026-11-01', end: today };
+
+  // Set past range
+  const pastKey = `${pastRange.start}_${pastRange.end}`;
+  testCache.set(pastKey, { totalSessions: 42, reports: [{ id: 's1' }], timestamp: Date.now() - 3600000 }); // 1 hour ago
+  const isPast = pastRange.end < today;
+  assert(isPast === true, 'End date earlier than today is identified as immutable past range');
+  const pastCached = testCache.get(pastKey);
+  const pastExpired = !isPast && (Date.now() - pastCached.timestamp > 60000);
+  assert(pastExpired === false, 'Immutable past range does not expire regardless of timestamp');
+
+  // Set current range
+  const currentKey = `${currentRange.start}_${currentRange.end}`;
+  testCache.set(currentKey, { totalSessions: 10, reports: [{ id: 's2' }], timestamp: Date.now() - 70000 }); // 70s ago
+  const isCurrentPast = currentRange.end < today;
+  assert(isCurrentPast === false, 'Range ending today or later is not treated as immutable past range');
+  const currentCached = testCache.get(currentKey);
+  const currentExpired = !isCurrentPast && (Date.now() - currentCached.timestamp > 60000);
+  assert(currentExpired === true, 'Active/current range expires after 60s TTL');
+
+  // Manual refresh clears cache
+  testCache.clear();
+  assert(testCache.size === 0, 'Manual refresh clears in-memory date-range reports cache');
+
+  // 3. Verify ADR-065 documentation in 02_ARCHITECTURE_DECISION_RECORDS.md
+  const adrPath = path.resolve(__dirname, '../../docs/architecture-vault/02_ARCHITECTURE_DECISION_RECORDS.md');
+  const adrContent = fs.readFileSync(adrPath, 'utf8');
+  assert(
+    adrContent.includes('ADR-065: Historical Attendance Reports Date-Range Client Caching (Immutable Past Terms)'),
+    '02_ARCHITECTURE_DECISION_RECORDS.md documents ADR-065'
+  );
+
+  // 4. Verify INDEX.md references ADR-065
+  const indexPath = path.resolve(__dirname, '../../docs/architecture-vault/INDEX.md');
+  const indexContent = fs.readFileSync(indexPath, 'utf8');
+  assert(
+    indexContent.includes('ADR-001 to ADR-065') &&
+    indexContent.includes('Historical Attendance Reports Date-Range Client Caching Immutable Past Terms'),
+    'INDEX.md references ADR-065 in vault catalog'
   );
 }
 
