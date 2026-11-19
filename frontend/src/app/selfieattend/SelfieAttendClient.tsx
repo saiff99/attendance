@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback, useMemo, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Camera, CheckCircle2, ShieldCheck, AlertCircle, RefreshCw,
@@ -77,12 +77,20 @@ interface SelfieAttendClientProps {
 }
 
 export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClientProps) {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const initialSessionId = searchParams.get("session_id");
   const initialToken = searchParams.get("token");
   const hasAutoSelectedRef = useRef<boolean>(false);
   const [checkinToken, setCheckinToken] = useState<string | null>(() => initialToken || null);
   const [pinInput, setPinInput] = useState<string>("");
+
+  const handleReturnToPortal = useCallback((e: React.MouseEvent) => {
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      e.preventDefault();
+      router.back();
+    }
+  }, [router]);
 
   // Step Machine: 1: select_session, 2: enter_roll, 3: capture_selfie, 4: result
   const [step, setStep] = useState<"select_session" | "enter_roll" | "capture_selfie" | "result">(() => {
@@ -1318,6 +1326,7 @@ export function SelfieAttendContent({ initialSessions = [] }: SelfieAttendClient
 
         <Link
           href={isStaffUser ? "/" : "/portal"}
+          onClick={handleReturnToPortal}
           className="group inline-flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-full bg-slate-800/80 hover:bg-indigo-600/20 text-slate-300 hover:text-white text-xs font-semibold border border-slate-700/80 hover:border-indigo-500/40 transition-all duration-200 backdrop-blur-md shadow-sm hover:shadow-md cursor-pointer active:scale-95 shrink-0"
           title={isStaffUser ? "Return to Dashboard" : "Return to Student Portal"}
         >

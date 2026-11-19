@@ -1708,6 +1708,35 @@
   3. *Positive:* Retains tamper-evident forensic trail: the purge operation itself is permanently audited.
   4. *Positive:* Transparent UI: Administrators immediately observe true database ledger count and display bounds.
 
+---
+
+### ADR-067: Instant 0ms Student Portal Back-Navigation Hydration & SWR Memory Caching
+
+- **Status:** Accepted
+- **Date:** 2026-11-19
+- **Context:**
+  1. *Return Navigation Friction:* When students navigate from `/portal` to `/selfieattend` to mark attendance and subsequently tap `← Portal` (or swipe back on iOS), clicking `<Link href="/portal">` unmounted `/selfieattend` and remounted `StudentPortalPage` with `data = null` and `loading = true`.
+  2. *Redundant Cold Splash Screen:* Because `loading && !data` was initially true on every navigation, students were repeatedly subjected to a full-screen loading splash (*"Synchronizing Academic Records..."*) accompanied by a 600ms artificial delay and redundant network re-queries to `/api/student/portal-data`.
+  3. *Cellular Data & Database Pressure:* On mobile devices with spotty campus connections, repeatedly downloading the entire portal dataset on back-navigation wasted cellular data, created perceive lag, and burdened Supabase with unnecessary queries.
+- **Decision:**
+  1. **Dual-Tier Client-Side SWR Caching (Module Memory & SessionStorage):**
+     - Implemented `globalPortalMemoryCache` (module-level JS memory) and `sessionStorage` fallback under key `medattend_portal_cache` in [`frontend/src/app/portal/page.tsx`](file:///Users/saif/Desktop/Attendance/Attendance-app/frontend/src/app/portal/page.tsx).
+     - Initialized `data` synchronously from cache via `useState<PortalData | null>(() => getCachedPortalData(...))`.
+     - Initialized `loading` to `false` whenever cached data is available, completely bypassing the full-screen splash screen on return visits.
+  2. **Silent Background Revalidation (Stale-While-Revalidate):**
+     - When mounting with existing cached data, `useEffect` triggers `fetchPortalData(undefined, true)` silently (`isSilent = true`).
+     - Fresh server data updates the state and cache in the background without UI interruption or layout shifts, ensuring that newly recorded attendances are seamlessly reflected.
+  3. **History-Aware Native Back Transition (`router.back()`):**
+     - In [`frontend/src/app/selfieattend/SelfieAttendClient.tsx`](file:///Users/saif/Desktop/Attendance/Attendance-app/frontend/src/app/selfieattend/SelfieAttendClient.tsx), updated the `← Portal` button to intercept clicks with `router.back()` when `window.history.length > 1`.
+     - Activates WebKit/Chromium Back-Forward Cache (BFCache), providing native iOS swipe-back smoothness with 0ms perceived latency. If opened directly without history, falls back to standard routing.
+  4. **Secure Cache Invalidation on Sign-Out:**
+     - Connected `handleLogout` to `clearPortalCache()` to ensure cached student metrics and identity records are wiped upon session termination.
+- **Consequences:**
+  1. *Positive:* Instantaneous 0ms return navigation to Student Portal from Selfie Attend, eliminating the redundant loading splash screen completely.
+  2. *Positive:* Smooth native iOS-like transition experience without frame drops or white/black flashes.
+  3. *Positive:* Drastically reduced redundant database calls and cellular bandwidth consumption.
+  4. *Positive:* Zero data loss or stale metrics: silent background revalidation ensures new attendance records update accurately.
+
 
 
 

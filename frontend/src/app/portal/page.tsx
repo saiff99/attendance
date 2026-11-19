@@ -77,13 +77,85 @@ function formatSessionTime(isoString?: string | null): string {
   }
 }
 
+// Module-level in-memory cache for instant 0ms back-navigation (ADR-067)
+let globalPortalMemoryCache: {
+  data: PortalData;
+  timestamp: number;
+  roll?: string;
+} | null = null;
+
+const PORTAL_CACHE_KEY = "medattend_portal_cache";
+
+function getCachedPortalData(currentStudentRoll?: string): PortalData | null {
+  if (typeof window === "undefined") return null;
+
+  // 1. Check module memory cache
+  if (globalPortalMemoryCache?.data) {
+    if (!currentStudentRoll || !globalPortalMemoryCache.roll || globalPortalMemoryCache.roll.toLowerCase() === currentStudentRoll.toLowerCase()) {
+      return globalPortalMemoryCache.data;
+    }
+  }
+
+  // 2. Check sessionStorage
+  try {
+    const raw = sessionStorage.getItem(PORTAL_CACHE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed?.data) {
+        if (!currentStudentRoll || !parsed.roll || parsed.roll.toLowerCase() === currentStudentRoll.toLowerCase()) {
+          globalPortalMemoryCache = parsed;
+          return parsed.data;
+        }
+      }
+    }
+  } catch {
+    // ignore parse or storage errors
+  }
+
+  return null;
+}
+
+function setCachedPortalData(data: PortalData) {
+  if (typeof window === "undefined") return;
+  const payload = {
+    data,
+    timestamp: Date.now(),
+    roll: data.student?.studentRoll,
+  };
+  globalPortalMemoryCache = payload;
+  try {
+    sessionStorage.setItem(PORTAL_CACHE_KEY, JSON.stringify(payload));
+  } catch {
+    // ignore storage quota errors
+  }
+}
+
+export function clearPortalCache() {
+  globalPortalMemoryCache = null;
+  if (typeof window !== "undefined") {
+    try {
+      sessionStorage.removeItem(PORTAL_CACHE_KEY);
+    } catch {}
+  }
+}
+
 export default function StudentPortalPage() {
   const { user, logout } = useAuth();
 
-  const [data, setData] = useState<PortalData | null>(null);
-  const [selectedRoll, setSelectedRoll] = useState<string>("");
-  const [loading, setLoading] = useState(true);
+  // Instant SWR Hydration: Initialize from memory / sessionStorage cache if available (ADR-067)
+  const [data, setData] = useState<PortalData | null>(() => {
+    return getCachedPortalData(user?.role === "Student" ? user.studentRoll : undefined);
+  });
+  const [selectedRoll, setSelectedRoll] = useState<string>(() => {
+    return data?.student?.studentRoll || (user?.role === "Student" ? user.studentRoll || "" : "");
+  });
+  const [loading, setLoading] = useState<boolean>(() => !data);
   const [error, setError] = useState<string | null>(null);
+
+  const handleLogout = useCallback(() => {
+    clearPortalCache();
+    logout();
+  }, [logout]);
 
   // Persistent student list cache for Admin Preview Switcher (ADR-064)
   const cachedStudentListRef = useRef<{ roll: string; name: string; year: string }[]>([]);
@@ -196,6 +268,7 @@ export default function StudentPortalPage() {
       }
 
       setData(json);
+      setCachedPortalData(json);
       if (json.student?.studentRoll) {
         setSelectedRoll((prev) => prev || json.student.studentRoll);
       }
@@ -220,13 +293,15 @@ export default function StudentPortalPage() {
     let isMounted = true;
     void (async () => {
       if (isMounted) {
-        await fetchPortalData();
+        const hasCached = Boolean(getCachedPortalData(user?.role === "Student" ? user.studentRoll : undefined));
+        // If data is already populated from cache, perform silent background revalidation without full-screen splash
+        await fetchPortalData(undefined, hasCached);
       }
     })();
     return () => {
       isMounted = false;
     };
-  }, [fetchPortalData]);
+  }, [fetchPortalData, user?.role, user?.studentRoll]);
 
   // Keep a stable ref of selectedRoll for window focus events without causing re-renders
   const selectedRollRef = useRef(selectedRoll);
@@ -442,7 +517,7 @@ export default function StudentPortalPage() {
               </Link>
             )}
             <button
-              onClick={() => logout()}
+              onClick={handleLogout}
               className="w-full sm:flex-1 py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-all cursor-pointer"
             >
               Sign Out
@@ -573,7 +648,7 @@ export default function StudentPortalPage() {
                     type="button"
                     onClick={() => {
                       setIsProfileMenuOpen(false);
-                      logout();
+                      handleLogout();
                     }}
                     className="group w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold text-rose-400 hover:text-rose-300 hover:bg-rose-500/15 active:scale-[0.98] transition-all duration-150 text-left cursor-pointer"
                   >

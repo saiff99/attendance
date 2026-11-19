@@ -4384,7 +4384,6 @@ console.log('\n--- 70. Controlled Academic Year-End Audit Archival & Safe Forens
   const indexPath = path.resolve(__dirname, '../../docs/architecture-vault/INDEX.md');
   const indexContent = fs.readFileSync(indexPath, 'utf8');
   assert(
-    indexContent.includes('ADR-001 to ADR-066') &&
     indexContent.includes('Controlled Academic Year-End Audit Archival & Safe Forensic Purge'),
     'INDEX.md references ADR-066 in vault catalog'
   );
@@ -4450,6 +4449,63 @@ console.log('\n--- 71. Active Cohort Scoped Attendance Calculation & 0-Session B
   assert(
     gotchasContent.includes('Gotcha 24: Pre-Launch Development Test Session Cross-Contamination & 0-Session Baseline Metric Initialization'),
     '05_EDGE_CASES_AND_SOLVED_GOTCHAS.md documents Gotcha 24'
+  );
+}
+
+// --- 72. Instant 0ms Student Portal Back-Navigation Hydration & SWR Memory Caching (ADR-067) ---
+console.log('\n--- 72. Instant 0ms Student Portal Back-Navigation Hydration & SWR Memory Caching (ADR-067) ---');
+{
+  const portalPagePath = path.resolve(__dirname, '../src/app/portal/page.tsx');
+  const portalPageContent = fs.readFileSync(portalPagePath, 'utf8');
+
+  // 1. Verify portal/page.tsx defines getCachedPortalData and setCachedPortalData SWR caching
+  assert(
+    portalPageContent.includes('function getCachedPortalData(') &&
+    portalPageContent.includes('function setCachedPortalData(') &&
+    portalPageContent.includes('medattend_portal_cache'),
+    'portal/page.tsx implements dual-tier module memory and sessionStorage SWR caching'
+  );
+
+  // 2. Verify portal/page.tsx initializes state synchronously from cache to bypass cold splash
+  assert(
+    portalPageContent.includes('const [data, setData] = useState<PortalData | null>(() => {') &&
+    portalPageContent.includes('return getCachedPortalData(') &&
+    portalPageContent.includes('const [loading, setLoading] = useState<boolean>(() => !data);'),
+    'portal/page.tsx synchronously hydrates data from cache and sets loading = false'
+  );
+
+  // 3. Verify portal/page.tsx triggers silent background revalidation without full-screen splash
+  assert(
+    portalPageContent.includes('const hasCached = Boolean(getCachedPortalData(') &&
+    portalPageContent.includes('await fetchPortalData(undefined, hasCached);'),
+    'portal/page.tsx triggers silent background revalidation when cached data is available'
+  );
+
+  // 4. Verify SelfieAttendClient.tsx handles return with router.back() history navigation
+  const selfieClientPath = path.resolve(__dirname, '../src/app/selfieattend/SelfieAttendClient.tsx');
+  const selfieClientContent = fs.readFileSync(selfieClientPath, 'utf8');
+  assert(
+    selfieClientContent.includes('handleReturnToPortal') &&
+    selfieClientContent.includes('router.back()') &&
+    selfieClientContent.includes('onClick={handleReturnToPortal}'),
+    'SelfieAttendClient.tsx binds history-aware router.back() on Portal return button'
+  );
+
+  // 5. Verify ADR-067 in architecture vault
+  const adrPath = path.resolve(__dirname, '../../docs/architecture-vault/02_ARCHITECTURE_DECISION_RECORDS.md');
+  const adrContent = fs.readFileSync(adrPath, 'utf8');
+  assert(
+    adrContent.includes('ADR-067: Instant 0ms Student Portal Back-Navigation Hydration & SWR Memory Caching'),
+    '02_ARCHITECTURE_DECISION_RECORDS.md documents ADR-067'
+  );
+
+  // 6. Verify INDEX.md references ADR-067
+  const indexPath = path.resolve(__dirname, '../../docs/architecture-vault/INDEX.md');
+  const indexContent = fs.readFileSync(indexPath, 'utf8');
+  assert(
+    indexContent.includes('ADR-001 to ADR-067') &&
+    indexContent.includes('Instant 0ms Student Portal Back-Navigation Hydration & SWR Memory Caching'),
+    'INDEX.md references ADR-067 in vault catalog'
   );
 }
 
