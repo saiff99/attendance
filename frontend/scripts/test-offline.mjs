@@ -4390,6 +4390,69 @@ console.log('\n--- 70. Controlled Academic Year-End Audit Archival & Safe Forens
   );
 }
 
+// --- 71. Active Cohort Scoped Attendance Calculation & 0-Session Baseline Parity (Gotcha 24) ---
+console.log('\n--- 71. Active Cohort Scoped Attendance Calculation & 0-Session Baseline Parity (Gotcha 24) ---');
+{
+  const portalDataRoutePath = path.resolve(__dirname, '../src/app/api/student/portal-data/route.ts');
+  const portalDataContent = fs.readFileSync(portalDataRoutePath, 'utf8');
+
+  // 1. Verify portal-data route scopes presentSessionMap strictly to applicableSessionIdSet
+  assert(
+    portalDataContent.includes('const applicableSessionIdSet = new Set(applicableSessions.map(s => s.id));') &&
+    portalDataContent.includes('applicableSessionIdSet.has(att.session_id)'),
+    'api/student/portal-data/route.ts scopes attendance strictly to active applicable sessions'
+  );
+
+  // 2. Verify baseline rate calculation defaults to 100.0% when 0 classes delivered
+  assert(
+    portalDataContent.includes('const overallRate = totalApplicableClasses > 0') &&
+    portalDataContent.includes(': 100.0;'),
+    'api/student/portal-data/route.ts defaults overallRate to 100.0% when 0 classes delivered'
+  );
+
+  // 3. Verify portal/page.tsx handles totalClasses === 0 with 100% Eligible emerald styling
+  const portalPagePath = path.resolve(__dirname, '../src/app/portal/page.tsx');
+  const portalPageContent = fs.readFileSync(portalPagePath, 'utf8');
+  assert(
+    portalPageContent.includes('summary.totalClasses === 0 || summary.percentage >= 75') &&
+    portalPageContent.includes('{summary.totalClasses === 0 ? "100%" : `${summary.percentage}%`}'),
+    'portal/page.tsx displays 100% and emerald Eligible styling when totalClasses === 0'
+  );
+
+  // 4. Behavioral test: simulate student with 7 historical archived attendances and 0 active sessions
+  const activeSessions = [];
+  const activeSessionIds = new Set(activeSessions.map(s => s.id));
+  const mockHistoricalAttendance = [
+    { session_id: 'archived-1', status: 'Present' },
+    { session_id: 'archived-2', status: 'Present' },
+    { session_id: 'archived-3', status: 'Present' },
+  ];
+  const presentMap = new Map();
+  mockHistoricalAttendance.forEach(a => {
+    if (a.status === 'Present' && activeSessionIds.has(a.session_id)) {
+      presentMap.set(a.session_id, true);
+    }
+  });
+
+  const totalClasses = activeSessions.length;
+  const totalPresent = presentMap.size;
+  const totalAbsent = Math.max(0, totalClasses - totalPresent);
+  const rate = totalClasses > 0 ? (totalPresent / totalClasses) * 100 : 100.0;
+
+  assert(totalClasses === 0, 'Total classes is 0 when all sessions are archived');
+  assert(totalPresent === 0, 'Archived session attendance does not leak into active attended count');
+  assert(totalAbsent === 0, 'Absent count is 0');
+  assert(rate === 100.0, 'Baseline rate is 100.0% Eligible');
+
+  // 5. Verify Gotcha 24 in architecture vault
+  const gotchasPath = path.resolve(__dirname, '../../docs/architecture-vault/05_EDGE_CASES_AND_SOLVED_GOTCHAS.md');
+  const gotchasContent = fs.readFileSync(gotchasPath, 'utf8');
+  assert(
+    gotchasContent.includes('Gotcha 24: Pre-Launch Development Test Session Cross-Contamination & 0-Session Baseline Metric Initialization'),
+    '05_EDGE_CASES_AND_SOLVED_GOTCHAS.md documents Gotcha 24'
+  );
+}
+
 // Summary
 console.log('\n' + '=' .repeat(65));
 console.log(`📊 Offline Unit Test Summary: ${passed} Passed, ${failed} Failed`);

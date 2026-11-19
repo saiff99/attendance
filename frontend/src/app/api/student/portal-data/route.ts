@@ -150,9 +150,13 @@ export async function GET(request: NextRequest) {
       throw attErr;
     }
 
+    // Set of active, unarchived session IDs applicable to this cohort
+    const applicableSessionIdSet = new Set(applicableSessions.map(s => s.id));
+
     const presentSessionMap = new Map<string, { capture_mode: string; recorded_at: string }>();
     (attendanceLogs || []).forEach(att => {
-      if (att.status === 'Present') {
+      // Strictly count attendance ONLY for active, unarchived classes applicable to this cohort
+      if (att.status === 'Present' && applicableSessionIdSet.has(att.session_id)) {
         presentSessionMap.set(att.session_id, {
           capture_mode: att.capture_mode || 'Live Scan',
           recorded_at: att.recorded_at,

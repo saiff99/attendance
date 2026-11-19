@@ -801,7 +801,7 @@ export default function StudentPortalPage() {
             <div className="flex items-center justify-between gap-1.5 mb-2">
               <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Overall Rate</span>
               <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap shrink-0 ${
-                summary.percentage >= 75
+                summary.totalClasses === 0 || summary.percentage >= 75
                   ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
                   : summary.percentage >= 65
                   ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
@@ -811,19 +811,19 @@ export default function StudentPortalPage() {
               </span>
             </div>
             <div className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-              {summary.percentage}%
+              {summary.totalClasses === 0 ? "100%" : `${summary.percentage}%`}
             </div>
             {/* Progress Bar */}
             <div className="mt-3 w-full bg-slate-800 h-2 rounded-full overflow-hidden">
               <div
                 className={`h-full rounded-full transition-all duration-500 ${
-                  summary.percentage >= 75
+                  summary.totalClasses === 0 || summary.percentage >= 75
                     ? "bg-gradient-to-r from-emerald-500 to-teal-400"
                     : summary.percentage >= 65
                     ? "bg-gradient-to-r from-amber-500 to-orange-400"
                     : "bg-gradient-to-r from-rose-500 to-red-400"
                 }`}
-                style={{ width: `${Math.min(100, Math.max(0, summary.percentage))}%` }}
+                style={{ width: `${summary.totalClasses === 0 ? 100 : Math.min(100, Math.max(0, summary.percentage))}%` }}
               />
             </div>
           </div>
