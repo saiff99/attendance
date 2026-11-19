@@ -105,7 +105,7 @@ export async function GET(request: NextRequest) {
 
     let query = supabaseServer
       .from("audit_logs")
-      .select("*")
+      .select("*", { count: "exact" })
       .order("created_at", { ascending: false })
       .limit(limit);
 
@@ -127,7 +127,7 @@ export async function GET(request: NextRequest) {
       query = query.lte("created_at", endIso);
     }
 
-    const { data, error } = await query;
+    const { data, count, error } = await query;
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
@@ -150,6 +150,7 @@ export async function GET(request: NextRequest) {
       success: true,
       logs,
       count: logs.length,
+      total_count: count ?? logs.length,
       checksum,
     });
   } catch (err: unknown) {

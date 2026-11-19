@@ -1680,6 +1680,34 @@
   3. *Positive:* Reduced aggregation query pressure on Supabase database.
   4. *Positive:* Retains complete real-time flexibility via explicit one-click cache invalidation on the header Refresh button.
 
+---
+
+### ADR-066: Controlled Academic Year-End Audit Archival & Safe Forensic Purge
+
+- **Status:** Accepted
+- **Date:** 2026-11-19
+- **Context:**
+  1. *Perpetual Table Growth & Long-Term Storage Concerns:* In compliance with DPDP Act 2023 Sec 6 and ISO 27001 (ADR-016), `public.audit_logs` is strictly immutable (`REVOKE UPDATE, DELETE, TRUNCATE`). Over multiple academic cohorts spanning 5 to 10 years, logging administrative actions, biometric consents, PIN resets, and session lifecycles causes table rows to accumulate.
+  2. *Risk of Impulsive Unbounded FIFO Deletions:* Arbitrarily capping logs at an arbitrary count (e.g. 1,000) and auto-deleting older rows on each insert is dangerous in high-concurrency medical college environments. During exam and enrollment periods, 1,000 events can occur within 48 to 72 hours, permanently wiping out forensic evidence of dispute logs from previous weeks or months.
+  3. *Academic Cohort Lifecycle & Cold Archival Best Practice:* Medical college governance (NMC) requires maintaining student records across their degree duration (typically 3 to 5 years). However, retaining 8-10 years of operational records in high-velocity primary PostgreSQL disk storage is unnecessary when cold file archives can be stored offline.
+- **Decision:**
+  1. **Strict 180-Day Minimum Retention Guard:**
+     - Archival and purge operations are restricted to logs older than at least 180 days (6 months). Deletion of active or recent operational logs is strictly forbidden at both application and database trigger levels.
+  2. **Mandatory Two-Step Export-Before-Delete Flow:**
+     - The Super Admin must download the complete encrypted/structured JSON cold storage archive (`GET /api/audit-logs/archive-purge?action=export`) to an offline or institutional drive before the deletion interface is unlocked.
+  3. **Dual Confirmation & Dedicated Stored Procedure (Migration 22):**
+     - Execution requires typing the explicit confirmation token `CONFIRM_FORENSIC_PURGE` and invoking `public.purge_archived_audit_logs(cutoff_timestamp, confirmation, admin_id)`.
+     - Transaction-scoped configuration `set_config('app.allow_audit_purge', 'true', true)` ensures normal `DELETE` or `TRUNCATE` operations remain 100% blocked under the immutability trigger.
+  4. **Self-Audited Forensic Purge:**
+     - The stored procedure automatically inserts a permanent record of the purge itself into `audit_logs` (`action = 'PURGE_ARCHIVED_AUDIT_LOGS'`) capturing exact deleted count, cutoff timestamp, and administrator identity.
+  5. **Exact Total Count Projection:**
+     - Updated `api/audit-logs/route.ts` to return `total_count: count ?? logs.length`, allowing the frontend KPI card to project true database inventory (`2,449 (Showing 1,000)`) instead of artificially capping at the pagination limit.
+- **Consequences:**
+  1. *Positive:* Prevents multi-year database disk bloat while strictly adhering to DPDP Act 2023 forensic accountability.
+  2. *Positive:* Zero data loss risk via enforced client-side cold archive export prior to purge execution.
+  3. *Positive:* Retains tamper-evident forensic trail: the purge operation itself is permanently audited.
+  4. *Positive:* Transparent UI: Administrators immediately observe true database ledger count and display bounds.
+
 
 
 

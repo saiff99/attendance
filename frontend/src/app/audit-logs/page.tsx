@@ -24,7 +24,10 @@ import {
   FileSpreadsheet,
   CalendarDays,
   Lock,
-  Loader2
+  Loader2,
+  Archive,
+  AlertTriangle,
+  CheckCircle2
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import Link from "next/link";
@@ -78,6 +81,34 @@ export default function AuditLogsPage() {
   const [activeDatePreset, setActiveDatePreset] = useState<"all" | "today" | "7d" | "30d">("all");
   const [ledgerChecksum, setLedgerChecksum] = useState<string | null>(null);
 
+  // Total exact count from database (ADR-066)
+  const [totalDatabaseCount, setTotalDatabaseCount] = useState<number | null>(null);
+
+  // Year-End Audit Archival & Safe Purge States (ADR-066)
+  const [isArchivePurgeModalOpen, setIsArchivePurgeModalOpen] = useState(false);
+  const [archiveCutoffDate, setArchiveCutoffDate] = useState<string>(() => {
+    const d = new Date();
+    d.setFullYear(d.getFullYear() - 1);
+    return d.toISOString().split("T")[0];
+  });
+  const [archiveStats, setArchiveStats] = useState<{ count: number; loading: boolean; error: string | null }>({
+    count: 0,
+    loading: false,
+    error: null,
+  });
+  const [isArchiveDownloaded, setIsArchiveDownloaded] = useState(false);
+  const [isDownloadingArchive, setIsDownloadingArchive] = useState(false);
+  const [purgeConfirmationInput, setPurgeConfirmationInput] = useState("");
+  const [isPurging, setIsPurging] = useState(false);
+  const [purgeSuccessResult, setPurgeSuccessResult] = useState<{ count: number; date: string } | null>(null);
+  const [purgeError, setPurgeError] = useState<string | null>(null);
+
+  const minAllowedCutoffStr = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 180);
+    return d.toISOString().split("T")[0];
+  }, []);
+
   const isSuperAdmin = user?.role === "Super Admin";
 
   const fetchLogs = async (customStart?: string, customEnd?: string) => {
@@ -97,6 +128,7 @@ export default function AuditLogsPage() {
       if (res.ok) {
         const data = await res.json();
         setLogs(data.logs || []);
+        if (data.total_count !== undefined) setTotalDatabaseCount(data.total_count);
         if (data.checksum) setLedgerChecksum(data.checksum);
       } else {
         console.error("Failed to fetch audit logs:", res.statusText);
@@ -187,6 +219,7 @@ export default function AuditLogsPage() {
           if (res.ok && isMounted) {
             const data = await res.json();
             setLogs(data.logs || []);
+            if (data.total_count !== undefined) setTotalDatabaseCount(data.total_count);
             if (data.checksum) setLedgerChecksum(data.checksum);
           }
         } catch (err) {
@@ -255,12 +288,104 @@ export default function AuditLogsPage() {
 
   // Analytics Metrics
   const metrics = useMemo(() => {
-    const total = logs.length;
+    const total = totalDatabaseCount !== null ? totalDatabaseCount : logs.length;
     const biometricEvents = logs.filter(l => l.action.includes("FACE")).length;
     const deletions = logs.filter(l => l.action.includes("DELETE")).length;
     const creations = logs.filter(l => l.action.includes("CREATE")).length;
     return { total, biometricEvents, deletions, creations };
-  }, [logs]);
+  }, [logs, totalDatabaseCount]);
+
+  const handleOpenArchiveModal = () => {
+    setIsArchivePurgeModalOpen(true);
+    setIsArchiveDownloaded(false);
+    setPurgeConfirmationInput("");
+    setPurgeSuccessResult(null);
+    setPurgeError(null);
+  };
+
+  // Scan eligible logs when modal is opened or cutoff date changes (ADR-066)
+  useEffect(() => {
+    if (!isArchivePurgeModalOpen || !archiveCutoffDate) return;
+    let isCancelled = false;
+
+    void (async () => {
+      setArchiveStats(prev => ({ ...prev, loading: true, error: null }));
+      try {
+        const res = await fetch(`/api/audit-logs/archive-purge?cutoff_date=${encodeURIComponent(archiveCutoffDate)}&action=stats`);
+        const data = await res.json();
+        if (!isCancelled) {
+          if (res.ok) {
+            setArchiveStats({ count: data.count || 0, loading: false, error: null });
+          } else {
+            setArchiveStats({ count: 0, loading: false, error: data.error || "Failed to scan logs." });
+          }
+        }
+      } catch (err: unknown) {
+        if (!isCancelled) {
+          setArchiveStats({ count: 0, loading: false, error: (err as Error).message });
+        }
+      }
+    })();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [isArchivePurgeModalOpen, archiveCutoffDate]);
+
+  const handleDownloadColdArchive = async () => {
+    try {
+      setIsDownloadingArchive(true);
+      setPurgeError(null);
+      const res = await fetch(`/api/audit-logs/archive-purge?cutoff_date=${encodeURIComponent(archiveCutoffDate)}&action=export`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to export archive");
+
+      const blob = new Blob([JSON.stringify(data.archive_payload, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `medattend_audit_archive_prior_to_${archiveCutoffDate}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+
+      setIsArchiveDownloaded(true);
+    } catch (err: unknown) {
+      setPurgeError((err as Error).message);
+    } finally {
+      setIsDownloadingArchive(false);
+    }
+  };
+
+  const handleExecutePurge = async () => {
+    if (purgeConfirmationInput !== "CONFIRM_FORENSIC_PURGE" || !isArchiveDownloaded) return;
+    try {
+      setIsPurging(true);
+      setPurgeError(null);
+      const res = await fetch("/api/audit-logs/archive-purge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          cutoff_date: archiveCutoffDate,
+          confirmation: purgeConfirmationInput,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to execute purge");
+
+      setPurgeSuccessResult({
+        count: data.purged_count,
+        date: archiveCutoffDate,
+      });
+      setPurgeConfirmationInput("");
+      void fetchLogs();
+    } catch (err: unknown) {
+      setPurgeError((err as Error).message);
+    } finally {
+      setIsPurging(false);
+    }
+  };
 
   // Action badge styles and human-readable names
   const getActionBadge = (action: string) => {
@@ -471,6 +596,17 @@ export default function AuditLogsPage() {
             <Download className="w-4 h-4 text-indigo-500" />
             <span>JSON</span>
           </button>
+
+          {isSuperAdmin && (
+            <button
+              onClick={handleOpenArchiveModal}
+              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-medium bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 text-rose-700 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/50 transition-all shadow-sm cursor-pointer"
+              title="Year-End Archival & Safe Purge (Export cold archive before cleaning logs older than 180 days)"
+            >
+              <Archive className="w-4 h-4 text-rose-600 dark:text-rose-400" />
+              <span>Year-End Archive & Purge</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -483,8 +619,12 @@ export default function AuditLogsPage() {
               <Database className="w-4 h-4" />
             </div>
           </div>
-          <p className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mt-2">{metrics.total}</p>
-          <span className="text-[11px] text-gray-400 dark:text-gray-500 mt-1 block">Recorded in audit ledger</span>
+          <p className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mt-2">
+            {metrics.total.toLocaleString()}
+          </p>
+          <span className="text-[11px] text-gray-400 dark:text-gray-500 mt-1 block">
+            Recorded in audit ledger {logs.length < metrics.total ? `(Showing ${logs.length})` : ""}
+          </span>
         </div>
 
         <div className="bg-white dark:bg-gray-900 p-4 sm:p-5 rounded-2xl border border-gray-200/80 dark:border-gray-800 shadow-sm">
@@ -1061,6 +1201,201 @@ export default function AuditLogsPage() {
               >
                 Close
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Year-End Audit Archival & Safe Purge Modal (ADR-066) */}
+      {isArchivePurgeModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-xl border border-gray-200 dark:border-gray-800 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/30">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-rose-100 dark:bg-rose-900/40 rounded-xl text-rose-600 dark:text-rose-400">
+                  <Archive className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-gray-900 dark:text-white">Year-End Audit Archival & Purge</h3>
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400">DPDP Act 2023 Compliant Cold Storage Rollover</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  if (!isPurging) {
+                    setIsArchivePurgeModalOpen(false);
+                    setPurgeSuccessResult(null);
+                    setPurgeError(null);
+                  }
+                }}
+                disabled={isPurging}
+                className="p-1 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer disabled:opacity-50"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 overflow-y-auto space-y-4 text-xs">
+              {/* Informational Policy Banner */}
+              <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-900/40 text-amber-800 dark:text-amber-300 space-y-1">
+                <div className="flex items-center gap-2 font-semibold">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                  <span>Immutable Cold Storage Requirement</span>
+                </div>
+                <p className="text-[11px] leading-relaxed text-amber-700/90 dark:text-amber-300/80">
+                  To keep the database lightweight without violating DPDP Act regulations, historical logs prior to the selected cutoff must first be downloaded into an encrypted/immutable JSON cold archive before live memory is purged. Cutoff must be at least 180 days in the past.
+                </p>
+              </div>
+
+              {/* Cutoff Date Selection */}
+              <div className="space-y-2">
+                <label className="font-semibold text-gray-700 dark:text-gray-300 flex items-center justify-between">
+                  <span>Archival Cutoff Date (Prior to):</span>
+                  <span className="text-[10px] text-gray-400">Max allowed: {minAllowedCutoffStr}</span>
+                </label>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const d = new Date();
+                      d.setFullYear(d.getFullYear() - 1);
+                      setArchiveCutoffDate(d.toISOString().split("T")[0]);
+                    }}
+                    className="px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-[11px] font-medium text-gray-700 dark:text-gray-300 hover:border-indigo-400"
+                  >
+                    Older than 1 Year
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const d = new Date();
+                      d.setFullYear(d.getFullYear() - 2);
+                      setArchiveCutoffDate(d.toISOString().split("T")[0]);
+                    }}
+                    className="px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-[11px] font-medium text-gray-700 dark:text-gray-300 hover:border-indigo-400"
+                  >
+                    Older than 2 Years
+                  </button>
+                  <input
+                    type="date"
+                    max={minAllowedCutoffStr}
+                    value={archiveCutoffDate}
+                    onChange={(e) => setArchiveCutoffDate(e.target.value)}
+                    className="px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-base sm:text-xs text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+
+              {/* Scanning / Stats Feedback */}
+              <div className="p-3 rounded-xl bg-gray-50 dark:bg-gray-800/40 border border-gray-200 dark:border-gray-700/80 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Database className="w-4 h-4 text-indigo-500 shrink-0" />
+                  <span className="text-gray-600 dark:text-gray-300">
+                    {archiveStats.loading ? (
+                      <span className="inline-flex items-center gap-1.5 text-gray-400">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" /> Scanning database for eligible logs...
+                      </span>
+                    ) : archiveStats.error ? (
+                      <span className="text-rose-500">{archiveStats.error}</span>
+                    ) : (
+                      <>
+                        <strong className="text-gray-900 dark:text-white font-semibold">{archiveStats.count.toLocaleString()}</strong> records found prior to {archiveCutoffDate}
+                      </>
+                    )}
+                  </span>
+                </div>
+              </div>
+
+              {/* Step 1: Export Archive */}
+              <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-700 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-gray-900 dark:text-white flex items-center gap-1.5">
+                    <span className="w-5 h-5 rounded-full bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 inline-flex items-center justify-center text-[11px] font-bold">1</span>
+                    Download Cold Storage Archive
+                  </span>
+                  {isArchiveDownloaded && (
+                    <span className="inline-flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">
+                      <CheckCircle2 className="w-3.5 h-3.5" /> Downloaded
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-normal">
+                  Export the complete dataset to a structured, verifiable JSON archive on your device before proceeding to database deletion.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleDownloadColdArchive}
+                  disabled={archiveStats.loading || archiveStats.count === 0 || isDownloadingArchive}
+                  className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-xs bg-indigo-600 hover:bg-indigo-700 text-white transition-all shadow-sm disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                >
+                  {isDownloadingArchive ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" /> Generating & Downloading Archive...
+                    </>
+                  ) : (
+                    <>
+                      <Download className="w-4 h-4" /> Download Archive ({archiveStats.count.toLocaleString()} Records)
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {/* Step 2: Confirmation & Purge */}
+              <div className={`p-4 rounded-xl border transition-all space-y-3 ${isArchiveDownloaded ? "border-rose-200 dark:border-rose-900/50 bg-rose-50/30 dark:bg-rose-950/20" : "border-gray-200 dark:border-gray-800 opacity-50 pointer-events-none"}`}>
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-gray-900 dark:text-white flex items-center gap-1.5">
+                    <span className="w-5 h-5 rounded-full bg-rose-100 dark:bg-rose-900/50 text-rose-600 dark:text-rose-400 inline-flex items-center justify-center text-[11px] font-bold">2</span>
+                    Confirm Database Deletion
+                  </span>
+                </div>
+                <p className="text-[11px] text-gray-600 dark:text-gray-400 leading-normal">
+                  Type <code className="px-1.5 py-0.5 rounded bg-gray-200 dark:bg-gray-800 font-mono text-[11px] text-rose-600 dark:text-rose-400">CONFIRM_FORENSIC_PURGE</code> to permanently delete the {archiveStats.count.toLocaleString()} archived records from live memory:
+                </p>
+                <input
+                  type="text"
+                  placeholder="CONFIRM_FORENSIC_PURGE"
+                  value={purgeConfirmationInput}
+                  onChange={(e) => setPurgeConfirmationInput(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-base sm:text-xs text-gray-900 dark:text-white font-mono focus:outline-none focus:ring-2 focus:ring-rose-500"
+                />
+                <button
+                  type="button"
+                  onClick={handleExecutePurge}
+                  disabled={!isArchiveDownloaded || purgeConfirmationInput !== "CONFIRM_FORENSIC_PURGE" || isPurging || archiveStats.count === 0}
+                  className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-xs bg-rose-600 hover:bg-rose-700 text-white transition-all shadow-sm disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                >
+                  {isPurging ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" /> Executing Safe Purge...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-4 h-4" /> Execute Safe Database Purge
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {/* Feedback Results */}
+              {purgeSuccessResult && (
+                <div className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-xs flex items-start gap-2.5">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                  <div>
+                    <strong className="font-semibold block">Archival Purge Succeeded!</strong>
+                    <span>{purgeSuccessResult.count.toLocaleString()} historical audit records prior to {purgeSuccessResult.date} were safely removed from live database memory.</span>
+                  </div>
+                </div>
+              )}
+
+              {purgeError && (
+                <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300 text-xs flex items-start gap-2.5">
+                  <AlertTriangle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
+                  <div>
+                    <strong className="font-semibold block">Purge Error</strong>
+                    <span>{purgeError}</span>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

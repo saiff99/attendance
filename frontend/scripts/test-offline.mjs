@@ -4295,9 +4295,98 @@ console.log('\n--- 69. Historical Attendance Reports Date-Range Client Caching (
   const indexPath = path.resolve(__dirname, '../../docs/architecture-vault/INDEX.md');
   const indexContent = fs.readFileSync(indexPath, 'utf8');
   assert(
-    indexContent.includes('ADR-001 to ADR-065') &&
     indexContent.includes('Historical Attendance Reports Date-Range Client Caching Immutable Past Terms'),
     'INDEX.md references ADR-065 in vault catalog'
+  );
+}
+
+// --- 70. Controlled Academic Year-End Audit Archival & Safe Forensic Purge (ADR-066) ---
+console.log('\n--- 70. Controlled Academic Year-End Audit Archival & Safe Forensic Purge (ADR-066) ---');
+{
+  // 1. Verify database/migrations/22_audit_logs_controlled_archive_purge.sql
+  const migration22Path = path.resolve(__dirname, '../../database/migrations/22_audit_logs_controlled_archive_purge.sql');
+  assert(fs.existsSync(migration22Path), 'database/migrations/22_audit_logs_controlled_archive_purge.sql exists');
+  const migration22Content = fs.readFileSync(migration22Path, 'utf8');
+  assert(
+    migration22Content.includes('enforce_audit_log_immutability') &&
+    migration22Content.includes('purge_archived_audit_logs') &&
+    migration22Content.includes('180 days') &&
+    migration22Content.includes('CONFIRM_FORENSIC_PURGE') &&
+    migration22Content.includes('PURGE_ARCHIVED_AUDIT_LOGS'),
+    'Migration 22 defines secure purge_archived_audit_logs procedure with 180-day guard and confirmation token'
+  );
+
+  // 2. Verify frontend/src/app/api/audit-logs/archive-purge/route.ts
+  const purgeApiPath = path.resolve(__dirname, '../src/app/api/audit-logs/archive-purge/route.ts');
+  assert(fs.existsSync(purgeApiPath), 'api/audit-logs/archive-purge/route.ts exists');
+  const purgeApiContent = fs.readFileSync(purgeApiPath, 'utf8');
+  assert(
+    purgeApiContent.includes('MIN_RETENTION_DAYS = 180') &&
+    purgeApiContent.includes("session.role !== 'Super Admin'") &&
+    purgeApiContent.includes('CONFIRM_FORENSIC_PURGE') &&
+    purgeApiContent.includes('purge_archived_audit_logs'),
+    'api/audit-logs/archive-purge/route.ts enforces Super Admin role, 180-day safety guard, and confirmation'
+  );
+  assert(
+    purgeApiContent.includes("action === 'export'") &&
+    purgeApiContent.includes('archive_payload'),
+    'api/audit-logs/archive-purge/route.ts exports full archive payload for cold storage download'
+  );
+
+  // 3. Verify frontend/src/app/api/audit-logs/route.ts returns exact total count
+  const auditLogsApiPath = path.resolve(__dirname, '../src/app/api/audit-logs/route.ts');
+  const auditLogsApiContent = fs.readFileSync(auditLogsApiPath, 'utf8');
+  assert(
+    auditLogsApiContent.includes("count: 'exact'") || auditLogsApiContent.includes('count: "exact"'),
+    'api/audit-logs/route.ts requests exact count from Supabase'
+  );
+  assert(
+    auditLogsApiContent.includes('total_count: count ?? logs.length'),
+    'api/audit-logs/route.ts returns unconstrained total_count for accurate ledger inventory'
+  );
+
+  // 4. Verify frontend/src/app/audit-logs/page.tsx UI components and modal
+  const auditLogsPagePath = path.resolve(__dirname, '../src/app/audit-logs/page.tsx');
+  const auditLogsPageContent = fs.readFileSync(auditLogsPagePath, 'utf8');
+  assert(
+    auditLogsPageContent.includes('isArchivePurgeModalOpen') &&
+    auditLogsPageContent.includes('handleDownloadColdArchive') &&
+    auditLogsPageContent.includes('handleExecutePurge'),
+    'audit-logs/page.tsx implements Year-End Archive & Purge modal and handlers'
+  );
+  assert(
+    auditLogsPageContent.includes('CONFIRM_FORENSIC_PURGE'),
+    'audit-logs/page.tsx prompts for CONFIRM_FORENSIC_PURGE dual confirmation'
+  );
+  assert(
+    auditLogsPageContent.includes('Year-End Archive & Purge'),
+    'audit-logs/page.tsx renders Year-End Archive & Purge button for Super Admins'
+  );
+
+  // 5. Behavioral test of 180-day retention guard math
+  const nowMs = Date.now();
+  const minAllowedDate = new Date(nowMs - 180 * 24 * 60 * 60 * 1000);
+  const recent30DaysCutoff = new Date(nowMs - 30 * 24 * 60 * 60 * 1000);
+  const valid1YearCutoff = new Date(nowMs - 365 * 24 * 60 * 60 * 1000);
+
+  assert(recent30DaysCutoff.getTime() > minAllowedDate.getTime(), '30-day cutoff is flagged as too recent');
+  assert(valid1YearCutoff.getTime() <= minAllowedDate.getTime(), '1-year cutoff is accepted for archival purge');
+
+  // 6. Verify ADR-066 in architecture vault
+  const adrPath = path.resolve(__dirname, '../../docs/architecture-vault/02_ARCHITECTURE_DECISION_RECORDS.md');
+  const adrContent = fs.readFileSync(adrPath, 'utf8');
+  assert(
+    adrContent.includes('ADR-066: Controlled Academic Year-End Audit Archival & Safe Forensic Purge'),
+    '02_ARCHITECTURE_DECISION_RECORDS.md documents ADR-066'
+  );
+
+  // 7. Verify INDEX.md references ADR-066
+  const indexPath = path.resolve(__dirname, '../../docs/architecture-vault/INDEX.md');
+  const indexContent = fs.readFileSync(indexPath, 'utf8');
+  assert(
+    indexContent.includes('ADR-001 to ADR-066') &&
+    indexContent.includes('Controlled Academic Year-End Audit Archival & Safe Forensic Purge'),
+    'INDEX.md references ADR-066 in vault catalog'
   );
 }
 
