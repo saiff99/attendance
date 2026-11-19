@@ -278,9 +278,10 @@ export async function GET(request: NextRequest) {
     const totalApplicableClasses = applicableSessions.length;
     const totalPresent = presentSessionMap.size;
     const totalAbsent = Math.max(0, totalApplicableClasses - totalPresent);
+    // Baseline: When 0 classes have been delivered, rate is 100.0% (Eligible/Good standing) consistent with subject-level metrics
     const overallRate = totalApplicableClasses > 0
       ? Math.round((totalPresent / totalApplicableClasses) * 1000) / 10
-      : 0;
+      : 100.0;
 
     let overallStatus: 'Eligible' | 'Borderline' | 'Risk' = 'Eligible';
     if (totalApplicableClasses > 0) {

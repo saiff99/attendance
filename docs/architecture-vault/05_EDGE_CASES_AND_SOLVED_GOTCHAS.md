@@ -431,6 +431,22 @@ This document catalogs critical real-world edge cases, platform-specific quirks,
   3. **In-Flight Lock Bypass on Forced Full Sync:** Modified `fetchLogs` to allow `forceFullSync = true` to proceed without being blocked by background polling intervals (`if (isFetchingLogsRef.current && !forceFullSync) return;`).
 - **Rule:** Whenever performing deletion or cancellation of stateful records in an incrementally polled view, always apply optimistic UI state removal and trigger a forced full sync (`forceFullSync = true`) to align client delta markers with the database.
 
+---
+
+### Gotcha 24: Pre-Launch Development Test Session Cross-Contamination & 0-Session Baseline Metric Initialization
+- **Symptom:**
+  When real medical students logged into their student attendance portal for the first time after onboarding, they were presented with a history of missed classes (e.g., 15–200 classes) with 0 attendances, displaying an alarmist 0% "Critical / Risk" attendance rate and full absent logs.
+- **Root Cause:**
+  1. *Unarchived Development Test Sessions:* During engineering trials and QA, numerous sessions were created with `is_archived = false` matching target cohorts (`1st Year`, `1st Year (Group A)`).
+  2. *Cohort Filter Pushdown:* `frontend/src/app/api/student/portal-data/route.ts` evaluated all unarchived matching sessions against the student. Because the real students were only recently enrolled, they had 0 attendance records for historical test sessions, resulting in 100% absence.
+  3. *Baseline Rate Metric Default Inconsistency:* If `totalApplicableClasses === 0`, `overallRate` defaulted to `0` rather than `100.0` (whereas individual subject rows defaulted to `100.0` with `Good` standing), creating a visual contradiction between the overall status card and the subject table.
+- **Architectural Fix:**
+  1. **Safe Batch Archival (`scripts/archive_past_test_sessions.mjs`):** Marked all 225 pre-launch test sessions with `is_archived: true`, `archived_at: NOW()`, and `target_academic_year: 'Archived'`, strictly excluding system configuration rows (`__SYSTEM_CONFIG__`, `__GEOFENCE_CONFIG__`). No raw records or attendance entries were deleted.
+  2. **Harmonized 0-Session Metric Baseline:** In `frontend/src/app/api/student/portal-data/route.ts`, initialized `overallRate = 100.0` and `overallStatus = 'Eligible'` when `totalApplicableClasses === 0`, maintaining parity with subject metrics. When 0 classes have been delivered, the student is in full standing.
+  3. **Forensic Audit Ledger Entry:** Inserted an audit event (`action: 'ARCHIVE_TEST_SESSIONS'`) documenting the batch archival in the DPDP-compliant ledger.
+- **Rule:** Never allow development/staging test sessions to persist in unarchived status into production student cohorts. When a cohort has zero delivered classes, overall attendance metrics must default to 100% Eligible standing without red penalty warnings.
+
+
 
 
 
